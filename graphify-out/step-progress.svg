@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="540" viewBox="0 0 980 540" font-family="Tajawal, Cairo, 'Segoe UI', system-ui, sans-serif">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#2A2028"/>
+    <stop offset="55%" stop-color="#1B1418"/>
+    <stop offset="100%" stop-color="#120C10"/>
+  </linearGradient>
+  <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#FF5722" stop-opacity="0.10"/>
+    <stop offset="55%" stop-color="#FF5722" stop-opacity="0.02"/>
+    <stop offset="100%" stop-color="#9D5CFF" stop-opacity="0.07"/>
+  </linearGradient>
+  <linearGradient id="title" x1="1" y1="0" x2="0" y2="0">
+    <stop offset="0%" stop-color="#FF5722"/>
+    <stop offset="100%" stop-color="#FFB020"/>
+  </linearGradient>
+
+</defs>
+<rect width="980" height="540" fill="url(#sky)"/>
+<text x="948" y="52" fill="url(#title)" font-size="28" font-weight="800" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">تقدّم STEP</text>
+<text x="948" y="78" fill="rgba(255,246,240,0.56)" font-size="13" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">إتقان الأقسام، ومسار الاختبارات التجريبية</text>
+<rect x="32" y="30" width="118" height="28" rx="14" fill="#FFB020" fill-opacity="0.16" stroke="#FFB020" stroke-opacity="0.55"/>
+<circle cx="50" cy="44" r="4" fill="#FFB020"/>
+<text x="91" y="49" fill="#FFB020" font-size="12" font-weight="700" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">بنية المشروع</text>
+<rect x="774.4" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="944" y="112" width="3" height="40" rx="2" fill="#FF5722"/>
+<text x="934" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">متوسّط الإتقان</text>
+<text x="934" y="150" fill="#FF5722" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">65%</text>
+<rect x="588.8" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="758.4" y="112" width="3" height="40" rx="2" fill="#FFB020"/>
+<text x="748.4" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أفضل درجة تجريبية</text>
+<text x="748.4" y="150" fill="#FFB020" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">—</text>
+<rect x="403.20000000000005" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="572.8000000000001" y="112" width="3" height="40" rx="2" fill="#10B981"/>
+<text x="562.8000000000001" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">آخر درجة</text>
+<text x="562.8000000000001" y="150" fill="#10B981" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">—</text>
+<rect x="217.60000000000002" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="387.20000000000005" y="112" width="3" height="40" rx="2" fill="#00C2FF"/>
+<text x="377.20000000000005" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أسئلة مُجابة</text>
+<text x="377.20000000000005" y="150" fill="#00C2FF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0</text>
+<rect x="32" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="201.6" y="112" width="3" height="40" rx="2" fill="#9D5CFF"/>
+<text x="191.6" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">سلسلة الأيام</text>
+<text x="191.6" y="150" fill="#9D5CFF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0</text>
+<g><rect x="32" y="190" width="450" height="300" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="190" width="450" height="300" rx="18" fill="url(#sheen)"/></g>
+<text x="462" y="222" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">حالة المفردات</text>
+<text x="462" y="241" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مقسّمة حسب درجة الإتقان</text>
+<text x="458" y="290.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">متقن</text>
+<rect x="108" y="272" width="274" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="199.33333333333334" y="272" width="182.66666666666666" height="26" rx="13" fill="#10B981"/>
+<text x="98" y="290.72" fill="#10B981" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">2</text>
+<text x="458" y="328.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مراجعة</text>
+<rect x="108" y="310" width="274" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="108" y="310" width="274" height="26" rx="13" fill="#9D5CFF"/>
+<text x="98" y="328.72" fill="#9D5CFF" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">3</text>
+<text x="458" y="366.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">جديد</text>
+<rect x="108" y="348" width="274" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="108" y="348" width="274" height="26" rx="13" fill="#FFB020"/>
+<text x="98" y="366.72" fill="#FFB020" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">3</text>
+<text x="462" y="462" fill="rgba(255,246,240,0.30)" font-size="11" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">المصدر: SEED_VOCAB داخل step-arena.html</text>
+<g><rect x="498" y="190" width="450" height="300" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="498" y="190" width="450" height="300" rx="18" fill="url(#sheen)"/></g>
+<text x="928" y="222" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">إتقان الأقسام</text>
+<text x="928" y="241" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">من PILLARS داخل الملف</text>
+<text x="924" y="286.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">القواعد</text>
+<rect x="574" y="268" width="214" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="633.9200000000001" y="268" width="154.07999999999998" height="26" rx="13" fill="#FF5722"/>
+<text x="564" y="286.72" fill="#FF5722" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">72%</text>
+<text x="924" y="324.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">القراءة</text>
+<rect x="574" y="306" width="214" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="663.88" y="306" width="124.11999999999999" height="26" rx="13" fill="#9D5CFF"/>
+<text x="564" y="324.72" fill="#9D5CFF" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">58%</text>
+<text x="924" y="362.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">التحليل الكتابي</text>
+<rect x="574" y="344" width="214" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="691.7" y="344" width="96.3" height="26" rx="13" fill="#10B981"/>
+<text x="564" y="362.72" fill="#10B981" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">45%</text>
+<text x="924" y="400.72" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">المفردات والاستماع</text>
+<rect x="574" y="382" width="214" height="26" rx="13" fill="rgba(255,255,255,0.055)"/>
+<rect x="610.38" y="382" width="177.62" height="26" rx="13" fill="#FFB020"/>
+<text x="564" y="400.72" fill="#FFB020" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">83%</text>
+<text x="32" y="522" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-09-30 16:54</text>
+<text x="948" y="522" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">report-agent · للقراءة فقط</text>
+</svg>

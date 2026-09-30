@@ -1,0 +1,211 @@
+{
+  "main": {
+    "id": "00b3c1f3395cb4de",
+    "type": "split",
+    "children": [
+      {
+        "id": "e568ef19f1bc7438",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "59912a93b568cd3c",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "مرحبًا.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "مرحبًا"
+            }
+          }
+        ]
+      },
+      {
+        "id": "85136aac8faadc61",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "426e477b43e154c7",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "العرض البياني"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "47fe57ea4a3cd2df",
+    "type": "split",
+    "children": [
+      {
+        "id": "3fe79bc57ebd5e38",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1f0159d3edd9fd00",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "مستكشف الملفات"
+            }
+          },
+          {
+            "id": "4a612ee4abdc76f8",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "البحث"
+            }
+          },
+          {
+            "id": "cec0a4e4da1b5aa6",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "الإشارات المرجعية"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "40c89c4fd343b15c",
+    "type": "split",
+    "children": [
+      {
+        "id": "7693235d8da62938",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "65e707c454c1134c",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "مرحبًا.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "الروابط الخلفية"
+            }
+          },
+          {
+            "id": "cc1ad1f427f6054d",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "مرحبًا.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "روابط صادرة"
+            }
+          },
+          {
+            "id": "fa7f99aa6b9c77d6",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "وسوم"
+            }
+          },
+          {
+            "id": "caf6b663f9a0b18b",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "جميع الخصائص"
+            }
+          },
+          {
+            "id": "326e27886485fb59",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "مرحبًا.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "المخطط التفصيلي"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:إفتح الانتقال السريع": false,
+      "graph:إفتح العرض البياني": false,
+      "canvas:إنشاء لوحة بصرية جديدة": false,
+      "daily-notes:إفتح ملاحظة اليوم": false,
+      "templates:أدرج قالب": false,
+      "command-palette:إفتح لوحة الأوامر": false,
+      "bases:إنشاء قاعدة جديدة": false
+    }
+  },
+  "active": "59912a93b568cd3c",
+  "lastOpenFiles": [
+    "مرحبًا.md"
+  ]
+}

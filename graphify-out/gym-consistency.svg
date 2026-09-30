@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="580" viewBox="0 0 980 580" font-family="Tajawal, Cairo, 'Segoe UI', system-ui, sans-serif">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#2A2028"/>
+    <stop offset="55%" stop-color="#1B1418"/>
+    <stop offset="100%" stop-color="#120C10"/>
+  </linearGradient>
+  <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#FF5722" stop-opacity="0.10"/>
+    <stop offset="55%" stop-color="#FF5722" stop-opacity="0.02"/>
+    <stop offset="100%" stop-color="#9D5CFF" stop-opacity="0.07"/>
+  </linearGradient>
+  <linearGradient id="title" x1="1" y1="0" x2="0" y2="0">
+    <stop offset="0%" stop-color="#FF5722"/>
+    <stop offset="100%" stop-color="#FFB020"/>
+  </linearGradient>
+
+</defs>
+<rect width="980" height="580" fill="url(#sky)"/>
+<text x="948" y="52" fill="url(#title)" font-size="28" font-weight="800" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">انتظام النادي</text>
+<text x="948" y="78" fill="rgba(255,246,240,0.56)" font-size="13" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">برنامج التقسيم وتغطية العضلات</text>
+<rect x="32" y="30" width="118" height="28" rx="14" fill="#FFB020" fill-opacity="0.16" stroke="#FFB020" stroke-opacity="0.55"/>
+<circle cx="50" cy="44" r="4" fill="#FFB020"/>
+<text x="91" y="49" fill="#FFB020" font-size="12" font-weight="700" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">بنية المشروع</text>
+<rect x="774.4" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="944" y="112" width="3" height="40" rx="2" fill="#10B981"/>
+<text x="934" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الهدف الأسبوعي</text>
+<text x="934" y="150" fill="#10B981" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">5</text>
+<rect x="588.8" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="758.4" y="112" width="3" height="40" rx="2" fill="#FF5722"/>
+<text x="748.4" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">جلسات مسجّلة</text>
+<text x="748.4" y="150" fill="#FF5722" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0</text>
+<rect x="403.20000000000005" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="572.8000000000001" y="112" width="3" height="40" rx="2" fill="#FFB020"/>
+<text x="562.8000000000001" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مجاميع فعّالة</text>
+<text x="562.8000000000001" y="150" fill="#FFB020" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0</text>
+<rect x="217.60000000000002" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="387.20000000000005" y="112" width="3" height="40" rx="2" fill="#00C2FF"/>
+<text x="377.20000000000005" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الحجم الكلّي</text>
+<text x="377.20000000000005" y="150" fill="#00C2FF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">—</text>
+<rect x="32" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
+<rect x="201.6" y="112" width="3" height="40" rx="2" fill="#FF4D8D"/>
+<text x="191.6" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أسابيع متتالية</text>
+<text x="191.6" y="150" fill="#FF4D8D" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0</text>
+<g><rect x="32" y="186" width="916" height="196" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="186" width="916" height="196" rx="18" fill="url(#sheen)"/></g>
+<text x="928" y="218" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أيام البرنامج</text>
+<text x="928" y="237" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">عدد التمارين في كل يوم من التقسيم</text>
+<line x1="72" y1="352" x2="908" y2="352" stroke="rgba(255,225,210,0.18)"/>
+<rect x="816.3333333333334" y="287.5" width="44" height="64.5" rx="7" fill="#FF5722" fill-opacity="0.92"/>
+<text x="838.3333333333334" y="280.5" fill="#FF5722" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">6</text>
+<rect x="677" y="276.75" width="44" height="75.25" rx="7" fill="#FF5722" fill-opacity="0.92"/>
+<text x="699" y="269.75" fill="#FF5722" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">7</text>
+<rect x="537.6666666666666" y="266" width="44" height="86" rx="7" fill="#FF5722" fill-opacity="0.92"/>
+<text x="559.6666666666666" y="259" fill="#FF5722" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">8</text>
+<rect x="398.3333333333333" y="298.25" width="44" height="53.75" rx="7" fill="#FF5722" fill-opacity="0.92"/>
+<text x="420.3333333333333" y="291.25" fill="#FF5722" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">5</text>
+<rect x="259" y="298.25" width="44" height="53.75" rx="7" fill="#FF5722" fill-opacity="0.92"/>
+<text x="281" y="291.25" fill="#FF5722" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">5</text>
+<rect x="119.66666666666663" y="309" width="44" height="43" rx="7" fill="#FF5722" fill-opacity="0.92"/>
+<text x="141.66666666666663" y="302" fill="#FF5722" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">4</text>
+<text x="838.3333333333334" y="370" fill="#FFF6F0" font-size="11.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">Push</text>
+<text x="699" y="370" fill="#FFF6F0" font-size="11.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">Pull</text>
+<text x="559.6666666666666" y="370" fill="#FFF6F0" font-size="11.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">Legs</text>
+<text x="420.3333333333333" y="370" fill="#FFF6F0" font-size="11.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">Upper</text>
+<text x="281" y="370" fill="#FFF6F0" font-size="11.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">Lower</text>
+<text x="141.66666666666663" y="370" fill="#FFF6F0" font-size="11.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">Off Day</text>
+<g><rect x="32" y="398" width="916" height="142" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="398" width="916" height="142" rx="18" fill="url(#sheen)"/></g>
+<text x="928" y="428" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">تغطية المجموعات العضلية</text>
+<text x="928" y="447" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">عدد التمارين الفريدة في البرنامج</text>
+<rect x="857.6" y="474.0" width="46.0" height="40.0" rx="5" fill="#FF5722" fill-opacity="0.92"/>
+<text x="880.6" y="468" fill="#FF5722" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">6</text>
+<text x="880.6" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">الظهر</text>
+<rect x="770.8" y="474.0" width="46.0" height="40.0" rx="5" fill="#FFB020" fill-opacity="0.92"/>
+<text x="793.8" y="468" fill="#FFB020" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">6</text>
+<text x="793.8" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">البطن</text>
+<rect x="684.0" y="487.3" width="46.0" height="26.7" rx="5" fill="#10B981" fill-opacity="0.92"/>
+<text x="707" y="481.3333333333333" fill="#10B981" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">4</text>
+<text x="707.0" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">الأكتاف</text>
+<rect x="597.2" y="494.0" width="46.0" height="20.0" rx="5" fill="#9D5CFF" fill-opacity="0.92"/>
+<text x="620.2" y="488" fill="#9D5CFF" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">3</text>
+<text x="620.2" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">الصدر</text>
+<rect x="510.4" y="494.0" width="46.0" height="20.0" rx="5" fill="#00C2FF" fill-opacity="0.92"/>
+<text x="533.4000000000001" y="488" fill="#00C2FF" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">3</text>
+<text x="533.4" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">الباي</text>
+<rect x="423.6" y="494.0" width="46.0" height="20.0" rx="5" fill="#FF4D8D" fill-opacity="0.92"/>
+<text x="446.6" y="488" fill="#FF4D8D" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">3</text>
+<text x="446.6" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">أمامية الفخذ</text>
+<rect x="336.8" y="500.7" width="46.0" height="13.3" rx="5" fill="#5B8CFF" fill-opacity="0.92"/>
+<text x="359.80000000000007" y="494.6666666666667" fill="#5B8CFF" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">2</text>
+<text x="359.8" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">التراي</text>
+<rect x="250.0" y="500.7" width="46.0" height="13.3" rx="5" fill="#FF7A45" fill-opacity="0.92"/>
+<text x="273" y="494.6666666666667" fill="#FF7A45" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">2</text>
+<text x="273.0" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">خلفية الفخذ</text>
+<rect x="163.2" y="507.3" width="46.0" height="6.7" rx="5" fill="#FF3B5C" fill-opacity="0.92"/>
+<text x="186.20000000000005" y="501.3333333333333" fill="#FF3B5C" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">1</text>
+<text x="186.2" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">البطة</text>
+<rect x="76.4" y="507.3" width="46.0" height="6.7" rx="5" fill="#FF5722" fill-opacity="0.92"/>
+<text x="99.39999999999998" y="501.3333333333333" fill="#FF5722" font-size="10" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">1</text>
+<text x="99.4" y="531" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">الجلوت</text>
+<text x="32" y="562" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-09-30 16:54</text>
+<text x="948" y="562" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">report-agent · للقراءة فقط</text>
+</svg>

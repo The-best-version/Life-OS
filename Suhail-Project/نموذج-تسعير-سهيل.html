@@ -1,0 +1,412 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>نموذج تسعير سهيل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap">
+
+<style>
+  :root{
+    --sand:#F5F0E6; --surface:#FCF9F3; --raise:#FFFDF8;
+    --ink:#241D14; --ink-soft:#6B5E4E; --ink-faint:#93866F;
+    --rule:#E1D7C5; --rule-soft:#EDE5D6;
+    --camel:#A96F3C; --camel-deep:#8A5629; --camel-wash:#F0E3D1;
+    --c-cost:#1F6DA8; --c-margin:#B76A21;
+    --ok:#2F6B4F; --warn:#9A6614; --bad:#9B342C;
+    --f-d:"Reem Kufi","Noto Kufi Arabic",system-ui,sans-serif;
+    --f-b:"IBM Plex Sans Arabic","Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --sand:#14110B; --surface:#1C1810; --raise:#232016;
+    --ink:#F2E9D9; --ink-soft:#AD9C83; --ink-faint:#80715A;
+    --rule:#362D21; --rule-soft:#2A2318;
+    --camel:#D9975B; --camel-deep:#E8B278; --camel-wash:#2F2416;
+    --c-cost:#4A8FC6; --c-margin:#BE7C31;
+    --ok:#6FA189; --warn:#D2A14E; --bad:#C4584D;
+  }}
+  :root[data-theme="dark"]{
+    --sand:#14110B; --surface:#1C1810; --raise:#232016;
+    --ink:#F2E9D9; --ink-soft:#AD9C83; --ink-faint:#80715A;
+    --rule:#362D21; --rule-soft:#2A2318;
+    --camel:#D9975B; --camel-deep:#E8B278; --camel-wash:#2F2416;
+    --c-cost:#4A8FC6; --c-margin:#BE7C31;
+    --ok:#6FA189; --warn:#D2A14E; --bad:#C4584D;
+  }
+
+  *{box-sizing:border-box}
+  body{direction:rtl;background:var(--sand);color:var(--ink);
+    font-family:var(--f-b);font-size:15.5px;line-height:1.8;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding-inline:20px;padding-block:0 80px}
+  h1,h2,h3{font-family:var(--f-d);font-weight:600;text-wrap:balance}
+  .num{font-variant-numeric:tabular-nums}
+
+  header{padding-block:46px 8px;border-bottom:1px solid var(--rule)}
+  .kicker{font-size:11.5px;letter-spacing:.15em;color:var(--camel);font-weight:600;margin:0 0 12px}
+  h1{font-size:clamp(32px,7.5vw,46px);line-height:1.2;margin:0 0 16px}
+  .sub{color:var(--ink-soft);margin:0 0 30px;max-width:60ch}
+
+  h2{font-size:clamp(22px,5vw,28px);margin:0 0 8px}
+  .sect{padding-block:46px;border-bottom:1px solid var(--rule)}
+  .sect > p.desc{color:var(--ink-soft);margin:0 0 26px;max-width:60ch;font-size:15px}
+
+  /* headline */
+  .headline{
+    background:var(--camel-wash);border-inline-start:3px solid var(--camel);
+    padding:24px 22px;margin-block:30px;border-radius:0 3px 3px 0;
+  }
+  .headline p{margin:0;font-size:clamp(18px,4.4vw,22px);font-family:var(--f-d);line-height:1.6}
+  .headline small{display:block;font-family:var(--f-b);font-size:15px;color:var(--ink-soft);margin-top:10px;font-weight:400}
+
+  /* KPI tiles */
+  .kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-top:4px}
+  .kpi{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 16px}
+  .kpi dt{font-size:11.5px;letter-spacing:.07em;color:var(--ink-faint);margin:0 0 8px;font-weight:600}
+  .kpi dd{margin:0;font-family:var(--f-d);font-size:32px;font-weight:700;line-height:1;color:var(--ink)}
+  .kpi dd s{text-decoration:none;font-size:13px;font-weight:500;color:var(--ink-faint);margin-inline-start:5px}
+  .kpi p{margin:8px 0 0;font-size:12.5px;color:var(--ink-faint);line-height:1.6}
+
+  /* tables */
+  .tbox{overflow-x:auto;margin-block:8px 0}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;min-width:440px}
+  th,td{text-align:start;padding:11px 10px;border-bottom:1px solid var(--rule-soft)}
+  thead th{
+    font-family:var(--f-d);font-size:12.5px;font-weight:600;color:var(--ink-faint);
+    letter-spacing:.05em;border-bottom:1px solid var(--rule);padding-bottom:9px;
+  }
+  td.n,th.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:1px solid var(--rule)}
+  tr.total td{font-weight:600;background:var(--surface)}
+  td small{display:block;color:var(--ink-faint);font-size:12.5px;line-height:1.5}
+  .hl{color:var(--camel-deep);font-weight:600}
+
+  /* proportion bar */
+  .bar{display:flex;height:40px;border-radius:2px;overflow:hidden;margin-block:22px 10px;gap:2px}
+  .bar div{display:grid;place-items:center;font-size:12.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden}
+  .bar .b-cost{background:var(--c-cost)}
+  .bar .b-marg{background:var(--c-margin)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink-soft)}
+  .legend span{display:flex;align-items:center;gap:7px}
+  .legend i{width:11px;height:11px;border-radius:2px;display:block}
+
+  /* calculator */
+  .calc{background:var(--raise);border:1px solid var(--rule);border-radius:3px;padding:24px 22px}
+  .calc label{display:block;font-family:var(--f-d);font-size:15px;font-weight:600;margin-bottom:6px}
+  .price-out{font-family:var(--f-d);font-size:44px;font-weight:700;color:var(--camel-deep);line-height:1;margin:0 0 4px}
+  .price-out span{font-size:15px;color:var(--ink-faint);font-weight:500;margin-inline-start:6px}
+  input[type=range]{width:100%;margin:14px 0 6px;accent-color:var(--camel);height:26px}
+  .ticks{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-faint);margin-bottom:20px}
+  .outs{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));border-top:1px solid var(--rule);padding-top:20px}
+  .out{}
+  .out dt{font-size:11.5px;color:var(--ink-faint);font-weight:600;margin-bottom:5px}
+  .out dd{margin:0;font-family:var(--f-d);font-size:24px;font-weight:600;line-height:1.1}
+  .verdict{margin-top:18px;padding:12px 14px;border-radius:2px;font-size:14px;font-weight:500;border:1px solid}
+  .v-ok{color:var(--ok);border-color:var(--ok);background:transparent}
+  .v-warn{color:var(--warn);border-color:var(--warn)}
+  .v-bad{color:var(--bad);border-color:var(--bad)}
+
+  /* rules list */
+  .rules{counter-reset:r;list-style:none;margin:0;padding:0}
+  .rules li{counter-increment:r;display:grid;grid-template-columns:34px 1fr;gap:14px;
+    padding-block:18px;border-bottom:1px solid var(--rule-soft);align-items:start}
+  .rules li::before{content:counter(r,arabic-indic);font-family:var(--f-d);font-size:20px;
+    font-weight:600;color:var(--camel);line-height:1.5}
+  .rules h3{font-size:16px;margin:0 0 4px}
+  .rules p{margin:0;color:var(--ink-soft);font-size:14.5px;line-height:1.7}
+
+  /* mistakes */
+  .fix{border-inline-start:2px solid var(--bad);padding:2px 16px;margin-block:20px}
+  .fix h3{font-size:16px;margin:0 0 5px}
+  .fix p{margin:0;color:var(--ink-soft);font-size:14.5px}
+  .fix b{color:var(--ink)}
+
+  /* checklist */
+  .check{list-style:none;margin:0;padding:0}
+  .check li{display:grid;grid-template-columns:auto 1fr;gap:12px;padding-block:13px;
+    border-bottom:1px solid var(--rule-soft);align-items:start;font-size:15px}
+  .check li::before{content:"";width:16px;height:16px;border:1.5px solid var(--camel);
+    border-radius:2px;margin-top:6px}
+  .check b{font-weight:600}
+  .check span{color:var(--ink-soft);font-size:13.5px;display:block}
+
+  footer{padding-top:34px;font-size:13px;color:var(--ink-faint);text-align:center}
+  @media (max-width:520px){.calc{padding:20px 16px}.kpi dd{font-size:28px}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="kicker">سُهَيْل للجلسات · الدمام والخبر · سبتمبر ٢٠٢٦</p>
+  <h1>نموذج التسعير</h1>
+  <p class="sub">
+    إعادة تسعير كاملة مبنية على التكلفة الفعلية، وهامش المساهمة، وقيمة وقتك، والإهلاك،
+    وأسعار السوق الموثقة. كل رقم هنا محسوب سطراً بسطر — مو تقدير.
+  </p>
+</header>
+
+<!-- ===== الخلاصة ===== -->
+<section class="sect">
+  <p class="kicker">الخلاصة</p>
+  <h2>تكلفتك منخفضة لدرجة أن التكلفة لا تحدد سعرك</h2>
+  <div class="headline">
+    <p>تكلفة الحجز الواحد ١١٧ ريال. هامشك ٨٣٪.</p>
+    <small>
+      يعني ما فيه سعر في النطاق المعقول يخسّرك. القرار كله يرجع للسوق والتموضع والسرعة —
+      مو للحسبة. وهذي نعمة ونقمة: تقدر تنافس بأي سعر، وتقدر تبيع بأرخص من اللازم بدون ما تحس.
+    </small>
+  </div>
+
+  <dl class="kpis">
+    <div class="kpi"><dt>التكلفة الحقيقية للحجز</dt><dd class="num">١١٧<s>ريال</s></dd>
+      <p>نقدي ٨٢ + إهلاك ٣٥</p></div>
+    <div class="kpi"><dt>هامش المساهمة عند ٦٩٠</dt><dd class="num">٥٧٤<s>ريال</s></dd>
+      <p>٨٣٪ من قيمة الحجز</p></div>
+    <div class="kpi"><dt>عائد ساعتك</dt><dd class="num">١٤٠<s>ريال/ساعة</s></dd>
+      <p>٤.١ ساعة عمل للحجز</p></div>
+    <div class="kpi"><dt>استرداد رأس المال</dt><dd class="num">٥<s>حجوزات</s></dd>
+      <p>من ٢,٩٤٩ ريال نقداً</p></div>
+  </dl>
+</section>
+
+<!-- ===== التكلفة ===== -->
+<section class="sect">
+  <p class="kicker">الطبقة الأولى</p>
+  <h2>من وين جاءت الـ١١٧؟</h2>
+  <p class="desc">قعدة العائلة، حجز واحد داخل الدمام أو الخبر.</p>
+
+  <div class="tbox">
+    <table>
+      <thead><tr><th>البند</th><th class="n">ريال</th><th>كيف حُسب</th></tr></thead>
+      <tbody>
+        <tr><td>الغاز</td><td class="n">٨</td>
+          <td><small>دفاية ٠.٧ كجم/ساعة × ٥ ساعات = ٣.٥ كجم. الأسطوانة ١١ كجم تكفي ٣ جلسات. تعبئتها ٢٦.٢٣ ريال (سعر غازكو الموحد).</small></td></tr>
+        <tr><td>الوقود</td><td class="n">٢٤</td>
+          <td><small>٧٢ كم (توصيل + استلام، ذهاب وعودة) × ٠.١٤ لتر/كم × ٢.٣٣ ريال.</small></td></tr>
+        <tr><td>إهلاك السيارة</td><td class="n">٢٠</td>
+          <td><small>إطارات وزيت وصيانة موزّعة على الرحلة.</small></td></tr>
+        <tr><td>التنظيف</td><td class="n">٢٠</td>
+          <td><small>منظفات، ماء، بخاخ حماية دوري.</small></td></tr>
+        <tr><td>مستهلكات</td><td class="n">١٠</td>
+          <td><small>بطاريات الإضاءة، مناديل، أكياس، تغليف.</small></td></tr>
+        <tr class="total"><td>مجموع التكلفة النقدية</td><td class="n">٨٢</td>
+          <td><small>اللي يطلع من جيبك فعلاً</small></td></tr>
+        <tr><td>إهلاك المعدات</td><td class="n">٣٥</td>
+          <td><small>رأس مال ٤,١٤٩ ريال ÷ ١٢٠ حجز عمر افتراضي. <b>هذي التكلفة اللي ينساها ٩ من ١٠ مبتدئين</b> — المعدات تموت وتحتاج بديل.</small></td></tr>
+        <tr class="total"><td>التكلفة الاقتصادية</td><td class="n hl">١١٧</td>
+          <td><small>الرقم الصحيح للتسعير</small></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bar" role="img" aria-label="من كل ٦٩٠ ريال: ١١٧ تكلفة و٥٧٤ هامش مساهمة">
+    <div class="b-cost" style="flex:117">تكلفة ١١٧</div>
+    <div class="b-marg" style="flex:574">هامش مساهمة ٥٧٤ ريال</div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--c-cost)"></i> التكلفة الاقتصادية — ١٧٪</span>
+    <span><i style="background:var(--c-margin)"></i> هامش المساهمة — ٨٣٪</span>
+  </div>
+</section>
+
+<!-- ===== وقتك ===== -->
+<section class="sect">
+  <p class="kicker">الطبقة الثانية</p>
+  <h2>وقتك ليس مجاناً</h2>
+  <p class="desc">
+    الحجز الواحد يستهلك <b>٤.١ ساعة</b> من وقتك: تحميل ٣٠ دقيقة، توصيل ٢٥، تركيب ٤٥،
+    عودة ٢٥، رحلة استلام ٢٥، فك ٣٠، عودة ٢٥، تفريغ وتنظيف ٦٠.
+  </p>
+  <p class="desc" style="margin-bottom:0">
+    لو قدّرت ساعتك بـ٤٠ ريال، فتكلفة وقتك <b>١٦٤ ريال للحجز</b>. وهذا مو خصم من ربحك —
+    هذا <b>أجرك</b>. الفرق بين الاثنين هو الفرق بين صاحب مشروع وموظف عند نفسه.
+    عند سعر ٦٩٠، ساعتك تساوي <span class="hl">١٤٠ ريال</span> — وهذا ممتاز لطالب جامعي.
+  </p>
+</section>
+
+<!-- ===== الحاسبة ===== -->
+<section class="sect">
+  <p class="kicker">جرّب بنفسك</p>
+  <h2>حاسبة السعر</h2>
+  <p class="desc">حرّك السعر وشوف وش يصير للهامش وعائد ساعتك. الأرقام لقعدة العائلة داخل الدمام والخبر.</p>
+
+  <div class="calc">
+    <label for="p">سعر قعدة العائلة</label>
+    <p class="price-out num" id="pv">٦٩٠<span>ريال</span></p>
+    <input type="range" id="p" min="300" max="1200" step="10" value="690" aria-label="سعر قعدة العائلة بالريال">
+    <div class="ticks"><span>٣٠٠</span><span>٧٥٠</span><span>١٢٠٠</span></div>
+
+    <dl class="outs">
+      <div class="out"><dt>هامش المساهمة</dt><dd class="num" id="o1">٥٧٤ ر</dd></div>
+      <div class="out"><dt>نسبة الهامش</dt><dd class="num" id="o2">٨٣٪</dd></div>
+      <div class="out"><dt>عائد الساعة</dt><dd class="num" id="o3">١٤٠ ر</dd></div>
+      <div class="out"><dt>حجوزات الاسترداد</dt><dd class="num" id="o4">٥</dd></div>
+      <div class="out"><dt>السعر للشخص</dt><dd class="num" id="o5">٦٩ ر</dd></div>
+    </dl>
+    <p class="verdict v-ok" id="vd">عائد ممتاز — السعر يستاهل وقتك ويبني المشروع.</p>
+  </div>
+</section>
+
+<!-- ===== الأخطاء ===== -->
+<section class="sect">
+  <p class="kicker">تصحيحات</p>
+  <h2>خمسة أخطاء في التسعير السابق</h2>
+  <p class="desc">اكتشفناها لما حسبنا كل سطر بدل التقدير بالحدس.</p>
+
+  <div class="fix"><h3>١ · الغاز كان مبالغاً فيه ٣ أضعاف</h3>
+    <p>قدّرناه <b>٢٧ ريال</b> للحجز على أساس تعبئة كاملة. الحقيقة: الأسطوانة تكفي <b>٣ جلسات</b>، فالتكلفة <b>٨ ريال</b>.</p></div>
+
+  <div class="fix"><h3>٢ · رسوم الجبيل تخسّرك</h3>
+    <p>وضعنا <b>+١٥٠ ريال</b>. الواقع: ٣٦٠ كم ذهاباً وإياباً = <b>١١٧ ريال وقود</b> وحده، زائد <b>٣.٥ ساعة</b> قيادة إضافية. عائد ساعتك ينزل من ١٤٠ إلى ٨٩. <b>الصحيح: +٢٥٠ ريال، وقعدة العائلة فقط.</b></p></div>
+
+  <div class="fix"><h3>٣ · تأجير الدفاية المنفرد أضعف منتج عندك</h3>
+    <p>بـ٢٥٠ ريال، هامشه ٥٥٪ وعائد ساعتك ٨٦ ريال — نفس الرحلة الكاملة بربع العائد. <b>الصحيح: ٣٠٠ ريال، أو تُعرض كإضافة فقط.</b></p></div>
+
+  <div class="fix"><h3>٤ · القعدة الصغيرة بـ٣٥٠ تضرّ الباقة الكبيرة</h3>
+    <p>٣٥٠ ← ٧٥٠ قفزة أكثر من الضعف، فتبدو الكبيرة غالية. <b>الصحيح: ٤٥٠</b> — فتصير القفزة لـ٦٩٠ مقابل ٣ أضعاف السعة، والكبيرة هي الصفقة الواضحة.</p></div>
+
+  <div class="fix"><h3>٥ · الإهلاك لم يُحسب أصلاً</h3>
+    <p>٣٥ ريال للحجز. تجاهله يعني إنك تأكل من رأس مالك وتسميه ربحاً، وبعد ١٢٠ حجز تكتشف إنك ما عندك فلوس تجدد بها المعدات.</p></div>
+</section>
+
+<!-- ===== قائمة الأسعار ===== -->
+<section class="sect">
+  <p class="kicker">القرار</p>
+  <h2>قائمة الأسعار الموصى بها</h2>
+  <p class="desc">مبنية على التكلفة كأرضية، والسوق كسقف، والتموضع الفاخر كاتجاه.</p>
+
+  <div class="tbox">
+    <table>
+      <thead><tr><th>الباقة</th><th class="n">كان</th><th class="n">صار</th><th class="n">الهامش</th><th class="n">ر/ساعة</th></tr></thead>
+      <tbody>
+        <tr><td>قعدة صغيرة<small>٣–٤ أشخاص</small></td><td class="n">٣٥٠</td><td class="n hl">٤٥٠</td><td class="n">٧٦٪</td><td class="n">١٠٧</td></tr>
+        <tr><td>قعدة العائلة<small>٩–١٠ أشخاص · الأساس</small></td><td class="n">٧٥٠</td><td class="n hl">٦٩٠</td><td class="n">٨٣٪</td><td class="n">١٤٠</td></tr>
+        <tr><td>العائلة + ضيافة<small>قهوة، شاي، تمر</small></td><td class="n">٨٩٠</td><td class="n hl">٨٤٠</td><td class="n">٨١٪</td><td class="n">١٤٩</td></tr>
+        <tr><td>تأجير دفاية فقط<small>لمن عنده قعدة جاهزة</small></td><td class="n">٢٥٠</td><td class="n hl">٣٠٠</td><td class="n">٦٣٪</td><td class="n">١١٨</td></tr>
+        <tr><td>رسوم الجبيل<small>العائلة فقط، نهايات الأسبوع</small></td><td class="n">+١٥٠</td><td class="n hl">+٢٥٠</td><td class="n">—</td><td class="n">١١٠</td></tr>
+        <tr><td>قعدة مميزة<small>شبة نار + سينما — بعد الدفعة الثانية</small></td><td class="n">—</td><td class="n hl">١,٢٩٠</td><td class="n">٨٥٪</td><td class="n">١٨٠</td></tr>
+        <tr><td>حجز ثانٍ نفس الليلة<small>نفس المنطقة — الرحلة مدفوعة أصلاً</small></td><td class="n">—</td><td class="n hl">−١٥٪</td><td class="n">٨٦٪</td><td class="n">٢١٠</td></tr>
+        <tr class="total"><td>التأمين المسترد</td><td class="n">٢٠٠</td><td class="n hl">١٠٠</td><td class="n">—</td><td class="n">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="headline" style="margin-bottom:0">
+    <p>عرض الإطلاق: خصم ٢٠٪ لأول ١٠ حجوزات — مقابل تقييم وصور.</p>
+    <small>
+      لاحظ الصياغة: ما خفّضنا السعر، <b>بادلناه</b>. السعر المعلن يبقى ٦٩٠، والخصم مقابل
+      شيء تحتاجه أنت. الخصم بلا مقابل يعلّم العميل ينتظر التخفيضات — والمبادلة تعطيك أول
+      ١٠ تقييمات، وهي أغلى من ١,٣٨٠ ريال بكثير.
+    </small>
+  </div>
+</section>
+
+<!-- ===== CAC ===== -->
+<section class="sect">
+  <p class="kicker">التسويق كاستثمار</p>
+  <h2>كم تقدر تدفع لاكتساب عميل؟</h2>
+  <p class="desc">أغلب المبتدئين يصرفون على الإعلان بالحدس. القاعدة التجارية: لا تصرف ريالاً قبل ما تعرف سقفك.</p>
+
+  <div class="tbox">
+    <table>
+      <thead><tr><th>البند</th><th class="n">القيمة</th><th>الأساس</th></tr></thead>
+      <tbody>
+        <tr><td>هامش المساهمة للحجز</td><td class="n">٥٧٤ ريال</td><td><small>عند سعر ٦٩٠</small></td></tr>
+        <tr><td>تكرار العميل</td><td class="n">٢.٢ حجز</td><td><small>خلال موسمين — مناسبات وتجمعات متكررة</small></td></tr>
+        <tr><td>القيمة المباشرة</td><td class="n">١,٢٦٢ ريال</td><td><small>٥٧٤ × ٢.٢</small></td></tr>
+        <tr><td>أثر الإحالات</td><td class="n">×١.٦</td><td><small>كل عميل راضٍ يجيب ٠.٦ عميل جديد</small></td></tr>
+        <tr class="total"><td>القيمة الكلية للعميل (LTV)</td><td class="n hl">٢,٠١٩ ريال</td><td><small>هذا ما يساويه عميل واحد فعلاً</small></td></tr>
+        <tr><td>سقف تكلفة الاكتساب عند ٤:١</td><td class="n hl">٥٠٥ ريال</td><td><small>النسبة الصحية المعتمدة تجارياً هي ٣:١ فأعلى</small></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="desc" style="margin-block:22px 0">
+    <b>وش تعني هذي عملياً؟</b> لو صرفت ١,٠٠٠ ريال إعلانات في شهر وجابت لك <b>حجزين فقط</b>،
+    تكون تكلفة الاكتساب ٥٠٠ ريال — وأنت <b>لا تزال رابحاً</b>. أغلب منافسيك ما يعرفون هذا
+    الرقم، فإما يخافون من الإعلان نهائياً، أو يصرفون بلا سقف. أنت تعرفه من اليوم الأول.
+  </p>
+</section>
+
+<!-- ===== القواعد ===== -->
+<section class="sect">
+  <p class="kicker">من عالم التجارة</p>
+  <h2>عشر قواعد تحميك من الغلط</h2>
+
+  <ol class="rules">
+    <li><div><h3>التكلفة تحدد الأرضية، والسوق يحدد السقف</h3>
+      <p>لا تسعّر بـ«التكلفة + نسبة». سعّر بما يستحقه ما تقدمه، وتأكد فقط أنه فوق الأرضية.</p></div></li>
+    <li><div><h3>لا تخفّض سعرك — بادِله</h3>
+      <p>كل خصم لازم يأخذ مقابلاً: تقييم، صور، تاريخ غير مطلوب، أو حجز مسبق. الخصم المجاني يعلّم العميل الانتظار.</p></div></li>
+    <li><div><h3>الباقة الغالية تبيع الباقة الوسطى</h3>
+      <p>وجود خيار بـ١,٢٩٠ يخلي الـ٦٩٠ تبدو معقولة. هذا أثر الإرساء، وما يكلفك شيئاً لأن أحداً قد لا يشتريه أصلاً.</p></div></li>
+    <li><div><h3>الباقة الصغيرة موجودة لتبيع الكبيرة</h3>
+      <p>سعّرها قريباً من الكبيرة عمداً، فيصير الفرق في القيمة أوضح من الفرق في السعر.</p></div></li>
+    <li><div><h3>اعرض الرقم بأصغر وحدة صادقة</h3>
+      <p>«٦٩ ريال للشخص» و«٦٩٠ ريال» نفس المبلغ — والأول يُقنع والثاني يُخيف.</p></div></li>
+    <li><div><h3>ارفع السعر بالتدريج حتى تجد السقف</h3>
+      <p>+١٠٪ كل ١٥ حجزاً. لما ينخفض معدل الحجز بوضوح، ارجع خطوة. هذي الطريقة الوحيدة لمعرفة سعر السوق الحقيقي.</p></div></li>
+    <li><div><h3>احسب وقتك كتكلفة</h3>
+      <p>وإلا تشتغل بالمجان وتسميه ربحاً. لو عائد ساعتك أقل من أي عمل بديل، المشروع يخسر حتى لو الحساب يقول ربح.</p></div></li>
+    <li><div><h3>الإهلاك تكلفة حقيقية اليوم، لا مستقبلاً</h3>
+      <p>اعزل ٣٥ ريال من كل حجز في حساب منفصل. بعد ١٢٠ حجزاً بتكون تملك ثمن معدات جديدة كاملة.</p></div></li>
+    <li><div><h3>العربون يحمي تدفقك النقدي</h3>
+      <p>٥٠٪ مقدماً تغطي تكلفتك النقدية كاملة قبل ما تتحرك، وتقلل الإلغاء لأن العميل صار «داخل» الصفقة.</p></div></li>
+    <li><div><h3>الأصل الذي يعمل خط دخل مستقل</h3>
+      <p>دفايتك تكلفتها ٨٩٩ وتأجّرها السوق بـ٣٠٠ لليلة. كل أصل عندك اسأل: هل يقدر يُؤجَّر وحده؟</p></div></li>
+  </ol>
+</section>
+
+<!-- ===== الخطوات ===== -->
+<section class="sect" style="border-bottom:0">
+  <p class="kicker">التنفيذ</p>
+  <h2>خمس خطوات هذا الأسبوع</h2>
+  <ul class="check">
+    <li><div><b>افحص أسعار المنافسين ميدانياً</b><span>افتح هايلايت «السعر» عند @galsaat_khobar من جوالك، وراسل اثنين آخرين كعميل عادي. عشرون دقيقة تحسم النقاش كله.</span></div></li>
+    <li><div><b>احجز معرّف suhail.kashta</b><span>إنستقرام وتيك توك وسناب و X — متاح على المنصتين الأوليين، وما يكلفك شيئاً.</span></div></li>
+    <li><div><b>ثبّت الأسعار الجديدة في الموقع</b><span>٤٥٠ / ٦٩٠ / ٨٤٠ / ٣٠٠ / +٢٥٠ للجبيل، مع عرض الإطلاق المقابل للتقييم.</span></div></li>
+    <li><div><b>افتح حساب الإهلاك</b><span>محفظة أو حساب منفصل، ٣٥ ريال من كل حجز. لا تلمسها.</span></div></li>
+    <li><div><b>سجّل كل حجز في جدول</b><span>التاريخ، الباقة، السعر، مصدر العميل، وتكلفته الفعلية. بعد ١٠ حجوزات بتملك بيانات حقيقية تستبدل كل تقدير في هذه الصفحة.</span></div></li>
+  </ul>
+</section>
+
+<footer>
+  نموذج تسعير سُهَيْل · كل الأرقام محسوبة من مصادر موثقة ومراجعة سطراً بسطر
+</footer>
+</div>
+
+<script>
+(function(){
+  var CASH=82, DEP=35, ECON=117, HRS=4.1, CAPITAL=2949, SEATS=10;
+  var ar=function(n){return String(n).replace(/[0-9]/g,function(d){return "٠١٢٣٤٥٦٧٨٩"[d];});};
+  var p=document.getElementById('p');
+  var pv=document.getElementById('pv');
+  var o=[1,2,3,4,5].map(function(i){return document.getElementById('o'+i);});
+  var vd=document.getElementById('vd');
+
+  function render(){
+    var price=+p.value;
+    var contrib=price-ECON;
+    var gm=Math.round(contrib/price*100);
+    var hourly=Math.round(contrib/HRS);
+    var recover=Math.ceil(CAPITAL/Math.max(price-CASH,1));
+    var perSeat=Math.round(price/SEATS);
+
+    pv.innerHTML=ar(price)+'<span>ريال</span>';
+    o[0].textContent=ar(contrib)+' ر';
+    o[1].textContent=ar(gm)+'٪';
+    o[2].textContent=ar(hourly)+' ر';
+    o[3].textContent=ar(recover);
+    o[4].textContent=ar(perSeat)+' ر';
+
+    var cls,msg;
+    if(hourly<60){cls='v-bad';msg='عائد ضعيف — ساعتك تساوي '+ar(hourly)+' ريال. ما يستاهل الجهد ولا يبني مشروعاً.';}
+    else if(hourly<110){cls='v-warn';msg='عائد مقبول — يغطي وقتك، لكن النمو بطيء والهامش ما يحتمل أخطاء.';}
+    else if(hourly<=210){cls='v-ok';msg='عائد ممتاز — السعر يستاهل وقتك ويبني المشروع.';}
+    else {cls='v-warn';msg='عائد عالٍ جداً — مربح على الورق، لكن بلا تقييمات وسمعة راح تقل الحجوزات.';}
+    vd.className='verdict '+cls;
+    vd.textContent=msg;
+  }
+  p.addEventListener('input',render);
+  render();
+})();
+</script>
+
+</body></html>

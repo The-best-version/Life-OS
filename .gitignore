@@ -1,0 +1,22 @@
+# dependencies & build output
+node_modules/
+.next/
+dist/
+build/
+out/
+*.tsbuildinfo
+.netlify/
+
+# personal data snapshots — localStorage exports, never committed
+graphify-out/data/
+
+# graphify working files
+graphify-out/cache/
+graphify-out/.graphify_*
+
+# OS / editor
+Thumbs.db
+.DS_Store
+
+# Obsidian per-machine UI state
+graphify-out/.obsidian/

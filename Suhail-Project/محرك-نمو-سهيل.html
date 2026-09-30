@@ -1,0 +1,439 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>محرك نمو سهيل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap">
+
+<style>
+  :root{
+    --sand:#F5F0E6; --surface:#FCF9F3; --raise:#FFFDF8;
+    --ink:#241D14; --ink-soft:#6B5E4E; --ink-faint:#93866F;
+    --rule:#E1D7C5; --rule-soft:#EDE5D6;
+    --camel:#A96F3C; --camel-deep:#8A5629; --camel-wash:#F0E3D1;
+    --accent2:#1F6DA8;
+    --ok:#2F6B4F; --bad:#9B342C;
+    --f-d:"Reem Kufi","Noto Kufi Arabic",system-ui,sans-serif;
+    --f-b:"IBM Plex Sans Arabic","Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --sand:#14110B; --surface:#1C1810; --raise:#232016;
+    --ink:#F2E9D9; --ink-soft:#AD9C83; --ink-faint:#80715A;
+    --rule:#362D21; --rule-soft:#2A2318;
+    --camel:#D9975B; --camel-deep:#E8B278; --camel-wash:#2F2416;
+    --accent2:#4A8FC6; --ok:#6FA189; --bad:#C4584D;
+  }}
+  :root[data-theme="dark"]{
+    --sand:#14110B; --surface:#1C1810; --raise:#232016;
+    --ink:#F2E9D9; --ink-soft:#AD9C83; --ink-faint:#80715A;
+    --rule:#362D21; --rule-soft:#2A2318;
+    --camel:#D9975B; --camel-deep:#E8B278; --camel-wash:#2F2416;
+    --accent2:#4A8FC6; --ok:#6FA189; --bad:#C4584D;
+  }
+
+  *{box-sizing:border-box}
+  body{direction:rtl;background:var(--sand);color:var(--ink);
+    font-family:var(--f-b);font-size:15.5px;line-height:1.8;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding-inline:20px;padding-block:0 80px}
+  h1,h2,h3{font-family:var(--f-d);font-weight:600;text-wrap:balance}
+  .num{font-variant-numeric:tabular-nums}
+
+  header{padding-block:46px 30px;border-bottom:1px solid var(--rule)}
+  .kicker{font-size:11.5px;letter-spacing:.15em;color:var(--camel);font-weight:600;margin:0 0 12px}
+  h1{font-size:clamp(32px,7.5vw,46px);line-height:1.2;margin:0 0 16px}
+  .sub{color:var(--ink-soft);margin:0;max-width:60ch}
+
+  .sect{padding-block:46px;border-bottom:1px solid var(--rule)}
+  h2{font-size:clamp(22px,5vw,29px);margin:0 0 10px}
+  .desc{color:var(--ink-soft);margin:0 0 26px;max-width:62ch;font-size:15px}
+  .sect p{max-width:62ch}
+
+  .headline{background:var(--camel-wash);border-inline-start:3px solid var(--camel);
+    padding:24px 22px;margin-block:26px;border-radius:0 3px 3px 0}
+  .headline p{margin:0;font-size:clamp(18px,4.3vw,22px);font-family:var(--f-d);line-height:1.6}
+  .headline small{display:block;font-family:var(--f-b);font-size:15px;color:var(--ink-soft);
+    margin-top:12px;font-weight:400;line-height:1.75}
+
+  figure{margin:30px 0 0}
+  figure svg{width:100%;max-width:100%;height:auto;display:block}
+  figcaption{font-size:13.5px;color:var(--ink-faint);margin-top:12px;text-align:center;line-height:1.7}
+
+  .tbox{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;min-width:460px}
+  th,td{text-align:start;padding:11px 10px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  thead th{font-family:var(--f-d);font-size:12.5px;font-weight:600;color:var(--ink-faint);
+    letter-spacing:.05em;border-bottom:1px solid var(--rule)}
+  td.n,th.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:1px solid var(--rule)}
+  tr.total td{font-weight:600;background:var(--surface)}
+  td small{display:block;color:var(--ink-faint);font-size:12.5px;line-height:1.55}
+  .hl{color:var(--camel-deep);font-weight:600}
+
+  .stage{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:baseline;margin-bottom:6px}
+  .stage b{font-family:var(--f-d);font-size:12px;letter-spacing:.08em;color:var(--sand);
+    background:var(--camel);padding:5px 11px;border-radius:2px;white-space:nowrap}
+
+  ul.plain{list-style:none;margin:0;padding:0}
+  ul.plain li{display:grid;grid-template-columns:auto 1fr;gap:11px;padding-block:11px;
+    border-bottom:1px solid var(--rule-soft);align-items:start}
+  ul.plain li::before{content:"";width:5px;height:5px;background:var(--camel);
+    transform:rotate(45deg);margin-top:11px}
+  ul.plain b{font-weight:600}
+  ul.plain span{display:block;color:var(--ink-soft);font-size:14px;line-height:1.7}
+
+  .shoot{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:22px 20px;margin-top:8px}
+  .shoot h3{font-size:16px;margin:0 0 12px}
+  .shoot ol{margin:0;padding-inline-start:20px}
+  .shoot li{padding-block:5px;font-size:14.5px}
+  .shoot li b{font-weight:600}
+
+  .killer{border:1.5px solid var(--camel);border-radius:3px;padding:24px 22px;margin-block:26px}
+  .killer h3{font-size:19px;margin:0 0 10px;color:var(--camel-deep)}
+  .killer p{margin:0 0 12px}
+  .killer p:last-child{margin-bottom:0}
+
+  .avoid li{border-inline-start:2px solid var(--bad);padding:2px 15px;margin-bottom:18px;list-style:none}
+  .avoid h3{font-size:16px;margin:0 0 4px}
+  .avoid p{margin:0;color:var(--ink-soft);font-size:14.5px}
+  .avoid{margin:0;padding:0}
+
+  .metrics{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .metric{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:17px 15px}
+  .metric dt{font-family:var(--f-d);font-size:14.5px;font-weight:600;margin-bottom:6px}
+  .metric dd{margin:0;font-size:13.5px;color:var(--ink-soft);line-height:1.65}
+  .metric em{font-style:normal;color:var(--camel-deep);font-weight:600}
+
+  footer{padding-top:34px;font-size:13px;color:var(--ink-faint);text-align:center}
+  @media (max-width:520px){.stage{grid-template-columns:1fr;gap:8px}.stage b{justify-self:start}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="kicker">سُهَيْل للجلسات · محرك النمو</p>
+  <h1>كيف تجيب العملاء وتخليهم يرجعون</h1>
+  <p class="sub">
+    نظام اكتساب واحتفاظ مبني على أصل تملكه ولا يملكه أغلب منافسيك:
+    كل حجز عندك يُنتج محتوى، وكل ضيف في الحجز قناة توزيع.
+  </p>
+</header>
+
+<!-- ===== الفكرة ===== -->
+<section class="sect">
+  <p class="kicker">الفكرة المركزية</p>
+  <h2>أنت لا تبيع جلسات — أنت تبيع دليلاً</h2>
+  <div class="headline">
+    <p>كل حجز هو جلسة تصوير يدفعون لك أجرة حضورها.</p>
+    <small>
+      محل ملابس يدفع مصوراً ليصنع محتوى. أنت العكس: <b>العميل يدفع لك ٦٩٠ ريال، وأنت تخرج
+      بأربع قطع محتوى</b> صُوّرت في موقع حقيقي مع أشخاص حقيقيين. هذا اختلاف جوهري —
+      وأغلب منافسيك يهدرونه لأنهم يعتبرون الحجز «شغلة خلصت».
+    </small>
+  </div>
+</section>
+
+<!-- ===== المحرك ===== -->
+<section class="sect">
+  <p class="kicker">الآلية</p>
+  <h2>الدولاب</h2>
+  <p class="desc">كل حجز يدور الدولاب دورة كاملة، ويخرج منه أكثر من حجز واحد.</p>
+
+  <figure>
+    <svg viewBox="0 0 820 510" role="img" aria-label="دولاب النمو: حجز واحد يصل عشرة ضيوف، ينتج محتوى، يحقق وصولاً محلياً، يولّد استفسارات، تتحول لحجز جديد بمعامل ١.١١">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"></path>
+        </marker>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--camel)"></path>
+        </marker>
+      </defs>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55" marker-end="url(#ar)">
+        <path d="M366.5 80.3 A180 180 0 0 0 257.4 159.6"></path>
+        <path d="M230.6 242.4 A180 180 0 0 0 272.1 370.7"></path>
+        <path d="M342.6 421.9 A180 180 0 0 0 477.4 421.9"></path>
+        <path d="M547.9 370.7 A180 180 0 0 0 589.6 242.4"></path>
+        <path d="M562.6 159.6 A180 180 0 0 0 453.5 80.3"></path>
+      </g>
+
+      <g font-family="IBM Plex Sans Arabic, sans-serif" font-size="12" fill="currentColor" opacity=".72" text-anchor="middle">
+        <text x="283" y="80">كل حجز = ١٠ أشخاص</text>
+        <text x="196" y="322">تصوّر أنت، ويصوّرون هم</text>
+        <text x="410" y="474">‏~٤٧٠ مشاهدة محلية</text>
+        <text x="622" y="322">‏١.٩ استفسار</text>
+        <text x="540" y="80">‏٣٥٪ يحجزون</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1.4" rx="3">
+        <rect x="330" y="51" width="160" height="48" fill="var(--camel-wash)" stroke="var(--camel)" rx="3"></rect>
+        <rect x="159" y="175" width="160" height="48" fill="var(--surface)" rx="3"></rect>
+        <rect x="224" y="377" width="160" height="48" fill="var(--surface)" rx="3"></rect>
+        <rect x="436" y="377" width="160" height="48" fill="var(--surface)" rx="3"></rect>
+        <rect x="501" y="175" width="160" height="48" fill="var(--surface)" rx="3"></rect>
+      </g>
+
+      <g font-family="Reem Kufi, sans-serif" font-size="13.5" fill="currentColor" text-anchor="middle" font-weight="600">
+        <text x="410" y="80">حجز واحد</text>
+        <text x="239" y="204">‏١٠ ضيوف يعيشونها</text>
+        <text x="304" y="406">محتوى وستوريات</text>
+        <text x="516" y="406">وصول محلي</text>
+        <text x="581" y="204">استفسارات</text>
+      </g>
+
+      <path d="M272 175 L370 104" fill="none" stroke="var(--camel)" stroke-width="1.6"
+            stroke-dasharray="5 4" marker-end="url(#ar2)"></path>
+      <text x="316" y="128" font-family="IBM Plex Sans Arabic, sans-serif" font-size="11.5"
+            fill="var(--camel)" text-anchor="middle">إحالة مباشرة ٠.٤٥</text>
+
+      <text x="410" y="248" font-family="Reem Kufi, sans-serif" font-size="34" font-weight="700"
+            fill="var(--camel)" text-anchor="middle">K = ١.١١</text>
+      <text x="410" y="277" font-family="IBM Plex Sans Arabic, sans-serif" font-size="13"
+            fill="currentColor" opacity=".7" text-anchor="middle">كل حجز يولّد ١.١١ حجز جديد</text>
+    </svg>
+    <figcaption>
+      المسار الطويل عبر المحتوى (٠.٦٦ حجز) والمسار القصير عبر الإحالة المباشرة (٠.٤٥ حجز).
+      مجموعهما أكبر من واحد — وهذا يعني أن المشروع ينمو ذاتياً متى ما دار الدولاب.
+    </figcaption>
+  </figure>
+
+  <p style="margin-top:28px">
+    <b>لكن انتبه لمفارقة الدولاب:</b> إذا كان K أكبر من واحد فهو ينمو ذاتياً — بشرط أن يدور أصلاً.
+    وفي الشهر الأول K لا يساوي شيئاً، لأن صفر × ١.١١ = صفر.
+    <b>أول عشر حجوزات لا تأتي من المحرك — أنت من يدفعها بيدك.</b>
+  </p>
+</section>
+
+<!-- ===== المرحلة ١ ===== -->
+<section class="sect">
+  <div class="stage"><b>المرحلة ١</b><h2 style="margin:0">أول عشرة عملاء</h2></div>
+  <p class="desc">لا إعلانات، ولا انتظار. هؤلاء تجيبهم بالاتصال المباشر خلال أسبوعين.</p>
+
+  <ul class="plain">
+    <li><div><b>دائرتك القريبة — بشرط واحد</b><span>أهلك، أصدقاء الجامعة، زملاء التدريب التعاوني، الجيران. لكن <b>لا تطلب منهم معروفاً</b> — اعرض عليهم منتجاً حقيقياً بسعر الإطلاق. فرق النبرة هذا يحدد إن كانوا سيوصون بك أم يشفقون عليك.</span></div></li>
+    <li><div><b>مجموعات واتساب الأحياء والعوائل</b><span>أقوى قناة في السعودية وأرخصها. رسالة واحدة مصحوبة بثلاث صور في مجموعة حي في الدمام تصل لمئة عائلة مستهدفة تماماً.</span></div></li>
+    <li><div><b>الجلسات التجريبية الثلاث</b><span>مجانية مقابل حق التصوير. هذي ليست خسارة — هذي ميزانية التصوير، وتكلفتها الحقيقية ٣٥١ ريال فقط (٣ × ١١٧).</span></div></li>
+    <li><div><b>حسابات كشتات الشرقية</b><span>اعرض تجهيز جلسة مجانية مقابل منشور. <b>@easternkashta</b> عندها ١١.٣ ألف متابع في الخبر وهي متوقفة — قد توافق على ترشيحك لجمهورها، فهي لا تخسر شيئاً.</span></div></li>
+    <li><div><b>طلب التقييم فوراً، لا لاحقاً</b><span>اطلبه وأنت تفك الجلسة والانطباع في ذروته — لا بعد يومين. معدل الاستجابة يتضاعف.</span></div></li>
+  </ul>
+</section>
+
+<!-- ===== المرحلة ٢ ===== -->
+<section class="sect">
+  <div class="stage"><b>المرحلة ٢</b><h2 style="margin:0">حصاد المحتوى</h2></div>
+  <p class="desc">
+    أنت لا «تصنع» محتوى — أنت <b>تحصده</b>. نفس الروتين في كل حجز، بلا استثناء، حتى لو كنت متعباً.
+  </p>
+
+  <div class="shoot">
+    <h3>روتين التصوير الثابت — ست لقطات في كل حجز</h3>
+    <ol>
+      <li><b>المكان فاضي</b> — قبل ما تنزل قطعة واحدة. هذي نصف فيديو «قبل وبعد».</li>
+      <li><b>تايم لابس التركيب</b> — ثبّت الجوال على حامل وشغّله. مجهود صفر، ونتيجة قوية.</li>
+      <li><b>الجلسة كاملة بلا أشخاص</b> — الساعة الذهبية، قبل الغروب بأربعين دقيقة.</li>
+      <li><b>تفاصيل السدو</b> — لقطة قريبة جداً. هذي هويتك البصرية وتفرقك عن الكل.</li>
+      <li><b>لقطة ليلية</b> — الفوانيس والدفاية شغالة.</li>
+      <li><b>الأجواء بإذنهم</b> — أيادٍ تصب قهوة، ظلال، ضحكات بعيدة. بلا وجوه إلا بموافقة صريحة.</li>
+    </ol>
+  </div>
+
+  <p style="margin-top:22px">
+    ست لقطات × أربعة حجوزات شهرياً = <b>٢٤ قطعة محتوى</b>. لن تحتاج أبداً أن تجلس تفكر
+    «وش أنشر اليوم». وستمتلك بعد ستة أشهر أرشيفاً لا يستطيع منافس جديد تعويضه بأي مبلغ.
+  </p>
+  <p><b>القاعدة:</b> انشر ٣ مرات أسبوعياً بثبات. الثبات المتوسط يتفوق على التميّز المتقطع.</p>
+</section>
+
+<!-- ===== المرحلة ٣ ===== -->
+<section class="sect">
+  <div class="stage"><b>المرحلة ٣</b><h2 style="margin:0">اجعل العميل يوزّعك</h2></div>
+  <p class="desc">
+    كل حجز فيه <b>عشرة أشخاص</b>، كل واحد عنده شبكة محلية. هؤلاء ليسوا ضيوفاً فقط —
+    هم عشر قنوات توزيع تجلس داخل قعدتك.
+  </p>
+
+  <ul class="plain">
+    <li><div><b>بطاقة صغيرة في كل جلسة</b><span>«صوّر قعدتك وتق @suhail.kashta — لك خصم ١٥٪ على جلستك الجاية». تكلفة البطاقة ريال، وتحوّل عشرة ضيوف إلى ناشرين.</span></div></li>
+    <li><div><b>تفصيلة توقيعية تظهر في كل صورة</b><span>فانوس بنجمة سهيل، أو شريط سدو مميز. ليس شعاراً كبيراً قبيحاً — بل تفصيلة أنيقة يسأل عنها من يرى الصورة: «وين لقيتوا هذي؟»</span></div></li>
+    <li><div><b>صمّم القعدة لتُصوَّر</b><span>اجعل زاوية واحدة على الأقل مثالية للتصوير — خلفية نظيفة، إضاءة دافئة، تناسق ألوان. الناس يصوّرون ما يبدو جميلاً في الكادر، لا ما هو مريح فقط.</span></div></li>
+  </ul>
+
+  <div class="killer">
+    <h3>وأقوى حركة في الملف كله: أرسل لهم الصور</h3>
+    <p>
+      بعد ٢٤ ساعة، مع إرجاع التأمين، أرسل للعميل <b>الصور التي التقطتها أنت — معدّلة ومجاناً</b>،
+      مع علامة مائية خفيفة لاسمك.
+    </p>
+    <p>
+      العائلة حصلت على صور احترافية لتجمعها العائلي بلا مقابل. وماذا يفعل الناس بصور جميلة
+      لعائلتهم؟ <b>ينشرونها.</b> فيصل اسمك لشبكتهم كاملة — ليس كإعلان، بل داخل ذكرى جميلة يفخرون بها.
+    </p>
+    <p>
+      تكلفتك: عشرون دقيقة تعديل. والعائد: انتشار عاطفي لا يُشترى بإعلان،
+      وعميل يشعر أنك أعطيته أكثر مما دفع. <b>ولا واحد من منافسيك يفعل هذا.</b>
+    </p>
+  </div>
+</section>
+
+<!-- ===== المرحلة ٤ ===== -->
+<section class="sect">
+  <div class="stage"><b>المرحلة ٤</b><h2 style="margin:0">الإحالة المزدوجة</h2></div>
+  <p class="desc">
+    الشبكات العائلية في السعودية هي أقوى قناة توزيع موجودة. اجعل الترشيح يربح الطرفين،
+    فيصبح للعميل سبب ملموس ليتكلم عنك.
+  </p>
+
+  <div class="headline" style="margin-top:0">
+    <p>رشّح صديقاً: له ١٠٠ ريال خصم، ولك ١٠٠ ريال على حجزك القادم.</p>
+    <small>الخصم للطرفين يزيل الحرج — العميل لا يشعر أنه «يبيع» على صديقه، بل يهديه شيئاً.</small>
+  </div>
+
+  <div class="tbox">
+    <table>
+      <thead><tr><th>قيمة الخصم</th><th class="n">تكلفتك</th><th class="n">صافي أول حجز</th><th class="n">LTV : CAC</th></tr></thead>
+      <tbody>
+        <tr><td>٧٥ ريال للطرفين</td><td class="n">١٥٠</td><td class="n">٤٢٤</td><td class="n">١٣.٥ : ١</td></tr>
+        <tr class="total"><td>١٠٠ ريال للطرفين <small>الموصى به</small></td><td class="n">٢٠٠</td><td class="n hl">٣٧٤</td><td class="n hl">١٠.١ : ١</td></tr>
+        <tr><td>١٥٠ ريال للطرفين</td><td class="n">٣٠٠</td><td class="n">٢٧٤</td><td class="n">٦.٧ : ١</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:18px">
+    النسبة الصحية المعتمدة تجارياً هي <b>٣:١</b>. برنامجك عند ١٠:١ — أي أنك تستطيع أن تكون
+    أكرم بكثير مما تظن، وتظل رابحاً بفارق واسع.
+  </p>
+</section>
+
+<!-- ===== المرحلة ٥ ===== -->
+<section class="sect">
+  <div class="stage"><b>المرحلة ٥</b><h2 style="margin:0">كيف يرجعون كل مرة</h2></div>
+  <p class="desc">
+    هنا الخطأ الذي يقع فيه الجميع: خدمتك <b>مناسباتية لا اعتيادية</b>. العميل لن يحجز لأنه
+    تذكرك — بل لأنك كنت حاضراً في اللحظة التي احتاجك فيها. فلا تنتظر أن يتذكرك: <b>كن أنت التذكير.</b>
+  </p>
+
+  <div class="tbox">
+    <table>
+      <thead><tr><th>التوقيت</th><th>المناسبة</th><th>الرسالة</th></tr></thead>
+      <tbody>
+        <tr><td>أواخر أغسطس</td><td>طلوع سهيل</td><td><small>«طلع سهيل — افتتحنا الموسم، والحجوزات مفتوحة.» رسالتك السنوية الأهم، واسمك يبررها.</small></td></tr>
+        <tr><td>٢٣ سبتمبر</td><td>اليوم الوطني</td><td><small>باقة بلمسة خضراء. احجز مبكراً — الطلب يتركّز في ليلتين.</small></td></tr>
+        <tr><td>أكتوبر – نوفمبر</td><td>الوسمي وأول برد</td><td><small>«الجو الليلة يستاهل قعدة.» تُرسل يوم انخفاض الحرارة فعلاً — لا في موعد ثابت.</small></td></tr>
+        <tr><td>ديسمبر – فبراير</td><td>إجازة منتصف العام والمربعانية</td><td><small>ذروة موسمك. اعرض حجزاً مبكراً بخصم مقابل الدفع المقدم.</small></td></tr>
+        <tr><td>رمضان</td><td>الغبقة والسحور</td><td><small>باقة رمضانية بتوقيت ليلي. سوق كامل قائم بذاته.</small></td></tr>
+        <tr><td>العيد</td><td>تجمعات العوائل</td><td><small>احجز قبلها بأسبوعين — الطلب ينفجر ويخفت بسرعة.</small></td></tr>
+        <tr><td>يونيو</td><td>نهاية العام الدراسي والتخرج</td><td><small>ينقذ لك شهراً ضعيفاً في الموسم.</small></td></tr>
+        <tr class="total"><td>سنوياً</td><td>ذكرى حجزه السابق</td><td><small><b>«قبل سنة بالضبط كانت قعدتكم…»</b> مع صورهم القديمة. أقوى رسالة في القائمة، وتكلفتها صفر.</small></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:22px">
+    <b>وقاعدة لا تكسرها:</b> رسالة التذكير تُكتب باسم العميل وتشير إلى حجزه السابق تحديداً.
+    «أهلاً أبو فهد، قبل سنة جهّزنا لكم قعدة عيد ميلاد سارة على شاطئ نصف القمر» ليست رسالة
+    تسويق — هي شخص يتذكرهم. والفرق بينهما هو الفرق بين حجز وتجاهل.
+  </p>
+</section>
+
+<!-- ===== قاعدة البيانات ===== -->
+<section class="sect">
+  <p class="kicker">البنية التحتية</p>
+  <h2>قاعدة عملائك تبدأ من الحجز الأول</h2>
+  <p class="desc">
+    كل الكلام أعلاه ينهار بلا بيانات. لا تحتاج نظاماً — جدول واحد وواتساب بزنس يكفيان،
+    بشرط أن تبدأ من الحجز <b>رقم واحد</b>.
+  </p>
+
+  <ul class="plain">
+    <li><div><b>سجّل عن كل حجز</b><span>الاسم وكيف يحب أن يُنادى · الجوال · التاريخ · الباقة · المبلغ · الموقع · <b>المناسبة</b> · من أين عرفك · ملاحظة شخصية (أسماء الأطفال، تفضيل قهوة، طلب خاص).</span></div></li>
+    <li><div><b>حقل «المناسبة» هو أثمن حقل عندك</b><span>لأنه ما يحدد متى ترسل له بعد سنة. عيد ميلاد في نوفمبر يعني رسالة في أكتوبر القادم.</span></div></li>
+    <li><div><b>واتساب بزنس — مجاني ومهمل من منافسيك</b><span>كتالوج بالباقات والأسعار، ردود جاهزة، رسالة غياب، ووسوم: <b>استفسار · حجز مؤكد · تم · متابعة موسمية</b>. الوسوم هي نظام إدارة العملاء كاملاً.</span></div></li>
+    <li><div><b>راجع القاعدة أول كل شهر</b><span>نصف ساعة: من مرّت سنة على حجزه؟ من له مناسبة قريبة؟ من حجز مرة ولم يعد؟ هذي أربح نصف ساعة في شهرك.</span></div></li>
+  </ul>
+</section>
+
+<!-- ===== الشراكات ===== -->
+<section class="sect">
+  <p class="kicker">توزيع بتكلفة صفر</p>
+  <h2>شراكات تجيب لك عملاء بلا إعلان</h2>
+  <ul class="plain">
+    <li><div><b>حسابات كشتات الشرقية</b><span>جلسة مجانية مقابل منشور. تكلفتك ١١٧ ريال، والوصول بالآلاف.</span></div></li>
+    <li><div><b>مصوّرو الجلسات العائلية</b><span>يحتاجون مواقع جاهزة وجميلة، وأنت تحتاج صوراً احترافية. ترشيح متبادل بلا فلوس.</span></div></li>
+    <li><div><b>أصحاب الشاليهات والاستراحات</b><span>ضيوفهم يحتاجون جلسات خارجية. اعرض عمولة ١٥٪ على كل ترشيح — تكلفتك ١٠٤ ريال مقابل عميل جديد.</span></div></li>
+    <li><div><b>عربات القهوة المتنقلة على الكورنيش</b><span>نفس العميل، خدمة مكمّلة لا منافسة. باقة مشتركة تفيد الطرفين.</span></div></li>
+    <li><div><b>منظمو أعياد الميلاد والبالونات</b><span>يبيعون التنسيق ولا يملكون الجلسات. أنت القطعة الناقصة عندهم.</span></div></li>
+  </ul>
+</section>
+
+<!-- ===== الأرقام ===== -->
+<section class="sect">
+  <p class="kicker">إلى أين يوصلك هذا</p>
+  <h2>السنة الأولى بالأرقام</h2>
+  <p class="desc">
+    نموذج متحفظ: يبدأ من شبكتك الشخصية، ينمو بالإحالة والمحتوى، ويراعي موسمية الشرقية
+    (الصيف شبه ميت لجلسات البحر).
+  </p>
+
+  <div class="tbox">
+    <table>
+      <thead><tr><th>الشهر</th><th class="n">حجوزات</th><th class="n">إيراد</th><th class="n">هامش مساهمة</th></tr></thead>
+      <tbody>
+        <tr><td>أكتوبر <small>الإطلاق</small></td><td class="n">٣</td><td class="n">٢,٠٧٠</td><td class="n">١,٧٢٢</td></tr>
+        <tr><td>نوفمبر</td><td class="n">٣</td><td class="n">٢,٠٧٠</td><td class="n">١,٧٢٢</td></tr>
+        <tr><td>ديسمبر</td><td class="n">٥</td><td class="n">٣,٤٥٠</td><td class="n">٢,٨٧٠</td></tr>
+        <tr><td>يناير</td><td class="n">١٠</td><td class="n">٦,٩٠٠</td><td class="n">٥,٧٤٠</td></tr>
+        <tr><td>فبراير <small>بلغت السقف التشغيلي</small></td><td class="n">١٦</td><td class="n">١١,٠٤٠</td><td class="n">٩,١٨٤</td></tr>
+        <tr><td>مارس – مايو</td><td class="n">١٦ ×٣</td><td class="n">٣٣,١٢٠</td><td class="n">٢٧,٥٥٢</td></tr>
+        <tr><td>يونيو <small>بداية الركود الصيفي</small></td><td class="n">١٢</td><td class="n">٨,٢٨٠</td><td class="n">٦,٨٨٨</td></tr>
+        <tr><td>يوليو – أغسطس <small>جلسات منزلية فقط</small></td><td class="n">٩ ×٢</td><td class="n">١٢,٤٢٠</td><td class="n">١٠,٣٣٢</td></tr>
+        <tr><td>سبتمبر <small>طلع سهيل</small></td><td class="n">١٣</td><td class="n">٨,٩٧٠</td><td class="n">٧,٤٦٢</td></tr>
+        <tr class="total"><td>السنة الأولى</td><td class="n hl">١٢٨</td><td class="n hl">٨٨,٣٢٠</td><td class="n hl">٧٣,٤٧٢</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:22px">
+    بعد خصم الإهلاك: <b>٦٨,٩٩٢ ريال صافي</b> مقابل <b>٥٢٥ ساعة عمل</b> —
+    أي <b>١٤٠ ريال للساعة</b>، وقاعدة عملاء تقارب <b>٥٨ عائلة</b> تعرفك بالاسم.
+  </p>
+
+  <div class="headline">
+    <p>في فبراير تبلغ سقفك التشغيلي: ١٦ حجزاً شهرياً.</p>
+    <small>
+      هذه ليست مشكلة — هذه <b>إشارة</b>. عندها تشتري الطقم الثاني (من الأرباح لا من جيبك)
+      أو تستعين بمساعد للتركيب. لا تكبّر قبل أن تصل السقف، ولا تتأخر بعد بلوغه — الأول
+      يحرق رأس مالك، والثاني يحرق الطلب الذي بنيته بجهد.
+    </small>
+  </div>
+</section>
+
+<!-- ===== المقاييس ===== -->
+<section class="sect">
+  <p class="kicker">القياس</p>
+  <h2>أربعة أرقام تراجعها كل أسبوع</h2>
+  <dl class="metrics">
+    <div class="metric"><dt>الاستفسارات</dt><dd>كم شخص راسلك؟ <em>مؤشر أعلى القمع</em> — إن نزل، المشكلة في المحتوى أو الوصول.</dd></div>
+    <div class="metric"><dt>نسبة الإغلاق</dt><dd>كم استفسار صار حجزاً؟ <em>المستهدف ٣٥٪+</em> — إن نزل، المشكلة في السعر أو سرعة ردك أو الثقة.</dd></div>
+    <div class="metric"><dt>مصدر كل حجز</dt><dd>إحالة؟ إنستقرام؟ تيك توك؟ واتساب؟ <em>يخبرك أين تضاعف جهدك</em> وأين توقفه.</dd></div>
+    <div class="metric"><dt>نسبة التكرار</dt><dd>كم عميلاً حجز أكثر من مرة؟ <em>المستهدف ٣٠٪+</em> — هذا المقياس الوحيد الذي يقيس جودتك الحقيقية.</dd></div>
+  </dl>
+</section>
+
+<!-- ===== لا تسوّي ===== -->
+<section class="sect" style="border-bottom:0">
+  <p class="kicker">تحذيرات</p>
+  <h2>خمسة أشياء تهدم المحرك</h2>
+  <ul class="avoid">
+    <li><h3>لا تشترِ متابعين</h3><p>متابع لا يحجز ولا يرشّح، ويكسر وصول منشوراتك للجمهور الحقيقي. حساب بألف متابع حقيقي من الدمام أثمن من عشرين ألفاً وهميين.</p></li>
+    <li><h3>لا توسّع للثلاث مدن قبل ما تشبع مدينتين</h3><p>الكثافة أهم من الانتشار: عشر عائلات في حي واحد يتكلمون مع بعض. عشر عائلات موزعة على ثلاث مدن لا أحد فيهم يعرف الآخر.</p></li>
+    <li><h3>لا تنشر بشكل متقطع</h3><p>أسبوعان صمت ثم عشرة منشورات في يوم أسوأ من منشور واحد أسبوعياً بثبات. الخوارزمية تعاقب الانقطاع، والعميل ينسى.</p></li>
+    <li><h3>لا تقبل حجزاً لا تستطيع تنفيذه بإتقان</h3><p>حجز واحد سيئ في بداية المشروع يكلفك أكثر مما يعوضه عشرة ناجحة — لأن السمعة في بدايتها هشّة جداً.</p></li>
+    <li><h3>لا تتوقف عن التصوير لأنك تعبت</h3><p>الليلة التي تتكاسل فيها عن التصوير هي ليلة أوقفت فيها المحرك. الأصل الوحيد الذي يتراكم عندك هو الأرشيف — احمِه.</p></li>
+  </ul>
+</section>
+
+<footer>
+  محرك نمو سُهَيْل · النموذج المالي متحفظ ومبني على أرقام التسعير المراجَعة
+</footer>
+</div>
+
+</body></html>

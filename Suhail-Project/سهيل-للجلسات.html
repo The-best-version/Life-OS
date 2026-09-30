@@ -1,0 +1,536 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>سهيل للجلسات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Amiri:ital,wght@0,400;1,400&display=swap">
+
+<style>
+  :root{
+    --sand:#F4EEE2;
+    --surface:#FCF8F0;
+    --ink:#241D14;
+    --ink-soft:#6E6152;
+    --ink-faint:#968770;
+    --rule:#E0D5C1;
+    --camel:#A96F3C;
+    --camel-deep:#8A5629;
+    --camel-wash:#EFE1CD;
+    --red:#8E2B25;
+    --green:#2F5344;
+    --blue:#2B4A6F;
+    --band-bg:#F7F1E5;
+
+    --night:#0E0D14;
+    --night-2:#16151F;
+    --star:#EADCBB;
+    --star-soft:#9A9284;
+
+    --f-display:"Reem Kufi","Noto Kufi Arabic",system-ui,sans-serif;
+    --f-body:"IBM Plex Sans Arabic","Segoe UI",system-ui,sans-serif;
+    --f-quote:"Amiri",Georgia,serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --sand:#141108;
+      --surface:#1D1912;
+      --ink:#F1E8D8;
+      --ink-soft:#AC9B82;
+      --ink-faint:#7E7059;
+      --rule:#362D21;
+      --camel:#D9975B;
+      --camel-deep:#E8B278;
+      --camel-wash:#332617;
+      --red:#C4584D;
+      --green:#6FA189;
+      --blue:#6E9BC9;
+      --band-bg:#1D1912;
+    }
+  }
+  :root[data-theme="dark"]{
+    --sand:#141108;
+    --surface:#1D1912;
+    --ink:#F1E8D8;
+    --ink-soft:#AC9B82;
+    --ink-faint:#7E7059;
+    --rule:#362D21;
+    --camel:#D9975B;
+    --camel-deep:#E8B278;
+    --camel-wash:#332617;
+    --red:#C4584D;
+    --green:#6FA189;
+    --blue:#6E9BC9;
+    --band-bg:#1D1912;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    direction:rtl;background:var(--sand);color:var(--ink);
+    font-family:var(--f-body);font-size:16px;line-height:1.85;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding-inline:20px}
+  .narrow{max-width:660px}
+
+  h2{font-family:var(--f-display);font-weight:600;letter-spacing:-.005em;text-wrap:balance}
+  .eyebrow{
+    font-size:11.5px;letter-spacing:.16em;color:var(--camel);
+    font-weight:600;margin:0 0 14px;
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative;background:var(--night);overflow:hidden;isolation:isolate}
+  .sky{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+  .hero__in{
+    position:relative;z-index:1;
+    max-width:900px;margin:0 auto;padding:clamp(70px,16vw,130px) 20px clamp(56px,11vw,96px);
+    text-align:center;
+  }
+  .hero .eyebrow{color:var(--star-soft)}
+  .brand{
+    font-family:var(--f-display);font-weight:700;
+    font-size:clamp(72px,21vw,148px);line-height:1;margin:0;
+    color:var(--star);letter-spacing:.01em;
+  }
+  .brand-sub{
+    font-family:var(--f-display);font-size:clamp(13px,3.4vw,16px);
+    letter-spacing:.34em;color:var(--star-soft);margin:16px 0 0;font-weight:400;
+  }
+  .hero__line{
+    font-family:var(--f-quote);font-style:italic;
+    font-size:clamp(21px,5.4vw,31px);line-height:1.6;
+    color:var(--star);margin:30px auto 0;max-width:20ch;
+  }
+  .hero__cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+  .btn{
+    display:inline-block;font-family:var(--f-body);font-size:15px;font-weight:600;
+    padding:13px 26px;border-radius:2px;text-decoration:none;
+    transition:transform .15s ease,background .15s ease;
+  }
+  .btn:focus-visible{outline:2px solid var(--camel);outline-offset:3px}
+  .btn--solid{background:var(--star);color:var(--night)}
+  .btn--solid:hover{background:#fff}
+  .btn--ghost{border:1px solid rgba(234,220,187,.38);color:var(--star)}
+  .btn--ghost:hover{border-color:var(--star)}
+
+  /* ---------- sadu band ---------- */
+  .sadu{display:block;width:100%;height:40px}
+  .sadu--thin{height:24px}
+
+  /* ---------- sections ---------- */
+  section{padding-block:clamp(52px,9vw,78px)}
+  .lead{
+    font-family:var(--f-quote);font-size:clamp(20px,4.6vw,25px);line-height:1.75;
+    color:var(--ink);margin:0 0 20px;
+  }
+  .sect-h{font-size:clamp(26px,6vw,34px);margin:0 0 10px}
+  .sect-d{color:var(--ink-soft);margin:0 0 34px;max-width:56ch;font-size:15.5px}
+
+  /* why rows */
+  .why{display:grid;gap:0;margin:0;padding:0;list-style:none}
+  .why li{
+    display:grid;grid-template-columns:34px 1fr;gap:16px;align-items:start;
+    padding-block:22px;border-top:1px solid var(--rule);
+  }
+  .why li:last-child{border-bottom:1px solid var(--rule)}
+  .why h3{font-family:var(--f-display);font-size:17px;font-weight:600;margin:0 0 6px}
+  .why p{margin:0;color:var(--ink-soft);font-size:15px;line-height:1.75}
+  .why svg{width:26px;height:26px;margin-top:6px;color:var(--camel)}
+
+  /* ---------- packages ---------- */
+  .tiers{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .tier{
+    background:var(--surface);border:1px solid var(--rule);border-radius:3px;
+    padding:26px 22px;display:flex;flex-direction:column;
+  }
+  .tier--hero{border-color:var(--camel);border-width:1.5px;position:relative}
+  .tier__flag{
+    position:absolute;top:-11px;inset-inline-start:22px;
+    background:var(--camel);color:var(--sand);
+    font-size:10.5px;font-weight:600;letter-spacing:.1em;padding:4px 10px;border-radius:2px;
+  }
+  .tier h3{font-family:var(--f-display);font-size:21px;font-weight:600;margin:0 0 4px}
+  .tier__cap{font-size:13px;color:var(--ink-faint);margin:0 0 18px}
+  .tier__price{
+    font-family:var(--f-display);font-size:42px;font-weight:700;line-height:1;
+    color:var(--camel-deep);margin:0;font-variant-numeric:tabular-nums;
+  }
+  .tier__price span{font-size:14px;font-weight:500;color:var(--ink-faint);margin-inline-start:6px}
+  .tier ul{list-style:none;margin:20px 0 0;padding:0;display:grid;gap:9px}
+  .tier li{
+    font-size:14.5px;color:var(--ink-soft);line-height:1.6;
+    display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:start;
+  }
+  .tier li::before{
+    content:"";width:5px;height:5px;background:var(--camel);
+    transform:rotate(45deg);margin-top:9px;
+  }
+
+  /* addons */
+  .addons{margin-top:18px;border-top:1px solid var(--rule)}
+  .addon{
+    display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+    padding-block:15px;border-bottom:1px solid var(--rule);
+  }
+  .addon b{font-weight:600;font-size:15.5px;font-family:var(--f-display)}
+  .addon span{font-size:13.5px;color:var(--ink-faint);display:block;font-weight:400;font-family:var(--f-body)}
+  .addon em{
+    font-style:normal;font-family:var(--f-display);font-weight:600;font-size:19px;
+    color:var(--camel-deep);white-space:nowrap;font-variant-numeric:tabular-nums;
+  }
+  .note{font-size:13.5px;color:var(--ink-faint);margin:18px 0 0}
+
+  /* ---------- proof (water) ---------- */
+  .proof{background:var(--night);color:var(--star)}
+  .proof .sect-h{color:var(--star)}
+  .proof .eyebrow{color:var(--camel-deep)}
+  .proof p{color:#BFB5A2;max-width:56ch;font-size:15.5px}
+  .proof .big{
+    font-family:var(--f-quote);font-style:italic;color:var(--star);
+    font-size:clamp(21px,5vw,28px);line-height:1.65;margin:0 0 20px;max-width:24ch;
+  }
+  .drops{display:flex;gap:10px;margin:26px 0 0;flex-wrap:wrap}
+  .drop{
+    border:1px solid rgba(234,220,187,.22);border-radius:2px;
+    padding:9px 15px;font-size:13.5px;color:#CFC5B0;
+  }
+
+  /* ---------- steps ---------- */
+  .steps{counter-reset:s;display:grid;gap:0;margin:0;padding:0;list-style:none}
+  .steps li{
+    counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:16px;
+    padding-block:22px;border-top:1px solid var(--rule);align-items:start;
+  }
+  .steps li:last-child{border-bottom:1px solid var(--rule)}
+  .steps li::before{
+    content:counter(s,arabic-indic);
+    font-family:var(--f-display);font-size:26px;font-weight:600;
+    color:var(--camel);line-height:1.15;
+  }
+  .steps h3{font-family:var(--f-display);font-size:17px;font-weight:600;margin:0 0 5px}
+  .steps p{margin:0;color:var(--ink-soft);font-size:15px}
+
+  /* ---------- photo slots ---------- */
+  .slots{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-top:6px}
+  .slot{
+    aspect-ratio:4/5;max-width:100%;
+    border:1px dashed var(--rule);border-radius:3px;background:var(--surface);
+    display:grid;place-items:center;text-align:center;padding:20px;
+  }
+  .slot p{margin:0;font-size:13.5px;color:var(--ink-faint);line-height:1.7}
+  .slot b{display:block;font-family:var(--f-display);font-size:14px;color:var(--camel);margin-bottom:7px;font-weight:600}
+
+  /* ---------- facts ---------- */
+  .facts{display:grid;gap:0;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));border-top:1px solid var(--rule)}
+  .fact{padding:22px 0;border-bottom:1px solid var(--rule);padding-inline-end:20px}
+  .fact dt{font-size:12px;letter-spacing:.1em;color:var(--camel);font-weight:600;margin-bottom:6px}
+  .fact dd{margin:0;font-size:15px;color:var(--ink-soft);line-height:1.7}
+  .fact dd b{color:var(--ink);font-weight:600}
+
+  /* ---------- final cta ---------- */
+  .final{text-align:center;background:var(--camel-wash)}
+  .final h2{font-size:clamp(28px,7vw,40px);margin:0 0 12px}
+  .final p{color:var(--ink-soft);margin:0 auto 28px;max-width:44ch}
+  .btn--brand{background:var(--camel-deep);color:#FFF8EC}
+  .btn--brand:hover{background:var(--camel)}
+  .tel{
+    font-family:var(--f-display);font-size:clamp(22px,5.5vw,28px);font-weight:600;
+    color:var(--ink);margin:22px 0 0;letter-spacing:.06em;direction:ltr;
+  }
+
+  footer{
+    background:var(--night);color:var(--star-soft);text-align:center;
+    padding-block:34px;font-size:13.5px;
+  }
+  footer b{color:var(--star);font-family:var(--f-display);font-weight:600;font-size:17px;display:block;margin-bottom:8px}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+  @media (max-width:520px){
+    .sadu{height:30px}
+    .tier{padding:22px 18px}
+  }
+</style>
+
+<!-- sadu pattern -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <pattern id="sadu" width="120" height="40" patternUnits="userSpaceOnUse">
+    <rect width="120" height="40" fill="var(--band-bg)"></rect>
+    <path d="M0 4 H120 M0 36 H120" stroke="var(--ink)" stroke-width="1.3" fill="none" opacity=".8"></path>
+    <path d="M0 4 v-4 M10 4 v-4 M20 4 v-4 M30 4 v-4 M40 4 v-4 M50 4 v-4 M60 4 v-4 M70 4 v-4 M80 4 v-4 M90 4 v-4 M100 4 v-4 M110 4 v-4 M0 36 v4 M10 36 v4 M20 36 v4 M30 36 v4 M40 36 v4 M50 36 v4 M60 36 v4 M70 36 v4 M80 36 v4 M90 36 v4 M100 36 v4 M110 36 v4" stroke="var(--ink)" stroke-width="1.1" fill="none" opacity=".5"></path>
+    <path d="M5 20 L30 7 L55 20 L30 33 Z" fill="none" stroke="var(--ink)" stroke-width="1.2"></path>
+    <path d="M16 20 L30 12.5 L44 20 L30 27.5 Z" fill="var(--red)"></path>
+    <path d="M24.5 20 L30 17 L35.5 20 L30 23 Z" fill="var(--band-bg)"></path>
+    <path d="M65 20 L90 7 L115 20 L90 33 Z" fill="none" stroke="var(--ink)" stroke-width="1.2"></path>
+    <path d="M76 20 L90 12.5 L104 20 L90 27.5 Z" fill="var(--green)"></path>
+    <path d="M84.5 20 L90 17 L95.5 20 L90 23 Z" fill="var(--band-bg)"></path>
+    <path d="M58 12 L62 20 L58 28 M62 12 L58 20 L62 28" stroke="var(--blue)" stroke-width="1.2" fill="none"></path>
+    <path d="M118 12 L122 20 L118 28 M-2 12 L2 20 L-2 28" stroke="var(--blue)" stroke-width="1.2" fill="none"></path>
+  </pattern>
+</defs></svg>
+
+
+<!-- ============ HERO ============ -->
+<div class="hero">
+  <svg class="sky" viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <defs>
+      <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#EADCBB" stop-opacity=".55"></stop>
+        <stop offset="45%" stop-color="#C9A86F" stop-opacity=".16"></stop>
+        <stop offset="100%" stop-color="#C9A86F" stop-opacity="0"></stop>
+      </radialGradient>
+      <linearGradient id="horizon" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#0E0D14" stop-opacity="0"></stop>
+        <stop offset="100%" stop-color="#2A2114" stop-opacity=".75"></stop>
+      </linearGradient>
+    </defs>
+    <rect width="1200" height="560" fill="#0E0D14"></rect>
+    <rect y="360" width="1200" height="200" fill="url(#horizon)"></rect>
+    <g fill="#EADCBB">
+      <circle cx="70" cy="60" r="1.3" opacity=".5"></circle><circle cx="155" cy="128" r="1" opacity=".35"></circle>
+      <circle cx="238" cy="52" r="1.6" opacity=".62"></circle><circle cx="312" cy="176" r="1.1" opacity=".4"></circle>
+      <circle cx="396" cy="92" r="1.3" opacity=".5"></circle><circle cx="455" cy="222" r="1" opacity=".3"></circle>
+      <circle cx="528" cy="44" r="1.8" opacity=".7"></circle><circle cx="602" cy="150" r="1.2" opacity=".45"></circle>
+      <circle cx="668" cy="80" r="1" opacity=".35"></circle><circle cx="742" cy="198" r="1.5" opacity=".55"></circle>
+      <circle cx="812" cy="58" r="1.2" opacity=".45"></circle><circle cx="884" cy="140" r="1" opacity=".32"></circle>
+      <circle cx="952" cy="212" r="1.7" opacity=".6"></circle><circle cx="1024" cy="70" r="1.2" opacity=".45"></circle>
+      <circle cx="1098" cy="160" r="1.4" opacity=".5"></circle><circle cx="1158" cy="96" r="1" opacity=".33"></circle>
+      <circle cx="112" cy="252" r="1.1" opacity=".36"></circle><circle cx="205" cy="300" r="1.4" opacity=".46"></circle>
+      <circle cx="356" cy="268" r="1" opacity=".3"></circle><circle cx="492" cy="322" r="1.3" opacity=".42"></circle>
+      <circle cx="628" cy="276" r="1.1" opacity=".34"></circle><circle cx="768" cy="330" r="1.5" opacity=".5"></circle>
+      <circle cx="898" cy="288" r="1" opacity=".3"></circle><circle cx="1042" cy="336" r="1.3" opacity=".42"></circle>
+      <circle cx="1136" cy="272" r="1.1" opacity=".35"></circle><circle cx="46" cy="186" r="1.2" opacity=".4"></circle>
+      <circle cx="278" cy="372" r="1" opacity=".26"></circle><circle cx="572" cy="392" r="1.1" opacity=".28"></circle>
+      <circle cx="1090" cy="404" r="1" opacity=".24"></circle><circle cx="392" cy="416" r="1.2" opacity=".26"></circle>
+    </g>
+    <circle cx="905" cy="418" r="92" fill="url(#glow)"></circle>
+    <path d="M905 386 Q910 413 933 418 Q910 423 905 450 Q900 423 877 418 Q900 413 905 386 Z" fill="#F6ECD5"></path>
+    <circle cx="905" cy="418" r="3.4" fill="#FFFFFF"></circle>
+  </svg>
+
+  <div class="hero__in">
+    <p class="eyebrow">جلسات خارجية · الدمام · الخبر · الجبيل</p>
+    <h1 class="brand">سُهَيْل</h1>
+    <p class="brand-sub">ﻟﻠﺠﻠﺴﺎﺕ ﺍﻟﺨﺎﺭﺟﻴﺔ</p>
+    <p class="hero__line">طلع سهيل… وجهّزنا قعدتك</p>
+    <div class="hero__cta">
+      <a class="btn btn--solid" href="#الباقات">شوف الباقات</a>
+      <a class="btn btn--ghost" href="#احجز">احجز الحين</a>
+    </div>
+  </div>
+</div>
+
+<svg class="sadu" height="40" aria-hidden="true" focusable="false"><rect width="100%" height="100%" fill="url(#sadu)"></rect></svg>
+
+
+<!-- ============ الفكرة ============ -->
+<section>
+  <div class="wrap narrow">
+    <p class="eyebrow">الفكرة</p>
+    <p class="lead">
+      لما يطلع سهيل، يعرف أهل الشرقية إن الحر راح — ويبدأ موسم البر والبحر.
+      إحنا نجي لك بالقعدة كاملة، ونتركك تقعد.
+    </p>
+    <p style="color:var(--ink-soft);margin:0">
+      جلسات أرضية بهوية نجدية أصيلة: قماش كريمي فاخر، لكنة جملية، وشريط سدو منسوج.
+      نوصّل، نركّب، ونرجع نفك — وأنت ما تحمل ولا قطعة. على شاطئ الخبر، في حوش بيتك، أو على سطحك.
+    </p>
+  </div>
+</section>
+
+
+<!-- ============ ليش سهيل ============ -->
+<section style="padding-top:0">
+  <div class="wrap narrow">
+    <h2 class="sect-h">ليش سهيل؟</h2>
+    <p class="sect-d">أربعة أشياء ما تلقاها مجتمعة عند غيرنا في الشرقية.</p>
+    <ul class="why">
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c0 4 3 5 6 5-3 0-6 1-6 5 0-4-3-5-6-5 3 0 6-1 6-5z"></path><circle cx="18.5" cy="17.5" r="1.6"></circle><circle cx="6" cy="16" r="1.2"></circle></svg>
+        <div>
+          <h3>هوية تراثية، مو بوهيمي مكرر</h3>
+          <p>سدو منسوج وألوان أرض. كل الجلسات المتوفرة في الشرقية خيام بيضاء وشموع — إحنا نقدّم القعدة السعودية الأصيلة.</p>
+        </div>
+      </li>
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z"></path><path d="M9.6 11.2c0-1.4 2.4-4.2 2.4-4.2s2.4 2.8 2.4 4.2a2.4 2.4 0 1 1-4.8 0z"></path></svg>
+        <div>
+          <h3>قماش مقاوم للسوائل</h3>
+          <p>القهوة والشاي والماء تنزلق ولا تنشرب. تقعد مرتاح مع عيالك بدون ما تحسب حساب كل فنجال.</p>
+        </div>
+      </li>
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5.2l3.4 2"></path></svg>
+        <div>
+          <h3>جاهزة خلال ٤٥ دقيقة</h3>
+          <p>نوصل في وقتك المحدد ونركّب بسرعة. وبعد ما تخلصون، نرجع نفك وننظف — ما تحمل ولا قطعة.</p>
+        </div>
+      </li>
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 6.5 10 17l-5-5"></path><path d="M3.5 12.5 6 15"></path></svg>
+        <div>
+          <h3>تُغسل وتُعقّم بعد كل حجز</h3>
+          <p>نرسل لك صورة المعدات نظيفة ومغلّفة قبل ما نتحرك لك. تعرف بالضبط وش راح يوصلك.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+
+<!-- ============ الباقات ============ -->
+<section id="الباقات" style="background:var(--band-bg);border-block:1px solid var(--rule)">
+  <div class="wrap">
+    <p class="eyebrow">الأسعار</p>
+    <h2 class="sect-h">الباقات</h2>
+    <p class="sect-d">كل الأسعار شاملة التوصيل والتركيب والفك. لا رسوم خفية.</p>
+
+    <div class="tiers">
+      <div class="tier">
+        <h3>قعدة صغيرة</h3>
+        <p class="tier__cap">٣ إلى ٤ أشخاص</p>
+        <p class="tier__price">٣٥٠<span>ريال</span></p>
+        <ul>
+          <li>جلسة أرضية ٢ متر بمساند</li>
+          <li>فرشة وبساط قاعدة</li>
+          <li>إضاءة فوانيس</li>
+          <li>توصيل وتركيب وفك</li>
+        </ul>
+      </div>
+
+      <div class="tier tier--hero">
+        <span class="tier__flag">الأكثر طلباً</span>
+        <h3>قعدة العائلة</h3>
+        <p class="tier__cap">٩ إلى ١٠ أشخاص</p>
+        <p class="tier__price">٧٥٠<span>ريال</span></p>
+        <ul>
+          <li>ثلاث جلسات أرضية بمساند</li>
+          <li>دفاية غاز خارجية + غاز</li>
+          <li>فرشة وبساط قاعدة كامل</li>
+          <li>إضاءة فوانيس وسلاسل</li>
+          <li>طاولات أرضية</li>
+          <li>توصيل وتركيب وفك</li>
+        </ul>
+      </div>
+
+      <div class="tier">
+        <h3>قعدة العائلة + ضيافة</h3>
+        <p class="tier__cap">٩ إلى ١٠ أشخاص</p>
+        <p class="tier__price">٨٩٠<span>ريال</span></p>
+        <ul>
+          <li>كل ما في قعدة العائلة</li>
+          <li>قهوة عربية ودلة وفناجيل</li>
+          <li>شاي وترمس</li>
+          <li>تمر وصينية ضيافة</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="addons">
+      <div class="addon">
+        <b>تأجير دفاية غاز فقط<span>لمن عنده قعدة جاهزة ويبي الدفا — توصيل وتركيب</span></b>
+        <em>٢٥٠ ريال</em>
+      </div>
+      <div class="addon">
+        <b>خدمة الجبيل<span>تضاف على أي باقة — نهايات الأسبوع فقط</span></b>
+        <em>+١٥٠ ريال</em>
+      </div>
+      <div class="addon">
+        <b>تأمين مسترد<span>يُرد كاملاً خلال ٢٤ ساعة من الاستلام</span></b>
+        <em>١٠٠ ريال</em>
+      </div>
+    </div>
+    <p class="note">الأسعار لليلة واحدة. للحجوزات الأطول أو المناسبات الخاصة، كلّمنا.</p>
+  </div>
+</section>
+
+
+<!-- ============ مقاوم للسوائل ============ -->
+<section class="proof">
+  <div class="wrap narrow">
+    <p class="eyebrow">الخامة</p>
+    <p class="big">اسكب القهوة… وشوف وش يصير.</p>
+    <p>
+      قماش جلساتنا معالَج ضد السوائل. القطرة تتكوّر على السطح وتنزلق بدل ما تنشرب —
+      يعني ما تقعد تراقب عيالك طول الليلة، وما تخاف من فنجال قهوة ينكب.
+    </p>
+    <p style="margin-top:14px">
+      وهذا السبب اللي خلّانا نخفّض التأمين المسترد إلى ١٠٠ ريال بدل المعتاد في السوق.
+      ثقتنا في الخامة، مو في جيبك.
+    </p>
+    <div class="drops">
+      <span class="drop">مقاوم للماء والقهوة والشاي</span>
+      <span class="drop">غسيل وتعقيم بعد كل حجز</span>
+      <span class="drop">تأمين مخفّض</span>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ كيف تحجز ============ -->
+<section>
+  <div class="wrap narrow">
+    <p class="eyebrow">الحجز</p>
+    <h2 class="sect-h">كيف تحجز؟</h2>
+    <p class="sect-d">أربع خطوات، وكلها عبر الواتساب.</p>
+    <ol class="steps">
+      <li><div><h3>كلّمنا على الواتساب</h3><p>قل لنا التاريخ، الموقع، وعدد الأشخاص. نرد عليك بالتوفر والسعر النهائي.</p></div></li>
+      <li><div><h3>ثبّت الحجز</h3><p>عربون ٥٠٪ يثبّت التاريخ، والباقي عند التركيب.</p></div></li>
+      <li><div><h3>نوصل ونركّب</h3><p>نجيك قبل موعدك، ونجهّز القعدة كاملة خلال ٤٥ دقيقة. ونرسل لك صورة المعدات معقّمة قبل ما نتحرك.</p></div></li>
+      <li><div><h3>نرجع نفك</h3><p>في الوقت المتفق عليه نجي نشيل كل شي. أنت ما تحمل ولا قطعة، والتأمين يرجع لك خلال ٢٤ ساعة.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+
+<!-- ============ صور ============ -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <p class="eyebrow">من جلساتنا</p>
+    <h2 class="sect-h">شوف بعينك</h2>
+    <p class="sect-d">هذي أماكن الصور — تُستبدل بصورك الفعلية بعد جلسات التصوير.</p>
+    <div class="slots">
+      <div class="slot"><p><b>١ · البحر وقت الغروب</b>لقطة واسعة للقعدة كاملة على شاطئ الخبر، الساعة الذهبية — يتوهج فيها السدو</p></div>
+      <div class="slot"><p><b>٢ · حوش منزلي ليلاً</b>القعدة مضاءة بالفوانيس والدفاية شغالة، تصوير من زاوية منخفضة</p></div>
+      <div class="slot"><p><b>٣ · تفاصيل السدو</b>لقطة قريبة جداً لشريط السدو والقماش الكريمي</p></div>
+      <div class="slot"><p><b>٤ · قبل وبعد</b>فيديو: مكان فاضي يتحول لقعدة كاملة — أقوى محتوى في هذا المجال</p></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ تفاصيل ============ -->
+<section style="padding-top:0">
+  <div class="wrap narrow">
+    <h2 class="sect-h">تفاصيل تهمك</h2>
+    <dl class="facts">
+      <div class="fact"><dt>مناطق الخدمة</dt><dd><b>الدمام والخبر</b> — بدون رسوم إضافية<br><b>الجبيل</b> — نهايات الأسبوع، +١٥٠ ريال</dd></div>
+      <div class="fact"><dt>الأوقات</dt><dd>من العصر حتى منتصف الليل. التركيب قبل موعدك بساعة.</dd></div>
+      <div class="fact"><dt>السلامة</dt><dd>طفاية حريق وحصيرة عازلة مع كل دفاية، وفحص للخرطوم قبل كل حجز.</dd></div>
+      <div class="fact"><dt>الإلغاء</dt><dd>مجاني قبل ٤٨ ساعة. بعدها يُخصم العربون.</dd></div>
+      <div class="fact"><dt>المواقع</dt><dd>نساعدك في اختيار الموقع المناسب، ونتأكد من أنظمة البلدية قبل الحجز.</dd></div>
+      <div class="fact"><dt>الموسم</dt><dd>جلسات البحر من أكتوبر إلى أبريل. الجلسات المنزلية طول السنة.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<svg class="sadu sadu--thin" height="24" aria-hidden="true" focusable="false"><rect width="100%" height="100%" fill="url(#sadu)"></rect></svg>
+
+
+<!-- ============ CTA ============ -->
+<section class="final" id="احجز">
+  <div class="wrap narrow">
+    <h2>جاهز نجهّز قعدتك؟</h2>
+    <p>كلّمنا على الواتساب وقل لنا التاريخ والموقع — نرد عليك بالتوفر والسعر خلال دقايق.</p>
+    <a class="btn btn--brand" href="https://wa.me/9665XXXXXXXX">احجز عبر واتساب</a>
+    <p class="tel">05X XXX XXXX</p>
+  </div>
+</section>
+
+<footer>
+  <b>سُهَيْل للجلسات الخارجية</b>
+  الدمام · الخبر · الجبيل &nbsp;·&nbsp; @suhail.kashta<br>
+  مسجّل بوثيقة عمل حر
+</footer>
+
+</body></html>

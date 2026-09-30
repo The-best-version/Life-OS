@@ -1,0 +1,17 @@
+{
+  "name": "2027 Life OS — وقت حصاد الثمار",
+  "short_name": "حصاد 2027",
+  "description": "نظام الانضباط اليومي: روتين، مصفوفة مهام، مكتبة كتب، وتتبع شهري.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B1026",
+  "theme_color": "#0B1026",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

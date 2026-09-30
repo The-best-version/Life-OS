@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * IRON LOG — design tokens
+ * ------------------------------------------------------------------
+ * The app is dark-only by design (a gym floor is not a light-mode place).
+ * `--*` HSL triplets feed the shadcn/ui primitives; the `--viz-*` hexes feed
+ * the SVG chart layer, where values are written against roles, never raw hex.
+ */
+
+@layer base {
+  :root {
+    /* ---- shadcn/ui surface + ink scale (Iron) ---- */
+    --background: 240 8% 6%; /* #0D0D0F — page plane */
+    --foreground: 40 20% 95%; /* #F5F3EF — primary ink */
+
+    --card: 240 4% 10%; /* #18181A — chart & card surface */
+    --card-foreground: 40 20% 95%;
+
+    --popover: 240 5% 14%; /* #212124 */
+    --popover-foreground: 40 20% 95%;
+
+    /* Energetic accent — the only loud colour in the UI */
+    --primary: 4 76% 53%; /* #E3392C */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 14%; /* #212124 — metallic grey */
+    --secondary-foreground: 40 20% 95%;
+
+    --muted: 240 5% 14%;
+    --muted-foreground: 240 4% 56%; /* #8D8D93 */
+
+    --accent: 240 7% 17%; /* #2A2A2E */
+    --accent-foreground: 40 20% 95%;
+
+    --destructive: 4 76% 53%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 57% 57%; /* #4FD1A0 */
+    --success-foreground: 240 8% 6%;
+
+    --border: 240 7% 17%; /* #2A2A2E — hairline */
+    --input: 240 5% 14%;
+    --ring: 4 76% 53%;
+
+    --radius: 1rem;
+
+    --font-sans: "Tajawal", system-ui, -apple-system, "Segoe UI", Tahoma, Arial,
+      sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono",
+      "Roboto Mono", monospace;
+
+    /* ---- chart layer (dataviz roles) ----
+     * Single-series charts wear the brand accent; the 3-slot categorical set is
+     * the validated dark stepping (blue / orange / aqua) and is only used where
+     * two or more series share one plot. */
+    --viz-surface: #18181a;
+    --viz-plane: #0d0d0f;
+    --viz-ink: #f5f3ef;
+    --viz-ink-secondary: #c3c2b7;
+    --viz-ink-muted: #898781;
+    --viz-grid: #2c2c2a;
+    --viz-baseline: #383835;
+
+    --viz-accent: #e3392c; /* single-series + "current" */
+    --viz-accent-wash: rgba(227, 57, 44, 0.1);
+    --viz-recessive: #3a3a3f; /* de-emphasised marks (sparkline history) */
+
+    --viz-series-1: #3987e5; /* blue */
+    --viz-series-2: #d95926; /* orange */
+    --viz-series-3: #199e70; /* aqua */
+
+    --viz-good: #0ca30c;
+    --viz-critical: #d03b3b;
+  }
+
+  * {
+    @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    color-scheme: dark;
+    scroll-padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    /* Room for the fixed bottom nav + the iOS home indicator. */
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    overscroll-behavior-y: none;
+  }
+
+  /* Numeric inputs: no spinners, they are a nightmare on a phone mid-set. */
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  /* The knurled-steel motif: a lattice hairline that tops the app shell. */
+  .iron-lattice {
+    height: 5px;
+    width: 100%;
+    opacity: 0.6;
+    background-image: repeating-linear-gradient(
+        135deg,
+        hsl(var(--primary)) 0 2px,
+        transparent 2px 13px
+      ),
+      repeating-linear-gradient(
+        45deg,
+        hsl(var(--primary)) 0 2px,
+        transparent 2px 13px
+      );
+  }
+
+  /* Soft ember behind page headers. */
+  .iron-ember::before {
+    content: "";
+    position: absolute;
+    inset: -30px -16px auto -16px;
+    height: 170px;
+    /* Origin sits on the inline-start edge — which is the RIGHT in this RTL
+       layout, i.e. behind the heading rather than opposite it. */
+    background: radial-gradient(
+      120% 100% at 85% 0%,
+      #4a130f 0%,
+      transparent 62%
+    );
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

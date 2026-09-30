@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تدفّق التركيز</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <h1 class="brand">تدفّق <span>التركيز</span></h1>
+    <div class="streak" id="streakBox" title="عدد الأيام المتتالية التي أنجزت فيها جلسة تركيز واحدة على الأقل">
+      <span class="streak-flame">&#9679;</span>
+      <span id="streakCount">0</span>
+      <span class="streak-label" id="streakLabel">يوم متتالٍ</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card timer-card">
+      <div class="modes" role="tablist" aria-label="وضع المؤقت">
+        <button class="mode active" data-mode="focus" role="tab" aria-selected="true">تركيز</button>
+        <button class="mode" data-mode="short" role="tab" aria-selected="false">استراحة قصيرة</button>
+        <button class="mode" data-mode="long" role="tab" aria-selected="false">استراحة طويلة</button>
+      </div>
+
+      <div class="dial">
+        <svg viewBox="0 0 240 240" class="ring" aria-hidden="true">
+          <circle class="ring-track" cx="120" cy="120" r="108"></circle>
+          <circle class="ring-progress" id="ringProgress" cx="120" cy="120" r="108"></circle>
+        </svg>
+        <div class="dial-inner">
+          <div class="time" id="timeDisplay" dir="ltr">25:00</div>
+          <div class="active-task" id="activeTaskLabel">لم تُحدَّد مهمة</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="startBtn">ابدأ</button>
+        <button class="btn ghost" id="resetBtn">إعادة ضبط</button>
+        <button class="btn ghost" id="skipBtn">تخطّي</button>
+      </div>
+
+      <p class="hint">مفتاح المسافة للبدء أو الإيقاف &middot; حرف R لإعادة الضبط &middot; حرف S للتخطّي</p>
+    </section>
+
+    <section class="card tasks-card">
+      <h2>المهام</h2>
+      <form class="task-form" id="taskForm">
+        <input type="text" id="taskInput" placeholder="على ماذا تعمل الآن؟" maxlength="120" autocomplete="off">
+        <button class="btn primary small" type="submit">إضافة</button>
+      </form>
+      <ul class="task-list" id="taskList"></ul>
+      <p class="empty" id="taskEmpty">لا توجد مهام بعد. أضف مهمة لتوجّه إليها جلستك القادمة.</p>
+    </section>
+
+    <section class="card stats-card">
+      <h2>اليوم</h2>
+      <div class="stat-row">
+        <div class="stat">
+          <div class="stat-value" id="todaySessions">0</div>
+          <div class="stat-label">جلسة مكتملة</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="todayMinutes">0</div>
+          <div class="stat-label">دقيقة تركيز</div>
+        </div>
+      </div>
+      <h2 class="spaced">آخر سبعة أيام</h2>
+      <div class="sparkline" id="sparkline"></div>
+      <h2 class="spaced">السجل</h2>
+      <ul class="history" id="history"></ul>
+      <p class="empty" id="historyEmpty">ستظهر هنا الجلسات التي تُكملها.</p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
