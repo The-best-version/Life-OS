@@ -1403,8 +1403,47 @@ const { useState, useEffect, useRef, useMemo } = React;
 /* ═══ Storage ═══ */
 const S = {
   get(k, fb) { try { const v = localStorage.getItem('step:' + k); return v != null ? JSON.parse(v) : fb; } catch { return fb; } },
-  set(k, v) { try { localStorage.setItem('step:' + k, JSON.stringify(v)); } catch {} }
+  set(k, v) { try { localStorage.setItem('step:' + k, JSON.stringify(v)); } catch {} syncOut(); }
 };
+
+/* Local sync - mirrors every step: key to report-agent's sync server so the
+   charts refresh without a manual export. If the server is down the rejection
+   is swallowed and localStorage stays the source of truth. */
+const SYNC_URL = 'http://127.0.0.1:47615/sync';
+let syncTimer = null;
+function syncLocal() {
+  try {
+    return (
+      location.protocol === 'file:' ||
+      location.hostname === 'localhost' ||
+      location.hostname === '127.0.0.1'
+    );
+  } catch {
+    return false;
+  }
+}
+function syncOut() {
+  if (!syncLocal()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    try {
+      const payload = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf('step:') !== 0) continue;
+        try { payload[k] = JSON.parse(localStorage.getItem(k)); }
+        catch { payload[k] = localStorage.getItem(k); }
+      }
+      fetch(SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', 'X-Local-Sync': '1' },
+        body: JSON.stringify({ project: 'step', payload }),
+      }).catch(() => {});
+    } catch {}
+  }, 2500);
+}
+// A write missed while the tab was closed still lands on the next open.
+syncOut();
 
 /* ═══ Activity log — real, per-day (local time, no UTC drift) ═══ */
 const DAY = d => {

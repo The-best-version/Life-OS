@@ -102,6 +102,36 @@ interface IronLogContextValue {
 
 const IronLogContext = createContext<IronLogContextValue | null>(null);
 
+/* Local sync - mirrors the database to report-agent's sync server so the
+   charts refresh without a manual export. If the server is down the rejection
+   is swallowed and localStorage stays the source of truth. */
+const SYNC_URL = "http://127.0.0.1:47615/sync";
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+function syncLocal() {
+  try {
+    return (
+      location.protocol === "file:" ||
+      location.hostname === "localhost" ||
+      location.hostname === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+}
+function syncOut(payload: Database) {
+  if (!syncLocal()) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    try {
+      fetch(SYNC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain", "X-Local-Sync": "1" },
+        body: JSON.stringify({ project: "ironlog", payload }),
+      }).catch(() => {});
+    } catch {}
+  }, 2500);
+}
+
 export function IronLogProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<Database>(EMPTY_DB);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
@@ -136,6 +166,7 @@ export function IronLogProvider({ children }: { children: ReactNode }) {
     if (storage !== "ready") return;
     if (db === EMPTY_DB) return;
     setSaveFailed(!saveDatabase(db));
+    syncOut(db);
   }, [db, status, storage]);
 
   /* ---- keep two open tabs in step ---- */

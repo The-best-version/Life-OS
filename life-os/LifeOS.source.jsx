@@ -723,6 +723,37 @@ const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
 
 /* --- persistence ------------------------------------------------------ */
 const STORAGE_KEY = "life-os-2027:v3";
+
+/* --- local sync -------------------------------------------------------
+   Mirrors the state to report-agent's sync server so the charts refresh
+   without a manual export. Entirely optional: if the server is down the
+   rejection is swallowed and localStorage remains the source of truth. */
+const SYNC_URL = "http://127.0.0.1:47615/sync";
+let syncTimer = null;
+function syncLocal() {
+  try {
+    return (
+      location.protocol === "file:" ||
+      location.hostname === "localhost" ||
+      location.hostname === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+}
+function syncOut(payload) {
+  if (!syncLocal()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    try {
+      fetch(SYNC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain", "X-Local-Sync": "1" },
+        body: JSON.stringify({ project: "lifeos", payload }),
+      }).catch(() => {});
+    } catch {}
+  }, 2500);
+}
 const UI_KEY = "life-os-2027:ui";
 const SCHEMA = 11;
 const HISTORY_CAP = 500;
@@ -6210,6 +6241,7 @@ export default function LifeOS() {
     } catch {
       /* storage blocked — the session still works */
     }
+    syncOut(state);
   }, [state]);
 
   useEffect(() => {
