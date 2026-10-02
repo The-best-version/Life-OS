@@ -64,6 +64,52 @@ import {
   ChevronUp,
   ChevronDown,
   MessageSquareQuote,
+  ShieldOff,
+  ShieldCheck,
+  HeartCrack,
+  LifeBuoy,
+  Hourglass,
+  AlertTriangle,
+  Crosshair,
+  Gauge,
+  Radar,
+  Send,
+  Rocket,
+  Lock,
+  Award,
+  FileSpreadsheet,
+  Database,
+  Presentation,
+  Languages,
+  Calculator,
+  UserSearch,
+  Search,
+  Handshake,
+  GraduationCap,
+  Milestone,
+  ClipboardList,
+  Mail,
+  FileText,
+  Megaphone,
+  Building2,
+  ExternalLink,
+  MessageSquare,
+  BadgeCheck,
+  Phone,
+  HandCoins,
+  BookOpenCheck,
+  ClipboardCheck,
+  Brain,
+  Smartphone,
+  BatteryLow,
+  CloudRain,
+  Mountain,
+  HelpCircle,
+  Frown,
+  Snail,
+  Wind,
+  Eye,
+  Minus,
 } from "lucide-react";
 
 /* ==================================================================== *
@@ -464,6 +510,7 @@ function NowStamp({ compact = false }) {
 /* --- navigation ------------------------------------------------------ */
 const NAV = [
   { id: "routine", label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
+  { id: "career", label: "مسار التوظيف", short: "التوظيف", icon: Briefcase },
   { id: "matrix", label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
   { id: "deep", label: "العمل العميق", short: "التركيز", icon: Timer },
   { id: "goals", label: "أهداف ٢٠٢٧", short: "الأهداف", icon: Flag },
@@ -473,7 +520,47 @@ const NAV = [
   { id: "prompts", label: "خزنة الأوامر", short: "الأوامر", icon: Bot },
   { id: "vault", label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
   { id: "analytics", label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
+  { id: "breaker", label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
 ];
+const NAV_IDS = NAV.map((n) => n.id);
+
+/* The saved order is a list of ids, not of tabs — a tab's definition lives in
+   NAV and nowhere else. Resolving through here is what makes the stored order
+   safe to trust: an id this build no longer has is dropped, a tab the saved
+   order has never seen joins the end, and a duplicate is taken once. Without
+   that last part a hand-edited backup could hide a tab outright. */
+function orderedNav(order) {
+  const byId = new Map(NAV.map((n) => [n.id, n]));
+  const seen = new Set();
+  const out = [];
+  for (const id of Array.isArray(order) ? order : []) {
+    if (byId.has(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push(byId.get(id));
+    }
+  }
+  for (const n of NAV) if (!seen.has(n.id)) out.push(n);
+  return out;
+}
+
+/* Reordering by id, shared by the drag path and the arrows. Kept generic
+   because the habit list already has its own group-aware versions — these
+   two are for a flat list of ids and nothing else. */
+const moveBefore = (ids, dragId, targetId) => {
+  if (dragId === targetId) return ids;
+  const rest = ids.filter((i) => i !== dragId);
+  const at = rest.indexOf(targetId);
+  return at < 0 ? ids : [...rest.slice(0, at), dragId, ...rest.slice(at)];
+};
+const nudgeInList = (ids, id, dir) => {
+  const i = ids.indexOf(id);
+  const j = i + (dir === "up" ? -1 : 1);
+  if (i < 0 || j < 0 || j >= ids.length) return ids;
+  const next = ids.slice();
+  next[i] = ids[j];
+  next[j] = ids[i];
+  return next;
+};
 
 /* --- kanban ----------------------------------------------------------- */
 const LANES = [
@@ -755,20 +842,40 @@ function syncOut(payload) {
   }, 2500);
 }
 const UI_KEY = "life-os-2027:ui";
-const SCHEMA = 11;
+const SCHEMA = 16;
 const HISTORY_CAP = 500;
 const STREAK_TARGET = 80;
 /* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
 const TOP_TASK_CAP = 3;
 
-const dayKey = (d = new Date()) =>
+/* The day ends when you sleep, not at midnight. Ticking «أذكار النوم» at
+   01:00 is finishing yesterday, not starting today — and a sheet that wiped
+   itself at 00:00 is why a night of work kept landing on the wrong row and
+   then being zeroed by the next morning's reload. Anything written between
+   midnight and this hour belongs to the previous day. */
+const DAY_START_HOUR = 4;
+
+/* "Now", shifted onto the logical day it belongs to. */
+const logicalNow = (d = new Date()) => {
+  const x = new Date(d.getTime());
+  x.setHours(x.getHours() - DAY_START_HOUR);
+  return x;
+};
+
+/* A calendar date, formatted as a key. The no-argument call means *now* and
+   gets the logical day; a call that passes a date means that exact calendar
+   square — the month grid and the streak walkers depend on the difference,
+   so the shift must not hide inside a default parameter. */
+const fmtDay = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
   ).padStart(2, "0")}`;
+const dayKey = (d) => fmtDay(d === undefined ? logicalNow() : d);
+
 const yesterdayKey = () => {
-  const d = new Date();
+  const d = logicalNow();
   d.setDate(d.getDate() - 1);
-  return dayKey(d);
+  return fmtDay(d);
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -806,6 +913,463 @@ const ADDED_TASKS = [
 
 const READ_ACTIVE = "active";
 const READ_GOAL_DEFAULT = 20;
+
+/* --- habit breaker ---------------------------------------------------- *
+ *  The mirror image of a routine habit: a streak you defend rather than
+ *  build. Everything here is keyed off one stored day — startDate — so the
+ *  count can never drift out of sync with a separate counter.
+ * ---------------------------------------------------------------------- */
+const MILESTONES = [
+  { d: 3, label: "٣ أيام", hint: "أصعب ٧٢ ساعة" },
+  { d: 7, label: "أسبوع", hint: "أسبوع كامل بلا رجعة" },
+  { d: 21, label: "٢١ يومًا", hint: "الدماغ بدأ ينسى" },
+  { d: 90, label: "٩٠ يومًا", hint: "ربع كامل — صرت شخصًا آخر" },
+];
+const MILESTONE_CAP = MILESTONES[MILESTONES.length - 1].d;
+
+const COST_TYPES = [
+  {
+    id: "money",
+    label: "مال",
+    unit: "ريال",
+    forms: ["ريال", "ريالان", "ريالات", "ريالًا"],
+    icon: Coins,
+    tint: "#FFB020",
+  },
+  {
+    id: "time",
+    label: "وقت",
+    unit: "ساعة",
+    forms: ["ساعة", "ساعتان", "ساعات", "ساعة"],
+    icon: Hourglass,
+    tint: "#00C2FF",
+  },
+];
+const costType = (id) => COST_TYPES.find((c) => c.id === id) || COST_TYPES[0];
+
+/* --- the weakness mirror ---------------------------------------------- *
+ *  A relapse written as prose is a diary: it reads well once and can never
+ *  be counted. So every confrontation with the urge — the ones that won and
+ *  the ones that lost — carries a cause, a mood and the clock hour beside
+ *  the free text. That is the whole point of the screen: to say back to the
+ *  user the one sentence he cannot say about himself — *this* is what takes
+ *  you down, and *this* is when it comes for you.
+ *
+ *  Every tag ships with its own counter-move. A diagnosis with no
+ *  prescription is just a nicer way of telling someone he is weak.
+ * ---------------------------------------------------------------------- */
+const URGE_TAGS = [
+  {
+    id: "big",
+    label: "المهمة كبيرة",
+    icon: Mountain,
+    tint: "#FF7A45",
+    counter:
+      "قصّها إلى خطوة واحدة مدّتها خمس دقائق، واكتبها كفعل لا كهدف: «افتح الملف»، لا «أنجز التقرير».",
+  },
+  {
+    id: "unclear",
+    label: "لا أعرف من أين أبدأ",
+    icon: HelpCircle,
+    tint: "#FFB020",
+    counter:
+      "لا تبدأ — خطّط فقط. اكتب أول ثلاث خطوات على ورقة ثم نفّذ الأولى وحدها. الغموض هو ما يشلّك، لا الكسل.",
+  },
+  {
+    id: "fear",
+    label: "خوف من الفشل",
+    icon: Frown,
+    tint: "#FF4D8D",
+    counter:
+      "اصنع نسخة سيئة عمدًا. المسوّدة الرديئة تكسر الرهبة، والجودة تأتي من التعديل لا من البداية.",
+  },
+  {
+    id: "phone",
+    label: "الهاتف بيدي",
+    icon: Smartphone,
+    tint: "#00C2FF",
+    counter:
+      "الهاتف في غرفة أخرى قبل أن تجلس، لا في جيبك. إرادتك لا تنافس إشعارًا صُمّم ليخطفها.",
+  },
+  {
+    id: "bored",
+    label: "ملل",
+    icon: Snail,
+    tint: "#9D5CFF",
+    counter:
+      "املأ الفراغ قبل أن يملأك هو. ضع البديل جاهزًا في متناول يدك قبل أن يأتي الملل بساعة.",
+  },
+  {
+    id: "tired",
+    label: "إرهاق",
+    icon: BatteryLow,
+    tint: "#5B8CFF",
+    counter:
+      "النوم ليس مكافأة بعد الإنجاز، هو شرطه. نَم بدل أن تقاوم بنصف دماغ — المقاومة المرهقة تخسر دائمًا.",
+  },
+  {
+    id: "stress",
+    label: "ضغط أو قلق",
+    icon: CloudRain,
+    tint: "#FF3B5C",
+    counter:
+      "أفرغ ما يضغطك على ورقة دقيقتين، ثم اختر أصغر بند فيها ونفّذه. القلق يتغذّى على القائمة المخفيّة.",
+  },
+  {
+    id: "lonely",
+    label: "وحدة",
+    icon: Eye,
+    tint: "#FF5722",
+    counter:
+      "اتصل بأحدهم أو انتقل إلى مكان فيه ناس. الوحدة هي الساحة المفضّلة لكل عادة تريد كسرها.",
+  },
+  {
+    id: "people",
+    label: "رفقة تجرّني",
+    icon: Users,
+    tint: "#10B981",
+    counter:
+      "جهّز جملة رفض قصيرة تقولها بلا شرح ولا اعتذار. التردّد نصف ثانية هو ما يُستغل.",
+  },
+  {
+    id: "free",
+    label: "فراغ مفاجئ",
+    icon: Wind,
+    tint: "#FFB020",
+    counter:
+      "الفراغ غير المخطّط يسلّم نفسه للعادة. احجز له بديلًا داخل الروتين بدل أن تتركه مفتوحًا.",
+  },
+];
+const tagOf = (id) => URGE_TAGS.find((t) => t.id === id) || null;
+
+const URGE_MOODS = [
+  { id: "empty", label: "فارغ" },
+  { id: "anxious", label: "قلِق" },
+  { id: "angry", label: "غاضب" },
+  { id: "low", label: "محبط" },
+  { id: "spent", label: "منهك" },
+  { id: "restless", label: "مشتّت" },
+];
+const moodOf = (id) => URGE_MOODS.find((m) => m.id === id) || null;
+
+/* Bands, not hours. "أكثر ما تسقط الساعة ١١" is a trivia fact; "بعد العشاء
+   إلى منتصف الليل" is a window a person can actually defend. The last band
+   starts at midnight and ends at four, so nothing wraps and every hour of
+   the clock lands in exactly one band. */
+const HOUR_BANDS = [
+  { id: "dawn", label: "من الفجر إلى الضحى", from: 4, to: 10 },
+  { id: "forenoon", label: "من الضحى إلى الظهر", from: 10, to: 14 },
+  { id: "afternoon", label: "من الظهر إلى المغرب", from: 14, to: 18 },
+  { id: "evening", label: "من المغرب إلى العشاء", from: 18, to: 21 },
+  { id: "night", label: "من العشاء إلى منتصف الليل", from: 21, to: 24 },
+  { id: "small", label: "بعد منتصف الليل", from: 0, to: 4 },
+];
+const bandAt = (h) =>
+  HOUR_BANDS.find((b) => h >= b.from && h < b.to) || HOUR_BANDS[0];
+const bandOf = (id) => HOUR_BANDS.find((b) => b.id === id) || null;
+
+const DOW_AR = [
+  "الأحد",
+  "الإثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+  "السبت",
+];
+
+/* Four templates, because the hardest part of this screen is the blank
+   form: a user who cannot phrase his own habit writes "التسويف" and stops.
+   Each preset carries the cost unit that actually fits it, a replacement
+   plan written as an order, and the two numbers the estimator opens on. */
+const BAD_PRESETS = [
+  {
+    key: "delay",
+    title: "التسويف",
+    costType: "time",
+    bouts: 3,
+    minutes: 40,
+    replacement:
+      "أضبط مؤقتًا على خمس دقائق وأفتح الملف فقط. إن أردت التوقف بعدها فلي ذلك.",
+  },
+  {
+    key: "scroll",
+    title: "التصفّح بلا هدف",
+    costType: "time",
+    bouts: 6,
+    minutes: 15,
+    replacement:
+      "أضع الهاتف في غرفة أخرى وأشرب ماءً وأمشي دقيقتين قبل أن أعود.",
+  },
+  {
+    key: "late",
+    title: "السهر بعد منتصف الليل",
+    costType: "time",
+    bouts: 1,
+    minutes: 90,
+    replacement:
+      "أطفئ الشاشات وأتوضّأ وأقرأ ورقًا عشر دقائق في السرير حتى ينام جسدي.",
+  },
+  {
+    key: "spend",
+    title: "الصرف خارج الميزانية",
+    costType: "money",
+    bouts: 3,
+    minutes: 35,
+    replacement:
+      "أضع ما أريده في قائمة وأؤجّله ٢٤ ساعة. إن بقيت أريده غدًا أعيد النظر.",
+  },
+];
+
+
+/* Whole days between two day keys. Parsed at local midnight on purpose —
+   `new Date("2027-01-05")` is UTC, which rolls the count a day early for
+   anyone east of Greenwich. */
+const daysBetween = (fromKey, toKey = dayKey()) => {
+  const a = new Date(`${fromKey}T00:00:00`);
+  const b = new Date(`${toKey}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+};
+
+/* One confrontation with the urge, win or lose. `kind` is the only field
+   that separates a relapse from a resisted craving, so both can be counted
+   on one scale — a screen that only records the losses makes the user look
+   weaker than he is, and he stops opening it. A log written before the tags
+   existed keeps `tag: ""` and is simply skipped by the breakdowns. */
+const urgeShape = (u = {}, kind = "hold") => ({
+  id: u.id || uid(),
+  at: typeof u.at === "string" ? u.at : dayKey(),
+  kind: u.kind === "fall" || kind === "fall" ? "fall" : "hold",
+  days: Number.isFinite(Number(u.days)) ? Math.max(0, Number(u.days)) : 0,
+  tag: tagOf(u.tag) ? u.tag : "",
+  mood: moodOf(u.mood) ? u.mood : "",
+  hour: Number.isFinite(Number(u.hour))
+    ? Math.min(23, Math.max(0, Math.round(Number(u.hour))))
+    : null,
+  dow: Number.isFinite(Number(u.dow)) ? Math.min(6, Math.max(0, Number(u.dow))) : null,
+  trigger: typeof u.trigger === "string" ? u.trigger : "",
+  feeling: typeof u.feeling === "string" ? u.feeling : "",
+});
+
+/* Stamped at the moment of logging, not derived later. The hour comes from
+   the wall clock and the weekday from the logical day: a craving at one in
+   the morning belongs to «بعد منتصف الليل» but to *yesterday's* row, which
+   is exactly how the person lived it. */
+const stamp = () => ({
+  at: dayKey(),
+  hour: new Date().getHours(),
+  dow: logicalNow().getDay(),
+});
+
+/* The one place a bad habit's fields are written — add form, migration and
+   import all pass through here, so the shape cannot drift between them. */
+const badHabitShape = (b = {}) => ({
+  id: b.id || uid(),
+  title: typeof b.title === "string" ? b.title : "",
+  startDate: typeof b.startDate === "string" ? b.startDate : dayKey(),
+  costType: b.costType === "time" ? "time" : "money",
+  costPerDay: Number.isFinite(Number(b.costPerDay))
+    ? Math.max(0, Number(b.costPerDay))
+    : 0,
+  replacement: typeof b.replacement === "string" ? b.replacement : "",
+  /* Falls and holds live in two arrays because they are read separately —
+     the card counts the falls, the mirror counts both. */
+  logs: Array.isArray(b.logs) ? b.logs.map((l) => urgeShape(l, "fall")) : [],
+  urges: Array.isArray(b.urges) ? b.urges.map((u) => urgeShape(u, "hold")) : [],
+});
+
+/* Arabic counts the noun, not just the number: ٣ أيام but ٢٥ يومًا. Printing
+   one fixed form next to a live counter is wrong most of the time. The four
+   forms are [one, two, 3–10, 11+]. */
+const arCount = (n, forms) => {
+  const h = Math.abs(n) % 100;
+  if (Math.abs(n) === 1) return forms[0];
+  if (Math.abs(n) === 2) return forms[1];
+  if (h >= 3 && h <= 10) return forms[2];
+  return forms[3];
+};
+const DAY_FORMS = ["يوم", "يومان", "أيام", "يومًا"];
+const dayWord = (n) => arCount(n, DAY_FORMS);
+const MIN_FORMS = ["دقيقة", "دقيقتان", "دقائق", "دقيقة"];
+const minWord = (n) => arCount(n, MIN_FORMS);
+const STEP_FORMS = ["خطوة", "خطوتان", "خطوات", "خطوة"];
+const stepWord = (n) => arCount(n, STEP_FORMS);
+const MEET_FORMS = ["مواجهة", "مواجهتان", "مواجهات", "مواجهة"];
+const meetWord = (n) => arCount(n, MEET_FORMS);
+const TIMES_FORMS = ["مرة", "مرتان", "مرات", "مرة"];
+const timesWord = (n) => arCount(n, TIMES_FORMS);
+const FALL_FORMS = ["انتكاسة", "انتكاستان", "انتكاسات", "انتكاسة"];
+const fallWord = (n) => arCount(n, FALL_FORMS);
+
+/* «قبل ٣ أيام», but «اليوم» at zero — nobody says «قبل ٠ يومًا». */
+function Since({ day }) {
+  const n = daysBetween(day);
+  if (n === 0) return "اليوم";
+  return (
+    <>
+      قبل{" "}
+      <span dir="ltr" className="tabular-nums">
+        {n}
+      </span>{" "}
+      {dayWord(n)}
+    </>
+  );
+}
+
+const cleanDays = (b) => daysBetween(b.startDate);
+const bleedSaved = (b) => cleanDays(b) * (b.costPerDay || 0);
+/* The longest run ever, not just the current one — a relapse log carries the
+   days it cost, so the record survives the reset that ended it. */
+const bestRun = (b) =>
+  Math.max(cleanDays(b), ...(b.logs || []).map((l) => l.days || 0), 0);
+
+/* --- diagnosis -------------------------------------------------------- *
+ *  Everything the mirror claims is counted here and nowhere else, so the
+ *  card can never drift from the numbers behind it. Each breakdown counts
+ *  on its *own* denominator — an entry with a mood but no tag must not
+ *  deflate the tag percentages, or the first few logs read as noise.
+ * ---------------------------------------------------------------------- */
+const MIRROR_MIN = 4;
+
+const breakerEvents = (list) =>
+  (list || []).flatMap((h) => [
+    ...(h.logs || []).map((l) => ({ ...l, kind: "fall", habit: h.title })),
+    ...(h.urges || []).map((u) => ({ ...u, kind: "hold", habit: h.title })),
+  ]);
+
+/* The commonest value of one field, with the share it holds. Returns null
+   rather than a zeroed row when nothing carries the field — "٠٪ من
+   مواجهاتك" is a claim about data that does not exist. */
+const topShare = (rows, pick) => {
+  const tally = new Map();
+  rows.forEach((r) => {
+    const v = pick(r);
+    if (v === null || v === undefined || v === "") return;
+    tally.set(v, (tally.get(v) || 0) + 1);
+  });
+  if (!tally.size) return null;
+  const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((n, [, c]) => n + c, 0);
+  return {
+    value: sorted[0][0],
+    count: sorted[0][1],
+    total,
+    pct: Math.round((sorted[0][1] / total) * 100),
+    rows: sorted.map(([value, count]) => ({
+      value,
+      count,
+      pct: Math.round((count / total) * 100),
+    })),
+  };
+};
+
+function weakSpots(list) {
+  const all = breakerEvents(list);
+  const falls = all.filter((e) => e.kind === "fall");
+  const holds = all.filter((e) => e.kind === "hold");
+  const runs = falls.map((f) => Number(f.days) || 0);
+
+  /* A trend wants two halves to compare, and halves of fewer than four runs
+     are one bad week against another. Below that it is simply not claimed —
+     an app that tells you you are "تتحسّن" off two data points teaches you
+     to distrust it. */
+  let trend = null;
+  if (runs.length >= 4) {
+    const half = Math.floor(runs.length / 2);
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
+    const early = mean(runs.slice(0, half));
+    const late = mean(runs.slice(half));
+    if (late - early >= 1) trend = { dir: "up", early, late };
+    else if (early - late >= 1) trend = { dir: "down", early, late };
+    else trend = { dir: "flat", early, late };
+  }
+
+  return {
+    total: all.length,
+    falls: falls.length,
+    holds: holds.length,
+    ready: all.length >= MIRROR_MIN,
+    hold: all.length ? Math.round((holds.length / all.length) * 100) : 0,
+    avgRun: runs.length ? runs.reduce((a, b) => a + b, 0) / runs.length : 0,
+    trend,
+    tag: topShare(all, (e) => e.tag),
+    /* The tag that most often *wins* — separate from the commonest tag on
+       purpose. A trigger you meet ten times and survive nine is not your
+       weak point; the one you meet three times and lose three is. */
+    fatal: topShare(falls, (e) => e.tag),
+    band: topShare(all, (e) =>
+      Number.isFinite(e.hour) ? bandAt(e.hour).id : null,
+    ),
+    dow: topShare(all, (e) => (Number.isFinite(e.dow) ? e.dow : null)),
+    mood: topShare(all, (e) => e.mood),
+  };
+}
+
+/* How often a single tag ends in a fall. Printed beside the tag's bar, it
+   turns a frequency list into a danger list. */
+const tagFallRate = (rows, id) => {
+  const met = rows.filter((e) => e.tag === id);
+  if (!met.length) return null;
+  const lost = met.filter((e) => e.kind === "fall").length;
+  return { met: met.length, lost, pct: Math.round((lost / met.length) * 100) };
+};
+
+/* --- the guard -------------------------------------------------------- *
+ *  A diagnosis nobody acts on is trivia. The mirror already knows which
+ *  band of the day takes the user down; this turns that into a warning that
+ *  arrives *before* the hour does, which is the only moment it can help.
+ * ---------------------------------------------------------------------- */
+const DANGER_MIN_HITS = 2;
+const DANGER_MIN_SHARE = 35;
+
+/* The band only counts as *the* danger hour when it holds a real share of
+   the confrontations. A band that leads by one event out of nine is a
+   coincidence, and a warning that fires on a coincidence is a warning the
+   user learns to scroll past. */
+function dangerWatch(list) {
+  const w = weakSpots(list);
+  if (!w.ready || !w.band) return null;
+  if (w.band.count < DANGER_MIN_HITS || w.band.pct < DANGER_MIN_SHARE) return null;
+  const share = w.fatal || w.tag;
+  return {
+    band: bandOf(w.band.value),
+    pct: w.band.pct,
+    tag: share ? tagOf(share.value) : null,
+  };
+}
+
+/* The current band, re-checked once a minute and again whenever the tab is
+   looked at. A background tab throttles its intervals hard, and the guard
+   that matters most is the one already waiting when the user comes back. */
+function useHourBand() {
+  const [id, setId] = useState(() => bandAt(new Date().getHours()).id);
+  useEffect(() => {
+    const check = () => setId(bandAt(new Date().getHours()).id);
+    const t = setInterval(check, 60000);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+  return id;
+}
+
+/* Today's confrontations, for the archive row. Counted from the one place
+   they live, so the calendar can never claim a day the breaker disagrees
+   with. */
+const breakerToday = (list, day = dayKey()) => {
+  const rows = breakerEvents(list).filter((e) => e.at === day);
+  return {
+    holds: rows.filter((e) => e.kind === "hold").length,
+    falls: rows.filter((e) => e.kind === "fall").length,
+  };
+};
+
+
 
 const SEED_HABITS = [
   { id: uid(), label: "شرب ماء", group: "morning", done: false },
@@ -894,7 +1458,7 @@ function readStreak(log, goal) {
   for (const r of log)
     byDay.set(r.date, (byDay.get(r.date) || 0) + (r.pages || 0));
 
-  const d = new Date();
+  const d = logicalNow();
   if ((byDay.get(dayKey(d)) || 0) < goal) d.setDate(d.getDate() - 1);
 
   let n = 0;
@@ -970,6 +1534,903 @@ const SEED_PIPELINE = [
   { title: "تحديث LinkedIn بخبرة التدريب التعاوني", lane: "doing" },
 ].map((c) => ({ id: uid(), ...c }));
 
+/* ==================================================================== *
+ *  CAREER — the 90-day employability masterplan
+ *
+ *  A diploma does not get hired; a routine does. Thirteen weeks in three
+ *  phases, five missions a week, written for a business administration
+ *  graduate specifically — not generic job-hunting advice.
+ *
+ *  Nothing here is a free-text to-do list. The schedule is generated from
+ *  a start date, the company sprints are locked into order, and the two
+ *  daily lists are *derived from the date* rather than reset by a rollover:
+ *  a tick is stored against its own day in `career.log`, so the morning
+ *  checklist is empty at dawn whether or not the app was reopened, and a
+ *  streak can be counted backwards without trusting a stored counter.
+ * ==================================================================== */
+const CAREER_DAYS = 90;
+const SKILL_TARGET = 2; // 30-minute blocks a day to bank the streak
+const BLOCK_MIN = 30;
+const FOLLOWUP_DAYS = 5; // an application untouched this long is overdue
+const APPS_PER_MONTH = 20; // one a day on weekdays — what the morning routine asks
+const CAREER_LOG_CAP = 400;
+const STREAK_CEIL = 14; // where a streak stops earning more readiness
+
+const CAREER_PHASES = [
+  {
+    id: "base",
+    label: "التأسيس",
+    span: "الأسابيع ١–٤",
+    weeks: [1, 2, 3, 4],
+    tint: T.sky,
+    icon: GraduationCap,
+    aim: "تسجيلات تعمل وحدها، وملف يمرّ أنظمة الفرز",
+  },
+  {
+    id: "arm",
+    label: "التسليح",
+    span: "الأسابيع ٥–٩",
+    weeks: [5, 6, 7, 8, 9],
+    tint: T.violet,
+    icon: Zap,
+    aim: "مهارات تُدفع عليها رواتب، ومعرض أعمال يُثبتها",
+  },
+  {
+    id: "strike",
+    label: "الهجوم",
+    span: "الأسابيع ١٠–١٣",
+    weeks: [10, 11, 12, 13],
+    tint: T.cta,
+    icon: Crosshair,
+    aim: "اختراق الشركات مباشرة، ثم المقابلة فالتفاوض",
+  },
+];
+
+const CAREER_WEEKS = [
+  {
+    w: 1,
+    phase: "base",
+    title: "السيرة التي تمرّ الفرز",
+    aim: "ملف واحد، صفحة واحدة، يقرأه النظام قبل الإنسان",
+    missions: [
+      "أنهِ «الأرضية» كاملة في تبويب العدّة: طاقات، تمهير، جدارة، دروب — قبل أي شيء آخر",
+      "أعد كتابة السيرة في صفحة واحدة: بلا جداول ولا أعمدة ولا صورة — أنظمة الفرز تقرأها نصًّا",
+      "استخرج ١٥ كلمة مفتاحية من خمسة إعلانات إدارية حقيقية، وازرعها في السيرة بصياغتها نفسها",
+      "حوّل كل مهمة في السيرة إلى نتيجة برقم: «نظّمت أرشيف ٢٠٠ ملف» لا «مسؤول عن الأرشفة»",
+      "اكتب سطر العنوان المهني تحت اسمك: «أخصائي إداري — تشغيل، تنسيق، تقارير»",
+      "مرّر السيرة على فاحص توافق ATS مجاني، وسجّل النسبة ثم أصلح أدنى ثلاث ملاحظات",
+    ],
+  },
+  {
+    w: 2,
+    phase: "base",
+    title: "واجهة لينكدإن",
+    aim: "أن يجدك مسؤول التوظيف قبل أن تطرق بابه",
+    missions: [
+      "صورة مهنية بخلفية محيّدة، وبانر يحمل تخصّصك لا منظرًا عامًّا",
+      "عنوان الملف أربع كلمات مفتاحية يبحث بها الموظِّف — لا «باحث عن عمل»",
+      "اكتب «نبذة» في خمسة أسطر: من أنا، ماذا أُجيد، ما الدور الذي أبحث عنه",
+      "فعّل «منفتح للعمل» واضبط المسمّيات الخمسة والمدينة ونوع الدوام",
+      "اطلب ثلاث توصيات مكتوبة: مشرف التدريب، أستاذ، زميل مشروع",
+    ],
+  },
+  {
+    w: 3,
+    phase: "base",
+    title: "سبرنت إكسل — عشر ساعات",
+    aim: "المهارة الأولى التي تُسأل عنها في كل مقابلة إدارية",
+    missions: [
+      "‏XLOOKUP و VLOOKUP على جدول بيانات حقيقي لا على مثال من درس",
+      "الجداول المحورية: استخرج ثلاثة تقارير مختلفة من ملف واحد",
+      "التنسيق الشرطي والتحقق من صحة البيانات على نموذج إدخال",
+      "ابنِ لوحة متابعة في ورقة واحدة: أربعة مؤشّرات ورسمان",
+      "احصل على شهادة إكسل مجانية واحدة وأضفها إلى الملف والسيرة",
+    ],
+  },
+  {
+    w: 4,
+    phase: "base",
+    title: "خريطة السوق",
+    aim: "قائمة أهداف مكتوبة بدل التقديم العشوائي",
+    missions: [
+      "اسرد أربعين شركة هدف في ثلاث طبقات: كبرى، متوسطة، ناشئة",
+      "حدّد خمسة مسمّيات واقعية لحديث تخرّج: منسّق إداري، مساعد تنفيذي، أخصائي عمليات، منسّق مشتريات، منسّق موارد بشرية",
+      "اعرف نطاق الراتب الحقيقي لكل مسمّى — رقمك في التفاوض يبدأ من هنا",
+      "راجع إعلانات تمهير المفتوحة هذا الأسبوع وقدّم على كل مطابق — القبول على السرعة",
+      "اصنع ملف متابعة التقديمات، وابدأه بثلاثة تقديمات مطابقة",
+    ],
+  },
+  {
+    w: 5,
+    phase: "arm",
+    title: "أساسيات أنظمة ERP",
+    aim: "الفرق بين «يعرف إكسل» و«يعرف يشتغل على نظام»",
+    missions: [
+      "افهم دورة الشراء كاملة: طلب، أمر شراء، استلام، فاتورة، سداد",
+      "تعلّم مصطلحات SAP وأوراكل الإدارية: مركز التكلفة، أمر الشراء، الحركة المخزنية",
+      "جرّب نظامًا تجريبيًّا أو نسخة مجانية، وسجّل عشر حركات بنفسك",
+      "اكتب صفحة واحدة: كيف يتدفّق مستند واحد من الطلب إلى السداد",
+      "أضف «أساسيات ERP» إلى السيرة بوصف دقيق لا بمبالغة",
+    ],
+  },
+  {
+    w: 6,
+    phase: "arm",
+    title: "الموارد البشرية والعمليات",
+    aim: "لغة الإدارة من داخلها",
+    missions: [
+      "اقرأ نظام العمل السعودي: ساعات العمل، الإجازات، نهاية الخدمة",
+      "افهم دورة التوظيف كما يراها الموظِّف — وستكتب طلبك بعدها بشكل مختلف",
+      "تعلّم مؤشّرات الأداء الإدارية: دوران الموظفين، زمن الدورة، الالتزام بالموعد",
+      "ارسم خريطة إجراء واحد (Process Map) لعملية إدارية تعرفها",
+      "اكتب سياسة من صفحة واحدة لإجراء متكرّر — ضعها في معرض أعمالك",
+    ],
+  },
+  {
+    w: 7,
+    phase: "arm",
+    title: "معرض أعمال الظلّ",
+    aim: "لا أحد يوظّف وعودًا؛ الناس توظّف مخرجات",
+    missions: [
+      "ابنِ لوحة متابعة مشتريات أو مخزون من بيانات مُفترضة واقعية",
+      "اكتب تقريرًا إداريًّا شهريًّا من صفحتين بالأرقام والتوصية",
+      "اصنع نموذج متابعة طلبات داخلية قابلًا للاستخدام فعلًا",
+      "ارفع المخرجات الثلاثة في مجلّد سحابي واحد برابط مباشر",
+      "اربط الرابط في لينكدإن والسيرة تحت «معرض أعمال»",
+    ],
+  },
+  {
+    w: 8,
+    phase: "arm",
+    title: "التقارير ولوحات المتابعة",
+    aim: "أن تُقرأ أرقامك في دقيقة",
+    missions: [
+      "تعلّم أساسيات Power BI أو Looker Studio: مصدر، علاقة، مرئية",
+      "حوّل أحد تقاريرك إلى لوحة تفاعلية من صفحة واحدة",
+      "اضبط قاعدة الرسم: رسم واحد، فكرة واحدة، عنوان يقول الخلاصة",
+      "اكتب ملخّصًا تنفيذيًّا من خمسة أسطر لكل لوحة",
+      "اعرض اللوحة على شخص غير مختص، وأصلح ما لم يفهمه في ثلاثين ثانية",
+    ],
+  },
+  {
+    w: 9,
+    phase: "arm",
+    title: "بنك قصص المقابلة",
+    aim: "السبب الأول لرفض حديثي التخرّج: لا قصص، فقط صفات",
+    missions: [
+      "افتح «أسئلة المقابلة وفخاخها» في العدّة، واكتب كل قصّة وأنت تنظر إلى السؤال الذي ستُستخدَم فيه",
+      "اكتب ست قصص بصيغة STAR: الموقف، المهمة، الإجراء، النتيجة برقم",
+      "جهّز جواب «حدّثني عن نفسك» في تسعين ثانية واحفظ هيكله لا نصّه",
+      "جهّز جواب «لماذا نحن؟» مربوطًا بشيء حقيقي عن الشركة",
+      "جهّز جواب نقطة الضعف: ضعف حقيقي + ما تفعله حياله الآن",
+      "سجّل نفسك بالفيديو مرّتين، واحذف من إجاباتك كل كلمة لا تضيف",
+    ],
+  },
+  {
+    w: 10,
+    phase: "strike",
+    title: "الهجوم المباشر",
+    aim: "الوظائف المعلنة أصعب طريق؛ الطريق الأقصر رسالة مكتوبة بعناية",
+    missions: [
+      "افتح أول هجوم شركة من سبعة أيام في هذا التطبيق",
+      "أرسل خمس رسائل نقطة ألم هذا الأسبوع — خمسًا مخصّصة لا خمسين منسوخة",
+      "تابع كل رسالة بعد خمسة أيام برسالة واحدة قصيرة لا أكثر",
+      "سجّل كل إرسال في لوحة التقديمات بتاريخه",
+      "راجع ما لم يُرَدّ عليه، وبدّل جملة واحدة في القالب ثم أعد التجربة",
+    ],
+  },
+  {
+    w: 11,
+    phase: "strike",
+    title: "الشبكة البشرية",
+    aim: "أكثر من نصف التعيينات تمرّ بإنسان يعرفك",
+    missions: [
+      "اطلب ثلاث مقابلات معرفية (١٥ دقيقة) من موظفين في أدوارك المستهدفة",
+      "اسأل في كل مقابلة: ما الذي يصعب في دورك؟ ومن أنجح من رأيت فيه؟",
+      "اطلب تزكية داخلية واحدة بوضوح وبلا إحراج",
+      "احضر لقاءً أو ملتقى مهنيًّا واحدًا، واخرج بثلاث جهات اتصال",
+      "اشكر كل من ساعدك برسالة قصيرة — الشبكة تُبنى بالمتابعة",
+    ],
+  },
+  {
+    w: 12,
+    phase: "strike",
+    title: "المقابلات الحقيقية",
+    aim: "التحويل: من مُرشّح إلى مُختار",
+    missions: [
+      "أجرِ مقابلتين تجريبيتين مع شخص يصحّح لك بصراحة",
+      "ابحث عن كل مقابلة: المنتج، العميل، آخر خبر، اسم من يقابلك",
+      "جهّز ثلاثة أسئلة تسألها أنت — السؤال الجيّد يقلب الكرسي",
+      "أرسل رسالة شكر في أربع وعشرين ساعة، تُذكّر بنقطة واحدة قلتها",
+      "أرسل رسالة الشكر من بنك الرسائل خلال أربع وعشرين ساعة — يُرسلها أقلّ من ربع المتقدّمين",
+      "بعد كل مقابلة اكتب: ما نجح، ما تعثّر، وما ستغيّره في التالية",
+    ],
+  },
+  {
+    w: 13,
+    phase: "strike",
+    title: "العرض والتفاوض",
+    aim: "الراتب الأول يحدّد سقف السنوات العشر القادمة",
+    missions: [
+      "لا تذكر رقمًا أولًا؛ وإذا أُلزمت فاذكر نطاقًا مبنيًّا على بحث الأسبوع الرابع",
+      "احسب الحزمة كاملة: الأساس، البدلات، التأمين، التدريب، مسار الترقية",
+      "اطلب أربعًا وعشرين ساعة قبل القبول — دائمًا",
+      "فاوض على بند واحد غير الراتب إذا أُغلق الراتب: تدريب، لقب، مرونة",
+      "اطلب العرض مكتوبًا قبل أي تأكيد نهائي",
+    ],
+  },
+];
+
+const CAREER_WEEK_COUNT = CAREER_WEEKS.length;
+const MISSION_TOTAL = CAREER_WEEKS.reduce((n, w) => n + w.missions.length, 0);
+const weekOf = (w) => CAREER_WEEKS.find((x) => x.w === w) || CAREER_WEEKS[0];
+const phaseOf = (id) => CAREER_PHASES.find((p) => p.id === id) || CAREER_PHASES[0];
+const missionKey = (w, i) => `${w}:${i}`;
+
+/* The seven days are fixed and run in order: research before portfolio,
+   portfolio before the pitch. A sprint whose owner jumps to day 7 is just
+   another cold message, which is the thing this is meant to replace. */
+const SPRINT_DAYS = [
+  {
+    d: 1,
+    label: "البحث العميق",
+    icon: Search,
+    tint: T.sky,
+    task: "اقرأ أخبار الشركة وصفحة وظائفها وحسابها المهني، واكتب ثلاث نقاط ألم تشغيلية أو إدارية محتملة.",
+    out: "ثلاث نقاط ألم مكتوبة",
+  },
+  {
+    d: 2,
+    label: "معرض الظلّ",
+    icon: FileSpreadsheet,
+    tint: T.violet,
+    task: "ابنِ مخرجًا واحدًا يعالج أقوى نقطة ألم: نموذج متابعة، تقرير، أو خريطة إجراء — باسمهم وببياناتهم المعلنة.",
+    out: "ملف واحد جاهز للإرسال",
+  },
+  {
+    d: 3,
+    label: "خريطة الهيكل",
+    icon: UserSearch,
+    tint: T.indigo,
+    task: "اعثر على مسؤول التوظيف، ومدير الإدارة المعنيّة، وموظّف واحد في مستواك. سجّل الأسماء والمسمّيات.",
+    out: "ثلاثة أسماء بمسمّياتها",
+  },
+  {
+    d: 4,
+    label: "القيمة أولًا ①",
+    icon: Handshake,
+    tint: T.primary,
+    task: "علّق تعليقًا مهنيًّا واحدًا يضيف فكرة على منشور لهم. لا مدح، ولا طلب وظيفة.",
+    out: "تعليق يُقرأ ويُتذكّر",
+  },
+  {
+    d: 5,
+    label: "القيمة أولًا ②",
+    icon: Users,
+    tint: T.primary,
+    task: "أرسل طلب تواصل مخصّصًا لموظّف واحد في سطرين: من أنت، ولماذا دوره يهمّك. بلا أي طلب.",
+    out: "طلب تواصل مخصّص",
+  },
+  {
+    d: 6,
+    label: "القيمة أولًا ③",
+    icon: Megaphone,
+    tint: T.primary,
+    task: "انشر من عندك شيئًا يلمس مجالهم — ملاحظة أو مخرج صغير — حتى يرى اسمك في سياق العمل لا في سياق الطلب.",
+    out: "منشور واحد من عندك",
+  },
+  {
+    d: 7,
+    label: "رسالة نقطة الألم",
+    icon: Send,
+    tint: T.cta,
+    task: "أرسل الرسالة ومعها المخرج: النقطة، الحلّ، ثم طلب عشر دقائق. لا سيرة ملحقة في الرسالة الأولى.",
+    out: "الرسالة مُرسلة ومسجّلة",
+  },
+];
+
+/* Six blocks of half an hour. Two a day is the bar — a bar that can be met
+   on a bad day is the only kind that survives ninety of them. */
+const SKILL_BLOCKS = [
+  {
+    id: "excel",
+    label: "إكسل: الجداول المحورية",
+    hint: "على ملف حقيقي، لا على فيديو",
+    icon: FileSpreadsheet,
+    tint: T.primary,
+  },
+  {
+    id: "erp",
+    label: "أساسيات ERP / SAP",
+    hint: "دورة الشراء والمخزون",
+    icon: Database,
+    tint: T.sky,
+  },
+  {
+    id: "report",
+    label: "كتابة التقارير والمراسلات",
+    hint: "تقرير من صفحة بالأرقام",
+    icon: FileText,
+    tint: T.violet,
+  },
+  {
+    id: "english",
+    label: "الإنجليزية المهنية",
+    hint: "مفردات المقابلة ونطقها",
+    icon: Languages,
+    tint: T.indigo,
+  },
+  {
+    id: "finance",
+    label: "المحاسبة للإداريين",
+    hint: "ميزانية، تدفّق نقدي، مركز تكلفة",
+    icon: Calculator,
+    tint: T.accent,
+  },
+  {
+    id: "present",
+    label: "العرض والتقديم",
+    hint: "شريحة واحدة، فكرة واحدة",
+    icon: Presentation,
+    tint: T.rose,
+  },
+];
+
+/* The morning routine, written as instructions rather than as reminders.
+ *
+ *  The first version of this list was six bare imperatives — "send one
+ *  connection request", "review the sector news" — and it was read, fairly,
+ *  as six commands with no method: no where, no how long, no words to send.
+ *  A checklist a person cannot execute without first inventing the method
+ *  is not a checklist, it is a guilt generator. So every step now carries
+ *  the four things that make it executable at 7am without thinking:
+ *
+ *    min    — how long it takes, so the whole run has a known price (45m)
+ *    where  — the exact place it happens, named
+ *    how    — the actual moves, in order
+ *    script — the words, ready to copy, with [brackets] where you fill in
+ *
+ *  `core` marks the four steps that put you in front of an employer. The
+ *  streak counts those four and only those four: dressing well is a good
+ *  opener, but it must never be allowed to stand in for an application. */
+const AM_CORE = new Set(["apply", "follow", "connect", "polish"]);
+const AM_TARGET = AM_CORE.size;
+
+const AM_ROUTINE = [
+  {
+    id: "dress",
+    label: "البس كأنك ذاهب إلى العمل",
+    min: 5,
+    icon: Briefcase,
+    tint: T.primary,
+    where: "في بيتك، قبل فتح الجوال",
+    how: [
+      "ملابس العمل لا ملابس النوم — الدماغ يصدّق ما يراه في المرآة.",
+      "اجلس على طاولة لا على السرير؛ المكان يحدّد جودة الساعة القادمة.",
+      "ضع الجوال على الوضع الصامت حتى تنتهي الخطوات الخمس الباقية.",
+    ],
+    script: "",
+  },
+  {
+    id: "news",
+    label: "افتح الرادار: عشر دقائق في أخبار القطاع",
+    min: 10,
+    icon: Radar,
+    tint: T.sky,
+    where: "لينكدإن + «أخبار الأعمال السعودية» في قوقل نيوز",
+    how: [
+      "تابع على لينكدإن ١٥ شركة من قائمة الأربعين، فتصير أخبارهم تصلك بلا بحث.",
+      "اقرأ العناوين فقط، وافتح خبرين لا أكثر.",
+      "اكتب سطرًا واحدًا في «نقاط الألم» لأي شركة ظهر لها خبر: توسّع، فرع جديد، تمويل، مشكلة.",
+      "هذا السطر هو مادة رسالتك اليوم — بلا رادار تكتب رسائل عامة، وبرادار تكتب رسالة لا تُهمَل.",
+    ],
+    script: "",
+  },
+  {
+    id: "apply",
+    label: "قدّم على وظيفة واحدة مطابقة — واحدة لا عشر",
+    min: 15,
+    icon: Send,
+    tint: T.cta,
+    where: "جدارات وطاقات للتوظيف، جدارة للحكومي، لينكدإن وبيت.كوم للخاص",
+    how: [
+      "اختر إعلانًا نُشر خلال ٧٢ ساعة — ما قبلها غالبًا امتلأ بمئات الطلبات.",
+      "استخرج خمس كلمات من نص الإعلان نفسه، وازرعها في السيرة بصياغتها حرفيًّا قبل الإرسال.",
+      "احفظ النسخة باسم الشركة. نسخة واحدة تُرسل للجميع تعني رفضًا من أنظمة الفرز قبل أن يراها إنسان.",
+      "أرفق سطرين لا صفحة في خانة الرسالة — القالب جاهز تحت.",
+      "سجّله فورًا في «التقديمات»، وإلا ضاع موعد المتابعة.",
+    ],
+    script: `السلام عليكم،
+
+قرأت إعلانكم عن [المسمّى]، وأرى فيه ثلاث مسؤوليات أعمل عليها فعلًا: [١]، [٢]، [٣].
+خريج إدارة أعمال، وأعددت [مخرج حقيقي: لوحة متابعة / تقرير / خريطة إجراء] يشبه ما يُطلب في الدور، ورابطه في السيرة.
+
+شاكرًا لوقتكم،
+[اسمك] — [جوالك]`,
+  },
+  {
+    id: "follow",
+    label: "تابع تقديمًا واحدًا عمره خمسة أيام",
+    min: 5,
+    icon: Mail,
+    tint: T.accent,
+    where: "تبويب «التقديمات» في هذا التطبيق — رادار المتابعة يختار لك",
+    how: [
+      "افتح رادار المتابعة وخذ الاسم الأول فيه. لا تختر بمزاجك، خذ الأقدم.",
+      "رسالة واحدة قصيرة لا رسالتين، وفي نفس سلسلة البريد لا في رسالة جديدة.",
+      "أضف شيئًا جديدًا في المتابعة — مخرجًا أو سطر قيمة — لا تذكيرًا مجرّدًا.",
+      "اضغط «تابعت اليوم» ليعاد ضبط العدّاد.",
+    ],
+    script: `السلام عليكم [الاسم]،
+
+أتابع طلبي على وظيفة [المسمّى] المُرسل في [التاريخ].
+أضفت منذ ذلك الحين [مخرجًا / شهادة / مهارة] يخصّ الدور مباشرة، وهو تحت تصرّفكم.
+
+وإن كان الدور قد أُغلق، يسعدني أن أبقى في قائمتكم لأي دور إداري قادم.
+
+شاكرًا لكم،
+[اسمك]`,
+  },
+  {
+    id: "connect",
+    label: "أرسل طلب تواصل واحدًا برسالة مخصّصة",
+    min: 5,
+    icon: Users,
+    tint: T.violet,
+    where: "لينكدإن — موظّف في دورك المستهدف، لا مدير تنفيذي",
+    how: [
+      "ابحث بالمسمّى + اسم الشركة، واختر من هو في مستواك أو أعلى بدرجة — هؤلاء يردّون.",
+      "اضغط «تواصل» ثم «إضافة ملاحظة». الطلب بلا ملاحظة يُقبل ويُنسى.",
+      "الملاحظة أقل من ٣٠٠ حرف وبلا أي طلب وظيفة — الطلب في الرسالة الأولى يحرق الباب.",
+      "بعد القبول بثلاثة أيام، أرسل سؤال المقابلة المعرفية من بنك القوالب.",
+    ],
+    script: `السلام عليكم [الاسم]،
+
+لفتني دورك في [الشركة]، وأنا خريج إدارة أعمال أبني مساري نحو [المسمّى المستهدف].
+أتابع ما تنشره عن [مجال محدّد]، وأحببت أن أكون ضمن شبكتك.
+
+شكرًا لك.`,
+  },
+  {
+    id: "polish",
+    label: "حسّن سطرًا واحدًا في السيرة أو لينكدإن",
+    min: 5,
+    icon: FileText,
+    tint: T.indigo,
+    where: "ملف السيرة + ملفك على لينكدإن",
+    how: [
+      "سطر واحد في اليوم فقط — ستّون سطرًا في الفصل، وملف يُعاد كتابته بالكامل بلا جلسة واحدة شاقّة.",
+      "حوّل مهمّة إلى نتيجة برقم: «نظّمت أرشيف ٢٠٠ ملف وقلّلت زمن الاستخراج من ١٠ دقائق إلى دقيقتين».",
+      "أو اسحب كلمة مفتاحية من إعلان اليوم وازرعها بصياغتها.",
+      "أو احذف سطرًا لا يقول شيئًا — الحذف تحسين أيضًا.",
+    ],
+    script: `[فعل بصيغة الماضي] [ماذا] [لمن/أين] — [النتيجة برقم أو بنسبة].
+
+مثال: «أعددت تقرير مشتريات شهريًّا لثلاثة أقسام، فانخفض التأخير في أوامر الشراء من ٨ أيام إلى ٣.»`,
+  },
+];
+
+const AM_MINUTES = AM_ROUTINE.reduce((n, s) => n + s.min, 0);
+
+/* ---- The Saudi ground floor -----------------------------------------
+ *  The plan used to open on "rewrite your CV", which is the right second
+ *  move and the wrong first one. For a Saudi business-administration
+ *  graduate the first contract most often arrives through a government
+ *  employment programme rather than a job board — and those programmes all
+ *  need a registration that costs a single evening and then sits there
+ *  working for months. Nothing else in this app pays back as much for as
+ *  little, so it is a one-time checklist that goes green before week one
+ *  is worth starting.
+ *
+ *  `link` is a hostname, not a deep path: ministry portals reorganise, and
+ *  a dead deep link is worse than a name the user can search. */
+const SAUDI_SETUP = [
+  {
+    id: "taqat",
+    label: "سجّل في طاقات — بوابة هدف الوطنية",
+    link: "taqat.sa",
+    icon: Building2,
+    tint: T.sky,
+    why: "البوابة التي تُبنى عليها بقيّة البرامج. بلا حساب فيها لا تظهر لك تمهير ولا الدعم ولا المسارات.",
+    how: [
+      "سجّل بالنفاذ الوطني الموحّد — نفس حساب أبشر.",
+      "أكمل الملف ١٠٠٪: الشهادة، التخصّص، المدينة، المسمّيات التي تقبلها.",
+      "فعّل التنبيهات، فالإعلانات تُغلق بسرعة.",
+    ],
+  },
+  {
+    id: "tamheer",
+    label: "قدّم على تمهير — تدريب منتهٍ بالتوظيف",
+    link: "hrdf.org.sa",
+    icon: GraduationCap,
+    tint: T.cta,
+    why: "أقصر طريق إلى أول عقد لخريج إدارة: أشهر داخل جهة حقيقية بمكافأة شهرية، وكثير من المتدرّبين يُثبَّتون. وحتى لو لم تُثبَّت، خرجت بخبرة مكتوبة تنهي سؤال «ليست لديك خبرة».",
+    how: [
+      "ادخل منصّة هدف ثم برنامج تمهير، وتحقّق من شروط التخرّج والمدّة.",
+      "اختر الجهات حسب القطاع لا حسب القرب فقط.",
+      "قدّم على كل إعلان مطابق — المنافسة على السرعة لا على المعدّل وحده.",
+      "أعد الزيارة كل أسبوعين؛ الإعلانات تتجدّد ولا تُشعرك.",
+    ],
+  },
+  {
+    id: "jadara",
+    label: "جهّز ملفك للوظائف الحكومية",
+    link: "my.gov.sa · جدارة",
+    icon: ClipboardCheck,
+    tint: T.indigo,
+    why: "التوظيف الحكومي يفتح في مواعيد محدّدة ويُغلق سريعًا. الجاهزية المسبقة هي الفرق بين أن تقدّم وأن تقرأ عن إعلان انتهى.",
+    how: [
+      "جهّز رقم الهوية ورقم الشهادة والمعدّل في ملف واحد قبل أن تبدأ.",
+      "دقّق إدخال المعدّل والتخصّص — خطأ هنا يُسقط الطلب آليًّا بلا إشعار.",
+      "ضع تذكيرًا شهريًّا للتحقّق من إعلان جديد.",
+    ],
+  },
+  {
+    id: "doroob",
+    label: "ابدأ مسارًا في دروب — تدريب مجاني بشهادة",
+    link: "doroob.sa",
+    icon: BookOpenCheck,
+    tint: T.violet,
+    why: "شهادات معتمدة ومجانية بالعربية تملأ فراغ «المهارات» في السيرة خلال أسابيع، ويعرفها الموظِّف السعودي.",
+    how: [
+      "ابدأ بالمهارات الأساسية ثم مسارًا إداريًّا أو ماليًّا.",
+      "أنهِ شهادة كل أسبوعين، وأضفها فورًا للسيرة وللينكدإن.",
+      "احفظ ملفات الشهادات في نفس مجلّد معرض الأعمال.",
+    ],
+  },
+  {
+    id: "linkedin",
+    label: "أكمل لينكدإن إلى ١٠٠٪ وفعّل «منفتح للعمل»",
+    link: "linkedin.com",
+    icon: Users,
+    tint: T.primary,
+    why: "أكثر من نصف التعيينات في القطاع الخاص تمرّ بإنسان. الملف الناقص لا يظهر في بحث الموظِّفين أصلًا.",
+    how: [
+      "صورة بخلفية محيّدة، وعنوان من أربع كلمات مفتاحية لا «باحث عن عمل».",
+      "فعّل «منفتح للعمل» واضبط خمسة مسمّيات والمدينة ونوع الدوام.",
+      "اطلب ثلاث توصيات مكتوبة: مشرف التدريب، أستاذ، زميل مشروع.",
+    ],
+  },
+  {
+    id: "boards",
+    label: "فعّل منصّتي توظيف خاصّتين لا عشرًا",
+    link: "bayt.com · wadhefa.com",
+    icon: Search,
+    tint: T.accent,
+    why: "القطاع الخاص ينشر خارج المنصّات الحكومية. حسابان يكفيان؛ العشرة تشتّت ولا تزيد الفرص.",
+    how: [
+      "ارفع السيرة بصيغة PDF نصّيّة لا صورة ممسوحة.",
+      "اضبط تنبيهًا يوميًّا لثلاثة مسمّيات في مدينتك.",
+      "راجع التنبيه في دقائق الرادار الصباحية لا طوال اليوم.",
+    ],
+  },
+  {
+    id: "portfolio",
+    label: "افتح مجلّد معرض الأعمال برابط واحد",
+    link: "Google Drive · OneDrive",
+    icon: FileSpreadsheet,
+    tint: T.rose,
+    why: "الشهادة يملكها كل منافس، والمخرج لا يملكه إلا من صنعه. الرابط هو ما يحوّل سيرتك من ادّعاء إلى دليل.",
+    how: [
+      "مجلّد واحد، وصلاحية «أي شخص لديه الرابط يطّلع».",
+      "ثلاثة ملفات تكفي للبداية: لوحة متابعة، تقرير من صفحتين، خريطة إجراء.",
+      "ضع الرابط في السيرة وفي لينكدإن تحت «معرض أعمال».",
+    ],
+  },
+  {
+    id: "cv",
+    label: "ثبّت نسخة السيرة الأساسية بصيغة تمرّ الفرز",
+    link: "ملف واحد تُشتقّ منه البقيّة",
+    icon: FileText,
+    tint: T.indigo,
+    why: "كل تقديم ينسخ من هذه النسخة ويعدّل فيها خمس كلمات. بلا نسخة أساسية ستعيد البناء من الصفر كل مرّة، وستتوقّف بعد أسبوع.",
+    how: [
+      "صفحة واحدة، بلا جداول ولا أعمدة ولا صورة — أنظمة الفرز تقرأ النص فقط.",
+      "عناوين قياسية: الخبرة، التعليم، المهارات، الشهادات.",
+      "مرّرها على فاحص توافق ATS مجاني وأصلح أدنى ثلاث ملاحظات.",
+    ],
+  },
+];
+
+const SETUP_TOTAL = SAUDI_SETUP.length;
+
+/* ---- The words ------------------------------------------------------
+ *  Every point in this hunt where a person freezes is a point where they
+ *  do not know what to write. Nine of them, written out, with [brackets]
+ *  to fill — and each kept short enough to edit in a minute, because a
+ *  template that still reads as a template after it is sent does more
+ *  damage than sending nothing at all. */
+const TEMPLATES = [
+  {
+    id: "cover",
+    label: "رسالة التغطية القصيرة",
+    when: "مع كل تقديم — سطران لا صفحة",
+    icon: Send,
+    tint: T.cta,
+    body: "السلام عليكم،\n\nقرأت إعلانكم عن [المسمّى]، وأرى فيه ثلاث مسؤوليات أعمل عليها فعلًا: [١]، [٢]، [٣].\nخريج إدارة أعمال، وأعددت [مخرجًا حقيقيًّا] يشبه ما يُطلب في الدور، ورابطه في السيرة.\n\nشاكرًا لوقتكم،\n[اسمك] — [جوالك]",
+  },
+  {
+    id: "followup",
+    label: "متابعة بعد التقديم",
+    when: "بعد خمسة أيام من الإرسال، مرّة واحدة",
+    icon: Mail,
+    tint: T.accent,
+    body: "السلام عليكم [الاسم]،\n\nأتابع طلبي على وظيفة [المسمّى] المُرسل في [التاريخ].\nأضفت منذ ذلك الحين [مخرجًا / شهادة / مهارة] يخصّ الدور مباشرة، وهو تحت تصرّفكم.\n\nوإن كان الدور قد أُغلق، يسعدني أن أبقى في قائمتكم لأي دور إداري قادم.\n\nشاكرًا لكم،\n[اسمك]",
+  },
+  {
+    id: "connect",
+    label: "طلب تواصل على لينكدإن",
+    when: "أقل من ٣٠٠ حرف، وبلا أي طلب وظيفة",
+    icon: Users,
+    tint: T.violet,
+    body: "السلام عليكم [الاسم]،\n\nلفتني دورك في [الشركة]، وأنا خريج إدارة أعمال أبني مساري نحو [المسمّى المستهدف].\nأتابع ما تنشره عن [مجال محدّد]، وأحببت أن أكون ضمن شبكتك.\n\nشكرًا لك.",
+  },
+  {
+    id: "coffee",
+    label: "طلب مقابلة معرفية",
+    when: "بعد قبول طلب التواصل بثلاثة أيام",
+    icon: MessageSquare,
+    tint: T.sky,
+    body: "السلام عليكم [الاسم]،\n\nشكرًا على القبول. أنا في بداية مساري الإداري، وأحاول أن أفهم الدور من داخله لا من إعلانات الوظائف.\nهل تتيح لك ظروفك خمس عشرة دقيقة هذا الأسبوع؟ ثلاثة أسئلة فقط:\nما الذي يصعب فعلًا في دورك؟ وما المهارة التي تمنّيت لو أتقنتها قبل أن تبدأ؟ وما الذي يميّز من نجح عندكم؟\n\nولن أطلب منك وظيفة — أطلب رأيك فقط.\n\n[اسمك]",
+  },
+  {
+    id: "referral",
+    label: "طلب تزكية داخلية",
+    when: "بعد محادثة حقيقية، لا مع غريب",
+    icon: Handshake,
+    tint: T.primary,
+    body: "السلام عليكم [الاسم]،\n\nشكرًا على وقتك الأسبوع الماضي، وقد غيّر ما ذكرته عن [شيء محدّد] فهمي للدور.\nرأيت أن [الشركة] أعلنت عن [المسمّى]، وأظنّني مطابقًا لـ[سببين محدّدين].\n\nهل تتيح لك الأنظمة تزكيتي داخليًّا؟ وإن كان في الطلب أي حرج فتجاوزه بلا تردّد — تواصلنا أهمّ عندي.\n\nالسيرة مرفقة، ورابط أعمالي: [الرابط].\n\n[اسمك]",
+  },
+  {
+    id: "thanks",
+    label: "شكر بعد المقابلة",
+    when: "خلال أربع وعشرين ساعة — يُرسله أقلّ من الربع",
+    icon: BadgeCheck,
+    tint: T.primary,
+    body: "السلام عليكم [الاسم]،\n\nشكرًا على وقتك اليوم. بقي في ذهني ما ذكرته عن [نقطة حقيقية من المقابلة].\nفكّرت فيها بعد اللقاء، وأرى أن [فكرتك أنت في سطرين] قد تساعد — وإن أحببتم، أرسل تصوّرًا من صفحة واحدة.\n\nمتحمّس للدور، وفي انتظار ما تستقرّون عليه.\n\n[اسمك]",
+  },
+  {
+    id: "silent",
+    label: "متابعة بعد المقابلة بلا ردّ",
+    when: "بعد سبعة أيام من الموعد الذي وُعدت به",
+    icon: Phone,
+    tint: T.sky,
+    body: "السلام عليكم [الاسم]،\n\nأتابع مقابلة [المسمّى] يوم [التاريخ]. أعلم أن القرارات تأخذ وقتها ولا أريد أن أستعجلكم.\nأودّ فقط أن أعرف إن كان المسار ما زال مفتوحًا حتى أرتّب بقيّة ارتباطاتي.\n\nوشاكرًا لك في الحالين.\n\n[اسمك]",
+  },
+  {
+    id: "salary",
+    label: "الردّ على سؤال الراتب",
+    when: "حين يُطلب رقمك قبل أن يُعرض عليك شيء",
+    icon: HandCoins,
+    tint: T.accent,
+    body: "سؤال مهمّ، وأفضّل أن أفهم نطاق المسؤوليات أولًا حتى يكون الرقم عادلًا للطرفين.\n\nوإن كان لا بدّ من رقم الآن: بحثي عن هذا الدور في [المدينة] يضع النطاق بين [أدنى] و[أعلى] ريال شهريًّا، وأنا مرتاح داخله حسب الحزمة كاملة.\n\nفما النطاق المعتمد لديكم لهذه الدرجة؟",
+  },
+  {
+    id: "offer",
+    label: "طلب مهلة على العرض",
+    when: "دائمًا — القبول الفوري يُضعف موقفك ولا يسرّع شيئًا",
+    icon: Award,
+    tint: T.rose,
+    body: "شكرًا جزيلًا، وسعيد بثقتكم.\n\nهل أستلم العرض مكتوبًا بتفاصيل الحزمة: الأساس، البدلات، التأمين، أيام الإجازة، ومسار الترقية؟\nوأرجو مهلة أربع وعشرين ساعة لأراجعه مراجعة تليق بقرار كهذا، وأعود لكم غدًا بإجابة واضحة.\n\n[اسمك]",
+  },
+];
+
+/* The eight questions that decide a fresh graduate's interview, each with
+   the trap it hides. They sit beside the story bank so the six STAR
+   stories get written against real questions instead of in a vacuum. */
+const INTERVIEW_QS = [
+  {
+    q: "حدّثني عن نفسك",
+    trap: "سرد السيرة من الولادة. المطلوب تسعون ثانية: من أنت الآن، ماذا تُجيد بدليل، أي دور تريد ولماذا هم.",
+  },
+  {
+    q: "لماذا نحن تحديدًا؟",
+    trap: "«شركة رائدة ولها سمعة طيّبة» تعني أنك لم تبحث. اذكر شيئًا حدث عندهم هذا العام وصِله بما تريد تعلّمه.",
+  },
+  {
+    q: "ما أكبر نقطة ضعف فيك؟",
+    trap: "«أنا مثاليّ في عملي» إجابة محروقة. ضعف حقيقي لا يقتل الدور، ثم ما تفعله حياله الآن بالتحديد.",
+  },
+  {
+    q: "ليست لديك خبرة — لماذا نوظّفك؟",
+    trap: "لا تعتذر ولا تدافع. انقل الحديث إلى مخرج صنعته: «أعددت هذا، وهو أقرب ما يكون لما يُطلب في الدور».",
+  },
+  {
+    q: "حدّثني عن موقف عملت فيه تحت ضغط",
+    trap: "صفات بلا قصّة. اسحب قصّة جاهزة من بنك القصص، وأنهِها برقم.",
+  },
+  {
+    q: "خلاف مع زميل أو مشرف — كيف تصرّفت؟",
+    trap: "«لم يحدث لي خلاف» يُقرأ تهرّبًا. اذكر خلافًا مهنيًّا، وركّز على ما فعلتَ أنت لا على خطأ الآخر.",
+  },
+  {
+    q: "أين ترى نفسك بعد خمس سنوات؟",
+    trap: "طموح معلّق في الهواء، أو طموح يتجاوز الشركة نفسها. اربطه بمسار موجود عندهم فعلًا.",
+  },
+  {
+    q: "هل لديك أسئلة لنا؟",
+    trap: "«لا، كل شيء واضح» أسوأ إجابة في المقابلة كلها. ثلاثة أسئلة جاهزة دائمًا: كيف يبدو النجاح في أول تسعين يومًا؟ ما أصعب ما في الدور؟ مع من سأعمل يوميًّا؟",
+  },
+];
+
+const APP_STAGES = [
+  { id: "sent", label: "مُرسَل", tint: T.indigo },
+  { id: "touch", label: "تمت المتابعة", tint: T.sky },
+  { id: "screen", label: "فرز هاتفي", tint: T.violet },
+  { id: "intv", label: "مقابلة", tint: T.accent },
+  { id: "offer", label: "عرض", tint: T.primary },
+  { id: "closed", label: "مُغلَق", tint: T.rose },
+];
+const OPEN_STAGES = new Set(["sent", "touch", "screen", "intv"]);
+const stageOf = (id) => APP_STAGES.find((s) => s.id === id) || APP_STAGES[0];
+
+/* One place each career row's fields are written — add form, migration and
+   import all pass through here, so the shape cannot drift between them. */
+const sprintShape = (s = {}) => ({
+  id: s.id || uid(),
+  company: typeof s.company === "string" ? s.company : "",
+  role: typeof s.role === "string" ? s.role : "",
+  startedAt: typeof s.startedAt === "string" ? s.startedAt : dayKey(),
+  pain: typeof s.pain === "string" ? s.pain : "",
+  solution: typeof s.solution === "string" ? s.solution : "",
+  contact: typeof s.contact === "string" ? s.contact : "",
+  days: s.days && typeof s.days === "object" ? s.days : {},
+  notes: s.notes && typeof s.notes === "object" ? s.notes : {},
+});
+
+const appShape = (a = {}) => ({
+  id: a.id || uid(),
+  company: typeof a.company === "string" ? a.company : "",
+  role: typeof a.role === "string" ? a.role : "",
+  stage: APP_STAGES.some((s) => s.id === a.stage) ? a.stage : "sent",
+  sentAt: typeof a.sentAt === "string" ? a.sentAt : dayKey(),
+  touchedAt: typeof a.touchedAt === "string" ? a.touchedAt : null,
+  note: typeof a.note === "string" ? a.note : "",
+});
+
+const storyShape = (s = {}) => ({
+  id: s.id || uid(),
+  title: typeof s.title === "string" ? s.title : "",
+  situation: typeof s.situation === "string" ? s.situation : "",
+  task: typeof s.task === "string" ? s.task : "",
+  action: typeof s.action === "string" ? s.action : "",
+  result: typeof s.result === "string" ? s.result : "",
+});
+
+const careerShape = (c = {}) => ({
+  startedAt: typeof c.startedAt === "string" ? c.startedAt : null,
+  /* The one-time Saudi registrations. An object keyed by id rather than an
+     array of done ids, so adding a row later cannot shift anyone's ticks. */
+  setup: c.setup && typeof c.setup === "object" ? c.setup : {},
+  missions: c.missions && typeof c.missions === "object" ? c.missions : {},
+  sprints: Array.isArray(c.sprints) ? c.sprints.map(sprintShape) : [],
+  apps: Array.isArray(c.apps) ? c.apps.map(appShape) : [],
+  stories: Array.isArray(c.stories) ? c.stories.map(storyShape) : [],
+  log: Array.isArray(c.log) ? c.log : [],
+});
+
+const careerDayNo = (c) =>
+  c.startedAt ? Math.min(CAREER_DAYS, daysBetween(c.startedAt) + 1) : 0;
+const careerWeekNo = (c) =>
+  c.startedAt
+    ? Math.min(CAREER_WEEK_COUNT, Math.floor(daysBetween(c.startedAt) / 7) + 1)
+    : 1;
+
+const missionsIn = (missions, weeks) =>
+  weeks.reduce(
+    (n, w) => n + weekOf(w).missions.filter((_, i) => missions[missionKey(w, i)]).length,
+    0,
+  );
+const missionCount = (weeks) =>
+  weeks.reduce((n, w) => n + weekOf(w).missions.length, 0);
+
+/* Today's row in the career log. Read by date, never by a reset — which is
+   what makes the two daily lists correct at 00:01 without any rollover. */
+const careerToday = (log) => (log || []).find((e) => e.date === dayKey()) || {};
+
+/* Merged like a history row: the day carries both daily lists, so writing
+   one must never drop the other. */
+function toggleDaily(log, field, id) {
+  const today = dayKey();
+  const prev = (log || []).find((e) => e.date === today);
+  const rest = (log || []).filter((e) => e.date !== today);
+  const have = prev?.[field] || [];
+  return [
+    ...rest,
+    {
+      ...prev,
+      date: today,
+      [field]: have.includes(id) ? have.filter((x) => x !== id) : [...have, id],
+    },
+  ].slice(-CAREER_LOG_CAP);
+}
+
+/* Days in a row that cleared `need`. A run whose last qualifying day was
+   yesterday still counts today — the day is not over, and zeroing it at
+   dawn would punish someone who studies in the evening. */
+function dailyStreak(log, field, need, only) {
+  const count = (e) =>
+    only ? (e[field] || []).filter((id) => only.has(id)).length : (e[field] || []).length;
+  const met = new Set((log || []).filter((e) => count(e) >= need).map((e) => e.date));
+  if (!met.size) return 0;
+  const d = logicalNow();
+  if (!met.has(dayKey(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (met.has(dayKey(d))) {
+    n += 1;
+    d.setDate(d.getDate() - 1);
+  }
+  return n;
+}
+
+const setupDone = (c) => SAUDI_SETUP.filter((x) => (c.setup || {})[x.id]).length;
+const amCoreDone = (am) => (am || []).filter((id) => AM_CORE.has(id)).length;
+
+const sprintDone = (sp) => SPRINT_DAYS.filter((d) => sp.days[d.d]).length;
+/* Locked in order: a day opens when every day before it is ticked. */
+const sprintOpenDay = (sp) => {
+  for (const d of SPRINT_DAYS) if (!sp.days[d.d]) return d.d;
+  return 0;
+};
+const needsFollowUp = (a) =>
+  OPEN_STAGES.has(a.stage) && daysBetween(a.touchedAt || a.sentAt) >= FOLLOWUP_DAYS;
+
+/* The composite: six measures of whether this week actually moved you
+   closer to a contract. Plan progress is scored against the weeks you have
+   *reached*, not against all ninety days — otherwise day three reads 2%
+   however perfectly it went, and a score nobody can move is a score nobody
+   looks at. */
+const READINESS = [
+  { id: "setup", label: "المنصّات والبرامج", max: 15, tint: T.sky },
+  { id: "plan", label: "خطة التسعين يومًا", max: 25, tint: T.cta },
+  { id: "apps", label: "تقديمات ٣٠ يومًا", max: 20, tint: T.indigo },
+  { id: "skill", label: "سلسلة الحصص", max: 15, tint: T.primary },
+  { id: "am", label: "روتين الصباح", max: 10, tint: T.accent },
+  { id: "sprint", label: "هجمات الشركات", max: 8, tint: T.violet },
+  { id: "story", label: "بنك القصص", max: 7, tint: T.rose },
+];
+
+function readiness(c) {
+  const live = careerWeekNo(c);
+  const reached = CAREER_WEEKS.filter((w) => w.w <= live).map((w) => w.w);
+  const planTotal = missionCount(reached);
+  const share = (hit, cap) => Math.min(1, cap ? hit / cap : 0);
+
+  const sent30 = (c.apps || []).filter((a) => daysBetween(a.sentAt) <= 30).length;
+  const attacks = (c.sprints || []).reduce((n, s) => n + sprintDone(s), 0);
+
+  const parts = {
+    setup: share(setupDone(c), SETUP_TOTAL),
+    plan: c.startedAt ? share(missionsIn(c.missions, reached), planTotal) : 0,
+    skill: share(dailyStreak(c.log, "skills", SKILL_TARGET), STREAK_CEIL),
+    apps: share(sent30, APPS_PER_MONTH),
+    am: share(dailyStreak(c.log, "am", AM_TARGET, AM_CORE), STREAK_CEIL),
+    sprint: share(attacks, SPRINT_DAYS.length * 2),
+    story: share((c.stories || []).length, 6),
+  };
+
+  const rows = READINESS.map((r) => ({
+    ...r,
+    got: Math.round(parts[r.id] * r.max),
+  }));
+  return { rows, total: rows.reduce((n, r) => n + r.got, 0) };
+}
+
+/* The day-7 message, assembled from what the sprint already knows. A blank
+   field leaves its bracket in place so the gap is obvious before sending. */
+const sprintPitch = (sp) =>
+  [
+    `السلام عليكم ${sp.contact || ""}،`.replace(/ ،$/, "،"),
+    "",
+    `لاحظت أن ${sp.company || "[الشركة]"} ${sp.pain || "[نقطة الألم]"}.`,
+    `أعددت ${sp.solution || "[المخرج]"} على بياناتكم المعلنة، وهو بين يديكم بلا أي التزام.`,
+    "",
+    `أنا خريج إدارة أعمال، وأبحث عن دور ${sp.role || "إداري"} أُكمل فيه هذا العمل من داخل الفريق.`,
+    "المخرج مرفق — وإن رأيتم فيه قيمة، يسعدني لقاء عشر دقائق.",
+    "",
+    "شاكرًا لوقتكم،",
+  ].join("\n");
+
 const freshState = (carry = {}) => ({
   schema: SCHEMA,
   date: dayKey(),
@@ -983,6 +2444,11 @@ const freshState = (carry = {}) => ({
   prompts: carry.prompts || SEED_PROMPTS,
   reviews: carry.reviews || [],
   pipeline: carry.pipeline || SEED_PIPELINE,
+  badHabits: carry.badHabits || [],
+  /* Entirely date-derived inside, so it carries across a rollover whole —
+     the two daily checklists empty themselves by reading today's log row. */
+  career: careerShape(carry.career),
+  navOrder: carry.navOrder || NAV_IDS,
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -1106,6 +2572,58 @@ function migrate(saved) {
     );
   }
 
+  /* Schema 12 adds the habit breaker. An older payload has no list at all;
+     one written by a newer build is run through badHabitShape so a row that
+     lost a field to a hand-edited backup comes back whole.
+
+     Schema 16 adds the tagged confrontation — a cause, a mood and the clock
+     hour on every entry, plus the `urges` list of cravings that were
+     resisted. It needs no branch of its own: badHabitShape runs every row
+     and every log through urgeShape on the way in, so an older relapse
+     simply arrives with an empty tag and is skipped by the breakdowns
+     instead of counted as an unknown cause. */
+  const badHabits = Array.isArray(saved.badHabits)
+    ? saved.badHabits.map(badHabitShape)
+    : [];
+
+  /* Schema 13 lets the user order the tabs. Stored as ids and normalised on
+     the way in, so a payload from a build with different tabs still resolves
+     to a complete, duplicate-free order. */
+  let navOrder = orderedNav(saved.navOrder).map((n) => n.id);
+
+  /* Schema 14 adds the employability masterplan. orderedNav appends a tab
+     the saved order has never seen to the *end*, which on a phone buries it
+     behind «المزيد» — so this one is placed by hand, once, right after the
+     routine. A daily driver that takes two taps to reach is not daily. */
+  if (from < 14 && !(saved.navOrder || []).includes("career")) {
+    const rest = navOrder.filter((id) => id !== "career");
+    const at = rest.indexOf("routine");
+    navOrder =
+      at < 0
+        ? ["career", ...rest]
+        : [...rest.slice(0, at + 1), "career", ...rest.slice(at + 1)];
+  }
+
+  /* Run through the shape whether or not it is new: a hand-edited backup
+     that lost a field comes back whole instead of crashing a render. */
+  let career = careerShape(saved.career);
+
+  /* Schema 15 rewrote the morning routine as instructions, and one step's
+     id went with it ("keyword" became "polish" when it stopped being about
+     keywords alone). Rename it inside the log rather than dropping it: an
+     orphan id still counts toward the day's total but can never render as
+     ticked, which reads as a checkbox that lies. */
+  if (from < 15) {
+    career = {
+      ...career,
+      log: (career.log || []).map((e) =>
+        (e.am || []).includes("keyword")
+          ? { ...e, am: e.am.map((id) => (id === "keyword" ? "polish" : id)) }
+          : e,
+      ),
+    };
+  }
+
   return {
     ...saved,
     schema: SCHEMA,
@@ -1115,6 +2633,9 @@ function migrate(saved) {
     quotes,
     reads,
     books,
+    badHabits,
+    career,
+    navOrder,
     reading: Array.isArray(saved.reading) ? saved.reading : [],
     readGoal: Number.isFinite(saved.readGoal)
       ? saved.readGoal
@@ -1123,38 +2644,70 @@ function migrate(saved) {
   };
 }
 
+/* Everything that outlives a day, in one place. Both the reload path and the
+   live rollover read this list — a key missing from it is data that quietly
+   vanishes at the next day boundary, so it must never be written twice. */
+const carryOf = (s) => ({
+  habits: s.habits,
+  tasks: s.tasks,
+  books: s.books,
+  goals: s.goals,
+  sessions: s.sessions,
+  income: s.income,
+  ventures: s.ventures,
+  prompts: s.prompts,
+  reviews: s.reviews,
+  pipeline: s.pipeline,
+  badHabits: s.badHabits,
+  career: s.career,
+  navOrder: s.navOrder,
+  quotes: s.quotes,
+  reads: s.reads,
+  reading: s.reading,
+  readGoal: s.readGoal,
+  cueImage: s.cueImage,
+  history: s.history,
+  bestStreak: s.bestStreak,
+});
+
+/* The day turning over, applied to a state already in memory. The reload
+   path and the live clock must agree on what a new day means, or a window
+   left open overnight ends up on a different footing from one reopened in
+   the morning — which is exactly how a night's work got written onto the
+   next day's row and then wiped. Returns the same object when nothing has
+   changed, so React can bail out of the render. */
+function rollDay(s) {
+  if (s.date === dayKey()) return s;
+  const continued = s.date === yesterdayKey() && s.dayBanked;
+  return freshState({
+    ...carryOf(s),
+    streakBase: continued ? (s.streakBase || 0) + 1 : 0,
+  });
+}
+
 function loadState() {
   if (typeof window === "undefined") return freshState();
+  let raw = null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return freshState();
-    const saved = migrate(JSON.parse(raw));
-    const carry = {
-      habits: saved.habits,
-      tasks: saved.tasks,
-      books: saved.books,
-      goals: saved.goals,
-      sessions: saved.sessions,
-      income: saved.income,
-      ventures: saved.ventures,
-      prompts: saved.prompts,
-      reviews: saved.reviews,
-      pipeline: saved.pipeline,
-      quotes: saved.quotes,
-      reads: saved.reads,
-      reading: saved.reading,
-      readGoal: saved.readGoal,
-      cueImage: saved.cueImage,
-      history: saved.history,
-      bestStreak: saved.bestStreak,
-    };
-    if (saved.date === dayKey()) return { ...freshState(carry), ...saved };
-    const continued = saved.date === yesterdayKey() && saved.dayBanked;
-    return freshState({
-      ...carry,
-      streakBase: continued ? (saved.streakBase || 0) + 1 : 0,
-    });
+    raw = window.localStorage.getItem(STORAGE_KEY);
   } catch {
+    return freshState(); // storage blocked outright — the session still works
+  }
+  if (!raw) return freshState();
+  try {
+    const saved = migrate(JSON.parse(raw));
+    if (saved.date === dayKey()) return { ...freshState(carryOf(saved)), ...saved };
+    return rollDay(saved);
+  } catch {
+    /* The payload exists but could not be read. Returning seed data here is
+       safe only if the original survives: the save effect fires moments later
+       and would overwrite it for good. A copy kept aside can still be
+       repaired by hand; an overwritten one cannot. */
+    try {
+      window.localStorage.setItem(`${STORAGE_KEY}:broken-${Date.now()}`, raw);
+    } catch {
+      /* no room for the rescue copy either — nothing further to try */
+    }
     return freshState();
   }
 }
@@ -1484,7 +3037,13 @@ function Checkbox({ checked, onToggle, label, tint = T.primary, size = "md" }) {
  *  The gradient ramps cool→hot as the day fills and keeps rotating, so a
  *  glance at the ring reads as momentum rather than a static gauge.
  * ---------------------------------------------------------------------- */
-function ProgressRing({ value, size = 168, stroke = 12 }) {
+function ProgressRing({
+  value,
+  size = 168,
+  stroke = 12,
+  label = "مؤشر الانضباط",
+  fullLabel = "يوم مكتمل 🔥",
+}) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const pct = Math.min(100, Math.max(0, value));
@@ -1580,7 +3139,7 @@ function ProgressRing({ value, size = 168, stroke = 12 }) {
           className="mt-1 text-[10.5px] font-bold leading-tight"
           style={{ color: full ? T.primaryLift : T.faint }}
         >
-          {full ? "يوم مكتمل 🔥" : "مؤشر الانضباط"}
+          {full ? fullLabel : label}
         </span>
       </div>
     </div>
@@ -3215,7 +4774,7 @@ function PromptsModule({ state, setState }) {
 /* ==================================================================== *
  *  MODULE — tactical weekly review
  * ==================================================================== */
-const weekKey = (d = new Date()) => {
+const weekKey = (d = logicalNow()) => {
   const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   t.setDate(t.getDate() - ((t.getDay() + 1) % 7)); // weeks start Saturday
   return dayKey(t);
@@ -5563,23 +7122,4546 @@ function VaultModule({ state, setState }) {
 }
 
 /* ==================================================================== *
+ *  MODULE — habit breaker
+ *  The mirror image of the routine screen: a streak you defend instead of
+ *  one you build. The reset is deliberately expensive — it costs a written
+ *  confession before it costs the days, because a counter you can zero
+ *  with one tap is a counter that teaches nothing.
+ * ==================================================================== */
+
+/* Days to the next milestone, drawn as a bar plus four gates. The bar is
+   scoped to the *next* gate rather than to 90 — at day 2 a bar that reads
+   2% is discouraging, while one that reads 66% of three days is true and
+   worth finishing. */
+function MilestoneTrack({ days }) {
+  const next = MILESTONES.find((m) => m.d > days) || null;
+  const prev = [...MILESTONES].reverse().find((m) => m.d <= days);
+  const floor = prev ? prev.d : 0;
+  const span = next ? next.d - floor : 1;
+  const pct = next ? Math.min(100, ((days - floor) / span) * 100) : 100;
+  const tint = next ? T.cta : T.primary;
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-end justify-between gap-3">
+        <p className="text-[11px]" style={{ color: T.faint }}>
+          {next ? (
+            <>
+              {"البوابة القادمة: "}
+              <span style={{ color: T.accent }}>{next.label}</span>
+            </>
+          ) : (
+            "تجاوزت كل البوابات. أنت خارج دائرة الخطر."
+          )}
+        </p>
+        {next && (
+          <p className="shrink-0 text-[11px]" style={{ color: T.muted }}>
+            {"باقٍ "}
+            {/* "٢ يومان" says two twice — under three, the word counts on
+                its own and the numeral is dropped. The separators are
+                non-breaking: an ordinary space at the edge of a dir="ltr"
+                span collapses, and the line renders as "باقٍ65يومًا". */}
+            {next.d - days > 2 && (
+              <>
+                <span
+                  dir="ltr"
+                  className="font-bold tabular-nums"
+                  style={{ color: T.cta }}
+                >
+                  {next.d - days}
+                </span>
+                {" "}
+              </>
+            )}
+            <span style={{ color: next.d - days > 2 ? undefined : T.cta }}>
+              {dayWord(next.d - days)}
+            </span>
+          </p>
+        )}
+      </div>
+
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full"
+        style={{ background: "rgba(255,255,255,0.08)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, ${tint}, ${
+              next ? T.accent : T.primaryLift
+            })`,
+            boxShadow: `0 0 12px ${tint}99`,
+          }}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 gap-1.5">
+        {MILESTONES.map((m) => {
+          const won = days >= m.d;
+          return (
+            <div
+              key={m.d}
+              title={m.hint}
+              className="rounded-lg border px-1 py-1.5 text-center transition-all duration-300"
+              style={{
+                borderColor: won ? `${T.primary}59` : T.border,
+                background: won ? `${T.primary}16` : "transparent",
+                boxShadow: won ? `0 0 18px -8px ${T.primary}` : "none",
+              }}
+            >
+              <p
+                dir="ltr"
+                className="text-[13px] font-extrabold tabular-nums"
+                style={{ color: won ? T.primary : "rgba(255,255,255,0.28)" }}
+              >
+                {m.d}
+              </p>
+              <p
+                className="text-[9px] leading-tight"
+                style={{ color: won ? `${T.primary}C0` : T.faint }}
+              >
+                {won ? "عبرتها" : dayWord(m.d)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* What the habit has stopped costing. Hours roll up to days past 24 — "٧٢
+   ساعة" is an abstraction, "٣ أيام كاملة" is a thing you can picture. */
+function BleedPanel({ habit }) {
+  const kind = costType(habit.costType);
+  const total = bleedSaved(habit);
+  const Icon = kind.icon;
+  const whole = Math.round(total);
+  const asDays = kind.id === "time" && whole >= 24 ? Math.floor(whole / 24) : 0;
+
+  return (
+    <div
+      className="rounded-2xl border p-4"
+      style={{ borderColor: `${kind.tint}3D`, background: `${kind.tint}12` }}
+    >
+      <div className="flex items-center gap-2">
+        <Icon size={14} strokeWidth={2} style={{ color: kind.tint }} />
+        <p className="text-[11px] font-bold" style={{ color: kind.tint }}>
+          ما استرجعته
+        </p>
+      </div>
+      <p className="mt-2 leading-none">
+        <span
+          dir="ltr"
+          className="text-[26px] font-extrabold tabular-nums"
+          style={{ color: kind.tint, textShadow: `0 0 24px ${kind.tint}66` }}
+        >
+          {whole.toLocaleString("en-US")}
+        </span>
+        <span className="mr-1.5 text-[12px] font-bold" style={{ color: kind.tint }}>
+          {arCount(whole, kind.forms)}
+        </span>
+      </p>
+      <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+        {habit.costPerDay > 0 ? (
+          asDays > 0 ? (
+            <>
+              {"≈ "}
+              <span dir="ltr" className="tabular-nums" style={{ color: T.muted }}>
+                {asDays}
+              </span>
+              {` ${dayWord(asDays)} كاملة عادت إليك`}
+            </>
+          ) : (
+            <>
+              {habit.costPerDay > 2 && (
+                <>
+                  <span dir="ltr" className="tabular-nums">
+                    {habit.costPerDay}
+                  </span>
+                  {" "}
+                </>
+              )}
+              {`${arCount(habit.costPerDay, kind.forms)} تتسرّب كل يوم`}
+            </>
+          )
+        ) : (
+          "حدّد الكلفة اليومية ليبدأ العدّاد"
+        )}
+      </p>
+    </div>
+  );
+}
+
+/* Reset friction. Nothing here is decoration: the streak and the recovered
+   cost are shown *before* the fields, the plan the user wrote for exactly
+   this moment is quoted back, and the destructive button stays disabled
+   until the trigger, the feeling and a deliberate acknowledgement are in. */
+function RelapseModal({ open, habit, prefill, onClose, onConfirm }) {
+  const [trigger, setTrigger] = useState("");
+  const [feeling, setFeeling] = useState("");
+  const [tag, setTag] = useState("");
+  const [mood, setMood] = useState("");
+  const [owned, setOwned] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      /* A relapse that arrives from a wave the user could not ride out
+         already knows the trigger and the mood — asking for them a second
+         time reads as the app not listening. The confession and the
+         acknowledgement are never prefilled: those are the friction. */
+      setTrigger(prefill?.trigger || "");
+      setFeeling("");
+      setTag(prefill?.tag || "");
+      setMood(prefill?.mood || "");
+      setOwned(false);
+    }
+  }, [open, habit?.id, prefill]);
+
+  if (!habit) return null;
+
+  const days = cleanDays(habit);
+  const kind = costType(habit.costType);
+  const lost = Math.round(bleedSaved(habit));
+  const picked = tagOf(tag);
+  /* The written confession stays required — it is the friction the reset is
+     supposed to cost. The free-text *feeling* does not: the mood chip
+     carries that answer in a form the mirror can actually count, and five
+     required fields at the worst moment of the day is a form abandoned
+     half-filled, which records nothing at all. */
+  const ready = tag && mood && trigger.trim() && owned;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="مرآة المحاسبة"
+      footer={
+        <>
+          <Btn
+            variant="outline"
+            className="flex-1"
+            onClick={onClose}
+            style={{ borderColor: `${T.primary}59`, color: T.primary }}
+          >
+            <ShieldCheck size={15} /> لا، سأصمد
+          </Btn>
+          <Btn
+            variant="default"
+            className="flex-1"
+            disabled={!ready}
+            onClick={() =>
+              onConfirm({
+                trigger: trigger.trim(),
+                feeling: feeling.trim(),
+                tag,
+                mood,
+              })
+            }
+            style={{
+              backgroundImage: `linear-gradient(135deg, ${T.danger}, ${T.ember})`,
+              boxShadow: `0 8px 24px -10px ${T.danger}`,
+              color: "#1A0603",
+            }}
+          >
+            <HeartCrack size={15} /> صفّر العدّاد
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div
+          className="rounded-2xl border px-4 py-3.5"
+          style={{ borderColor: `${T.danger}4D`, background: `${T.danger}12` }}
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={15} style={{ color: T.danger }} />
+            <p className="text-[12px] font-extrabold" style={{ color: T.danger }}>
+              أنت على وشك أن تخسر
+            </p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <p
+                dir="ltr"
+                className="text-[24px] font-extrabold leading-none tabular-nums"
+                style={{ color: T.danger }}
+              >
+                {days}
+              </p>
+              <p className="mt-1 text-[10px]" style={{ color: T.muted }}>
+                {`${dayWord(days)} من الصمود`}
+              </p>
+            </div>
+            <div>
+              <p
+                dir="ltr"
+                className="text-[24px] font-extrabold leading-none tabular-nums"
+                style={{ color: T.danger }}
+              >
+                {lost.toLocaleString("en-US")}
+              </p>
+              <p className="mt-1 text-[10px]" style={{ color: T.muted }}>
+                {`${arCount(lost, kind.forms)} استرجعتها`}
+              </p>
+            </div>
+          </div>
+          <p
+            className="mt-3 border-t pt-3 text-[11.5px] leading-relaxed"
+            style={{ borderColor: `${T.danger}2E`, color: T.danger }}
+          >
+            هذه ليست لحظة ضعف تمرّ عليك — هذا قرار تأخذه الآن بيدك. الرغبة تمرّ
+            خلال عشرين دقيقة سواء استجبت لها أو لا.
+          </p>
+        </div>
+
+        {habit.replacement ? (
+          <div
+            className="rounded-2xl border px-4 py-3"
+            style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+          >
+            <div className="flex items-center gap-2">
+              <LifeBuoy size={14} style={{ color: T.sky }} />
+              <p className="text-[11px] font-bold" style={{ color: T.sky }}>
+                خطتك التي كتبتها لهذه اللحظة بالذات
+              </p>
+            </div>
+            <p className="mt-2 text-[13px] leading-relaxed text-white/85">
+              {habit.replacement}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            ما الذي فتح الباب؟ اختر واحدًا — هذا ما تُبنى عليه مرآتك.
+          </label>
+          <TagPicker value={tag} onPick={setTag} />
+        </div>
+
+        {picked && (
+          <div
+            className="los-in rounded-2xl border px-4 py-3"
+            style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+          >
+            <div className="flex items-center gap-2">
+              <Brain size={14} style={{ color: T.sky }} />
+              <p className="text-[11px] font-bold" style={{ color: T.sky }}>
+                المضاد الذي تحتاجه المرة القادمة
+              </p>
+            </div>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+              {picked.counter}
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            ما شعورك قبلها مباشرة؟
+          </label>
+          <MoodPicker value={mood} onPick={setMood} />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            اكتبها بتفصيلها: أين كنت ومع من وماذا حدث قبلها مباشرة؟
+          </label>
+          <Field
+            as="textarea"
+            rows={3}
+            value={trigger}
+            onChange={(e) => setTrigger(e.target.value)}
+            className="resize-none leading-relaxed"
+            placeholder="كنت وحيدًا بعد منتصف الليل والهاتف بيدي…"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.faint }}>
+            ما شعورك الآن، بصدق؟ (اختياري)
+          </label>
+          <Field
+            as="textarea"
+            rows={2}
+            value={feeling}
+            onChange={(e) => setFeeling(e.target.value)}
+            className="resize-none leading-relaxed"
+            placeholder="فارغ، ونادم قبل أن أنتهي…"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOwned((v) => !v)}
+          aria-pressed={owned}
+          className="flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-right transition-all duration-200"
+          style={{
+            borderColor: owned ? `${T.danger}80` : T.border,
+            background: owned ? `${T.danger}14` : "transparent",
+          }}
+        >
+          <span
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200"
+            style={{
+              borderColor: owned ? T.danger : T.borderStrong,
+              background: owned ? T.danger : "transparent",
+            }}
+          >
+            <Check
+              size={12}
+              strokeWidth={4}
+              style={{ color: T.bgDeep, opacity: owned ? 1 : 0 }}
+            />
+          </span>
+          <span
+            className="text-[11.5px] leading-relaxed"
+            style={{ color: owned ? T.danger : T.muted }}
+          >
+            أُقرّ أن هذا اختيار اخترته، لا قدر نزل بي.
+          </span>
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* A stepper rather than a number field. The two numbers the estimator asks
+   for are small and get nudged, not typed, and a keyboard that covers half
+   a phone to turn «٣» into «٤» is a keyboard nobody opens twice. */
+function NumStep({ value, onChange, min = 0, max = 999, step = 1, unit, tint = T.sky }) {
+  const clamp = (n) => Math.min(max, Math.max(min, n));
+  const btn =
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 active:scale-90 disabled:opacity-30";
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value - step))}
+        disabled={value <= min}
+        aria-label="أنقص"
+        className={btn}
+        style={{ borderColor: T.border, color: T.muted }}
+      >
+        <Minus size={13} strokeWidth={3} />
+      </button>
+      <p className="min-w-0 flex-1 text-center leading-none">
+        <span
+          dir="ltr"
+          className="text-[19px] font-extrabold tabular-nums"
+          style={{ color: tint }}
+        >
+          {value}
+        </span>
+        <span className="mr-1.5 text-[11px] font-bold" style={{ color: T.muted }}>
+          {unit}
+        </span>
+      </p>
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value + step))}
+        disabled={value >= max}
+        aria-label="زد"
+        className={btn}
+        style={{ borderColor: `${tint}4D`, color: tint }}
+      >
+        <Plus size={13} strokeWidth={3} />
+      </button>
+    </div>
+  );
+}
+
+/* Asked cold, «كم ساعة تخسرها يوميًا؟» is answered with a guess, and every
+   figure built on that guess is a lie the app then states confidently. So
+   the field is filled by arithmetic instead of by memory: two things a
+   person genuinely can answer — how often it happens and how long it takes
+   — multiply into the daily cost.
+
+   Procrastination needs the second method. It has no «مرات»: it eats a
+   share of a day that was already planned, so the questions become how many
+   hours you meant to work and how much of them evaporated — two questions
+   with real answers. */
+const estimate = (type, e) =>
+  type === "money"
+    ? (e.perWeek * e.amount) / 7
+    : e.method === "share"
+      ? (e.planned * e.lost) / 100
+      : (e.bouts * e.minutes) / 60;
+
+function CostEstimator({ type, seed, onPick }) {
+  const [open, setOpen] = useState(false);
+  const [e, setE] = useState({
+    method: seed?.method || "bouts",
+    bouts: seed?.bouts ?? 3,
+    minutes: seed?.minutes ?? 20,
+    planned: 6,
+    lost: 40,
+    perWeek: seed?.bouts ?? 3,
+    amount: seed?.minutes ?? 35,
+  });
+
+  /* Pushed on every change rather than behind a «طبّق» button: the number
+     field above stays the one source of truth, and a second copy of the
+     figure waiting to be applied is a second copy that can disagree. */
+  const set = (patch) => {
+    const next = { ...e, ...patch };
+    setE(next);
+    onPick(Math.round(estimate(type, next) * 10) / 10);
+  };
+
+  const daily = Math.round(estimate(type, e) * 10) / 10;
+  const kind = costType(type);
+  const yearly = daily * 365;
+  const asDays = type === "time" ? Math.round(yearly / 24) : 0;
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-bold transition-colors"
+        style={{ color: T.sky }}
+      >
+        <Calculator size={13} />
+        {open ? "أغلق الحاسبة" : "لا أعرف الرقم — احسبه معي"}
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+
+      {open && (
+        <div
+          className="los-in mt-2 rounded-2xl border p-4"
+          style={{ borderColor: `${T.sky}3D`, background: `${T.sky}0E` }}
+        >
+          {type === "time" && (
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              {[
+                { id: "bouts", label: "نوبات متفرّقة" },
+                { id: "share", label: "تلتهم يومي" },
+              ].map((m) => {
+                const on = e.method === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => set({ method: m.id })}
+                    aria-pressed={on}
+                    className="rounded-xl border py-2 text-[11.5px] font-bold transition-all duration-200"
+                    style={{
+                      borderColor: on ? T.sky : T.border,
+                      background: on ? `${T.sky}1C` : "transparent",
+                      color: on ? T.sky : T.muted,
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {type === "money" ? (
+              <>
+                <EstRow label="كم مرة في الأسبوع؟">
+                  <NumStep
+                    value={e.perWeek}
+                    onChange={(v) => set({ perWeek: v })}
+                    min={1}
+                    max={70}
+                    unit="مرة"
+                    tint={T.accent}
+                  />
+                </EstRow>
+                <EstRow label="كم تدفع في المرة الواحدة؟">
+                  <NumStep
+                    value={e.amount}
+                    onChange={(v) => set({ amount: v })}
+                    min={1}
+                    max={5000}
+                    step={5}
+                    unit="ريال"
+                    tint={T.accent}
+                  />
+                </EstRow>
+              </>
+            ) : e.method === "share" ? (
+              <>
+                <EstRow label="كم ساعة نويت أن تعمل اليوم؟">
+                  <NumStep
+                    value={e.planned}
+                    onChange={(v) => set({ planned: v })}
+                    min={1}
+                    max={16}
+                    unit="ساعة"
+                  />
+                </EstRow>
+                <EstRow label="كم منها ضاع فعلًا؟">
+                  <NumStep
+                    value={e.lost}
+                    onChange={(v) => set({ lost: v })}
+                    min={5}
+                    max={100}
+                    step={5}
+                    unit="٪"
+                  />
+                </EstRow>
+              </>
+            ) : (
+              <>
+                <EstRow label="كم مرة في اليوم؟">
+                  <NumStep
+                    value={e.bouts}
+                    onChange={(v) => set({ bouts: v })}
+                    min={1}
+                    max={40}
+                    unit="مرة"
+                  />
+                </EstRow>
+                <EstRow label="كم دقيقة في المرة؟">
+                  <NumStep
+                    value={e.minutes}
+                    onChange={(v) => set({ minutes: v })}
+                    min={1}
+                    max={600}
+                    step={5}
+                    unit="دقيقة"
+                  />
+                </EstRow>
+              </>
+            )}
+          </div>
+
+          <div
+            className="mt-4 rounded-xl border px-3.5 py-3"
+            style={{ borderColor: `${kind.tint}40`, background: `${kind.tint}12` }}
+          >
+            <p className="text-[10.5px] font-bold" style={{ color: kind.tint }}>
+              الكلفة اليومية
+            </p>
+            <p className="mt-1 leading-none">
+              <span
+                dir="ltr"
+                className="text-[22px] font-extrabold tabular-nums"
+                style={{ color: kind.tint }}
+              >
+                {daily}
+              </span>
+              <span className="mr-1.5 text-[12px] font-bold" style={{ color: kind.tint }}>
+                {/* ٢٫٤ ساعتان is nonsense — a fraction counts in the
+                    singular, and only a whole number takes the dual. */}
+                {Number.isInteger(daily) ? arCount(daily, kind.forms) : kind.forms[0]}
+              </span>
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+              {"على هذا المعدّل تخسر "}
+              <span
+                dir="ltr"
+                className="font-extrabold tabular-nums"
+                style={{ color: T.danger }}
+              >
+                {(type === "time" ? asDays : Math.round(yearly)).toLocaleString("en-US")}
+              </span>
+              {type === "time"
+                ? ` ${dayWord(asDays)} كاملة كل سنة — ليست ساعات فراغ، بل أيام من عمرك.`
+                : " ريال كل سنة."}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EstRow({ label, children }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-bold" style={{ color: T.muted }}>
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+/* One picker for both modals. The relapse and the resisted urge must be
+   tagged from the identical list, or the counts beneath them are comparing
+   two different vocabularies. */
+function TagPicker({ value, onPick }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {URGE_TAGS.map((t) => {
+        const on = value === t.id;
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onPick(on ? "" : t.id)}
+            aria-pressed={on}
+            className="flex items-center gap-2 rounded-xl border px-2.5 py-2 text-right text-[11.5px] font-bold transition-all duration-200 active:scale-95"
+            style={{
+              borderColor: on ? t.tint : T.border,
+              background: on ? `${t.tint}1C` : "transparent",
+              color: on ? t.tint : T.muted,
+              boxShadow: on ? `0 0 20px -8px ${t.tint}` : "none",
+            }}
+          >
+            <Icon size={14} strokeWidth={2} className="shrink-0" />
+            <span className="min-w-0 flex-1 leading-tight">{t.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MoodPicker({ value, onPick }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {URGE_MOODS.map((m) => {
+        const on = value === m.id;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onPick(on ? "" : m.id)}
+            aria-pressed={on}
+            className="rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition-all duration-200 active:scale-95"
+            style={{
+              borderColor: on ? T.violet : T.border,
+              background: on ? `${T.violet}1C` : "transparent",
+              color: on ? T.violet : T.muted,
+            }}
+          >
+            {m.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Add and edit share one form — two forms for one shape is how the two
+   drift apart. The replacement plan is required: a habit you are quitting
+   without something to put in its place is a vacuum, not a plan. */
+function BadHabitFormModal({ open, draft, setDraft, onSave, onClose }) {
+  if (!draft) return null;
+  const ready = draft.title.trim() && draft.replacement.trim();
+  const seed = BAD_PRESETS.find((p) => p.key === draft.preset);
+
+  /* A preset fills the three fields the user stalls on and seeds the
+     estimator with numbers that fit *that* habit — التسويف is measured as a
+     share of a planned day, الصرف as a weekly amount. It never touches the
+     date: the last time is his to answer. */
+  const usePreset = (p) =>
+    setDraft((d) => ({
+      ...d,
+      preset: p.key,
+      title: p.title,
+      costType: p.costType,
+      replacement: p.replacement,
+      costPerDay: String(
+        Math.round(
+          estimate(p.costType, {
+            method: p.key === "delay" ? "share" : "bouts",
+            bouts: p.bouts,
+            minutes: p.minutes,
+            planned: 6,
+            lost: 40,
+            perWeek: p.bouts,
+            amount: p.minutes,
+          }) * 10,
+        ) / 10,
+      ),
+    }));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={draft.id ? "تعديل العادة" : "عادة جديدة تكسرها"}
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" disabled={!ready} onClick={onSave}>
+            <ShieldOff size={15} /> {draft.id ? "حفظ" : "ابدأ العدّ"}
+          </Btn>
+          <Btn variant="outline" className="flex-1" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {!draft.id && (
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold" style={{ color: T.faint }}>
+              ابدأ من قالب جاهز، أو اكتبها بنفسك
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {BAD_PRESETS.map((p) => {
+                const on = draft.preset === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => usePreset(p)}
+                    aria-pressed={on}
+                    className="rounded-xl border px-2.5 py-2 text-[11.5px] font-bold transition-all duration-200 active:scale-95"
+                    style={{
+                      borderColor: on ? T.cta : T.border,
+                      background: on ? `${T.cta}1C` : "transparent",
+                      color: on ? T.cta : T.muted,
+                    }}
+                  >
+                    {p.title}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            ما العادة التي تتركها؟
+          </label>
+          <Field
+            autoFocus
+            value={draft.title}
+            onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+            placeholder="السهر بعد منتصف الليل"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.sky }}>
+            ملاذك الآمن — ماذا تفعل بالضبط حين تهجم الرغبة؟
+          </label>
+          <Field
+            as="textarea"
+            rows={3}
+            value={draft.replacement}
+            onChange={(e) => setDraft((d) => ({ ...d, replacement: e.target.value }))}
+            className="resize-none leading-relaxed"
+            style={{ borderColor: `${T.sky}45`, background: `${T.sky}0A` }}
+            placeholder="أتوضّأ وأخرج للمشي عشر دقائق، وأترك الهاتف في الغرفة."
+          />
+          <p className="text-[10px] leading-relaxed" style={{ color: T.faint }}>
+            اكتبها كأمر تنفّذه بلا تفكير. الرغبة لا تترك مساحة للارتجال.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            ماذا تنزف هذه العادة؟
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {COST_TYPES.map((c) => {
+              const on = draft.costType === c.id;
+              const Icon = c.icon;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setDraft((d) => ({ ...d, costType: c.id }))}
+                  aria-pressed={on}
+                  className="flex items-center justify-center gap-2 rounded-xl border py-2.5 text-[12.5px] font-bold transition-all duration-200"
+                  style={{
+                    borderColor: on ? c.tint : T.border,
+                    background: on ? `${c.tint}1C` : "transparent",
+                    color: on ? c.tint : T.muted,
+                  }}
+                >
+                  <Icon size={14} /> {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            {`الكلفة اليومية (${costType(draft.costType).unit})`}
+          </label>
+          <Field
+            type="number"
+            min="0"
+            step="0.5"
+            dir="ltr"
+            className="text-left tabular-nums"
+            value={draft.costPerDay}
+            onChange={(e) => setDraft((d) => ({ ...d, costPerDay: e.target.value }))}
+            placeholder="30"
+          />
+          <CostEstimator
+            key={`${draft.preset || "none"}-${draft.costType}`}
+            type={draft.costType}
+            seed={
+              seed
+                ? {
+                    method: seed.key === "delay" ? "share" : "bouts",
+                    bouts: seed.bouts,
+                    minutes: seed.minutes,
+                  }
+                : null
+            }
+            onPick={(v) => setDraft((d) => ({ ...d, costPerDay: String(v) }))}
+          />
+          <p className="text-[10px] leading-relaxed" style={{ color: T.faint }}>
+            رقم تقريبي أفضل من لا رقم. العدّاد لا يحاسبك على الدقّة، يحاسبك على
+            أن ترى الثمن مكتوبًا.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+            متى كانت آخر مرة؟
+          </label>
+          <Field
+            type="date"
+            dir="ltr"
+            className="text-left"
+            max={dayKey()}
+            value={draft.startDate}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, startDate: e.target.value || dayKey() }))
+            }
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
+  const [openLogs, setOpenLogs] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const days = cleanDays(habit);
+  const logs = habit.logs || [];
+  const urges = habit.urges || [];
+  /* One journal, both outcomes. Two separate lists would hide the only
+     comparison that matters: the same trigger met twice, survived once. */
+  const journal = useMemo(
+    () =>
+      [...logs, ...urges]
+        .map((e, i) => ({ ...e, seq: i }))
+        .sort((a, b) => (a.at === b.at ? a.seq - b.seq : a.at < b.at ? 1 : -1)),
+    [logs, urges],
+  );
+  const own = useMemo(() => weakSpots([habit]), [habit]);
+  const best = bestRun(habit);
+  const atGate = MILESTONES.some((m) => m.d === days);
+  const tint = days >= MILESTONE_CAP ? T.primary : days >= 7 ? T.accent : T.cta;
+
+  return (
+    <Card
+      className={`group flex flex-col p-5 sm:p-6${reward ? " los-reward" : ""}`}
+      style={{
+        borderColor: atGate ? `${T.primary}5C` : undefined,
+        boxShadow: atGate
+          ? `inset 0 1px 0 0 rgba(255,255,255,0.085), 0 0 46px -16px ${T.primary}`
+          : undefined,
+      }}
+    >
+      <div className="flex items-start gap-2.5">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: `${tint}45`,
+            background: `${tint}18`,
+            color: tint,
+          }}
+        >
+          <ShieldOff size={16} strokeWidth={1.9} />
+        </span>
+        <h3 className="min-w-0 flex-1 pt-1.5 text-[15px] font-bold">{habit.title}</h3>
+        <button
+          onClick={onEdit}
+          aria-label={`تعديل ${habit.title}`}
+          className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-white/70 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          <Pencil size={13} />
+        </button>
+        <button
+          onClick={() => (confirmDel ? onDelete() : setConfirmDel(true))}
+          aria-label={
+            confirmDel ? `تأكيد حذف ${habit.title}` : `حذف ${habit.title}`
+          }
+          className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          style={confirmDel ? { color: T.danger, opacity: 1 } : undefined}
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      {confirmDel && (
+        <div
+          className="los-in mt-3 flex items-center gap-2 rounded-xl border px-3 py-2"
+          style={{ borderColor: `${T.danger}4D`, background: `${T.danger}12` }}
+        >
+          <p className="min-w-0 flex-1 text-[11px]" style={{ color: T.danger }}>
+            سيُحذف السجل كاملًا. اضغط السلّة مرة أخرى للتأكيد.
+          </p>
+          <Btn variant="ghost" size="sm" onClick={() => setConfirmDel(false)}>
+            تراجع
+          </Btn>
+        </div>
+      )}
+
+      <div className="mt-5 flex items-end justify-between gap-3">
+        <div>
+          <p
+            dir="ltr"
+            className="text-[44px] font-extrabold leading-none tabular-nums"
+            style={{ color: tint, textShadow: `0 0 30px ${tint}59` }}
+          >
+            {days}
+          </p>
+          <p className="mt-1.5 text-[11.5px]" style={{ color: T.muted }}>
+            {days === 0 ? "اليوم الأول يبدأ الآن" : `${dayWord(days)} بلا انتكاسة`}
+          </p>
+        </div>
+        {best > 0 && (
+          <Badge tint={best > days ? T.violet : T.primary}>
+            <Flame size={10} />
+            {"الأطول: "}
+            <span dir="ltr" className="tabular-nums">
+              {best}
+            </span>
+          </Badge>
+        )}
+      </div>
+
+      <MilestoneTrack days={days} />
+
+      {own.tag && own.total >= 3 && (
+        <p className="mt-4 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+          <span style={{ color: T.violet }}>نمطك هنا: </span>
+          {tagOf(own.tag.value)?.label}
+          {" في "}
+          <span dir="ltr" className="font-extrabold tabular-nums">
+            {own.tag.count}
+          </span>
+          {" من "}
+          <span dir="ltr" className="font-extrabold tabular-nums">
+            {own.tag.total}
+          </span>
+          {` ${meetWord(own.tag.total)}.`}
+        </p>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <BleedPanel habit={habit} />
+        <div
+          className="rounded-2xl border p-4"
+          style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+        >
+          <div className="flex items-center gap-2">
+            <LifeBuoy size={14} strokeWidth={2} style={{ color: T.sky }} />
+            <p className="text-[11px] font-bold" style={{ color: T.sky }}>
+              الملاذ الآمن
+            </p>
+          </div>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+            {habit.replacement || "لم تكتب خطة بعد — الرغبة لا تنتظر ارتجالك."}
+          </p>
+        </div>
+      </div>
+
+      {/* The resisted craving comes first and wears the success colour: it
+          is the button he should be reaching for on most days, and a card
+          whose only action is «سقطت» is a card he stops opening. */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Btn variant="success" size="sm" onClick={onUrge}>
+          <ShieldCheck size={13} /> واجهت الرغبة
+        </Btn>
+        <Btn variant="danger" size="sm" onClick={onRelapse}>
+          <HeartCrack size={13} /> سجّل انتكاسة
+        </Btn>
+        {journal.length > 0 && (
+          <button
+            onClick={() => setOpenLogs((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] transition-colors hover:text-white/80"
+            style={{ color: T.faint }}
+          >
+            {openLogs ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            <span dir="ltr" className="tabular-nums">
+              {journal.length}
+            </span>
+            {` ${meetWord(journal.length)} مسجّلة`}
+          </button>
+        )}
+      </div>
+
+      {urges.length > 0 && (
+        <p className="mt-2 text-[10.5px]" style={{ color: T.primary }}>
+          {"صمدت "}
+          <span dir="ltr" className="font-extrabold tabular-nums">
+            {urges.length}
+          </span>
+          {` ${timesWord(urges.length)} في وجه الرغبة — وهذه ليست صدفة.`}
+        </p>
+      )}
+
+      {openLogs && journal.length > 0 && (
+        <div className="los-in mt-4 space-y-2.5">
+          <p className="text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            اقرأ المحفّزات متتالية — النمط الذي يتكرّر هو عدوّك الحقيقي، لا
+            العادة نفسها. الأخضر صمود والأحمر سقوط، والمحفّز نفسه يظهر في
+            الاثنين.
+          </p>
+          {journal.map((l) => {
+            const fell = l.kind === "fall";
+            const tint = fell ? T.danger : T.primary;
+            const t = tagOf(l.tag);
+            const m = moodOf(l.mood);
+            return (
+              <div
+                key={l.id}
+                className="rounded-xl border px-3.5 py-3"
+                style={{ borderColor: `${tint}33`, background: `${tint}0D` }}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    dir="ltr"
+                    className="text-[10.5px] tabular-nums"
+                    style={{ color: T.faint }}
+                  >
+                    {l.at}
+                  </span>
+                  {fell ? (
+                    <Badge tint={T.danger}>
+                      {"سقطت بعد "}
+                      <span dir="ltr" className="tabular-nums">
+                        {l.days}
+                      </span>
+                      {` ${dayWord(l.days)}`}
+                    </Badge>
+                  ) : (
+                    <Badge tint={T.primary}>
+                      <ShieldCheck size={10} /> صمدت
+                    </Badge>
+                  )}
+                  {t && <Badge tint={t.tint}>{t.label}</Badge>}
+                  {m && <Badge tint={T.violet}>{m.label}</Badge>}
+                  {Number.isFinite(l.hour) && (
+                    <span className="text-[10px]" style={{ color: T.faint }}>
+                      {bandAt(l.hour).label}
+                    </span>
+                  )}
+                </div>
+                {l.trigger && (
+                  <p className="mt-2 text-[12px] leading-relaxed text-white/80">
+                    {l.trigger}
+                  </p>
+                )}
+                {l.feeling && (
+                  <p className="mt-1 text-[12px] leading-relaxed text-white/60">
+                    <span style={{ color: T.violet }}>الشعور: </span>
+                    {l.feeling}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* The craving logged *before* it wins. Without it the screen only ever sees
+   the losses, which makes a person look weaker than he is and teaches him
+   to stop opening it — and worse, it leaves the diagnosis blind to the
+   triggers he beats, which is exactly the half that proves what works.
+ *
+ *  It is also the one place the app intervenes instead of recording. A
+ *  craving is a wave: it rises and falls inside a quarter of an hour
+ *  whether it is obeyed or not, and the reason people lose is that in its
+ *  third minute it feels permanent. The timer is there to show it falling. */
+const WAVE_OPTIONS = [
+  { min: 5, label: "٥ دقائق" },
+  { min: 15, label: "١٥ دقيقة" },
+];
+
+function UrgeModal({ open, habit, onClose, onConfirm, onFell }) {
+  const [tag, setTag] = useState("");
+  const [mood, setMood] = useState("");
+  const [note, setNote] = useState("");
+  const [mode, setMode] = useState("pick");
+  const [endAt, setEndAt] = useState(0);
+  const [span, setSpan] = useState(0);
+  const [left, setLeft] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      setTag("");
+      setMood("");
+      setNote("");
+      setMode("pick");
+      setLeft(0);
+      setSpan(0);
+    }
+  }, [open, habit?.id]);
+
+  /* Counted down from a stored end time rather than by decrementing a
+     number: a throttled background tab skips ticks, and a wave that pauses
+     while the user looks away is a wave that never ends. */
+  useEffect(() => {
+    if (mode !== "wave") return;
+    const tick = () => {
+      const l = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+      setLeft(l);
+      if (l === 0) setMode("after");
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [mode, endAt]);
+
+  if (!habit) return null;
+
+  const picked = tagOf(tag);
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  const pct = span ? ((span - left) / span) * 100 : 0;
+  const start = (min) => {
+    setSpan(min * 60);
+    setEndAt(Date.now() + min * 60000);
+    setMode("wave");
+  };
+  const log = () => onConfirm({ tag, mood, trigger: note.trim() });
+
+  const title =
+    mode === "wave" ? "اركب الموجة" : mode === "after" ? "انتهت الموجة" : "واجهت الرغبة";
+
+  const footer =
+    mode === "wave" ? (
+      <Btn variant="outline" className="flex-1" onClick={() => setMode("pick")}>
+        أوقف الموجة
+      </Btn>
+    ) : mode === "after" ? (
+      <>
+        <Btn variant="success" className="flex-1" onClick={log}>
+          <ShieldCheck size={15} /> صمدت
+        </Btn>
+        <Btn
+          variant="danger"
+          className="flex-1"
+          onClick={() => onFell({ tag, mood, trigger: note.trim() })}
+        >
+          <HeartCrack size={15} /> لم أصمد
+        </Btn>
+      </>
+    ) : (
+      <>
+        <Btn variant="success" className="flex-1" disabled={!tag} onClick={log}>
+          <ShieldCheck size={15} /> سجّلها صمودًا
+        </Btn>
+        <Btn variant="outline" className="flex-1" onClick={onClose}>
+          إلغاء
+        </Btn>
+      </>
+    );
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} footer={footer}>
+      {mode === "wave" ? (
+        <div className="space-y-4">
+          <p className="text-center text-[12px] leading-relaxed" style={{ color: T.muted }}>
+            لا تقاوم الرغبة — انتظرها. أنت لا تفعل شيئًا الآن سوى أن تدع
+            الموجة تهبط.
+          </p>
+
+          <p
+            dir="ltr"
+            className="text-center text-[56px] font-extrabold leading-none tabular-nums"
+            style={{ color: T.primary, textShadow: `0 0 40px ${T.primary}66` }}
+          >
+            {mm}:{ss}
+          </p>
+
+          <div
+            className="h-2 overflow-hidden rounded-full"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-1000 ease-linear"
+              style={{
+                width: `${pct}%`,
+                background: `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`,
+                boxShadow: `0 0 12px ${T.primary}99`,
+              }}
+            />
+          </div>
+
+          {picked && (
+            <div
+              className="rounded-2xl border px-4 py-3"
+              style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+            >
+              <div className="flex items-center gap-2">
+                <Brain size={14} style={{ color: T.sky }} />
+                <p className="text-[11px] font-bold" style={{ color: T.sky }}>
+                  نفّذ هذا بدل الانتظار الفارغ
+                </p>
+              </div>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+                {picked.counter}
+              </p>
+            </div>
+          )}
+
+          {habit.replacement ? (
+            <div
+              className="rounded-2xl border px-4 py-3"
+              style={{ borderColor: `${T.primary}3D`, background: `${T.primary}10` }}
+            >
+              <div className="flex items-center gap-2">
+                <LifeBuoy size={14} style={{ color: T.primary }} />
+                <p className="text-[11px] font-bold" style={{ color: T.primary }}>
+                  ملاذك الآمن
+                </p>
+              </div>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+                {habit.replacement}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : mode === "after" ? (
+        <div className="space-y-4">
+          <p className="text-[13px] leading-relaxed text-white/85">
+            انتهت الموجة. الرغبة التي بدت قبل قليل وكأنها لن تمرّ — أين هي
+            الآن؟
+          </p>
+          <p className="text-[12px] leading-relaxed" style={{ color: T.muted }}>
+            هذا بالضبط ما كانت تخفيه عنك: أنها مؤقّتة. وكلما انتظرتها مرة
+            إضافية، ضعفت المرة التي بعدها.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-[12px] leading-relaxed" style={{ color: T.muted }}>
+            سجّلها الآن وأنت داخلها، لا بعد ساعة. الوسم الذي تختاره هنا هو
+            الذي يبني تشخيصك — بلا وسوم تبقى المرآة فارغة.
+          </p>
+
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+              ما الذي استدعاها الآن؟
+            </label>
+            <TagPicker value={tag} onPick={setTag} />
+          </div>
+
+          {picked && (
+            <div
+              className="los-in rounded-2xl border px-4 py-3"
+              style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+            >
+              <div className="flex items-center gap-2">
+                <Brain size={14} style={{ color: T.sky }} />
+                <p className="text-[11px] font-bold" style={{ color: T.sky }}>
+                  المضاد لهذا المحفّز
+                </p>
+              </div>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+                {picked.counter}
+              </p>
+            </div>
+          )}
+
+          <div
+            className="rounded-2xl border px-4 py-3"
+            style={{ borderColor: `${T.primary}3D`, background: `${T.primary}10` }}
+          >
+            <div className="flex items-center gap-2">
+              <Hourglass size={14} style={{ color: T.primary }} />
+              <p className="text-[11px] font-bold" style={{ color: T.primary }}>
+                اركب الموجة بدل أن تقاومها
+              </p>
+            </div>
+            <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+              الرغبة تعلو وتهبط خلال ربع ساعة سواء استجبت لها أو لم تستجب.
+              اضبط المؤقّت ولا تفعل شيئًا حتى ينتهي.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {WAVE_OPTIONS.map((o) => (
+                <Btn
+                  key={o.min}
+                  variant="success"
+                  size="sm"
+                  disabled={!tag}
+                  onClick={() => start(o.min)}
+                >
+                  <Timer size={13} /> {o.label}
+                </Btn>
+              ))}
+            </div>
+            {!tag && (
+              <p className="mt-2 text-[10px]" style={{ color: T.faint }}>
+                اختر المحفّز أولًا — المؤقّت يعرض المضاد الخاص به.
+              </p>
+            )}
+          </div>
+
+          {habit.replacement ? (
+            <div
+              className="rounded-2xl border px-4 py-3"
+              style={{ borderColor: `${T.primary}3D`, background: `${T.primary}10` }}
+            >
+              <div className="flex items-center gap-2">
+                <LifeBuoy size={14} style={{ color: T.primary }} />
+                <p className="text-[11px] font-bold" style={{ color: T.primary }}>
+                  نفّذ ملاذك الآن
+                </p>
+              </div>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+                {habit.replacement}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold" style={{ color: T.muted }}>
+              كيف تشعر؟
+            </label>
+            <MoodPicker value={mood} onPick={setMood} />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold" style={{ color: T.faint }}>
+              سطر تكتبه لنفسك (اختياري)
+            </label>
+            <Field
+              as="textarea"
+              rows={2}
+              value={note}
+              onChange={(ev) => setNote(ev.target.value)}
+              className="resize-none leading-relaxed"
+              placeholder="جلست للمذاكرة فوجدت نفسي أفتح الهاتف…"
+            />
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+
+function MirrorTile({ icon: Icon, label, value, sub, tint }) {
+  return (
+    <div
+      className="rounded-xl border px-3.5 py-3"
+      style={{ borderColor: `${tint}3D`, background: `${tint}10` }}
+    >
+      <div className="flex items-center gap-1.5">
+        <Icon size={12} strokeWidth={2.2} style={{ color: tint }} />
+        <p className="text-[10px] font-bold" style={{ color: tint }}>
+          {label}
+        </p>
+      </div>
+      <p className="mt-1.5 text-[13.5px] font-extrabold leading-tight text-white/90">
+        {value}
+      </p>
+      {sub ? (
+        <p className="mt-1 text-[10px] leading-relaxed" style={{ color: T.faint }}>
+          {sub}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* Shown above every screen, not just the breaker: the point is to meet the
+   user where he already is when his hour arrives. The fill stays T.card —
+   a surface sitting on the sky never carries its own white or tinted alpha,
+   or it turns into a pale smear against a noon horizon. The alarm is
+   carried by the border, the glow and the type. */
+function DangerBanner({ list, here, onOpen }) {
+  const bandId = useHourBand();
+  const watch = useMemo(() => dangerWatch(list), [list]);
+  /* Dismissal is deliberately not persisted and is keyed to the band and
+     the day: it lasts until the hour passes. A warning that can be switched
+     off for good is a warning that gets switched off on the first bad
+     evening — which is the evening it was written for. */
+  const [hidden, setHidden] = useState("");
+  const key = `${dayKey()}:${bandId}`;
+
+  if (!watch || watch.band.id !== bandId || hidden === key) return null;
+
+  return (
+    <Card
+      className="los-in mb-6 p-5"
+      style={{
+        borderColor: `${T.danger}66`,
+        boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.085), 0 0 54px -18px ${T.danger}`,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: `${T.danger}4D`,
+            background: `${T.danger}1A`,
+            color: T.danger,
+          }}
+        >
+          <AlertTriangle size={16} strokeWidth={2.2} />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-extrabold" style={{ color: T.danger }}>
+            أنت الآن في ساعة خطرك
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+            {watch.band.label}
+            {" — "}
+            <span dir="ltr" className="font-extrabold tabular-nums">
+              {watch.pct}٪
+            </span>
+            {" من مواجهاتك تقع في هذه الفترة. قرّر الآن، لا بعد ربع ساعة."}
+          </p>
+
+          {watch.tag && (
+            <div
+              className="mt-3 rounded-xl border px-3.5 py-2.5"
+              style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+            >
+              <p className="text-[10.5px] font-bold" style={{ color: T.sky }}>
+                {`ضعفك هنا: ${watch.tag.label} — نفّذ هذا`}
+              </p>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/85">
+                {watch.tag.counter}
+              </p>
+            </div>
+          )}
+
+          {!here && (
+            <Btn variant="danger" size="sm" className="mt-3" onClick={onOpen}>
+              <ShieldOff size={13} /> افتح كاسر العادات
+            </Btn>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setHidden(key)}
+          aria-label="إخفاء التنبيه حتى تنتهي الفترة"
+          className="shrink-0 rounded-lg border p-1.5 text-white/35 transition-colors hover:text-white/80"
+          style={{ borderColor: T.border }}
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+/* The screen the user asked for: not a counter, a diagnosis. Everything in
+   it is counted from what he logged and nothing is inferred — a mirror that
+   invents a weakness is worse than no mirror, because it is believed. Below
+   the threshold it says so plainly instead of drawing empty bars. */
+function WeaknessMirror({ list }) {
+  const w = useMemo(() => weakSpots(list), [list]);
+  const events = useMemo(() => breakerEvents(list), [list]);
+  /* Two different things that both used to be called `fatal`: the tally
+     (count, total, pct) and the tag it points at. Collapsing them cost the
+     verdict its numbers. */
+  const fatal = w.fatal;
+  const common = w.tag;
+  const prescribe = (fatal && tagOf(fatal.value)) || (common && tagOf(common.value));
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex items-start gap-2.5">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: `${T.violet}45`,
+            background: `${T.violet}18`,
+            color: T.violet,
+          }}
+        >
+          <Radar size={16} strokeWidth={1.9} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[16px] font-extrabold">مرآة نقاط الضعف</h3>
+          <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            لا تعرف نقطة ضعفك لأنك تعيشها ولا تعدّها. هنا تُعدّ: كل مواجهة
+            تسجّلها — سقطت أو صمدت — تضيف سطرًا إلى تشخيصك.
+          </p>
+        </div>
+      </div>
+
+      {!w.ready ? (
+        <div className="mt-5">
+          <div className="flex items-end justify-between gap-3">
+            <p className="text-[11.5px]" style={{ color: T.muted }}>
+              {"التشخيص يبدأ بعد "}
+              <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: T.cta }}>
+                {MIRROR_MIN}
+              </span>
+              {" مواجهات مسجّلة"}
+            </p>
+            <p dir="ltr" className="shrink-0 text-[11px] font-extrabold tabular-nums" style={{ color: T.cta }}>
+              {w.total}/{MIRROR_MIN}
+            </p>
+          </div>
+          <div
+            className="mt-2 h-2 overflow-hidden rounded-full"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(100, (w.total / MIRROR_MIN) * 100)}%`,
+                background: `linear-gradient(90deg, ${T.cta}, ${T.accent})`,
+                boxShadow: `0 0 12px ${T.cta}99`,
+              }}
+            />
+          </div>
+          <p className="mt-3 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+            لا تنتظر الانتكاسة لتسجّل. كل مرة تهجم الرغبة وتصمد، اضغط «واجهت
+            الرغبة» على بطاقة العادة — المرآة تتعلّم من صمودك أكثر مما تتعلّم
+            من سقوطك.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-5 space-y-4">
+          {prescribe && (
+            <div
+              className="rounded-2xl border px-4 py-3.5"
+              style={{
+                borderColor: `${prescribe.tint}4D`,
+                background: `${prescribe.tint}14`,
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Crosshair size={14} style={{ color: prescribe.tint }} />
+                <p className="text-[11px] font-extrabold" style={{ color: prescribe.tint }}>
+                  نقطة ضعفك الأولى
+                </p>
+              </div>
+              <p className="mt-2 text-[15px] font-extrabold" style={{ color: prescribe.tint }}>
+                {prescribe.label}
+              </p>
+              <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+                {fatal ? (
+                  <>
+                    {"سقطت بسببه "}
+                    <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: T.danger }}>
+                      {fatal.count}
+                    </span>
+                    {" من أصل "}
+                    <span dir="ltr" className="font-extrabold tabular-nums">
+                      {fatal.total}
+                    </span>
+                    {` ${fallWord(fatal.total)} مسجّلة.`}
+                  </>
+                ) : (
+                  <>
+                    {"يتكرّر في "}
+                    <span dir="ltr" className="font-extrabold tabular-nums">
+                      {common.pct}٪
+                    </span>
+                    {" من مواجهاتك."}
+                  </>
+                )}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <MirrorTile
+              icon={Clock}
+              label="ساعة الخطر"
+              tint={T.ember}
+              value={w.band ? bandOf(w.band.value).label : "—"}
+              sub={
+                w.band ? (
+                  <>
+                    <span dir="ltr" className="tabular-nums">
+                      {w.band.pct}٪
+                    </span>
+                    {" من مواجهاتك تقع هنا"}
+                  </>
+                ) : (
+                  "لم تُسجَّل ساعات بعد"
+                )
+              }
+            />
+            <MirrorTile
+              icon={CalendarDays}
+              label="يوم الخطر"
+              tint={T.indigo}
+              value={w.dow ? DOW_AR[Number(w.dow.value)] : "—"}
+              sub={
+                w.dow ? (
+                  <>
+                    <span dir="ltr" className="tabular-nums">
+                      {w.dow.count}
+                    </span>
+                    {` ${meetWord(w.dow.count)} في هذا اليوم`}
+                  </>
+                ) : (
+                  "لا بيانات بعد"
+                )
+              }
+            />
+            <MirrorTile
+              icon={ShieldCheck}
+              label="معدّل صمودك"
+              tint={w.hold >= 50 ? T.primary : T.danger}
+              value={
+                <span dir="ltr" className="tabular-nums">
+                  {w.hold}٪
+                </span>
+              }
+              sub={
+                <>
+                  {"صمدت في "}
+                  <span dir="ltr" className="tabular-nums">
+                    {w.holds}
+                  </span>
+                  {" من "}
+                  <span dir="ltr" className="tabular-nums">
+                    {w.total}
+                  </span>
+                  {` ${meetWord(w.total)}`}
+                </>
+              }
+            />
+            <MirrorTile
+              icon={Flame}
+              label="متوسط الصمود"
+              tint={T.accent}
+              value={
+                w.falls ? (
+                  <>
+                    <span dir="ltr" className="tabular-nums">
+                      {Math.round(w.avgRun)}
+                    </span>
+                    {` ${dayWord(Math.round(w.avgRun))}`}
+                  </>
+                ) : (
+                  "بلا انتكاسة"
+                )
+              }
+              sub={
+                w.trend
+                  ? w.trend.dir === "up"
+                    ? "سلاسلك تطول — أنت تتحسّن فعلًا"
+                    : w.trend.dir === "down"
+                      ? "سلاسلك تقصر — راجع ملاذك الآمن"
+                      : "ثابت، لا يطول ولا يقصر"
+                  : "اجمع انتكاسات أكثر ليظهر الاتجاه"
+              }
+            />
+          </div>
+
+          {w.mood && (
+            <p className="text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+              {"أغلب مواجهاتك تأتيك وأنت "}
+              <span className="font-extrabold" style={{ color: T.violet }}>
+                {moodOf(w.mood.value)?.label}
+              </span>
+              {" — الشعور الذي يسبق العادة هو الباب، والعادة مجرّد الغرفة."}
+            </p>
+          )}
+
+          {prescribe && (
+            <div
+              className="rounded-2xl border px-4 py-3"
+              style={{ borderColor: `${T.sky}3D`, background: `${T.sky}10` }}
+            >
+              <div className="flex items-center gap-2">
+                <Brain size={14} style={{ color: T.sky }} />
+                <p className="text-[11px] font-bold" style={{ color: T.sky }}>
+                  المضاد — نفّذ هذا بدل أن تقاوم بإرادتك
+                </p>
+              </div>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+                {prescribe.counter}
+              </p>
+            </div>
+          )}
+
+          {w.tag && (
+            <div>
+              <p className="mb-2 text-[11px] font-bold" style={{ color: T.muted }}>
+                خريطة محفّزاتك
+              </p>
+              <div className="space-y-2">
+                {w.tag.rows.map((r) => {
+                  const t = tagOf(r.value);
+                  if (!t) return null;
+                  const rate = tagFallRate(events, r.value);
+                  const Icon = t.icon;
+                  return (
+                    <div key={r.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon size={12} style={{ color: t.tint }} className="shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-[11.5px] font-bold text-white/80">
+                          {t.label}
+                        </span>
+                        {rate && (
+                          <span
+                            dir="ltr"
+                            className="shrink-0 text-[10px] font-extrabold tabular-nums"
+                            style={{ color: rate.pct >= 50 ? T.danger : T.primary }}
+                          >
+                            {rate.lost}/{rate.met}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className="mt-1 h-1.5 overflow-hidden rounded-full"
+                        style={{ background: "rgba(255,255,255,0.07)" }}
+                      >
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${r.pct}%`,
+                            background: `linear-gradient(90deg, ${t.tint}, ${t.tint}99)`,
+                            boxShadow: `0 0 10px ${t.tint}70`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2.5 text-[10px] leading-relaxed" style={{ color: T.faint }}>
+                الرقم على اليسار: كم مرة سقطت من أصل كم مرة واجهت هذا المحفّز.
+                محفّز تواجهه كثيرًا وتصمد ليس ضعفك — ضعفك هو الذي يسقطك في كل
+                مرة تقريبًا.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function BreakerModule({ state, setState }) {
+  const list = state.badHabits || [];
+  const [draft, setDraft] = useState(null);
+  const [relapsing, setRelapsing] = useState(null);
+  const [urging, setUrging] = useState(null);
+  const [prefill, setPrefill] = useState(null);
+  /* Set synchronously and cleared on a timer, never through
+     requestAnimationFrame — a reward scheduled on a frame is swallowed in a
+     hidden tab and then replays when the tab comes back. */
+  const [rewardId, setRewardId] = useState(null);
+  const rewardTimer = useRef(null);
+  useEffect(() => () => clearTimeout(rewardTimer.current), []);
+
+  const openAdd = () =>
+    setDraft({
+      id: "",
+      title: "",
+      startDate: dayKey(),
+      costType: "money",
+      costPerDay: "",
+      replacement: "",
+    });
+
+  const openEdit = (h) => setDraft({ ...h, costPerDay: String(h.costPerDay ?? "") });
+
+  const save = () => {
+    const edit = draft.id;
+    setState((s) => {
+      const rows = s.badHabits || [];
+      /* An edit must keep the journal the row already carries — the form
+         never shows the logs, so a blind spread would drop them. */
+      const shaped = badHabitShape({
+        ...draft,
+        logs: edit ? rows.find((b) => b.id === edit)?.logs || [] : [],
+      });
+      return {
+        ...s,
+        badHabits: edit
+          ? rows.map((b) => (b.id === edit ? { ...shaped, id: edit } : b))
+          : [...rows, shaped],
+      };
+    });
+    setDraft(null);
+  };
+
+  const remove = (id) =>
+    setState((s) => ({
+      ...s,
+      badHabits: (s.badHabits || []).filter((b) => b.id !== id),
+    }));
+
+  const confirmRelapse = ({ trigger, feeling, tag, mood }) => {
+    const id = relapsing.id;
+    setState((s) => ({
+      ...s,
+      badHabits: (s.badHabits || []).map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              /* The run that just ended is stamped on the log, so the record
+                 outlives the counter it cost. */
+              logs: [
+                ...(b.logs || []),
+                urgeShape(
+                  {
+                    ...stamp(),
+                    days: cleanDays(b),
+                    tag,
+                    mood,
+                    trigger,
+                    feeling,
+                  },
+                  "fall",
+                ),
+              ],
+              startDate: dayKey(),
+            }
+          : b,
+      ),
+    }));
+    setRelapsing(null);
+    setPrefill(null);
+  };
+
+  /* A hold never touches startDate: surviving the urge is the streak
+     continuing, not an event in it. */
+  const confirmUrge = ({ tag, mood, trigger }) => {
+    const id = urging.id;
+    setState((s) => ({
+      ...s,
+      badHabits: (s.badHabits || []).map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              urges: [
+                ...(b.urges || []),
+                urgeShape({ ...stamp(), tag, mood, trigger }, "hold"),
+              ],
+            }
+          : b,
+      ),
+    }));
+    setUrging(null);
+    setRewardId(id);
+    clearTimeout(rewardTimer.current);
+    rewardTimer.current = setTimeout(() => setRewardId(null), 900);
+  };
+
+  const cleanToday = list.filter((b) => cleanDays(b) > 0).length;
+  const longest = list.reduce((n, b) => Math.max(n, cleanDays(b)), 0);
+
+  return (
+    <div className="space-y-7">
+      <Card className="p-6 sm:p-7">
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+          كاسر العادات
+        </h2>
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
+          هنا تحمي سلسلة بدل أن تبنيها. كل عادة تحمل عدّادًا نظيفًا، وملاذًا
+          آمنًا تنفّذه حين تهجم الرغبة، وحسابًا لما استرجعته من مال أو وقت.
+          وكل مواجهة تسجّلها — سقطت أو صمدت — تُبنى عليها مرآة نقاط ضعفك في
+          أسفل الشاشة.
+        </p>
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Btn variant="default" onClick={openAdd} className="shrink-0">
+            <Plus size={15} strokeWidth={3} /> عادة جديدة تكسرها
+          </Btn>
+        </div>
+
+        {list.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge tint={T.primary}>
+              <ShieldCheck size={10} />
+              <span dir="ltr" className="tabular-nums">
+                {cleanToday}/{list.length}
+              </span>
+              {" صامدة"}
+            </Badge>
+            <Badge tint={T.violet}>
+              <Radar size={10} />
+              <span dir="ltr" className="tabular-nums">
+                {breakerEvents(list).length}
+              </span>
+              {` ${meetWord(breakerEvents(list).length)} مسجّلة`}
+            </Badge>
+            <Badge tint={T.ember}>
+              <Flame size={10} />
+              {"أطول عدّاد حالي: "}
+              <span dir="ltr" className="tabular-nums">
+                {longest}
+              </span>
+              {` ${dayWord(longest)}`}
+            </Badge>
+          </div>
+        )}
+      </Card>
+
+      {list.length === 0 ? (
+        <Card className="p-10 text-center">
+          <ShieldOff
+            size={34}
+            strokeWidth={1.4}
+            className="mx-auto"
+            style={{ color: T.faint }}
+          />
+          <p className="mt-4 text-[14px] font-bold" style={{ color: T.muted }}>
+            لا عادة تحت المقصلة بعد
+          </p>
+          <p className="mx-auto mt-2 max-w-sm text-[12px] leading-relaxed" style={{ color: T.faint }}>
+            اختر واحدة فقط للبداية — الأغلى ثمنًا، لا الأسهل. العدّاد يبدأ من
+            آخر مرة فعلتها فيها.
+          </p>
+          <Btn variant="default" className="mt-5" onClick={openAdd}>
+            <Plus size={15} strokeWidth={3} /> ابدأ الأولى
+          </Btn>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {list.map((h) => (
+            <BadHabitCard
+              key={h.id}
+              habit={h}
+              reward={rewardId === h.id}
+              onRelapse={() => setRelapsing(h)}
+              onUrge={() => setUrging(h)}
+              onEdit={() => openEdit(h)}
+              onDelete={() => remove(h.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {list.length > 0 && <WeaknessMirror list={list} />}
+
+      <BadHabitFormModal
+        open={!!draft}
+        draft={draft}
+        setDraft={setDraft}
+        onSave={save}
+        onClose={() => setDraft(null)}
+      />
+
+      <RelapseModal
+        open={!!relapsing}
+        habit={relapsing}
+        prefill={prefill}
+        onClose={() => {
+          setRelapsing(null);
+          setPrefill(null);
+        }}
+        onConfirm={confirmRelapse}
+      />
+
+      <UrgeModal
+        open={!!urging}
+        habit={urging}
+        onClose={() => setUrging(null)}
+        onConfirm={confirmUrge}
+        onFell={(answers) => {
+          const h = urging;
+          setUrging(null);
+          setPrefill(answers);
+          setRelapsing(h);
+        }}
+      />
+    </div>
+  );
+}
+
+/* ==================================================================== *
  *  MODULE 4 — Analytics
  * ==================================================================== */
+/* ==================================================================== *
+ *  MODULE — the 90-day employability masterplan
+ *
+ *  Four views, because four different time horizons live here: what must
+ *  happen in the next hour, this week, against one company, and across the
+ *  whole hunt. They are deliberately not one scrolling page — the daily
+ *  view has to be openable and finishable before breakfast.
+ * ==================================================================== */
+const CAREER_VIEWS = [
+  { id: "today", label: "اليوم", icon: Sunrise },
+  { id: "kit", label: "العدّة", icon: Briefcase },
+  { id: "plan", label: "الخطة", icon: CalendarDays },
+  { id: "war", label: "الشركات", icon: Crosshair },
+  { id: "track", label: "التقديمات", icon: ClipboardList },
+];
+
+function ReadinessCard({ career, onStart }) {
+  const { rows, total } = useMemo(() => readiness(career), [career]);
+  const day = careerDayNo(career);
+  const week = careerWeekNo(career);
+  const left = career.startedAt ? Math.max(0, CAREER_DAYS - day) : CAREER_DAYS;
+
+  return (
+    <Card className="p-6 sm:p-7">
+      {/* The ring sits beside the headline rather than after the breakdown:
+          on a phone the column stacks, and a score six bars down the page is
+          a score nobody sees. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Gauge size={16} style={{ color: T.cta }} />
+            <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+              خطة التوظيف في ٩٠ يومًا
+            </h2>
+          </div>
+          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
+            الشهادة لا توظّف، الروتين يوظّف. ثلاث عشرة أسبوعًا في ثلاث مراحل،
+            وخمس مهام كل أسبوع مكتوبة لخريج إدارة أعمال تحديدًا.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            {career.startedAt ? (
+              <>
+                <Badge tint={T.cta}>
+                  اليوم{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {day}
+                  </span>{" "}
+                  من{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {CAREER_DAYS}
+                  </span>
+                </Badge>
+                <Badge tint={T.accent}>
+                  الأسبوع{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {week}
+                  </span>{" "}
+                  · {phaseOf(weekOf(week).phase).label}
+                </Badge>
+                <Badge tint={left > 0 ? T.sky : T.primary}>
+                  {left > 0 ? (
+                    <>
+                      بقي{" "}
+                      <span dir="ltr" className="tabular-nums">
+                        {left}
+                      </span>{" "}
+                      {dayWord(left)}
+                    </>
+                  ) : (
+                    "انتهت التسعون"
+                  )}
+                </Badge>
+              </>
+            ) : (
+              <Btn variant="default" size="sm" onClick={onStart}>
+                <Rocket size={14} strokeWidth={2.6} /> ابدأ العدّ من اليوم
+              </Btn>
+            )}
+          </div>
+        </div>
+
+        <div className="self-center">
+          <ProgressRing
+            value={total}
+            size={178}
+            stroke={13}
+            label="مؤشر الجهوزية"
+            fullLabel="جاهز للتوظيف"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((r) => {
+          const pct = Math.round((r.got / r.max) * 100);
+          return (
+            <div
+              key={r.id}
+              className="rounded-xl border px-3.5 py-2.5"
+              style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-[11.5px] font-bold" style={{ color: T.muted }}>
+                  {r.label}
+                </span>
+                <span
+                  dir="ltr"
+                  className="shrink-0 text-[11px] font-extrabold tabular-nums"
+                  style={{ color: r.tint }}
+                >
+                  {r.got}/{r.max}
+                </span>
+              </div>
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full"
+                style={{ background: "rgba(255,255,255,0.07)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${pct}%`,
+                    background: `linear-gradient(90deg, ${r.tint}, ${r.tint}99)`,
+                    boxShadow: pct > 0 ? `0 0 10px ${r.tint}80` : "none",
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/* One timer for all six blocks on purpose: a time-blocker that lets two run
+   at once is a stopwatch collection, not a block. */
+function SkillBlock({ block, done, live, left, onPick, onToggle, reward }) {
+  const Icon = block.icon;
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  const pct = ((BLOCK_MIN * 60 - left) / (BLOCK_MIN * 60)) * 100;
+
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border transition-all duration-300${
+        reward ? " los-reward" : ""
+      }`}
+      style={{
+        borderColor: done ? `${T.primary}59` : live ? `${T.cta}70` : T.border,
+        background: done
+          ? `${T.primary}12`
+          : live
+          ? `${T.cta}12`
+          : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div className="flex items-center gap-3 px-3.5 py-3">
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: `${block.tint}45`,
+            background: `${block.tint}18`,
+            color: block.tint,
+          }}
+        >
+          <Icon size={17} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className="truncate text-[13px] font-extrabold"
+            style={{
+              color: done ? T.primary : T.fg,
+              textDecoration: done ? "line-through" : "none",
+            }}
+          >
+            {block.label}
+          </p>
+          <p className="truncate text-[10.5px]" style={{ color: T.faint }}>
+            {live ? (
+              <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.ctaLift }}>
+                {mm}:{ss}
+              </span>
+            ) : (
+              block.hint
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Btn
+            variant={live ? "outline" : "ghost"}
+            size="icon"
+            onClick={onPick}
+            title={live ? "إيقاف الحصّة" : "ابدأ ٣٠ دقيقة"}
+            aria-label={live ? "إيقاف الحصّة" : "ابدأ ٣٠ دقيقة"}
+            style={{
+              borderColor: live ? `${T.accent}59` : T.border,
+              color: live ? T.accent : T.muted,
+            }}
+          >
+            {live ? <Pause size={14} /> : <Play size={14} />}
+          </Btn>
+          {/* Checkbox grows to fill its label; with no label it needs a box
+              of its own or it collapses next to the play button. */}
+          <div className="flex w-8 justify-end">
+            <Checkbox checked={!!done} onToggle={onToggle} tint={T.primary} size="sm" />
+          </div>
+        </div>
+      </div>
+      {live && (
+        <div className="h-1" style={{ background: "rgba(255,255,255,0.07)" }}>
+          <div
+            className="h-full transition-all duration-300"
+            style={{
+              width: `${pct}%`,
+              background: `linear-gradient(90deg, ${T.cta}, ${T.accent})`,
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* A block of ready-to-send text with one button. Clipboard access can be
+   refused outright, so the text stays selectable on screen and the button
+   simply reports what happened instead of failing silently. */
+function CopyBox({ text, tint = T.cta, label = "انسخ النص" }) {
+  const [copied, fireCopied] = useBurst(1800);
+  const [failed, fireFailed] = useBurst(2600);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      fireCopied();
+    } catch {
+      fireFailed();
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-3"
+      style={{ borderColor: `${tint}33`, background: `${tint}0D` }}
+    >
+      <pre
+        className="whitespace-pre-wrap break-words font-[inherit] text-[11.5px] leading-relaxed"
+        style={{ color: T.muted }}
+      >
+        {text}
+      </pre>
+      <div className="mt-2.5 flex items-center gap-2">
+        <Btn
+          variant={copied ? "success" : "outline"}
+          size="sm"
+          onClick={copy}
+          style={copied ? undefined : { borderColor: `${tint}4D`, color: tint }}
+        >
+          {copied ? <CheckCheck size={12} /> : <Copy size={12} />}
+          {copied ? "نُسخ" : label}
+        </Btn>
+        {failed && (
+          <span className="text-[10px]" style={{ color: T.faint }}>
+            النسخ محجوب — حدّد النص ثم انسخه يدويًّا
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---- One morning step ------------------------------------------------
+   Collapsed it is a checkbox with a clock; opened it is the whole method.
+   The method is deliberately *not* always visible: six expanded steps is a
+   wall of text at 7am, and a wall of text is skipped the same way a bare
+   imperative is. */
+function AmStep({ step, n, on, open, onOpen, onToggle }) {
+  const Icon = step.icon;
+  const core = AM_CORE.has(step.id);
+
+  return (
+    <div
+      className="rounded-xl border transition-all duration-300"
+      style={{
+        borderColor: on ? `${T.primary}4D` : T.border,
+        background: on ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div className="flex items-center gap-3 px-3.5 py-2.5">
+        <span
+          dir="ltr"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[11px] font-extrabold tabular-nums"
+          style={{
+            borderColor: `${step.tint}45`,
+            background: `${step.tint}18`,
+            color: step.tint,
+          }}
+        >
+          {n}
+        </span>
+        <Icon size={15} className="hidden shrink-0 sm:block" style={{ color: step.tint }} />
+        <Checkbox
+          checked={on}
+          onToggle={onToggle}
+          label={step.label}
+          tint={T.primary}
+          size="sm"
+        />
+        <span className="shrink-0 text-[10px] font-bold" style={{ color: T.faint }}>
+          <span dir="ltr" className="tabular-nums">
+            {step.min}
+          </span>{" "}
+          {minWord(step.min)}
+        </span>
+        {/* The core mark stays visible at every width: it is the only thing
+            that tells the four streak-bearing steps apart from the two that
+            merely warm you up. */}
+        {core && (
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ background: T.cta }}
+            title="خطوة أساسية — تحفظ السلسلة"
+          />
+        )}
+        <button
+          onClick={onOpen}
+          aria-expanded={open}
+          aria-label={open ? `أغلق شرح: ${step.label}` : `كيف أنفّذ: ${step.label}`}
+          className="shrink-0 rounded-lg border p-1.5 transition-all duration-200 hover:brightness-125"
+          style={{
+            borderColor: open ? `${step.tint}4D` : T.border,
+            color: open ? step.tint : T.faint,
+            background: open ? `${step.tint}14` : "transparent",
+          }}
+        >
+          <ChevronDown
+            size={13}
+            style={{
+              transform: open ? "rotate(180deg)" : "none",
+              transition: "transform .25s",
+            }}
+          />
+        </button>
+      </div>
+
+      {open && (
+        <div
+          className="los-in space-y-3 border-t px-3.5 pb-3.5 pt-3"
+          style={{ borderColor: T.border }}
+        >
+          <p className="flex items-start gap-1.5 text-[11px]" style={{ color: step.tint }}>
+            <Milestone size={12} className="mt-0.5 shrink-0" />
+            <span style={{ color: T.muted }}>{step.where}</span>
+          </p>
+          <ol className="space-y-1.5">
+            {step.how.map((line, i) => (
+              <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
+                <span
+                  dir="ltr"
+                  className="mt-[3px] shrink-0 text-[10px] font-extrabold tabular-nums"
+                  style={{ color: step.tint }}
+                >
+                  {i + 1}.
+                </span>
+                <span style={{ color: T.muted }}>{line}</span>
+              </li>
+            ))}
+          </ol>
+          {step.script && <CopyBox text={step.script} tint={step.tint} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CareerToday({ state, setState, onGo }) {
+  const career = state.career;
+  const today = careerToday(career.log);
+  const skills = today.skills || [];
+  const am = today.am || [];
+
+  const [pick, setPick] = useState(null); // block id holding the timer
+  const [openStep, setOpenStep] = useState(null); // the one expanded method
+  const [endAt, setEndAt] = useState(null);
+  const [left, setLeft] = useState(BLOCK_MIN * 60);
+  const [rang, setRang] = useState(false);
+  const [reward, fireReward] = useBurst(900);
+
+  /* Target timestamp, not a decrementing counter: a background tab throttles
+     intervals hard and a counted-down half hour silently loses minutes. */
+  useEffect(() => {
+    if (endAt === null) return;
+    const tick = () => setLeft(Math.max(0, Math.round((endAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [endAt]);
+
+  const mark = useCallback(
+    (id) =>
+      setState((s) => ({
+        ...s,
+        career: { ...s.career, log: toggleDaily(s.career.log, "skills", id) },
+      })),
+    [setState],
+  );
+
+  /* A finished block is also a half hour of focused work, so it lands in the
+     same session log the deep-work screen and the analytics read. One place
+     counts minutes in this app, and this is it. */
+  useEffect(() => {
+    if (endAt === null || left > 0 || rang) return;
+    setRang(true);
+    setEndAt(null);
+    fireReward();
+    setState((s) => {
+      const have = careerToday(s.career.log).skills || [];
+      return {
+        ...s,
+        sessions: [
+          ...(s.sessions || []),
+          { id: uid(), date: dayKey(), minutes: BLOCK_MIN, taskId: null },
+        ].slice(-400),
+        career: {
+          ...s.career,
+          log: have.includes(pick)
+            ? s.career.log
+            : toggleDaily(s.career.log, "skills", pick),
+        },
+      };
+    });
+  }, [endAt, left, rang, pick, setState, fireReward]);
+
+  const choose = (id) => {
+    if (pick === id && endAt !== null) {
+      setLeft(Math.max(0, Math.round((endAt - Date.now()) / 1000)));
+      setEndAt(null);
+      return;
+    }
+    const fresh = pick === id ? left || BLOCK_MIN * 60 : BLOCK_MIN * 60;
+    setPick(id);
+    setRang(false);
+    setLeft(fresh);
+    setEndAt(Date.now() + fresh * 1000);
+  };
+
+  const toggleAm = (id) =>
+    setState((s) => ({
+      ...s,
+      career: { ...s.career, log: toggleDaily(s.career.log, "am", id) },
+    }));
+
+  const skillStreak = dailyStreak(career.log, "skills", SKILL_TARGET);
+  const amStreak = dailyStreak(career.log, "am", AM_TARGET, AM_CORE);
+  const coreDone = amCoreDone(am);
+  const amPct = Math.round((am.length / AM_ROUTINE.length) * 100);
+  const leftMin = AM_ROUTINE.filter((x) => !am.includes(x.id)).reduce((n, x) => n + x.min, 0);
+  const hit = skills.length >= SKILL_TARGET;
+
+  const setupLeft = SETUP_TOTAL - setupDone(career);
+
+  return (
+    <div className="space-y-5">
+      {setupLeft > 0 && (
+        <Card
+          className="p-5 sm:p-6"
+          style={{ borderColor: `${T.sky}59`, boxShadow: `0 18px 44px -28px ${T.sky}` }}
+        >
+          <h3
+            className="flex items-center gap-2 text-[15px] font-extrabold"
+            style={{ color: T.sky }}
+          >
+            <Building2 size={16} /> ابدأ من الأرضية
+          </h3>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+            بقيت{" "}
+            <span dir="ltr" className="tabular-nums font-bold">
+              {setupLeft}
+            </span>{" "}
+            {stepWord(setupLeft)} من التسجيلات التي تُنجَز مرّة
+            وتعمل شهورًا — تمهير وطاقات ودروب وغيرها. أمسية واحدة هنا تساوي
+            أسبوعًا من التقديم العشوائي.
+          </p>
+          <Btn
+            variant="default"
+            size="sm"
+            className="mt-3.5"
+            onClick={() => onGo && onGo("kit")}
+          >
+            <Briefcase size={13} /> افتح العدّة
+          </Btn>
+        </Card>
+      )}
+
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Sunrise size={17} style={{ color: T.accent }} />
+            <h3 className="text-[17px] font-extrabold" style={{ color: T.accent }}>
+              روتين الصباح التنفيذي
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge tint={amPct === 100 ? T.primary : T.accent}>
+              <span dir="ltr" className="tabular-nums">
+                {am.length}/{AM_ROUTINE.length}
+              </span>
+            </Badge>
+            {amStreak > 0 && (
+              <Badge tint={T.ember}>
+                <Flame size={10} />
+                <span dir="ltr" className="tabular-nums">
+                  {amStreak}
+                </span>{" "}
+                {dayWord(amStreak)}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+          ست خطوات في{" "}
+          <span dir="ltr" className="tabular-nums">
+            {AM_MINUTES}
+          </span>{" "}
+          {minWord(AM_MINUTES)}، تُنفَّذ بالترتيب قبل أن يأخذ اليوم رأيه فيك. اضغط السهم في أي
+          خطوة لترى أين تُنفَّذ وكيف، ومعها نصّ جاهز للنسخ.
+        </p>
+
+        {/* The contract, said out loud: four specific steps carry the streak,
+            and which four is not left to be guessed from a number. */}
+        <div
+          className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border px-3.5 py-2.5 text-[11px]"
+          style={{ borderColor: `${T.cta}2E`, background: `${T.cta}0A` }}
+        >
+          <span className="flex items-center gap-1.5" style={{ color: T.muted }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: T.cta }} />
+            الخطوات الأساسية الأربع (تقديم، متابعة، تواصل، تحسين) هي ما يحفظ
+            السلسلة — والباقي يهيّئك لها.
+          </span>
+          <span className="flex items-center gap-1.5 font-bold" style={{ color: coreDone >= AM_TARGET ? T.primary : T.ctaLift }}>
+            <Flame size={11} />
+            <span dir="ltr" className="tabular-nums">
+              {coreDone}/{AM_TARGET}
+            </span>
+            {coreDone >= AM_TARGET ? "السلسلة محفوظة اليوم" : "لحفظ اليوم"}
+          </span>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {AM_ROUTINE.map((item, i) => (
+            <AmStep
+              key={item.id}
+              step={item}
+              n={i + 1}
+              on={am.includes(item.id)}
+              open={openStep === item.id}
+              onOpen={() => setOpenStep((x) => (x === item.id ? null : item.id))}
+              onToggle={() => toggleAm(item.id)}
+            />
+          ))}
+        </div>
+
+        <p className="mt-3 text-[11px]" style={{ color: T.faint }}>
+          {am.length === AM_ROUTINE.length ? (
+            "انتهى الروتين. ما تبقّى من اليوم ربح صافٍ."
+          ) : (
+            <>
+              المتبقّي{" "}
+              <span dir="ltr" className="tabular-nums">
+                {leftMin}
+              </span>{" "}
+              {minWord(leftMin)}.
+            </>
+          )}
+        </p>
+      </Card>
+
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Clock size={17} style={{ color: T.cta }} />
+            <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
+              حصص المهارات — نصف ساعة لكل حصّة
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge tint={hit ? T.primary : T.cta}>
+              <span dir="ltr" className="tabular-nums">
+                {skills.length}/{SKILL_TARGET}
+              </span>{" "}
+              اليوم
+            </Badge>
+            {skillStreak > 0 && (
+              <Badge tint={T.ember}>
+                <Flame size={10} />
+                <span dir="ltr" className="tabular-nums">
+                  {skillStreak}
+                </span>{" "}
+                {dayWord(skillStreak)}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
+          حصّتان في اليوم تحفظان السلسلة. الحصّة المكتملة تُسجَّل في العمل العميق
+          تلقائيًّا.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+          {SKILL_BLOCKS.map((b) => (
+            <SkillBlock
+              key={b.id}
+              block={b}
+              done={skills.includes(b.id)}
+              live={pick === b.id && endAt !== null}
+              left={pick === b.id ? left : BLOCK_MIN * 60}
+              reward={reward && pick === b.id}
+              onPick={() => choose(b.id)}
+              onToggle={() => mark(b.id)}
+            />
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function CareerPlan({ state, setState }) {
+  const career = state.career;
+  const live = careerWeekNo(career);
+  const [week, setWeek] = useState(live);
+  const data = weekOf(week);
+  const phase = phaseOf(data.phase);
+  const missions = career.missions || {};
+
+  const toggle = (i) =>
+    setState((s) => {
+      const k = missionKey(week, i);
+      const next = { ...(s.career.missions || {}) };
+      if (next[k]) delete next[k];
+      else next[k] = true;
+      return { ...s, career: { ...s.career, missions: next } };
+    });
+
+  const doneHere = data.missions.filter((_, i) => missions[missionKey(week, i)]).length;
+  const allDone = missionsIn(missions, CAREER_WEEKS.map((w) => w.w));
+
+  return (
+    <div className="space-y-5">
+      {/* phases — the completion percentage of each is the whole point */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {CAREER_PHASES.map((p) => {
+          const hit = missionsIn(missions, p.weeks);
+          const total = missionCount(p.weeks);
+          const pct = total ? Math.round((hit / total) * 100) : 0;
+          const here = p.id === data.phase;
+          const Icon = p.icon;
+          return (
+            <Card
+              key={p.id}
+              className="p-4 transition-all duration-300"
+              style={{
+                borderColor: here ? `${p.tint}70` : "rgba(255,225,210,0.18)",
+                boxShadow: here ? `0 14px 36px -22px ${p.tint}` : undefined,
+              }}
+            >
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
+                  style={{
+                    borderColor: `${p.tint}45`,
+                    background: `${p.tint}18`,
+                    color: p.tint,
+                  }}
+                >
+                  <Icon size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-extrabold" style={{ color: p.tint }}>
+                    {p.label}
+                  </p>
+                  <p className="truncate text-[10px]" style={{ color: T.faint }}>
+                    {p.span}
+                  </p>
+                </div>
+                <span
+                  dir="ltr"
+                  className="shrink-0 text-[15px] font-extrabold tabular-nums"
+                  style={{ color: pct === 100 ? T.primary : p.tint }}
+                >
+                  {pct}%
+                </span>
+              </div>
+              <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+                {p.aim}
+              </p>
+              <div
+                className="mt-3 h-1.5 overflow-hidden rounded-full"
+                style={{ background: "rgba(255,255,255,0.07)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${pct}%`,
+                    background: `linear-gradient(90deg, ${pct === 100 ? T.primary : p.tint}, ${
+                      pct === 100 ? T.primaryLift : p.tint
+                    }99)`,
+                    boxShadow: pct > 0 ? `0 0 10px ${pct === 100 ? T.primary : p.tint}80` : "none",
+                  }}
+                />
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* week strip */}
+      <Card className="p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: T.faint }}>
+            <Milestone size={12} /> الأسابيع الثلاثة عشر
+          </p>
+          <Badge tint={T.cta}>
+            <span dir="ltr" className="tabular-nums">
+              {allDone}/{MISSION_TOTAL}
+            </span>{" "}
+            مهمة
+          </Badge>
+        </div>
+        <div className="grid grid-cols-5 gap-2 sm:grid-cols-7 lg:grid-cols-[repeat(13,minmax(0,1fr))]">
+          {CAREER_WEEKS.map((w) => {
+            const on = w.w === week;
+            const tint = phaseOf(w.phase).tint;
+            const hit = w.missions.filter((_, i) => missions[missionKey(w.w, i)]).length;
+            const full = hit === w.missions.length;
+            const now = w.w === live && !!career.startedAt;
+            return (
+              <button
+                key={w.w}
+                onClick={() => setWeek(w.w)}
+                aria-pressed={on}
+                title={w.title}
+                className="relative rounded-xl border py-2 text-center transition-all duration-200"
+                style={{
+                  borderColor: on ? `${tint}99` : full ? `${T.primary}4D` : T.border,
+                  backgroundImage: on ? `linear-gradient(160deg, ${tint}33, ${tint}0A)` : "none",
+                  backgroundColor: on
+                    ? "transparent"
+                    : full
+                    ? `${T.primary}12`
+                    : "rgba(255,255,255,0.03)",
+                  color: on ? tint : full ? T.primary : T.muted,
+                }}
+              >
+                <span dir="ltr" className="block text-[13px] font-extrabold tabular-nums">
+                  {w.w}
+                </span>
+                <span dir="ltr" className="block text-[9px] tabular-nums opacity-70">
+                  {hit}/{w.missions.length}
+                </span>
+                {now && (
+                  <span
+                    aria-label="الأسبوع الحالي"
+                    className="absolute left-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
+                    style={{ background: T.cta, boxShadow: `0 0 8px ${T.cta}` }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* the selected week */}
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Badge tint={phase.tint}>{phase.label}</Badge>
+              <Badge tint={T.faint}>
+                الأسبوع{" "}
+                <span dir="ltr" className="tabular-nums">
+                  {week}
+                </span>
+              </Badge>
+            </div>
+            <h3 className="mt-2.5 text-[19px] font-extrabold" style={{ color: T.fg }}>
+              {data.title}
+            </h3>
+            <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+              {data.aim}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Btn
+              variant="ghost"
+              size="icon"
+              onClick={() => setWeek(Math.max(1, week - 1))}
+              disabled={week === 1}
+              aria-label="الأسبوع السابق"
+              style={{ borderColor: T.border }}
+            >
+              <ChevronRight size={15} />
+            </Btn>
+            <span
+              dir="ltr"
+              className="text-[13px] font-extrabold tabular-nums"
+              style={{ color: doneHere === data.missions.length ? T.primary : T.accent }}
+            >
+              {doneHere}/{data.missions.length}
+            </span>
+            <Btn
+              variant="ghost"
+              size="icon"
+              onClick={() => setWeek(Math.min(CAREER_WEEK_COUNT, week + 1))}
+              disabled={week === CAREER_WEEK_COUNT}
+              aria-label="الأسبوع التالي"
+              style={{ borderColor: T.border }}
+            >
+              <ChevronLeft size={15} />
+            </Btn>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2.5">
+          {data.missions.map((m, i) => {
+            const on = !!missions[missionKey(week, i)];
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-3 rounded-xl border px-3.5 py-3 transition-all duration-300"
+                style={{
+                  borderColor: on ? `${T.primary}4D` : T.border,
+                  background: on ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
+                }}
+              >
+                <span
+                  dir="ltr"
+                  className="mt-1 w-4 shrink-0 text-center text-[10px] font-extrabold tabular-nums"
+                  style={{ color: on ? T.primary : T.faint }}
+                >
+                  {i + 1}
+                </span>
+                <Checkbox
+                  checked={on}
+                  onToggle={() => toggle(i)}
+                  label={m}
+                  tint={T.primary}
+                  size="sm"
+                />
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function SprintCard({ sprint, onToggle, onNote, onEdit, onDelete }) {
+  const [open, setOpen] = useState(sprintOpenDay(sprint));
+  const [copied, fireCopied] = useBurst(1800);
+  const done = sprintDone(sprint);
+  const pct = Math.round((done / SPRINT_DAYS.length) * 100);
+  const next = sprintOpenDay(sprint);
+  const finished = next === 0;
+
+  /* Finishing a day opens the next one. The sequence is the whole feature,
+     and hunting for the next card is how a sequence gets abandoned. */
+  const tick = (d) => {
+    onToggle(d);
+    setOpen(sprint.days[d] ? d : d < SPRINT_DAYS.length ? d + 1 : 0);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(sprintPitch(sprint));
+      fireCopied();
+    } catch {
+      /* clipboard can be blocked — the text is on screen to select */
+    }
+  };
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+              style={{
+                borderColor: finished ? `${T.primary}45` : `${T.cta}45`,
+                background: finished ? `${T.primary}18` : `${T.cta}18`,
+                color: finished ? T.primary : T.cta,
+              }}
+            >
+              <Crosshair size={18} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[16px] font-extrabold" style={{ color: T.fg }}>
+                {sprint.company || "شركة بلا اسم"}
+              </p>
+              <p className="truncate text-[10.5px]" style={{ color: T.faint }}>
+                {sprint.role || "دور إداري"} · بدأ <Since day={sprint.startedAt} />
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge tint={finished ? T.primary : T.cta}>
+            <span dir="ltr" className="tabular-nums">
+              {done}/{SPRINT_DAYS.length}
+            </span>
+          </Badge>
+          <Btn
+            variant="ghost"
+            size="icon"
+            onClick={onEdit}
+            aria-label="تعديل الهجوم"
+            style={{ borderColor: T.border }}
+          >
+            <Pencil size={13} />
+          </Btn>
+          <Btn
+            variant="ghost"
+            size="icon"
+            onClick={onDelete}
+            aria-label="حذف الهجوم"
+            style={{ borderColor: T.border, color: T.danger }}
+          >
+            <Trash2 size={13} />
+          </Btn>
+        </div>
+      </div>
+
+      <div
+        className="mt-4 h-1.5 overflow-hidden rounded-full"
+        style={{ background: "rgba(255,255,255,0.07)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, ${finished ? T.primary : T.cta}, ${
+              finished ? T.primaryLift : T.accent
+            })`,
+            boxShadow: pct > 0 ? `0 0 10px ${finished ? T.primary : T.cta}80` : "none",
+          }}
+        />
+      </div>
+
+      <div className="mt-4 space-y-2.5">
+        {SPRINT_DAYS.map((d) => {
+          const on = !!sprint.days[d.d];
+          /* Locked until the day before it is ticked: a sprint that jumps
+             to day seven is just another cold message, which is the thing
+             this schedule exists to replace. */
+          const locked = !on && d.d !== next;
+          const Icon = locked ? Lock : d.icon;
+          const expanded = open === d.d;
+          return (
+            <div
+              key={d.d}
+              className="overflow-hidden rounded-xl border transition-all duration-300"
+              style={{
+                borderColor: on
+                  ? `${T.primary}4D`
+                  : locked
+                  ? T.border
+                  : `${d.tint}70`,
+                background: on
+                  ? `${T.primary}0F`
+                  : locked
+                  ? "rgba(255,255,255,0.02)"
+                  : `${d.tint}10`,
+                opacity: locked ? 0.55 : 1,
+              }}
+            >
+              <button
+                onClick={() => setOpen(expanded ? 0 : d.d)}
+                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-right"
+                aria-expanded={expanded}
+              >
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+                  style={{
+                    borderColor: on ? `${T.primary}45` : `${d.tint}3D`,
+                    background: on ? `${T.primary}18` : `${d.tint}14`,
+                    color: on ? T.primary : locked ? T.faint : d.tint,
+                  }}
+                >
+                  <Icon size={14} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate text-[12.5px] font-extrabold"
+                    style={{ color: on ? T.primary : locked ? T.muted : T.fg }}
+                  >
+                    اليوم{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {d.d}
+                    </span>{" "}
+                    · {d.label}
+                  </p>
+                  <p className="truncate text-[10px]" style={{ color: T.faint }}>
+                    {d.out}
+                  </p>
+                </div>
+                {expanded ? (
+                  <ChevronUp size={14} style={{ color: T.faint }} />
+                ) : (
+                  <ChevronDown size={14} style={{ color: T.faint }} />
+                )}
+              </button>
+
+              {expanded && (
+                <div className="space-y-3 border-t px-3.5 py-3" style={{ borderColor: T.border }}>
+                  <p className="text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+                    {d.task}
+                  </p>
+
+                  {d.d === 7 && (
+                    <div
+                      className="rounded-xl border p-3"
+                      style={{ borderColor: `${T.cta}3D`, background: `${T.cta}0D` }}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: T.ctaLift }}>
+                          <Send size={11} /> الرسالة الجاهزة
+                        </p>
+                        <Btn
+                          variant={copied ? "success" : "outline"}
+                          size="sm"
+                          onClick={copy}
+                          style={copied ? undefined : { borderColor: T.border }}
+                        >
+                          {copied ? <CheckCheck size={12} /> : <Copy size={12} />}
+                          {copied ? "نُسخت" : "انسخ"}
+                        </Btn>
+                      </div>
+                      <pre
+                        className="whitespace-pre-wrap text-[11px] leading-relaxed"
+                        style={{ color: T.muted, fontFamily: "inherit" }}
+                      >
+                        {sprintPitch(sprint)}
+                      </pre>
+                    </div>
+                  )}
+
+                  <Field
+                    as="textarea"
+                    rows={2}
+                    value={sprint.notes[d.d] || ""}
+                    onChange={(e) => onNote(d.d, e.target.value)}
+                    className="resize-none text-[12px]"
+                    placeholder="ما خرجت به من هذا اليوم…"
+                    aria-label={`ملاحظة اليوم ${d.d}`}
+                  />
+
+                  <Btn
+                    variant={on ? "outline" : "success"}
+                    size="sm"
+                    onClick={() => tick(d.d)}
+                    disabled={locked}
+                    className="w-full"
+                    style={on ? { borderColor: T.border } : undefined}
+                  >
+                    {on ? (
+                      <>
+                        <RotateCcw size={12} /> أعد فتح اليوم
+                      </>
+                    ) : (
+                      <>
+                        <Check size={13} strokeWidth={3} /> أنجزت هذا اليوم
+                      </>
+                    )}
+                  </Btn>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function SprintModal({ open, draft, setDraft, onClose, onSave }) {
+  if (!draft) return null;
+  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={draft.id ? "تعديل الهجوم" : "هجوم شركة جديد"}
+      footer={
+        <>
+          <Btn variant="default" onClick={onSave} className="flex-1" disabled={!draft.company.trim()}>
+            <Check size={15} strokeWidth={3} /> {draft.id ? "حفظ" : "ابدأ السبعة أيام"}
+          </Btn>
+          <Btn variant="ghost" onClick={onClose} style={{ borderColor: T.border }}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="los-sp-c" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            اسم الشركة
+          </label>
+          <Field id="los-sp-c" value={draft.company} onChange={set("company")} placeholder="مثال: شركة المراعي" />
+        </div>
+        <div>
+          <label htmlFor="los-sp-r" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            الدور المستهدف
+          </label>
+          <Field id="los-sp-r" value={draft.role} onChange={set("role")} placeholder="منسّق إداري" />
+        </div>
+        <div>
+          <label htmlFor="los-sp-n" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            جهة الاتصال (إن عرفتها)
+          </label>
+          <Field id="los-sp-n" value={draft.contact} onChange={set("contact")} placeholder="أ. فلان، مدير الموارد البشرية" />
+        </div>
+        <div>
+          <label htmlFor="los-sp-p" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            نقطة الألم — تُكتب في اليوم الأول
+          </label>
+          <Field
+            id="los-sp-p"
+            as="textarea"
+            rows={2}
+            value={draft.pain}
+            onChange={set("pain")}
+            className="resize-none"
+            placeholder="تتوسّع بثلاثة فروع ولا يظهر لها نظام متابعة طلبات موحّد"
+          />
+        </div>
+        <div>
+          <label htmlFor="los-sp-s" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            المخرج — يُبنى في اليوم الثاني
+          </label>
+          <Field
+            id="los-sp-s"
+            as="textarea"
+            rows={2}
+            value={draft.solution}
+            onChange={set("solution")}
+            className="resize-none"
+            placeholder="نموذج متابعة طلبات على إكسل بلوحة مؤشّرات"
+          />
+        </div>
+        <p className="text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+          النقطة والمخرج يُركّبان رسالة اليوم السابع تلقائيًّا.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+function CareerWar({ state, setState }) {
+  const sprints = state.career.sprints || [];
+  const [draft, setDraft] = useState(null);
+
+  const save = () => {
+    const company = draft.company.trim();
+    if (!company) return;
+    setState((s) => ({
+      ...s,
+      career: {
+        ...s.career,
+        sprints: draft.id
+          ? s.career.sprints.map((x) => (x.id === draft.id ? { ...x, ...draft, company } : x))
+          : [sprintShape({ ...draft, company }), ...s.career.sprints],
+      },
+    }));
+    setDraft(null);
+  };
+
+  const patch = (id, fn) =>
+    setState((s) => ({
+      ...s,
+      career: {
+        ...s.career,
+        sprints: s.career.sprints.map((x) => (x.id === id ? fn(x) : x)),
+      },
+    }));
+
+  const remove = (id) => {
+    if (!window.confirm("حذف هذا الهجوم وكل ملاحظاته؟")) return;
+    setState((s) => ({
+      ...s,
+      career: { ...s.career, sprints: s.career.sprints.filter((x) => x.id !== id) },
+    }));
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
+              <Crosshair size={17} /> خطة اختراق الشركات
+            </h3>
+            <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+              اكتب اسم شركة، فيُولَّد لها جدول سبعة أيام مقفل بالترتيب: بحث، ثم
+              مخرج، ثم أسماء، ثم ثلاثة أيام قيمة أولًا، ثم رسالة واحدة تُرسل.
+            </p>
+          </div>
+          <Btn
+            variant="default"
+            size="sm"
+            onClick={() =>
+              setDraft({
+                company: "",
+                role: "",
+                contact: "",
+                pain: "",
+                solution: "",
+              })
+            }
+          >
+            <Plus size={14} strokeWidth={3} /> هجوم جديد
+          </Btn>
+        </div>
+      </Card>
+
+      {sprints.length === 0 ? (
+        <Card className="flex flex-col items-center gap-3 border-dashed p-10 text-center">
+          <Crosshair size={26} style={{ color: T.faint }} />
+          <p className="text-[12.5px]" style={{ color: T.muted }}>
+            لا هجوم مفتوح. شركة واحدة مدروسة أفضل من خمسين تقديمًا منسوخًا.
+          </p>
+        </Card>
+      ) : (
+        sprints.map((sp) => (
+          <SprintCard
+            key={sp.id}
+            sprint={sp}
+            onToggle={(d) =>
+              patch(sp.id, (x) => {
+                const days = { ...x.days };
+                if (days[d]) delete days[d];
+                else days[d] = true;
+                return { ...x, days };
+              })
+            }
+            onNote={(d, text) =>
+              patch(sp.id, (x) => ({ ...x, notes: { ...x.notes, [d]: text } }))
+            }
+            onEdit={() => setDraft({ ...sp })}
+            onDelete={() => remove(sp.id)}
+          />
+        ))
+      )}
+
+      <SprintModal
+        open={!!draft}
+        draft={draft}
+        setDraft={setDraft}
+        onClose={() => setDraft(null)}
+        onSave={save}
+      />
+    </div>
+  );
+}
+
+function AppModal({ open, draft, setDraft, onClose, onSave }) {
+  if (!draft) return null;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={draft.id ? "تعديل التقديم" : "تقديم جديد"}
+      footer={
+        <>
+          <Btn variant="default" onClick={onSave} className="flex-1" disabled={!draft.company.trim()}>
+            <Check size={15} strokeWidth={3} /> حفظ
+          </Btn>
+          <Btn variant="ghost" onClick={onClose} style={{ borderColor: T.border }}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="los-ap-c" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            الشركة
+          </label>
+          <Field
+            id="los-ap-c"
+            value={draft.company}
+            onChange={(e) => setDraft({ ...draft, company: e.target.value })}
+            placeholder="اسم الشركة"
+          />
+        </div>
+        <div>
+          <label htmlFor="los-ap-r" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            المسمّى
+          </label>
+          <Field
+            id="los-ap-r"
+            value={draft.role}
+            onChange={(e) => setDraft({ ...draft, role: e.target.value })}
+            placeholder="منسّق إداري"
+          />
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] font-bold" style={{ color: T.muted }}>
+            المرحلة
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {APP_STAGES.map((s) => {
+              const on = s.id === draft.stage;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setDraft({ ...draft, stage: s.id })}
+                  aria-pressed={on}
+                  className="rounded-xl border px-3 py-1.5 text-[11.5px] font-bold transition-all duration-200"
+                  style={{
+                    borderColor: on ? `${s.tint}80` : T.border,
+                    background: on ? `${s.tint}1F` : "transparent",
+                    color: on ? s.tint : T.faint,
+                  }}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <label htmlFor="los-ap-n" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            ملاحظة
+          </label>
+          <Field
+            id="los-ap-n"
+            as="textarea"
+            rows={2}
+            value={draft.note}
+            onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+            className="resize-none"
+            placeholder="القناة، اسم من كلّمك، أي وعد بموعد…"
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function StoryModal({ open, draft, setDraft, onClose, onSave }) {
+  if (!draft) return null;
+  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
+  const rows = [
+    { k: "situation", label: "الموقف", hint: "أين ومتى، في سطر" },
+    { k: "task", label: "المهمة", hint: "ما كان مطلوبًا منك تحديدًا" },
+    { k: "action", label: "الإجراء", hint: "ما فعلته أنت، لا ما فعله الفريق" },
+    { k: "result", label: "النتيجة", hint: "برقم: وفّرت، قلّصت، أنجزت قبل…" },
+  ];
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={draft.id ? "تعديل القصة" : "قصة مقابلة جديدة"}
+      footer={
+        <>
+          <Btn variant="default" onClick={onSave} className="flex-1" disabled={!draft.title.trim()}>
+            <Check size={15} strokeWidth={3} /> حفظ
+          </Btn>
+          <Btn variant="ghost" onClick={onClose} style={{ borderColor: T.border }}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="los-st-t" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+            عنوان القصة
+          </label>
+          <Field
+            id="los-st-t"
+            value={draft.title}
+            onChange={set("title")}
+            placeholder="مثال: أنقذت تسليم تقرير متأخّر"
+          />
+        </div>
+        {rows.map((r) => (
+          <div key={r.k}>
+            <label htmlFor={`los-st-${r.k}`} className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
+              {r.label}
+            </label>
+            <Field
+              id={`los-st-${r.k}`}
+              as="textarea"
+              rows={2}
+              value={draft[r.k]}
+              onChange={set(r.k)}
+              className="resize-none"
+              placeholder={r.hint}
+            />
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function StoryCard({ story, onEdit, onDelete }) {
+  const [copied, fireCopied] = useBurst(1800);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        [
+          story.title,
+          "",
+          `الموقف: ${story.situation}`,
+          `المهمة: ${story.task}`,
+          `الإجراء: ${story.action}`,
+          `النتيجة: ${story.result}`,
+        ].join("\n"),
+      );
+      fireCopied();
+    } catch {
+      /* clipboard blocked — the text is on screen to select */
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-3.5"
+      style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+    >
+      <div className="flex items-start gap-2.5">
+        <Award size={15} className="mt-0.5 shrink-0" style={{ color: T.rose }} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-extrabold" style={{ color: T.fg }}>
+            {story.title}
+          </p>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+            {story.result || story.action || story.situation || "لم تُكتب بعد"}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Btn
+            variant="ghost"
+            size="icon"
+            onClick={copy}
+            aria-label="انسخ القصة"
+            style={{ borderColor: T.border, color: copied ? T.primary : T.muted }}
+          >
+            {copied ? <CheckCheck size={13} /> : <Copy size={13} />}
+          </Btn>
+          <Btn variant="ghost" size="icon" onClick={onEdit} aria-label="تعديل" style={{ borderColor: T.border }}>
+            <Pencil size={13} />
+          </Btn>
+          <Btn
+            variant="ghost"
+            size="icon"
+            onClick={onDelete}
+            aria-label="حذف"
+            style={{ borderColor: T.border, color: T.danger }}
+          >
+            <Trash2 size={13} />
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CareerTrack({ state, setState }) {
+  const apps = state.career.apps || [];
+  const stories = state.career.stories || [];
+  const [draft, setDraft] = useState(null);
+  const [story, setStory] = useState(null);
+
+  const overdue = apps.filter(needsFollowUp);
+  const sent30 = apps.filter((a) => daysBetween(a.sentAt) <= 30).length;
+  const interviews = apps.filter((a) => a.stage === "intv" || a.stage === "offer").length;
+  const offers = apps.filter((a) => a.stage === "offer").length;
+
+  const saveApp = () => {
+    const company = draft.company.trim();
+    if (!company) return;
+    setState((s) => ({
+      ...s,
+      career: {
+        ...s.career,
+        apps: draft.id
+          ? s.career.apps.map((a) => (a.id === draft.id ? { ...a, ...draft, company } : a))
+          : [appShape({ ...draft, company }), ...s.career.apps],
+      },
+    }));
+    setDraft(null);
+  };
+
+  const touch = (id) =>
+    setState((s) => ({
+      ...s,
+      career: {
+        ...s.career,
+        apps: s.career.apps.map((a) =>
+          a.id === id
+            ? { ...a, touchedAt: dayKey(), stage: a.stage === "sent" ? "touch" : a.stage }
+            : a,
+        ),
+      },
+    }));
+
+  const removeApp = (id) =>
+    setState((s) => ({
+      ...s,
+      career: { ...s.career, apps: s.career.apps.filter((a) => a.id !== id) },
+    }));
+
+  const saveStory = () => {
+    const title = story.title.trim();
+    if (!title) return;
+    setState((s) => ({
+      ...s,
+      career: {
+        ...s.career,
+        stories: story.id
+          ? s.career.stories.map((x) => (x.id === story.id ? { ...x, ...story, title } : x))
+          : [...s.career.stories, storyShape({ ...story, title })],
+      },
+    }));
+    setStory(null);
+  };
+
+  const stats = [
+    { label: "تقديم خلال ٣٠ يومًا", n: sent30, tint: T.indigo },
+    { label: "مقابلات", n: interviews, tint: T.accent },
+    { label: "عروض", n: offers, tint: T.primary },
+    { label: "تحتاج متابعة", n: overdue.length, tint: overdue.length ? T.danger : T.faint },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
+              <ClipboardList size={17} /> لوحة التقديمات
+            </h3>
+            <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
+              التقديم الذي لا يُتابَع يُنسى. ما مضى عليه{" "}
+              <span dir="ltr" className="tabular-nums">
+                {FOLLOWUP_DAYS}
+              </span>{" "}
+              أيام بلا حركة يظهر في الرادار.
+            </p>
+          </div>
+          <Btn
+            variant="default"
+            size="sm"
+            onClick={() => setDraft({ company: "", role: "", stage: "sent", note: "" })}
+          >
+            <Plus size={14} strokeWidth={3} /> تقديم جديد
+          </Btn>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {stats.map((s) => (
+            <div
+              key={s.label}
+              className="rounded-xl border px-3 py-2.5 text-center"
+              style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+            >
+              <p dir="ltr" className="text-[20px] font-extrabold tabular-nums" style={{ color: s.tint }}>
+                {s.n}
+              </p>
+              <p className="mt-0.5 text-[10px] leading-tight" style={{ color: T.faint }}>
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {overdue.length > 0 && (
+        <Card
+          className="p-5 sm:p-6"
+          style={{ borderColor: `${T.danger}59`, boxShadow: `0 18px 44px -28px ${T.danger}` }}
+        >
+          <h3 className="flex items-center gap-2 text-[15px] font-extrabold" style={{ color: T.danger }}>
+            <Radar size={16} /> رادار المتابعة
+          </h3>
+          <p className="mt-1.5 text-[11.5px]" style={{ color: T.muted }}>
+            رسالة متابعة واحدة قصيرة ترفع احتمال الردّ أكثر من تقديم جديد.
+          </p>
+          <div className="mt-4 space-y-2">
+            {overdue.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-3 rounded-xl border px-3.5 py-2.5"
+                style={{ borderColor: `${T.danger}3D`, background: `${T.danger}0D` }}
+              >
+                <AlertTriangle size={14} className="shrink-0" style={{ color: T.danger }} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-bold" style={{ color: T.fg }}>
+                    {a.company}
+                  </p>
+                  <p className="truncate text-[10px]" style={{ color: T.faint }}>
+                    بلا حركة منذ{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {daysBetween(a.touchedAt || a.sentAt)}
+                    </span>{" "}
+                    {dayWord(daysBetween(a.touchedAt || a.sentAt))}
+                  </p>
+                </div>
+                <Btn variant="success" size="sm" onClick={() => touch(a.id)}>
+                  <Mail size={12} /> تابعت اليوم
+                </Btn>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-5 sm:p-6">
+        <div className="space-y-2">
+          {apps.length === 0 ? (
+            <p
+              className="rounded-xl border border-dashed py-10 text-center text-[11.5px]"
+              style={{ borderColor: T.border, color: T.faint }}
+            >
+              لا تقديمات بعد — ابدأ بواحد مطابق اليوم، لا بعشرة منسوخة
+            </p>
+          ) : (
+            apps.map((a) => {
+              const st = stageOf(a.stage);
+              const late = needsFollowUp(a);
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-center gap-3 rounded-xl border px-3.5 py-2.5 transition-all duration-300"
+                  style={{
+                    borderColor: late ? `${T.danger}3D` : T.border,
+                    background: "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+                    style={{
+                      borderColor: `${st.tint}3D`,
+                      background: `${st.tint}14`,
+                      color: st.tint,
+                    }}
+                  >
+                    <Send size={13} />
+                  </span>
+                  <button
+                    onClick={() => setDraft({ ...a })}
+                    className="min-w-0 flex-1 text-right"
+                    aria-label={`تعديل تقديم ${a.company}`}
+                  >
+                    <p className="truncate text-[12.5px] font-extrabold" style={{ color: T.fg }}>
+                      {a.company}
+                    </p>
+                    <p className="truncate text-[10px]" style={{ color: T.faint }}>
+                      {a.role || "بلا مسمّى"} · أُرسل <Since day={a.sentAt} />
+                    </p>
+                  </button>
+                  <Badge tint={st.tint} className="shrink-0">
+                    {st.label}
+                  </Badge>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeApp(a.id)}
+                    aria-label="حذف التقديم"
+                    style={{ borderColor: T.border, color: T.danger }}
+                  >
+                    <Trash2 size={13} />
+                  </Btn>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </Card>
+
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.rose }}>
+              <Award size={17} /> بنك قصص المقابلة
+            </h3>
+            <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+              السبب الأول لرفض حديث التخرّج أنه يذكر صفاته ولا يملك قصصًا. ستّ
+              قصص بصيغة STAR تكفي كل سؤال سلوكي تقريبًا.
+            </p>
+          </div>
+          <Btn
+            variant="default"
+            size="sm"
+            onClick={() =>
+              setStory({ title: "", situation: "", task: "", action: "", result: "" })
+            }
+          >
+            <Plus size={14} strokeWidth={3} /> قصة جديدة
+          </Btn>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {stories.length === 0 ? (
+            <p
+              className="rounded-xl border border-dashed py-8 text-center text-[11.5px]"
+              style={{ borderColor: T.border, color: T.faint }}
+            >
+              لا قصص بعد — ابدأ بموقف واحد انتهى بنتيجة يمكن قياسها
+            </p>
+          ) : (
+            stories.map((s) => (
+              <StoryCard
+                key={s.id}
+                story={s}
+                onEdit={() => setStory({ ...s })}
+                onDelete={() =>
+                  setState((st) => ({
+                    ...st,
+                    career: {
+                      ...st.career,
+                      stories: st.career.stories.filter((x) => x.id !== s.id),
+                    },
+                  }))
+                }
+              />
+            ))
+          )}
+        </div>
+      </Card>
+
+      <AppModal
+        open={!!draft}
+        draft={draft}
+        setDraft={setDraft}
+        onClose={() => setDraft(null)}
+        onSave={saveApp}
+      />
+      <StoryModal
+        open={!!story}
+        draft={story}
+        setDraft={setStory}
+        onClose={() => setStory(null)}
+        onSave={saveStory}
+      />
+    </div>
+  );
+}
+
+/* ==================================================================== *
+ *  The kit — the three things a hunt stalls on when they are missing
+ *
+ *  A plan tells you what to do this week; it does not tell you where to
+ *  register, what to type, or what you will be asked. Those three gaps are
+ *  where this hunt actually stops, so they get their own screen rather
+ *  than a paragraph buried in a week's missions.
+ * ==================================================================== */
+function SetupRow({ item, on, open, onOpen, onToggle }) {
+  const Icon = item.icon;
+  return (
+    <div
+      className="rounded-xl border transition-all duration-300"
+      style={{
+        borderColor: on ? `${T.primary}4D` : T.border,
+        background: on ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div className="flex items-center gap-3 px-3.5 py-2.5">
+        <Icon size={15} className="shrink-0" style={{ color: item.tint }} />
+        <Checkbox
+          checked={on}
+          onToggle={onToggle}
+          label={item.label}
+          tint={T.primary}
+          size="sm"
+        />
+        <button
+          onClick={onOpen}
+          aria-expanded={open}
+          aria-label={open ? `أغلق شرح: ${item.label}` : `لماذا وكيف: ${item.label}`}
+          className="shrink-0 rounded-lg border p-1.5 transition-all duration-200 hover:brightness-125"
+          style={{
+            borderColor: open ? `${item.tint}4D` : T.border,
+            color: open ? item.tint : T.faint,
+            background: open ? `${item.tint}14` : "transparent",
+          }}
+        >
+          <ChevronDown
+            size={13}
+            style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .25s" }}
+          />
+        </button>
+      </div>
+
+      {open && (
+        <div
+          className="los-in space-y-2.5 border-t px-3.5 pb-3.5 pt-3"
+          style={{ borderColor: T.border }}
+        >
+          <p className="text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+            {item.why}
+          </p>
+          <ol className="space-y-1.5">
+            {item.how.map((line, i) => (
+              <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
+                <span
+                  dir="ltr"
+                  className="mt-[3px] shrink-0 text-[10px] font-extrabold tabular-nums"
+                  style={{ color: item.tint }}
+                >
+                  {i + 1}.
+                </span>
+                <span style={{ color: T.muted }}>{line}</span>
+              </li>
+            ))}
+          </ol>
+          <p
+            dir="ltr"
+            className="flex items-center justify-end gap-1.5 text-[11px] font-bold"
+            style={{ color: item.tint }}
+          >
+            {item.link}
+            <ExternalLink size={11} />
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplateCard({ tpl, open, onOpen }) {
+  const Icon = tpl.icon;
+  return (
+    <Card className="overflow-hidden p-0">
+      <button
+        onClick={onOpen}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-4 py-3 text-right transition-colors duration-200"
+      >
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: `${tpl.tint}45`,
+            background: `${tpl.tint}18`,
+            color: tpl.tint,
+          }}
+        >
+          <Icon size={15} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-extrabold" style={{ color: T.fg }}>
+            {tpl.label}
+          </span>
+          <span className="block truncate text-[10.5px]" style={{ color: T.faint }}>
+            {tpl.when}
+          </span>
+        </span>
+        <ChevronDown
+          size={14}
+          className="shrink-0"
+          style={{
+            color: T.faint,
+            transform: open ? "rotate(180deg)" : "none",
+            transition: "transform .25s",
+          }}
+        />
+      </button>
+      {open && (
+        <div className="los-in px-4 pb-4">
+          <CopyBox text={tpl.body} tint={tpl.tint} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function CareerKit({ state, setState }) {
+  const career = state.career;
+  const setup = career.setup || {};
+  const [openSetup, setOpenSetup] = useState(null);
+  const [openTpl, setOpenTpl] = useState(null);
+
+  const done = setupDone(career);
+  const pct = Math.round((done / SETUP_TOTAL) * 100);
+
+  const toggleSetup = (id) =>
+    setState((s) => {
+      const next = { ...(s.career.setup || {}) };
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return { ...s, career: { ...s.career, setup: next } };
+    });
+
+  return (
+    <div className="space-y-5">
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3
+              className="flex items-center gap-2 text-[17px] font-extrabold"
+              style={{ color: T.sky }}
+            >
+              <Building2 size={17} /> الأرضية: المنصّات والبرامج
+            </h3>
+            <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+              ثماني خطوات تُنجَز مرّة واحدة، ثم تعمل لك شهورًا وأنت نائم. أهمّها
+              تمهير: أقصر طريق معروف لأول عقد لخريج إدارة في السوق السعودي.
+              أنجِزها قبل أن تبدأ أسابيع الخطة — لا بعدها.
+            </p>
+          </div>
+          <Badge tint={done === SETUP_TOTAL ? T.primary : T.sky}>
+            <span dir="ltr" className="tabular-nums">
+              {done}/{SETUP_TOTAL}
+            </span>
+          </Badge>
+        </div>
+
+        <div
+          className="mt-4 h-1.5 w-full overflow-hidden rounded-full"
+          style={{ background: "rgba(255,255,255,0.07)" }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${pct}%`,
+              background: `linear-gradient(90deg, ${T.sky}, ${done === SETUP_TOTAL ? T.primary : T.cta})`,
+            }}
+          />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {SAUDI_SETUP.map((item) => (
+            <SetupRow
+              key={item.id}
+              item={item}
+              on={!!setup[item.id]}
+              open={openSetup === item.id}
+              onOpen={() => setOpenSetup((x) => (x === item.id ? null : item.id))}
+              onToggle={() => toggleSetup(item.id)}
+            />
+          ))}
+        </div>
+
+        <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+          أسماء المنصّات ثابتة، وروابطها قد تتغيّر مع إعادة ترتيب البوّابات —
+          ابحث بالاسم إن لم يفتح الرابط مباشرة.
+        </p>
+      </Card>
+
+      <Card className="p-5 sm:p-6">
+        <h3
+          className="flex items-center gap-2 text-[17px] font-extrabold"
+          style={{ color: T.ctaLift }}
+        >
+          <MessageSquare size={17} /> بنك الرسائل
+        </h3>
+        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+          كل توقّف في البحث عن عمل هو لحظة لا تعرف فيها ماذا تكتب. تسع رسائل
+          جاهزة، تملأ ما بين الأقواس وترسل. غيّر جملة واحدة على الأقل في كل
+          رسالة — القالب الذي يصل كما هو يُقرأ قالبًا.
+        </p>
+        <div className="mt-4 space-y-2.5">
+          {TEMPLATES.map((t) => (
+            <TemplateCard
+              key={t.id}
+              tpl={t}
+              open={openTpl === t.id}
+              onOpen={() => setOpenTpl((x) => (x === t.id ? null : t.id))}
+            />
+          ))}
+        </div>
+      </Card>
+
+      <Card className="p-5 sm:p-6">
+        <h3
+          className="flex items-center gap-2 text-[17px] font-extrabold"
+          style={{ color: T.rose }}
+        >
+          <ScanFace size={17} /> أسئلة المقابلة وفخاخها
+        </h3>
+        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+          ثمانية أسئلة تحسم مقابلة حديث التخرّج. اكتب قصص{" "}
+          <span dir="ltr">STAR</span> في «التقديمات» وأنت تنظر إلى هذه
+          القائمة، لا في الفراغ.
+        </p>
+        <div className="mt-4 space-y-2">
+          {INTERVIEW_QS.map((x, i) => (
+            <div
+              key={x.q}
+              className="rounded-xl border px-3.5 py-3"
+              style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+            >
+              <p className="flex items-start gap-2 text-[12.5px] font-extrabold" style={{ color: T.fg }}>
+                <span dir="ltr" className="mt-[2px] shrink-0 text-[10px] tabular-nums" style={{ color: T.rose }}>
+                  {i + 1}.
+                </span>
+                {x.q}
+              </p>
+              <p className="mt-1.5 pr-5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+                <span className="font-bold" style={{ color: T.danger }}>
+                  الفخّ:{" "}
+                </span>
+                {x.trap}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function CareerModule({ state, setState }) {
+  const [view, setView] = useState("today");
+  const career = state.career;
+
+  const start = () =>
+    setState((s) => ({ ...s, career: { ...s.career, startedAt: dayKey() } }));
+
+  return (
+    <div className="space-y-7">
+      <ReadinessCard career={career} onStart={start} />
+
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+        {CAREER_VIEWS.map((v) => {
+          const on = v.id === view;
+          const Icon = v.icon;
+          return (
+            <button
+              key={v.id}
+              onClick={() => setView(v.id)}
+              aria-pressed={on}
+              className="flex flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 transition-all duration-200 sm:px-2"
+              style={{
+                borderColor: on ? `${T.cta}80` : T.border,
+                backgroundImage: on
+                  ? `linear-gradient(160deg, ${T.cta}2E, ${T.cta}0A)`
+                  : "none",
+                backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
+                color: on ? T.ctaLift : T.muted,
+                boxShadow: on ? `0 10px 26px -16px ${T.cta}` : "none",
+              }}
+            >
+              <Icon size={16} strokeWidth={on ? 2.6 : 2} />
+              <span className="text-[10px] font-extrabold sm:text-[11.5px]">{v.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div key={view} className="los-in">
+        {view === "today" && (
+          <CareerToday state={state} setState={setState} onGo={setView} />
+        )}
+        {view === "kit" && <CareerKit state={state} setState={setState} />}
+        {view === "plan" && <CareerPlan state={state} setState={setState} />}
+        {view === "war" && <CareerWar state={state} setState={setState} />}
+        {view === "track" && <CareerTrack state={state} setState={setState} />}
+      </div>
+    </div>
+  );
+}
+
 const AR_MONTHS = [
   "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
   "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
 ];
 const WEEK_LABELS = ["س", "ح", "ن", "ث", "ر", "خ", "ج"];
 
+/* "2026-10-01" inside Arabic text renders as "01-10-2026" — the hyphens are
+   neutral, so bidi reorders the three numbers right to left. Spelling the
+   month out removes the ambiguity instead of fighting it with isolates. */
+const arDate = (ds) => {
+  const [y, m, d] = String(ds || "").split("-").map(Number);
+  if (!y || !m || !d) return ds || "";
+  return `${d} ${AR_MONTHS[m - 1]} ${y}`;
+};
+
 const levelOf = (pct) =>
   pct >= 90 ? 4 : pct >= 70 ? 3 : pct >= 45 ? 2 : pct > 0 ? 1 : 0;
 const LEVEL_BG = [
   "rgba(255,255,255,0.04)",
-  "rgba(16,185,129,0.28)",
+  "rgba(16,185,129,0.42)",
   "rgba(16,185,129,0.5)",
   "rgba(16,185,129,0.74)",
   "#10B981",
 ];
+
+/* What you were actually keeping on a given day, block by block. Labels are
+   resolved from the live routine rather than stored per day — a renamed habit
+   should read under its current name, and twenty Arabic labels a day would
+   cost most of a megabyte a year. A habit since deleted is still shown: it
+   was part of that day whether or not it survived to this one. */
+function DayRollCall({ row, state }) {
+  const detail = useMemo(() => {
+    if (!row || !Array.isArray(row.done)) return null;
+    const live = new Map((state.habits || []).map((h) => [h.id, h]));
+    const done = new Set(row.done);
+    /* The roster recorded that day. Older rows predate it, so they fall back
+       to today's routine — flagged, because that comparison is approximate. */
+    const exact = Array.isArray(row.all);
+    const ids = exact ? row.all : (state.habits || []).map((h) => h.id);
+    const items = ids.map((id) => ({
+      id,
+      label: live.get(id)?.label || "عادة لم تعد في روتينك",
+      group: live.get(id)?.group || null,
+      done: done.has(id),
+    }));
+    return {
+      items,
+      exact,
+      kept: items.filter((i) => i.done).length,
+      total: items.length || row.total || 0,
+    };
+  }, [row, state.habits]);
+
+  const pages = useMemo(
+    () =>
+      (state.reading || [])
+        .filter((r) => r.date === row?.date)
+        .reduce((n, r) => n + (r.pages || 0), 0),
+    [state.reading, row],
+  );
+
+  const careerDay = useMemo(
+    () => (state.career?.log || []).find((e) => e.date === row?.date) || null,
+    [state.career, row],
+  );
+
+  if (!row) return null;
+
+  const extras = [
+    pages > 0 && { label: "صفحة قراءة", n: pages, tint: T.violet },
+    careerDay?.skills?.length && {
+      label: "حصّة مهارة",
+      n: careerDay.skills.length,
+      tint: T.sky,
+    },
+    careerDay?.am?.length && {
+      label: "خطوة صباحية",
+      n: careerDay.am.length,
+      tint: T.accent,
+    },
+  ].filter(Boolean);
+
+  return (
+    <div className="space-y-3">
+      {!detail ? (
+        <p
+          className="rounded-xl border border-dashed px-3.5 py-4 text-center text-[11.5px] leading-relaxed"
+          style={{ borderColor: T.border, color: T.faint }}
+        >
+          هذا اليوم سُجّلت نسبته فقط — تفاصيل الروتين تُحفظ من اليوم فصاعدًا.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs" style={{ color: T.muted }}>
+              الروتين ذلك اليوم
+            </p>
+            <span
+              dir="ltr"
+              className="text-[12px] font-extrabold tabular-nums"
+              style={{ color: detail.kept ? T.primary : T.faint }}
+            >
+              {detail.kept}/{detail.total}
+            </span>
+          </div>
+
+          {/* Where the score came from. "٢٠٪" says nothing about whether the
+              morning held and the evening collapsed — and that is the whole
+              question when you go back to look at a day. */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {GROUPS.map((g) => {
+              const items = detail.items.filter((h) => h.group === g.id);
+              if (!items.length) return null;
+              const kept = items.filter((h) => h.done).length;
+              const pct = Math.round((kept / items.length) * 100);
+              const Icon = g.icon;
+              return (
+                <div
+                  key={g.id}
+                  className="rounded-lg border px-2 py-1.5 text-center"
+                  style={{
+                    borderColor: pct ? `${g.tint}59` : T.border,
+                    background: pct ? `${g.tint}14` : "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <Icon size={11} className="mx-auto" style={{ color: g.tint }} />
+                  <p
+                    dir="ltr"
+                    className="mt-0.5 text-[13px] font-extrabold tabular-nums"
+                    style={{ color: pct ? g.tint : T.faint }}
+                  >
+                    {pct}%
+                  </p>
+                  <p className="truncate text-[9px]" style={{ color: T.faint }}>
+                    {g.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {[...GROUPS, { id: null, label: "خارج الروتين الحالي", icon: Hourglass, tint: T.faint }].map(
+            (g) => {
+              const items = detail.items.filter((h) => h.group === g.id);
+              if (!items.length) return null;
+              const Icon = g.icon;
+              const kept = items.filter((h) => h.done).length;
+              return (
+                <div
+                  key={g.id || "gone"}
+                  className="rounded-xl border px-3 py-2.5"
+                  style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+                >
+                  <p
+                    className="mb-2 flex items-center gap-1.5 text-[10.5px] font-bold"
+                    style={{ color: g.tint }}
+                  >
+                    <Icon size={11} /> {g.label}
+                    <span dir="ltr" className="mr-auto tabular-nums opacity-70">
+                      {kept}/{items.length} · {Math.round((kept / items.length) * 100)}%
+                    </span>
+                  </p>
+                  <ul className="space-y-1">
+                    {items.map((h) => (
+                      <li key={h.id} className="flex items-start gap-2 text-[12px]">
+                        {h.done ? (
+                          <Check
+                            size={12}
+                            strokeWidth={3.5}
+                            className="mt-0.5 shrink-0"
+                            style={{ color: T.primary }}
+                          />
+                        ) : (
+                          <X
+                            size={12}
+                            strokeWidth={3}
+                            className="mt-0.5 shrink-0"
+                            style={{ color: T.faint }}
+                          />
+                        )}
+                        <span style={{ color: h.done ? T.fg : T.faint }}>{h.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            },
+          )}
+
+          {!detail.exact && (
+            <p className="text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+              قورن هذا اليوم بروتينك الحالي — قائمة ذلك اليوم نفسها لم تكن تُحفظ بعد.
+            </p>
+          )}
+        </>
+      )}
+
+      {extras.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {extras.map((e) => (
+            <Badge key={e.label} tint={e.tint}>
+              <span dir="ltr" className="tabular-nums">
+                {e.n}
+              </span>{" "}
+              {e.label}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CONSISTENCY_WINDOWS = [
+  { id: 30, label: "٣٠ يومًا" },
+  { id: 90, label: "٩٠ يومًا" },
+  { id: 0, label: "كل السجل" },
+];
+
+/* Which habits actually hold, across time rather than on one day. A month of
+   percentages tells you how you did; this tells you *what* you did, and the
+   bottom of the list is where the next percentage point is hiding.
+   Only days carrying a recorded roster count — a day that stored a score and
+   nothing else cannot say which habit earned it, and guessing would be worse
+   than an honest gap. */
+function ConsistencyCard({ state }) {
+  const [win, setWin] = useState(30);
+
+  const data = useMemo(() => {
+    const rows = (state.history || []).filter(
+      (h) => Array.isArray(h.done) && Array.isArray(h.all) && h.all.length,
+    );
+    const scoped = win ? rows.filter((h) => daysBetween(h.date) < win) : rows;
+    if (!scoped.length) return null;
+
+    const live = new Map((state.habits || []).map((h) => [h.id, h]));
+    const tally = new Map();
+    const blocks = new Map(GROUPS.map((g) => [g.id, { kept: 0, total: 0 }]));
+
+    for (const r of scoped) {
+      const done = new Set(r.done);
+      for (const id of r.all) {
+        if (!tally.has(id)) tally.set(id, { kept: 0, total: 0 });
+        const t = tally.get(id);
+        t.total += 1;
+        if (done.has(id)) t.kept += 1;
+        const g = live.get(id)?.group;
+        if (g && blocks.has(g)) {
+          const b = blocks.get(g);
+          b.total += 1;
+          if (done.has(id)) b.kept += 1;
+        }
+      }
+    }
+
+    const habits = [...tally.entries()]
+      .map(([id, t]) => ({
+        id,
+        label: live.get(id)?.label || "عادة لم تعد في روتينك",
+        group: live.get(id)?.group || null,
+        pct: Math.round((t.kept / t.total) * 100),
+        ...t,
+      }))
+      .sort((a, b) => b.pct - a.pct || b.kept - a.kept);
+
+    return { days: scoped.length, habits, blocks };
+  }, [state.history, state.habits, win]);
+
+  const tintFor = (pct) =>
+    pct >= 80 ? T.primary : pct >= 50 ? T.accent : pct > 0 ? T.ember : T.danger;
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
+            <ListChecks size={17} /> أكثر ما التزمت به
+          </h3>
+          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            ليست النسبة، بل ما وراءها: أي عادة تصمد، وأيّها تسقط أولًا.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          {CONSISTENCY_WINDOWS.map((w) => {
+            const on = w.id === win;
+            return (
+              <button
+                key={w.id}
+                onClick={() => setWin(w.id)}
+                aria-pressed={on}
+                className="rounded-lg border px-2.5 py-1 text-[10.5px] font-bold transition-all duration-200"
+                style={{
+                  borderColor: on ? `${T.cta}80` : T.border,
+                  background: on ? `${T.cta}1F` : "transparent",
+                  color: on ? T.ctaLift : T.faint,
+                }}
+              >
+                {w.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {!data ? (
+        <p
+          className="mt-5 rounded-xl border border-dashed py-10 text-center text-[11.5px] leading-relaxed"
+          style={{ borderColor: T.border, color: T.faint }}
+        >
+          لا توجد أيام بسجلّ مفصّل بعد — يبدأ العدّ من اليوم.
+          <br />
+          كل يوم تؤشّر فيه عادةً يضيف سطرًا هنا.
+        </p>
+      ) : (
+        <>
+          <p className="mt-4 text-[11px]" style={{ color: T.faint }}>
+            محسوب على{" "}
+            <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.muted }}>
+              {data.days}
+            </span>{" "}
+            {dayWord(data.days)} بسجلّ مفصّل
+          </p>
+
+          {/* which part of the day holds, before which habit holds */}
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {GROUPS.map((g) => {
+              const b = data.blocks.get(g.id);
+              if (!b || !b.total) return null;
+              const pct = Math.round((b.kept / b.total) * 100);
+              const Icon = g.icon;
+              return (
+                <div
+                  key={g.id}
+                  className="rounded-xl border px-2 py-2.5 text-center"
+                  style={{ borderColor: `${g.tint}3D`, background: `${g.tint}10` }}
+                >
+                  <Icon size={13} className="mx-auto" style={{ color: g.tint }} />
+                  <p
+                    dir="ltr"
+                    className="mt-1 text-[15px] font-extrabold tabular-nums"
+                    style={{ color: g.tint }}
+                  >
+                    {pct}%
+                  </p>
+                  <p className="truncate text-[9.5px]" style={{ color: T.faint }}>
+                    {g.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 space-y-2">
+            {data.habits.map((h, i) => {
+              const tint = tintFor(h.pct);
+              const g = GROUPS.find((x) => x.id === h.group);
+              return (
+                <div
+                  key={h.id}
+                  className="rounded-xl border px-3.5 py-2.5"
+                  style={{
+                    borderColor: i === 0 ? `${T.primary}59` : T.border,
+                    background:
+                      i === 0 ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="min-w-0 flex-1 truncate text-[12.5px] font-bold" style={{ color: T.fg }}>
+                      {i === 0 && <span style={{ color: T.accent }}>★ </span>}
+                      {h.label}
+                    </p>
+                    <span
+                      dir="ltr"
+                      className="shrink-0 text-[10.5px] tabular-nums"
+                      style={{ color: T.faint }}
+                    >
+                      {h.kept}/{h.total}
+                    </span>
+                    <span
+                      dir="ltr"
+                      className="w-10 shrink-0 text-left text-[13px] font-extrabold tabular-nums"
+                      style={{ color: tint }}
+                    >
+                      {h.pct}%
+                    </span>
+                  </div>
+                  <div
+                    className="mt-2 h-1.5 overflow-hidden rounded-full"
+                    style={{ background: "rgba(255,255,255,0.07)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${h.pct}%`,
+                        background: `linear-gradient(90deg, ${tint}, ${tint}99)`,
+                        boxShadow: h.pct ? `0 0 10px ${tint}66` : "none",
+                      }}
+                    />
+                  </div>
+                  {g && (
+                    <p className="mt-1 text-[9.5px]" style={{ color: g.tint }}>
+                      {g.label}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
 
 function AnalyticsModule({ state, discipline, streak }) {
   const today = new Date();
@@ -5602,6 +11684,11 @@ function AnalyticsModule({ state, discipline, streak }) {
           .filter((h) => h.distraction || h.fix || h.mirror)
           .map((h) => [h.date, h]),
       ),
+    [state.history],
+  );
+
+  const rowsByDate = useMemo(
+    () => new Map((state.history || []).map((h) => [h.date, h])),
     [state.history],
   );
 
@@ -5708,12 +11795,15 @@ function AnalyticsModule({ state, discipline, streak }) {
           {grid.map((cell, i) => {
             if (cell === null) return <span key={`e${i}`} />;
             const note = notesByDate.get(cell.ds);
+            /* Every recorded day opens, not just the ones carrying a written
+               reflection — the roll call is the thing worth going back for. */
+            const row = cell.pct === undefined ? null : rowsByDate.get(cell.ds);
             return (
               <button
                 key={cell.ds}
                 type="button"
-                onClick={() => note && setOpenNote(note)}
-                disabled={!note}
+                onClick={() => row && setOpenNote(row)}
+                disabled={!row}
                 title={
                   cell.pct === undefined
                     ? `${cell.ds} — لا سجلّ`
@@ -5722,21 +11812,52 @@ function AnalyticsModule({ state, discipline, streak }) {
                 className="relative flex aspect-square items-center justify-center rounded-lg border text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default"
                 style={{
                   background: LEVEL_BG[levelOf(cell.pct ?? 0)],
+                  /* A tracked day and an untracked one must never look the
+                     same. A 20% day is a day you showed up for, and at 0.28
+                     alpha against a noon sky it read as blank — which is
+                     what "nothing is being saved" looked like. */
                   borderColor:
-                    cell.ds === dayKey() ? T.accent : "rgba(255,255,255,0.06)",
+                    cell.ds === dayKey()
+                      ? T.accent
+                      : cell.pct !== undefined
+                      ? `${T.primary}66`
+                      : "rgba(255,255,255,0.06)",
                   color:
                     (cell.pct ?? 0) >= 45
                       ? "#04140E"
-                      : "rgba(255,255,255,0.35)",
+                      : cell.pct !== undefined
+                      ? "rgba(253,248,246,0.8)"
+                      : "rgba(255,255,255,0.3)",
                 }}
               >
                 {cell.d}
-                {note && (
+                {(note || row?.holds > 0 || row?.falls > 0) && (
                   <span
                     aria-hidden="true"
-                    className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
-                    style={{ background: T.cta, boxShadow: `0 0 5px ${T.cta}` }}
-                  />
+                    className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-0.5"
+                  >
+                    {note && (
+                      <i
+                        className="block h-1 w-1 rounded-full"
+                        style={{ background: T.cta, boxShadow: `0 0 5px ${T.cta}` }}
+                      />
+                    )}
+                    {row?.holds > 0 && (
+                      <i
+                        className="block h-1 w-1 rounded-full"
+                        style={{
+                          background: T.primary,
+                          boxShadow: `0 0 5px ${T.primary}`,
+                        }}
+                      />
+                    )}
+                    {row?.falls > 0 && (
+                      <i
+                        className="block h-1 w-1 rounded-full"
+                        style={{ background: T.rose, boxShadow: `0 0 5px ${T.rose}` }}
+                      />
+                    )}
+                  </span>
                 )}
               </button>
             );
@@ -5746,7 +11867,7 @@ function AnalyticsModule({ state, discipline, streak }) {
         <Modal
           open={!!openNote}
           onClose={() => setOpenNote(null)}
-          title={`وقفة ${openNote?.date || ""}`}
+          title={openNote ? arDate(openNote.date) : ""}
         >
           <div className="space-y-4">
             <Badge tint={(openNote?.pct ?? 0) >= STREAK_TARGET ? T.primary : T.cta}>
@@ -5755,6 +11876,33 @@ function AnalyticsModule({ state, discipline, streak }) {
               </span>
               {" ذلك اليوم"}
             </Badge>
+
+            {(openNote?.holds > 0 || openNote?.falls > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {openNote.holds > 0 && (
+                  <Badge tint={T.primary}>
+                    <ShieldCheck size={10} />
+                    {"صمدت "}
+                    <span dir="ltr" className="tabular-nums">
+                      {openNote.holds}
+                    </span>
+                    {` ${timesWord(openNote.holds)}`}
+                  </Badge>
+                )}
+                {openNote.falls > 0 && (
+                  <Badge tint={T.danger}>
+                    <HeartCrack size={10} />
+                    <span dir="ltr" className="tabular-nums">
+                      {openNote.falls}
+                    </span>
+                    {` ${fallWord(openNote.falls)}`}
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <DayRollCall row={openNote} state={state} />
+
             {openNote?.distraction && (
               <div>
                 <p className="mb-1.5 text-xs text-white/45">ما الذي شتّتني</p>
@@ -5798,7 +11946,7 @@ function AnalyticsModule({ state, discipline, streak }) {
         </Modal>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-[10px] text-white/30">
-          <span>الإطار الذهبي = اليوم · النقطة المرجانية = وقفة مكتوبة</span>
+          <span>اضغط أي يوم مسجَّل لمراجعة روتينه · الإطار الذهبي = اليوم · النقطة المرجانية = وقفة مكتوبة</span>
           <span className="flex items-center gap-1.5">
             أقل
             {LEVEL_BG.map((c, i) => (
@@ -5812,6 +11960,8 @@ function AnalyticsModule({ state, discipline, streak }) {
           </span>
         </div>
       </Card>
+
+      <ConsistencyCard state={state} />
 
       {/* year overview */}
       <Card className="p-6 sm:p-7">
@@ -5849,10 +11999,10 @@ function AnalyticsModule({ state, discipline, streak }) {
 /* Module scope, not a closure inside LifeOS — defining it inline gave the
    nav a new component type every render, so React tore down and rebuilt
    every button, dropping focus and restarting transitions mid-flight. */
-function NavList({ tab, onGo, showLabels }) {
+function NavList({ items, tab, onGo, showLabels }) {
   return (
     <nav className="flex flex-col gap-1.5">
-      {NAV.map((n) => {
+      {items.map((n) => {
         const on = n.id === tab;
         const Icon = n.icon;
         return (
@@ -5884,15 +12034,125 @@ function NavList({ tab, onGo, showLabels }) {
   );
 }
 
+/* Reordering the nav itself. Drag for the mouse and ↑/↓ for a finger, the
+   same pairing the habit list uses and for the same reason: HTML5 drag never
+   fires on touch, so the arrows are the only path that works on a phone.
+   The cut line is not decoration — the order also decides which four tabs
+   reach the mobile bar, and that consequence is invisible from a desktop. */
+function NavOrderEditor({ order, onChange, onReset }) {
+  const [dragging, setDragging] = useState(null);
+  const [over, setOver] = useState(null);
+  const items = orderedNav(order);
+  const ids = items.map((n) => n.id);
+  const pristine = ids.join() === NAV_IDS.join();
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {items.map((n, i) => {
+        const Icon = n.icon;
+        const isOver = over === n.id && dragging && dragging !== n.id;
+        return (
+          <React.Fragment key={n.id}>
+            <div
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", n.id);
+                e.dataTransfer.effectAllowed = "move";
+                setDragging(n.id);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                setOver(null);
+              }}
+              onDragOver={(e) => {
+                if (!dragging || dragging === n.id) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setOver(n.id);
+              }}
+              onDragLeave={() => setOver((o) => (o === n.id ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setOver(null);
+                const id = e.dataTransfer.getData("text/plain");
+                if (id) onChange(moveBefore(ids, id, n.id));
+              }}
+              className="flex items-center gap-2 rounded-xl border px-2 py-2 transition-all duration-200"
+              style={{
+                borderColor: isOver ? T.cta : T.border,
+                background: isOver ? `${T.cta}1F` : "rgba(255,255,255,0.04)",
+                opacity: dragging === n.id ? 0.4 : 1,
+                cursor: "grab",
+              }}
+            >
+              <span aria-hidden="true" className="shrink-0 text-white/25">
+                <GripVertical size={13} />
+              </span>
+              <Icon size={15} strokeWidth={1.9} className="shrink-0" style={{ color: T.muted }} />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-white/80">
+                {n.label}
+              </span>
+              <button
+                onClick={() => onChange(nudgeInList(ids, n.id, "up"))}
+                disabled={i === 0}
+                aria-label={`تحريك ${n.label} لأعلى`}
+                className="shrink-0 rounded p-1 text-white/30 transition-all hover:text-white/80 disabled:pointer-events-none disabled:opacity-20"
+              >
+                <ChevronUp size={13} />
+              </button>
+              <button
+                onClick={() => onChange(nudgeInList(ids, n.id, "down"))}
+                disabled={i === items.length - 1}
+                aria-label={`تحريك ${n.label} لأسفل`}
+                className="shrink-0 rounded p-1 text-white/30 transition-all hover:text-white/80 disabled:pointer-events-none disabled:opacity-20"
+              >
+                <ChevronDown size={13} />
+              </button>
+            </div>
+
+            {i === TAB_BAR - 1 && items.length > TAB_BAR && (
+              <div className="flex items-center gap-2 py-0.5">
+                <span
+                  className="h-px flex-1"
+                  style={{ background: `${T.accent}4D` }}
+                />
+                <span
+                  className="shrink-0 text-[9.5px] font-bold"
+                  style={{ color: T.accent }}
+                >
+                  آخر ما يظهر على شريط الجوال
+                </span>
+                <span
+                  className="h-px flex-1"
+                  style={{ background: `${T.accent}4D` }}
+                />
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+
+      <button
+        onClick={onReset}
+        disabled={pristine}
+        className="mt-1 self-start rounded-lg px-2 py-1 text-[10.5px] transition-colors hover:text-white/70 disabled:pointer-events-none disabled:opacity-30"
+        style={{ color: T.faint }}
+      >
+        استعادة الترتيب الأصلي
+      </button>
+    </div>
+  );
+}
+
 /* Mobile navigation. Floats clear of the bottom edge so it reads as a
    separate pane of glass rather than a docked strip, and clears the home
    indicator via safe-area inset. */
 const TAB_BAR = 4; // four fit a phone legibly; the rest live behind "المزيد"
 
-function BottomTabs({ tab, onGo, onSettings }) {
+function BottomTabs({ items, tab, onGo, onSettings }) {
   const [more, setMore] = useState(false);
-  const front = NAV.slice(0, TAB_BAR);
-  const rest = NAV.slice(TAB_BAR);
+  const front = items.slice(0, TAB_BAR);
+  const rest = items.slice(TAB_BAR);
   const restActive = rest.some((n) => n.id === tab);
 
   const glass = {
@@ -6030,6 +12290,7 @@ function BottomTabs({ tab, onGo, onSettings }) {
 function SettingsModal({ open, onClose, state, setState }) {
   const fileRef = useRef(null);
   const [note, setNote] = useState(null); // {ok, text}
+  const [ordering, setOrdering] = useState(false);
 
   const exportData = () => {
     try {
@@ -6093,6 +12354,38 @@ function SettingsModal({ open, onClose, state, setState }) {
               </p>
             </div>
           ))}
+        </div>
+
+        {/* The sidebar's own reorder toggle is desktop-only, so this is the
+            single path a phone has to its tab order. */}
+        <div
+          className="rounded-2xl border p-3"
+          style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+        >
+          <button
+            onClick={() => setOrdering((v) => !v)}
+            aria-expanded={ordering}
+            className="flex w-full items-center gap-2 text-right"
+          >
+            {ordering ? (
+              <ChevronUp size={14} style={{ color: T.accent }} />
+            ) : (
+              <ChevronDown size={14} style={{ color: T.accent }} />
+            )}
+            <span className="flex-1 text-[12.5px] font-bold" style={{ color: T.accent }}>
+              ترتيب التبويبات
+            </span>
+            <GripVertical size={13} style={{ color: T.faint }} />
+          </button>
+          {ordering && (
+            <div className="los-in mt-3">
+              <NavOrderEditor
+                order={state.navOrder}
+                onChange={(ids) => setState((s) => ({ ...s, navOrder: ids }))}
+                onReset={() => setState((s) => ({ ...s, navOrder: NAV_IDS }))}
+              />
+            </div>
+          )}
         </div>
 
         <div className="space-y-2.5">
@@ -6230,19 +12523,39 @@ export default function LifeOS() {
   const [tab, setTab] = useState(() => readUI().tab || "routine");
   const [collapsed, setCollapsed] = useState(() => !!readUI().collapsed);
   const [streakToast, setStreakToast] = useState(null); // streak count when banked
+  const [saveFailed, setSaveFailed] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [editNav, setEditNav] = useState(false);
   const [reflect, setReflect] = useState(false);
-  const [reflectDone, setReflectDone] = useState(false);
+  const [reflectDone, setReflectDone] = useState(null); // the day already asked about
   const [mirror, setMirror] = useState(false);
 
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      setSaveFailed(false);
     } catch {
-      /* storage blocked — the session still works */
+      /* Swallowing this silently is how a week of work disappears without
+         anyone noticing. The app keeps running — but it has to say so. */
+      setSaveFailed(true);
     }
     syncOut(state);
   }, [state]);
+
+  /* The app is left open for days, so the day boundary cannot live only in
+     the load path. Polled once a minute and re-checked whenever the tab is
+     looked at again, because a background tab throttles timers hard. */
+  useEffect(() => {
+    const check = () => setState(rollDay);
+    const id = setInterval(check, 60000);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -6257,6 +12570,31 @@ export default function LifeOS() {
     ? Math.round((habitsDone / state.habits.length) * 100)
     : 0;
 
+  /* Which habits, not just how many. Reviewing a month is asking "what was I
+     actually keeping", and a bare percentage cannot answer that. Ids rather
+     than labels — twenty Arabic labels a day is most of a megabyte a year,
+     and the label is resolved from the live list when the day is opened. */
+  const doneIds = useMemo(
+    () => state.habits.filter((h) => h.done).map((h) => h.id),
+    [state.habits],
+  );
+  /* Keyed on the roll call itself, never on the score alone: unticking one
+     habit and ticking another leaves the percentage identical, and a
+     dependency on the number would quietly freeze the list behind it. */
+  const rollCall = doneIds.join(",");
+  /* The roster as it stood that day, not just the ticks. Without it a habit
+     added in November would show up as "missed" across every day in October,
+     which is a worse lie than showing nothing. */
+  const roster = useMemo(() => state.habits.map((h) => h.id), [state.habits]);
+
+  /* The breaker stops being an island here: the day's holds and falls ride
+     the same archive row as the discipline score, so the calendar and the
+     day's roll call can show them. */
+  const breakerDay = useMemo(
+    () => breakerToday(state.badHabits || []),
+    [state.badHabits],
+  );
+
   /* archive today's score continuously so analytics never needs a save button.
      Today's entry is merged, not replaced — it also carries the evening
      reflection, and rebuilding it from scratch would wipe what was written. */
@@ -6265,12 +12603,21 @@ export default function LifeOS() {
       const today = dayKey();
       const prev = (s.history || []).find((h) => h.date === today);
       const rest = (s.history || []).filter((h) => h.date !== today);
-      const next = [...rest, { ...prev, date: today, pct: discipline }].slice(
-        -HISTORY_CAP,
-      );
+      const next = [
+        ...rest,
+        {
+          ...prev,
+          date: today,
+          pct: discipline,
+          done: doneIds,
+          all: roster,
+          holds: breakerDay.holds,
+          falls: breakerDay.falls,
+        },
+      ].slice(-HISTORY_CAP);
       return { ...s, history: next };
     });
-  }, [discipline]);
+  }, [rollCall, discipline, doneIds, roster, breakerDay.holds, breakerDay.falls]);
 
   useEffect(() => {
     if (discipline >= STREAK_TARGET && !state.dayBanked) {
@@ -6306,11 +12653,14 @@ export default function LifeOS() {
   const todayEntry = (state.history || []).find((h) => h.date === dayKey());
   const alreadyReflected = !!(todayEntry?.distraction || todayEntry?.fix);
   useEffect(() => {
-    if (alreadyReflected || reflectDone) return;
+    /* Keyed to the day, not to the session: the window stays open for days
+       at a time, and a plain "already asked" flag would mean the evening
+       prompt fired once and never again. */
+    if (alreadyReflected || reflectDone === dayKey()) return;
     const check = () => {
       if (new Date().getHours() >= 20 && discipline < STREAK_TARGET) {
         setReflect(true);
-        setReflectDone(true);
+        setReflectDone(dayKey());
       }
     };
     check();
@@ -6373,6 +12723,12 @@ export default function LifeOS() {
   }, []);
 
   const go = (id) => setTab(id);
+
+  const navItems = useMemo(() => orderedNav(state.navOrder), [state.navOrder]);
+  const setNavOrder = useCallback(
+    (ids) => setState((s) => ({ ...s, navOrder: ids })),
+    [],
+  );
 
   const active = NAV.find((n) => n.id === tab) || NAV[0];
 
@@ -6532,7 +12888,38 @@ export default function LifeOS() {
             )}
           </div>
 
-          <NavList tab={tab} onGo={go} showLabels={!collapsed} />
+          {/* Collapsed to icons there is no room to drag or label a row, so
+              the toggle only exists while the labels do. */}
+          {!collapsed && (
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <p className="text-[10px] font-bold" style={{ color: T.faint }}>
+                {editNav ? "اسحب أو استخدم الأسهم" : "التنقّل"}
+              </p>
+              <button
+                onClick={() => setEditNav((v) => !v)}
+                aria-pressed={editNav}
+                className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors"
+                style={{
+                  borderColor: editNav ? `${T.primary}59` : T.border,
+                  color: editNav ? T.primary : T.faint,
+                  background: editNav ? `${T.primary}14` : "transparent",
+                }}
+              >
+                {editNav ? <Check size={11} strokeWidth={3} /> : <GripVertical size={11} />}
+                {editNav ? "تم" : "ترتيب"}
+              </button>
+            </div>
+          )}
+
+          {editNav && !collapsed ? (
+            <NavOrderEditor
+              order={state.navOrder}
+              onChange={setNavOrder}
+              onReset={() => setNavOrder(NAV_IDS)}
+            />
+          ) : (
+            <NavList items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
+          )}
 
           <div className="mt-auto space-y-3">
             {!collapsed && (
@@ -6626,6 +13013,14 @@ export default function LifeOS() {
           </div>
 
           <div className="mx-auto w-full max-w-6xl px-5 pb-36 pt-7 sm:px-7 lg:px-10 lg:pb-20 lg:pt-12">
+            {/* Outside the keyed wrapper on purpose: the warning belongs to
+                the hour, not to the tab, and re-animating it on every tab
+                change would turn it into decoration. */}
+            <DangerBanner
+              list={state.badHabits || []}
+              here={tab === "breaker"}
+              onOpen={() => go("breaker")}
+            />
             <div key={tab} className="los-in">
               {tab === "routine" && (
                 <RoutineModule
@@ -6638,6 +13033,9 @@ export default function LifeOS() {
                   mirror={todayEntry?.mirror || ""}
                   onOpenMirror={() => setMirror(true)}
                 />
+              )}
+              {tab === "career" && (
+                <CareerModule state={state} setState={setState} />
               )}
               {tab === "matrix" && (
                 <MatrixModule state={state} setState={setState} />
@@ -6664,6 +13062,9 @@ export default function LifeOS() {
                   streak={streak}
                 />
               )}
+              {tab === "breaker" && (
+                <BreakerModule state={state} setState={setState} />
+              )}
             </div>
 
             <footer className="mt-14 text-center text-[11px] text-white/20">
@@ -6673,7 +13074,39 @@ export default function LifeOS() {
         </main>
       </div>
 
-      <BottomTabs tab={tab} onGo={go} onSettings={() => setSettings(true)} />
+      <BottomTabs
+        items={navItems}
+        tab={tab}
+        onGo={go}
+        onSettings={() => setSettings(true)}
+      />
+
+      {/* A write that fails has to be loud. Everything on screen is still
+          correct — it just is not on disk, and only the user can decide what
+          to do about that. */}
+      {saveFailed && (
+        <div
+          className="los-in fixed inset-x-3 z-[80] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-center shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-[min(560px,92vw)] sm:-translate-x-1/2"
+          style={{
+            top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            background: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
+            borderColor: `${T.danger}80`,
+            boxShadow: `0 0 60px -12px ${T.danger}`,
+          }}
+          role="alert"
+        >
+          <AlertTriangle size={18} className="shrink-0" style={{ color: T.danger }} />
+          <p className="text-[12.5px] font-bold leading-relaxed" style={{ color: T.fg }}>
+            تعذّر الحفظ في هذا المتصفّح — ما تراه الآن غير محفوظ.
+            <span className="block text-[11px] font-normal" style={{ color: T.muted }}>
+              صدّر نسخة احتياطية قبل إغلاق الصفحة.
+            </span>
+          </p>
+          <Btn variant="danger" size="sm" onClick={() => setSettings(true)} className="shrink-0">
+            <Download size={13} /> صدّر الآن
+          </Btn>
+        </div>
+      )}
 
       <SettingsModal
         open={settings}
