@@ -42,10 +42,12 @@ The daily routine runs in six prayer-anchored blocks — الصباح، بعد �
 - **Date and time sit beside the wordmark**, small — `NowStamp`, its own component so the one-second tick re-renders that line and nothing else. It is named `NowStamp` and not `Clock` because `Clock` is already a lucide icon in this file.
 - Smooth transitions on every interactive state. Respect `prefers-reduced-motion` — every `los-*` animation is disabled under it (including `los-drift`, the cloud motion), and `usePrefersReducedMotion` gates both the SMIL gradient on the discipline ring and the star twinkle.
 
-Two rendering traps this UI has already hit:
+Four rendering traps this UI has already hit:
 
 - **Never put a `transform` animation on the same element as `-webkit-background-clip: text`.** Chrome collapses the clip and the text paints as a solid block. Animate a wrapper instead, and always pair the clip with `-webkit-text-fill-color: transparent`.
 - **Never drive a reward animation through `requestAnimationFrame`.** It does not run in a hidden tab, so the reward is swallowed and then replays when the tab returns. Set the state synchronously and clear it on a timer.
+- **`Modal` renders through a portal into `document.body`, and must keep doing so.** A transformed ancestor becomes the containing block for every `position: fixed` descendant, and `.los-in` — the wrapper that slides each screen in — animates `transform`. Every modal is rendered from inside a module, so without the portal each one is laid out against the module's content box instead of the window: the tallest form put its own header above the top edge, where nothing can scroll to it. Capping the height treats the symptom; leaving the transformed subtree is the fix.
+- **Never set a CSS shorthand beside one of its own longhands in the same `style` object.** React applies them in object order and a re-render can have the shorthand wipe the longhand. This has bitten twice: `background` erasing `GLASS.backgroundImage` (the quadrants lost their sheen), and `textDecoration` beside `textDecorationColor` on the checkbox label. Use the longhands — `backgroundColor`, `textDecorationLine`.
 
 ## Tech stack
 

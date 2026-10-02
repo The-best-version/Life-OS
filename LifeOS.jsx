@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { createRoot } from "react-dom";
+import { createRoot, createPortal } from "react-dom";
 import {
   Menu,
   X,
@@ -3818,7 +3818,26 @@ function Modal({ open, onClose, title, children, footer, wide = false }) {
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+
+  /* --- why this is a portal ------------------------------------------- *
+   *  A modal is `position: fixed`, which normally resolves against the
+   *  viewport — except that a transformed ancestor becomes the containing
+   *  block for every fixed descendant, and `.los-in`, the wrapper that
+   *  slides each screen in, animates `transform`. Every modal in this app
+   *  is rendered from inside a module, so every one of them was being laid
+   *  out against the module's content box instead of the window: on a
+   *  screen with little content the tallest form (the habit-breaker's) was
+   *  positioned so its header sat above the top edge, unreachable, because
+   *  there is nothing above a fixed element to scroll.
+   *
+   *  Capping the height or changing the easing would both be treatments of
+   *  the symptom. Rendering outside the transformed subtree is the fix:
+   *  `document.body` has no transformed ancestor, so `inset-0` means the
+   *  window again — for this modal and the twenty others that share it.
+   *  React still routes events through the tree the modal is written in,
+   *  so every `onClose` and every handler keeps working unchanged.
+   * -------------------------------------------------------------------- */
+  const tree = (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-6">
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
@@ -3857,6 +3876,10 @@ function Modal({ open, onClose, title, children, footer, wide = false }) {
       </div>
     </div>
   );
+
+  /* `document.body` is read at render, so the guard is for the server pass
+     and for a test host that mounts without one. */
+  return typeof document === "undefined" ? tree : createPortal(tree, document.body);
 }
 
 function StarRating({ value, onChange, size = 15 }) {
