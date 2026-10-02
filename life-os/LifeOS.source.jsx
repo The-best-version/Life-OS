@@ -110,6 +110,18 @@ import {
   Wind,
   Eye,
   Minus,
+  MapPin,
+  Repeat,
+  Percent,
+  Bell,
+  CalendarClock,
+  CalendarPlus,
+  School,
+  BookMarked,
+  AlarmClock,
+  CircleDot,
+  Hash,
+  SquarePen,
 } from "lucide-react";
 
 /* ==================================================================== *
@@ -540,6 +552,8 @@ function NowStamp({ compact = false }) {
 /* --- navigation ------------------------------------------------------ */
 const NAV = [
   { id: "routine", label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
+  { id: "agenda", label: "التقويم", short: "التقويم", icon: CalendarDays },
+  { id: "uni", label: "الجامعة", short: "الجامعة", icon: GraduationCap },
   { id: "career", label: "مسار التوظيف", short: "التوظيف", icon: Briefcase },
   { id: "matrix", label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
   { id: "deep", label: "العمل العميق", short: "التركيز", icon: Timer },
@@ -872,7 +886,7 @@ function syncOut(payload) {
   }, 2500);
 }
 const UI_KEY = "life-os-2027:ui";
-const SCHEMA = 16;
+const SCHEMA = 17;
 const HISTORY_CAP = 500;
 const STREAK_TARGET = 80;
 /* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
@@ -1231,6 +1245,14 @@ const TIMES_FORMS = ["مرة", "مرتان", "مرات", "مرة"];
 const timesWord = (n) => arCount(n, TIMES_FORMS);
 const FALL_FORMS = ["انتكاسة", "انتكاستان", "انتكاسات", "انتكاسة"];
 const fallWord = (n) => arCount(n, FALL_FORMS);
+const HOUR_FORMS = ["ساعة", "ساعتان", "ساعات", "ساعة"];
+const hourWord = (n) => arCount(n, HOUR_FORMS);
+const COURSE_FORMS = ["مقرّر", "مقرّران", "مقرّرات", "مقرّرًا"];
+const courseWord = (n) => arCount(n, COURSE_FORMS);
+const WEEK_FORMS = ["أسبوع", "أسبوعان", "أسابيع", "أسبوعًا"];
+const weekWord = (n) => arCount(n, WEEK_FORMS);
+const LECTURE_FORMS = ["محاضرة", "محاضرتان", "محاضرات", "محاضرة"];
+const lectureWord = (n) => arCount(n, LECTURE_FORMS);
 
 /* «قبل ٣ أيام», but «اليوم» at zero — nobody says «قبل ٠ يومًا». */
 function Since({ day }) {
@@ -2461,6 +2483,649 @@ const sprintPitch = (sp) =>
     "شاكرًا لوقتكم،",
   ].join("\n");
 
+/* ==================================================================== *
+ *  CALENDAR — the months and the years
+ *
+ *  The routine screen owns today and the quarters own the year's goals;
+ *  neither can answer «متى الاختبار؟». That is what this is for: a dated
+ *  square you can put something important on, months or years ahead, and
+ *  find again without having to remember it.
+ * ==================================================================== */
+
+/* Day keys are calendar squares, not instants, and every helper here parses
+   them at LOCAL midnight. `new Date("2027-01-05")` is read as UTC and lands
+   on the 4th for anyone east of Greenwich — which is all of the Gulf, every
+   day of the year. */
+const keyToDate = (ds) => {
+  const [y, m, d] = String(ds || "").split("-").map(Number);
+  if (!y || !m || !d || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const x = new Date(y, m - 1, d);
+  /* Rejects 31 February outright instead of quietly accepting it as the
+     3rd of March, which is how an invalid date becomes a wrong one. */
+  if (x.getFullYear() !== y || x.getMonth() !== m - 1 || x.getDate() !== d)
+    return null;
+  return x;
+};
+
+const isKey = (ds) => !!keyToDate(ds);
+
+const addDays = (ds, n) => {
+  const d = keyToDate(ds);
+  if (!d) return ds;
+  return fmtDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+};
+
+/* Signed, unlike `daysBetween`, which floors at zero for the streak
+   counters. A calendar needs the sign: «متأخر ٣ أيام» and «بعد ٣ أيام» are
+   opposite facts, and clamping collapses them into the same number. */
+const daysUntil = (ds, fromKey = dayKey()) => {
+  const a = keyToDate(fromKey);
+  const b = keyToDate(ds);
+  if (!a || !b) return null;
+  return Math.round((b - a) / 86400000);
+};
+
+/* "HH:MM" or nothing at all. A half-typed time is worse than no time: it
+   sorts wrongly and then renders as a lie, so anything that is not a real
+   clock reading is dropped on the way into state. */
+const hhmm = (v, fallback = "") => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
+  if (!m) return fallback;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return fallback;
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+};
+
+const minsOf = (t) => {
+  const v = hhmm(t);
+  if (!v) return null;
+  const [h, m] = v.split(":").map(Number);
+  return h * 60 + m;
+};
+
+const nowMins = (d = new Date()) => d.getHours() * 60 + d.getMinutes();
+
+/* 14:30 → «٢:٣٠ م». A 24-hour clock is what gets typed; a 12-hour one is
+   what gets read. */
+const prettyTime = (t) => {
+  const v = hhmm(t);
+  if (!v) return "";
+  const [h, m] = v.split(":").map(Number);
+  const suffix = h < 12 ? "ص" : "م";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+};
+
+const clampNum = (v, min, max, fallback) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+};
+
+const EVENT_KINDS = [
+  { id: "exam", label: "اختبار", icon: GraduationCap, tint: "#FF3B5C" },
+  { id: "deadline", label: "موعد تسليم", icon: ClipboardList, tint: "#FF7A45" },
+  { id: "class", label: "محاضرة أو دورة", icon: Presentation, tint: "#00C2FF" },
+  { id: "meet", label: "مقابلة أو اجتماع", icon: Handshake, tint: "#5B8CFF" },
+  { id: "money", label: "استحقاق مالي", icon: HandCoins, tint: "#FFB020" },
+  { id: "social", label: "مناسبة", icon: Sparkles, tint: "#FF4D8D" },
+  { id: "travel", label: "سفر", icon: Rocket, tint: "#9D5CFF" },
+  { id: "note", label: "تذكير", icon: NotebookPen, tint: "#10B981" },
+];
+const kindOf = (id) =>
+  EVENT_KINDS.find((k) => k.id === id) || EVENT_KINDS[EVENT_KINDS.length - 1];
+
+const REPEATS = [
+  { id: "none", label: "مرّة واحدة", short: "" },
+  { id: "weekly", label: "كل أسبوع", short: "أسبوعي" },
+  { id: "monthly", label: "كل شهر", short: "شهري" },
+  { id: "yearly", label: "كل سنة", short: "سنوي" },
+];
+const repeatOf = (id) => REPEATS.find((r) => r.id === id) || REPEATS[0];
+
+/* How many days before the square itself the entry starts warning. Zero
+   means it only speaks on the day — which for an exam is far too late. */
+const WARN_CHOICES = [0, 1, 3, 7, 14, 30];
+
+const eventShape = (e = {}) => ({
+  id: e.id || uid(),
+  title: typeof e.title === "string" ? e.title : "",
+  date: isKey(e.date) ? e.date : dayKey(),
+  time: hhmm(e.time),
+  kind: EVENT_KINDS.some((k) => k.id === e.kind) ? e.kind : "note",
+  repeat: REPEATS.some((r) => r.id === e.repeat) ? e.repeat : "none",
+  /* An open-ended weekly entry is a legitimate thing to want, so `null`
+     here is a real value and not a missing one. */
+  until: isKey(e.until) ? e.until : null,
+  place: typeof e.place === "string" ? e.place : "",
+  note: typeof e.note === "string" ? e.note : "",
+  warn: WARN_CHOICES.includes(Number(e.warn)) ? Number(e.warn) : 0,
+  /* Per occurrence, not one flag: a weekly entry ticked this Sunday must
+     still be waiting next Sunday, and a boolean cannot say that. */
+  doneOn: Array.isArray(e.doneOn)
+    ? e.doneOn.filter((d) => typeof d === "string" && isKey(d))
+    : [],
+});
+
+/* Every square an entry lands on inside a window — the only real
+   arithmetic on this screen, so it is written once and read everywhere.
+ *
+ *  Bounded by the window at BOTH ends on purpose: walking forward from the
+ *  start date would cost a weekly entry from 2019 three hundred iterations
+ *  to draw one month, and the year view asks for twelve months at a time.
+ *
+ *  A monthly entry on the 31st is SKIPPED in a thirty-day month rather than
+ *  pulled back onto the 30th, and 29 February exists only in a leap year.
+ *  Moving a due date silently is the one thing a calendar must never do.
+ */
+function occurrences(ev, fromKey, toKey) {
+  const start = keyToDate(ev.date);
+  const from = keyToDate(fromKey);
+  const to = keyToDate(toKey);
+  if (!start || !from || !to || to < from) return [];
+  const stop = ev.until ? keyToDate(ev.until) : null;
+  const last = stop && stop < to ? stop : to;
+  if (last < from || last < start) return [];
+  const out = [];
+  const at = (y, m, d) => new Date(y, m, d);
+
+  if (ev.repeat === "weekly") {
+    let x = start;
+    if (x < from) {
+      const weeks = Math.ceil((from - x) / (7 * 86400000));
+      x = at(start.getFullYear(), start.getMonth(), start.getDate() + weeks * 7);
+    }
+    for (; x <= last; x = at(x.getFullYear(), x.getMonth(), x.getDate() + 7))
+      out.push(fmtDay(x));
+    return out;
+  }
+
+  if (ev.repeat === "monthly") {
+    const dom = start.getDate();
+    let y = from > start ? from.getFullYear() : start.getFullYear();
+    let m = from > start ? from.getMonth() : start.getMonth();
+    for (;;) {
+      if (at(y, m, 1) > last) break;
+      const dim = at(y, m + 1, 0).getDate();
+      if (dom <= dim) {
+        const d = at(y, m, dom);
+        if (d >= from && d >= start && d <= last) out.push(fmtDay(d));
+      }
+      m += 1;
+      if (m > 11) {
+        m = 0;
+        y += 1;
+      }
+    }
+    return out;
+  }
+
+  if (ev.repeat === "yearly") {
+    const mo = start.getMonth();
+    const dom = start.getDate();
+    for (let y = from.getFullYear(); y <= last.getFullYear(); y++) {
+      if (dom > at(y, mo + 1, 0).getDate()) continue; // 29 Feb, common year
+      const d = at(y, mo, dom);
+      if (d >= from && d >= start && d <= last) out.push(fmtDay(d));
+    }
+    return out;
+  }
+
+  if (start >= from && start <= last) out.push(ev.date);
+  return out;
+}
+
+const isEventDone = (ev, on) => (ev.doneOn || []).includes(on);
+
+/* Timed entries first in clock order, then the day's untimed reminders.
+   Sorting "" as a time would float them all to dawn. */
+const byClock = (a, b) => {
+  const x = minsOf(a.ev.time);
+  const y = minsOf(b.ev.time);
+  if (x === null && y === null) return 0;
+  if (x === null) return 1;
+  if (y === null) return -1;
+  return x - y;
+};
+
+/* date key → the occurrences landing on it, across one window. */
+function eventsIn(list, fromKey, toKey) {
+  const map = new Map();
+  for (const ev of list || [])
+    for (const on of occurrences(ev, fromKey, toKey)) {
+      const row = map.get(on);
+      if (row) row.push({ ev, on });
+      else map.set(on, [{ ev, on }]);
+    }
+  for (const row of map.values()) row.sort(byClock);
+  return map;
+}
+
+/* What is coming, flattened and ordered — including anything still unticked
+   behind today, because an overdue entry that scrolls out of sight is an
+   entry the calendar failed to carry. A ticked past occurrence is done and
+   drops out. */
+function upcoming(list, days = 180, backlog = 60) {
+  const today = dayKey();
+  const from = addDays(today, -backlog);
+  const to = addDays(today, days);
+  const out = [];
+  for (const ev of list || [])
+    for (const on of occurrences(ev, from, to)) {
+      if (on < today && isEventDone(ev, on)) continue;
+      out.push({ ev, on });
+    }
+  out.sort((a, b) => (a.on === b.on ? byClock(a, b) : a.on < b.on ? -1 : 1));
+  return out;
+}
+
+/* The entries whose warning window is open today and that are not ticked.
+   `warn` is days-before, so an exam set to warn at seven starts speaking a
+   week out and keeps speaking until the day itself has passed. */
+function alertsOf(list) {
+  const today = dayKey();
+  const rows = [];
+  for (const ev of list || []) {
+    if (!ev.warn) continue;
+    for (const on of occurrences(ev, today, addDays(today, ev.warn))) {
+      if (isEventDone(ev, on)) continue;
+      rows.push({ ev, on, left: daysUntil(on) });
+    }
+  }
+  rows.sort((a, b) => a.left - b.left);
+  return rows;
+}
+
+/* The relative day, in words. Arabic counts in threes, so the plural comes
+   from `dayWord` rather than from a bare "أيام". */
+const whenWord = (on) => {
+  const n = daysUntil(on);
+  if (n === null) return "";
+  if (n === 0) return "اليوم";
+  if (n === 1) return "غدًا";
+  if (n === 2) return "بعد غد";
+  if (n === -1) return "أمس";
+  if (n < 0) {
+    const d = -n;
+    return `متأخر ${d <= 10 ? `${d} ${dayWord(d)}` : `${d} يومًا`}`;
+  }
+  return `بعد ${n <= 10 ? `${n} ${dayWord(n)}` : `${n} يومًا`}`;
+};
+
+/* ==================================================================== *
+ *  UNIVERSITY — a desk, not a folder of reminders
+ *
+ *  A term is four things at once: a timetable he has to be in the right
+ *  room for, a mark sheet he has to keep above a line, an absence count
+ *  that can bar him from the final, and a GPA all of it rolls up into.
+ *  Each one is nearly useless alone — a mark without its weight, or an
+ *  absence without the cap, answers nothing. So they live on one screen
+ *  and read from one another.
+ * ==================================================================== */
+
+/* The Saudi five-point scale with the four-point column beside it. The
+   percentage floors are the standard ones, and they are what lets the mark
+   sheet name the grade a course is currently earning instead of leaving
+   him to look it up. Ordered high to low — `gradeFromPct` depends on that,
+   and F sits at zero so the search can never miss. */
+const GRADES = [
+  { id: "A+", ar: "ممتاز مرتفع", p5: 5, p4: 4, min: 95 },
+  { id: "A", ar: "ممتاز", p5: 4.75, p4: 3.75, min: 90 },
+  { id: "B+", ar: "جيد جدًا مرتفع", p5: 4.5, p4: 3.5, min: 85 },
+  { id: "B", ar: "جيد جدًا", p5: 4, p4: 3, min: 80 },
+  { id: "C+", ar: "جيد مرتفع", p5: 3.5, p4: 2.5, min: 75 },
+  { id: "C", ar: "جيد", p5: 3, p4: 2, min: 70 },
+  { id: "D+", ar: "مقبول مرتفع", p5: 2.5, p4: 1.5, min: 65 },
+  { id: "D", ar: "مقبول", p5: 2, p4: 1, min: 60 },
+  { id: "F", ar: "راسب", p5: 1, p4: 0, min: 0 },
+];
+const gradeOf = (id) => GRADES.find((g) => g.id === id) || null;
+const gradePoints = (g, scale) => (Number(scale) === 4 ? g.p4 : g.p5);
+const gradeFromPct = (pct) =>
+  GRADES.find((g) => pct >= g.min) || GRADES[GRADES.length - 1];
+
+/* Where an average sits, named. The number alone does not tell a student
+   whether he is safe, and «٣.١ من ٥» is a different sentence from
+   «٣.١ من ٤» — so the band is read off the ratio, not the raw figure. */
+const GPA_BANDS = [
+  { min: 0.9, label: "ممتاز", tint: "#10B981" },
+  { min: 0.75, label: "جيد جدًا", tint: "#00C2FF" },
+  { min: 0.6, label: "جيد", tint: "#FFB020" },
+  { min: 0.4, label: "مقبول", tint: "#FF7A45" },
+  { min: 0, label: "تحت الخط", tint: "#FF3B5C" },
+];
+const gpaBand = (gpa, scale) => {
+  const r = scale ? gpa / scale : 0;
+  return GPA_BANDS.find((b) => r >= b.min) || GPA_BANDS[GPA_BANDS.length - 1];
+};
+
+/* The university week, Sunday first. Friday is not on it; Saturday is, at
+   the end, because some sections really are scheduled there and a timetable
+   that cannot hold a real section is not a timetable. */
+const UNI_DAYS = [
+  { d: 0, label: "الأحد", short: "ح" },
+  { d: 1, label: "الإثنين", short: "ن" },
+  { d: 2, label: "الثلاثاء", short: "ث" },
+  { d: 3, label: "الأربعاء", short: "ر" },
+  { d: 4, label: "الخميس", short: "خ" },
+  { d: 6, label: "السبت", short: "س" },
+];
+const uniDayOf = (d) => UNI_DAYS.find((x) => x.d === Number(d)) || null;
+
+/* Vivid, never pastel — the tint is how a block is found on the timetable
+   at a glance, and a washed-out one finds nothing. */
+const COURSE_TINTS = [
+  "#00C2FF",
+  "#FFB020",
+  "#FF4D8D",
+  "#9D5CFF",
+  "#5B8CFF",
+  "#FF7A45",
+  "#10B981",
+  "#FF5722",
+];
+
+/* A quarter of the meetings is the usual bar for being barred from the
+   final. Derived from how often the course actually meets rather than
+   asked for — but still editable, because it is a regulation and
+   regulations differ between universities. */
+const ABSENCE_LIMIT = 0.25;
+const TERM_WEEKS_DEFAULT = 15;
+
+const UNI_TASK_KINDS = [
+  { id: "assign", label: "واجب", icon: ClipboardList, tint: "#FF7A45" },
+  { id: "quiz", label: "كويز", icon: ClipboardCheck, tint: "#FFB020" },
+  { id: "mid", label: "اختبار فصلي", icon: FileText, tint: "#FF4D8D" },
+  { id: "final", label: "اختبار نهائي", icon: GraduationCap, tint: "#FF3B5C" },
+  { id: "project", label: "مشروع", icon: Rocket, tint: "#9D5CFF" },
+  { id: "present", label: "عرض تقديمي", icon: Presentation, tint: "#00C2FF" },
+];
+const uniKindOf = (id) =>
+  UNI_TASK_KINDS.find((k) => k.id === id) || UNI_TASK_KINDS[0];
+/* The ones that cannot be rescheduled by asking nicely. */
+const UNI_EXAM_KINDS = new Set(["quiz", "mid", "final"]);
+
+const slotShape = (s = {}) => ({
+  id: s.id || uid(),
+  day: uniDayOf(s.day) ? Number(s.day) : 0,
+  from: hhmm(s.from, "08:00"),
+  to: hhmm(s.to, "09:50"),
+  room: typeof s.room === "string" ? s.room : "",
+});
+
+const markShape = (m = {}) => ({
+  id: m.id || uid(),
+  label: typeof m.label === "string" ? m.label : "",
+  /* `null` is "not returned yet" and has to survive as null. A zero is a
+     zero he actually scored, and folding the two together is exactly how a
+     mark sheet starts lying about where he stands. */
+  score:
+    m.score === null || m.score === undefined || m.score === ""
+      ? null
+      : Number.isFinite(Number(m.score))
+        ? Math.max(0, Number(m.score))
+        : null,
+  max: clampNum(m.max, 0.01, 1000, 100),
+  weight: clampNum(m.weight, 0, 100, 0),
+});
+
+const courseShape = (c = {}) => ({
+  id: c.id || uid(),
+  code: typeof c.code === "string" ? c.code : "",
+  name: typeof c.name === "string" ? c.name : "",
+  credits: clampNum(c.credits, 1, 12, 3),
+  instructor: typeof c.instructor === "string" ? c.instructor : "",
+  term: typeof c.term === "string" ? c.term : "",
+  tint: COURSE_TINTS.includes(c.tint) ? c.tint : COURSE_TINTS[0],
+  slots: Array.isArray(c.slots) ? c.slots.map(slotShape) : [],
+  marks: Array.isArray(c.marks) ? c.marks.map(markShape) : [],
+  /* Set by hand once the final grade is published. Until then the mark
+     sheet projects one and the GPA leaves the course out entirely. */
+  grade: gradeOf(c.grade) ? c.grade : null,
+  absences: clampNum(c.absences, 0, 200, 0),
+  absenceCap: clampNum(c.absenceCap, 0, 200, 0), // 0 → derive from the slots
+  target: clampNum(c.target, 0, 100, 90),
+  notes: typeof c.notes === "string" ? c.notes : "",
+});
+
+const termShape = (t = {}) => ({
+  id: t.id || uid(),
+  label: typeof t.label === "string" ? t.label : "",
+  start: isKey(t.start) ? t.start : dayKey(),
+  end: isKey(t.end) ? t.end : addDays(dayKey(), 7 * TERM_WEEKS_DEFAULT),
+  weeks: clampNum(t.weeks, 1, 40, TERM_WEEKS_DEFAULT),
+});
+
+const uniTaskShape = (t = {}) => ({
+  id: t.id || uid(),
+  title: typeof t.title === "string" ? t.title : "",
+  kind: UNI_TASK_KINDS.some((k) => k.id === t.kind) ? t.kind : "assign",
+  course: typeof t.course === "string" ? t.course : "",
+  due: isKey(t.due) ? t.due : dayKey(),
+  time: hhmm(t.time),
+  place: typeof t.place === "string" ? t.place : "",
+  weight: clampNum(t.weight, 0, 100, 0),
+  done: !!t.done,
+  notes: typeof t.notes === "string" ? t.notes : "",
+});
+
+/* The whole desk, reshaped. The active-term pointer is normalised here and
+   nowhere else: a dangling id — a term deleted, or a hand-edited backup —
+   would otherwise render an empty screen that looks exactly like lost data. */
+const uniShape = (u = {}) => {
+  const terms = Array.isArray(u.terms) ? u.terms.map(termShape) : [];
+  const ids = new Set(terms.map((t) => t.id));
+  let term = typeof u.term === "string" && ids.has(u.term) ? u.term : "";
+  if (!term && terms.length) {
+    const today = dayKey();
+    term = (terms.find((t) => t.start <= today && today <= t.end) || terms[0]).id;
+  }
+  return {
+    scale: Number(u.scale) === 4 ? 4 : 5,
+    /* Everything before the terms listed here, as one pair. Asking for
+       every past term just to show a cumulative figure is a wall nobody
+       climbs; two numbers off a transcript is thirty seconds. */
+    priorGpa: clampNum(u.priorGpa, 0, 5, 0),
+    priorCredits: clampNum(u.priorCredits, 0, 500, 0),
+    /* Which scale that figure was typed on. Without it, flipping the scale
+       folds a four-point average into a five-point cumulative — a wrong
+       number stated confidently, which is worse than no number at all. */
+    priorScale: Number(u.priorScale) === 4 ? 4 : 5,
+    term,
+    terms,
+    courses: Array.isArray(u.courses) ? u.courses.map(courseShape) : [],
+    tasks: Array.isArray(u.tasks) ? u.tasks.map(uniTaskShape) : [],
+  };
+};
+
+/* One term, so the screen opens on a timetable to fill rather than on a
+   form asking what a term is. The dates are editable and the label is
+   generic on purpose — inventing a term number would be inventing his
+   transcript. */
+const SEED_UNI = () => {
+  const start = dayKey();
+  const t = termShape({
+    label: "الفصل الحالي",
+    start,
+    end: addDays(start, 7 * TERM_WEEKS_DEFAULT),
+    weeks: TERM_WEEKS_DEFAULT,
+  });
+  return uniShape({ terms: [t], term: t.id });
+};
+
+/* --- the mark sheet --------------------------------------------------- *
+ *  Two different questions, and conflating them is the usual bug: how much
+ *  of the full hundred is already banked, versus how the marks that came
+ *  back average on their own. One quiz worth 10%, answered perfectly, is
+ *  ten points banked — not a course standing at 100%.
+ * -------------------------------------------------------------------- */
+function courseStanding(c) {
+  let totalW = 0;
+  let gradedW = 0;
+  let earned = 0; // points of the final hundred, already banked
+  for (const m of c.marks || []) {
+    totalW += m.weight;
+    if (m.score === null) continue;
+    gradedW += m.weight;
+    earned += (m.score / m.max) * m.weight;
+  }
+  const pending = Math.max(0, totalW - gradedW);
+  return {
+    totalW,
+    gradedW,
+    pending,
+    earned,
+    /* The average over what has come back — the honest "how am I doing". */
+    pace: gradedW > 0 ? (earned / gradedW) * 100 : null,
+    /* Where the course lands if the rest goes exactly as the returned marks
+       have gone. A projection, and labelled as one. */
+    projected: gradedW > 0 ? earned + (earned / gradedW) * pending : null,
+    /* The need-calculator is honest only once the declared weights add up
+       to a hundred. Below that, some of the remaining marks are not
+       declared at all, and «تحتاج ٨٤٪» would be arithmetic on a
+       denominator that does not exist yet. */
+    weightOk: Math.abs(totalW - 100) < 0.5,
+  };
+}
+
+/* What the remaining weight has to average for the course to land on the
+   target. Over 100 means the target is already out of reach on the
+   declared weights, and the screen says so instead of printing 118%. */
+const needFor = (st, target) =>
+  st.pending <= 0 ? null : ((target - st.earned) / st.pending) * 100;
+
+/* How many meetings the course holds across the term, and how many
+   absences bar you from the final. `null` rather than a guess when the
+   timetable is empty — a cap of one, invented out of nothing, is exactly
+   the kind of number a student would plan around. */
+const meetingsOf = (c, term) =>
+  (c.slots || []).length * (term ? term.weeks : TERM_WEEKS_DEFAULT);
+const absenceCapOf = (c, term) => {
+  if (c.absenceCap > 0) return c.absenceCap;
+  const n = meetingsOf(c, term);
+  return n > 0 ? Math.max(1, Math.floor(n * ABSENCE_LIMIT)) : null;
+};
+const ATTEND_BANDS = [
+  { min: 1, label: "خطر الحرمان", tint: "#FF3B5C" },
+  { min: 0.75, label: "على الحدّ", tint: "#FF7A45" },
+  { min: 0.5, label: "انتبه", tint: "#FFB020" },
+  { min: 0, label: "آمن", tint: "#10B981" },
+];
+const attendBand = (used, cap) => {
+  if (!cap) return null;
+  const r = used / cap;
+  return ATTEND_BANDS.find((b) => r >= b.min) || ATTEND_BANDS[ATTEND_BANDS.length - 1];
+};
+
+/* Term and cumulative averages. Only a course carrying a published letter
+   grade counts: an ungraded course has no points, and reading it as a zero
+   would drop the GPA the moment a new term is registered. */
+function gpaOf(courses, scale) {
+  let points = 0;
+  let credits = 0;
+  for (const c of courses || []) {
+    const g = gradeOf(c.grade);
+    if (!g) continue;
+    points += gradePoints(g, scale) * c.credits;
+    credits += c.credits;
+  }
+  return { gpa: credits ? points / credits : 0, points, credits };
+}
+
+const coursesIn = (uni, termId) =>
+  (uni.courses || []).filter((c) => c.term === termId);
+const termOf = (uni, id) => (uni.terms || []).find((t) => t.id === id) || null;
+const courseIn = (uni, id) => (uni.courses || []).find((c) => c.id === id) || null;
+const courseName = (c) =>
+  !c ? "" : c.name || c.code || "مقرّر بلا اسم";
+
+/* The university's own deadlines, as calendar rows. Derived, never stored
+   twice: a due date edited on the university screen has to move on the
+   calendar in the same render, and two copies of one date are two dates
+   that will eventually disagree. */
+function uniDue(uni, fromKey, toKey) {
+  const map = new Map();
+  for (const t of uni.tasks || []) {
+    if (t.due < fromKey || t.due > toKey) continue;
+    const row = map.get(t.due);
+    if (row) row.push(t);
+    else map.set(t.due, [t]);
+  }
+  for (const row of map.values())
+    row.sort((a, b) => (minsOf(a.time) ?? 1441) - (minsOf(b.time) ?? 1441));
+  return map;
+}
+
+/* Today's sections, and the one he is either sitting in or walking to.
+   Minutes are passed in rather than read off the clock so the caller owns
+   the tick — this runs on every render of a screen that re-renders once a
+   minute, and two clocks in one frame can disagree by a minute. */
+function daySections(courses, dow, mins) {
+  const rows = [];
+  for (const c of courses || [])
+    for (const s of c.slots || [])
+      if (s.day === dow) {
+        const from = minsOf(s.from) ?? 0;
+        const to = minsOf(s.to) ?? from;
+        rows.push({
+          course: c,
+          slot: s,
+          from,
+          to,
+          now: mins >= from && mins < to,
+        });
+      }
+  rows.sort((a, b) => a.from - b.from);
+  return rows;
+}
+
+/* The next section anywhere in the week, walking forward from now. The day
+   offset rides along so the card can say «غدًا» instead of a weekday the
+   user then has to count to. */
+function nextSection(courses, dow, mins) {
+  for (let i = 0; i < 8; i++) {
+    const rows = daySections(courses, (dow + i) % 7, i === 0 ? mins : -1).filter(
+      (r) => i > 0 || r.to > mins,
+    );
+    if (rows.length) return { ...rows[0], inDays: i };
+  }
+  return null;
+}
+
+/* Minutes to a position on the week grid, clamped to the band the grid
+   actually draws — a 06:00 section must not render above the top edge. */
+const DAY_FROM = 7 * 60;
+const DAY_TO = 23 * 60;
+const spanPct = (from, to) => {
+  const a = Math.max(DAY_FROM, Math.min(DAY_TO, from));
+  const b = Math.max(a + 12, Math.min(DAY_TO, to));
+  const w = DAY_TO - DAY_FROM;
+  return { top: ((a - DAY_FROM) / w) * 100, height: ((b - a) / w) * 100 };
+};
+
+/* The timetable, the next-section card and the "now" line all move with
+   the clock, and this screen is left open for hours. One minute is the
+   right grain: a second would re-render the module sixty times a minute
+   for a line that moves one pixel. */
+function useMinuteClock() {
+  const [mins, setMins] = useState(() => nowMins());
+  useEffect(() => {
+    const check = () => setMins(nowMins());
+    const t = setInterval(check, 60000);
+    /* A background tab throttles intervals hard, so also re-read the clock
+       the moment the tab is looked at again. */
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+  return mins;
+}
+
 const freshState = (carry = {}) => ({
   schema: SCHEMA,
   date: dayKey(),
@@ -2475,6 +3140,11 @@ const freshState = (carry = {}) => ({
   reviews: carry.reviews || [],
   pipeline: carry.pipeline || SEED_PIPELINE,
   badHabits: carry.badHabits || [],
+  /* The calendar and the university desk. Every row in both is keyed to a
+     calendar date of its own, so they cross a day rollover untouched —
+     nothing in either of them belongs to "today" in the first place. */
+  events: carry.events || [],
+  uni: carry.uni || SEED_UNI(),
   /* Entirely date-derived inside, so it carries across a rollover whole —
      the two daily checklists empty themselves by reading today's log row. */
   career: careerShape(carry.career),
@@ -2654,6 +3324,35 @@ function migrate(saved) {
     };
   }
 
+  /* Schema 17 adds the calendar and the university desk. An older payload
+     has neither and starts them empty; one written by a newer build is run
+     back through the shapes, so a row that lost a field to a hand-edited
+     backup comes back whole instead of crashing a render. */
+  const events = Array.isArray(saved.events) ? saved.events.map(eventShape) : [];
+  const uni = saved.uni ? uniShape(saved.uni) : SEED_UNI();
+
+  /* Both are daily screens for a student, so — like `career` before them —
+     they are placed by hand right after the routine instead of being
+     appended to the end, where a phone buries a tab behind «المزيد». A tab
+     the user has already positioned himself is left exactly where he put
+     it, and becomes the anchor for the next one. */
+  if (from < 17) {
+    let anchor = "routine";
+    for (const id of ["agenda", "uni"]) {
+      if ((saved.navOrder || []).includes(id)) {
+        anchor = id;
+        continue;
+      }
+      const rest = navOrder.filter((x) => x !== id);
+      const at = rest.indexOf(anchor);
+      navOrder =
+        at < 0
+          ? [id, ...rest]
+          : [...rest.slice(0, at + 1), id, ...rest.slice(at + 1)];
+      anchor = id;
+    }
+  }
+
   return {
     ...saved,
     schema: SCHEMA,
@@ -2665,6 +3364,8 @@ function migrate(saved) {
     books,
     badHabits,
     career,
+    events,
+    uni,
     navOrder,
     reading: Array.isArray(saved.reading) ? saved.reading : [],
     readGoal: Number.isFinite(saved.readGoal)
@@ -2689,6 +3390,8 @@ const carryOf = (s) => ({
   reviews: s.reviews,
   pipeline: s.pipeline,
   badHabits: s.badHabits,
+  events: s.events,
+  uni: s.uni,
   career: s.career,
   navOrder: s.navOrder,
   quotes: s.quotes,
@@ -2929,7 +3632,7 @@ function Badge({ children, tint = T.accent, className = "" }) {
   );
 }
 
-function Modal({ open, onClose, title, children, footer }) {
+function Modal({ open, onClose, title, children, footer, wide = false }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     if (open) window.addEventListener("keydown", onKey);
@@ -2947,7 +3650,11 @@ function Modal({ open, onClose, title, children, footer }) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="los-in relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border p-6 sm:rounded-3xl"
+        /* A desk needs room for a table; a form does not. One prop, so
+           every existing call site keeps the narrow sheet it was built for. */
+        className={`los-in relative max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border p-6 sm:rounded-3xl ${
+          wide ? "max-w-3xl" : "max-w-md"
+        }`}
         style={{
           background: `linear-gradient(160deg, ${T.bgLift}, ${T.bgDeep})`,
           borderColor: `${T.cta}40`,
@@ -12037,6 +12744,3522 @@ function AnalyticsModule({ state, discipline, streak }) {
 /* Module scope, not a closure inside LifeOS — defining it inline gave the
    nav a new component type every render, so React tore down and rebuilt
    every button, dropping focus and restarting transitions mid-flight. */
+/* ==================================================================== *
+ *  MODULE — the calendar: months, years, and the things that matter on them
+ * ==================================================================== */
+
+const AGENDA_VIEWS = [
+  { id: "month", label: "الشهر", icon: CalendarDays },
+  { id: "year", label: "السنة", icon: LayoutGrid },
+  { id: "list", label: "القادم", icon: ListChecks },
+];
+
+/* A dated input that renders dark. Left to itself the native picker paints
+   a white panel and a black glyph on a dark card — unreadable, and the icon
+   disappears entirely. `colorScheme` is the one line that fixes both. */
+function DateField({ value, onChange, id, min, ...rest }) {
+  return (
+    <Field
+      id={id}
+      type="date"
+      dir="ltr"
+      value={value || ""}
+      min={min}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ colorScheme: "dark", textAlign: "left" }}
+      {...rest}
+    />
+  );
+}
+
+function TimeField({ value, onChange, id, ...rest }) {
+  return (
+    <Field
+      id={id}
+      type="time"
+      dir="ltr"
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ colorScheme: "dark", textAlign: "left" }}
+      {...rest}
+    />
+  );
+}
+
+/* One occurrence, as a row. The tick is per-day — the same weekly entry is
+   ticked this Sunday and open the next — so the reward has to fire on the
+   occurrence, not on the entry. */
+function EventRow({ ev, on, onToggle, onEdit, onDelete, showDate = false }) {
+  const k = kindOf(ev.kind);
+  const Icon = k.icon;
+  const done = isEventDone(ev, on);
+  const late = !done && on < dayKey();
+  const [burst, fireBurst] = useBurst(700);
+  const rep = repeatOf(ev.repeat);
+
+  const handle = () => {
+    if (!done) fireBurst();
+    onToggle();
+  };
+
+  return (
+    <div
+      className={`group flex items-start gap-2 rounded-xl border p-2.5 transition-all duration-200${
+        burst ? " los-reward" : ""
+      }`}
+      style={{
+        borderColor: burst
+          ? T.primary
+          : late
+            ? `${T.danger}4D`
+            : "rgba(255,255,255,0.08)",
+        backgroundColor: burst
+          ? `${T.primary}26`
+          : done
+            ? `${T.primary}0F`
+            : late
+              ? `${T.danger}0F`
+              : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <span
+        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+        style={{
+          borderColor: done ? `${T.primary}59` : `${k.tint}45`,
+          background: done ? `${T.primary}1A` : `${k.tint}18`,
+          color: done ? T.primary : k.tint,
+        }}
+      >
+        <Icon size={15} strokeWidth={1.9} />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-start gap-2">
+          <Checkbox
+            checked={done}
+            onToggle={handle}
+            label={ev.title || k.label}
+            tint={T.primary}
+            size="sm"
+          />
+          <button
+            onClick={onEdit}
+            aria-label={`تعديل ${ev.title || k.label}`}
+            className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-white/70 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={onDelete}
+            aria-label={`حذف ${ev.title || k.label}`}
+            className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pr-1.5 text-[10.5px]">
+          <span style={{ color: k.tint }}>{k.label}</span>
+          {showDate && (
+            <span
+              className="inline-flex items-center gap-1"
+              style={{ color: late ? T.danger : T.faint }}
+            >
+              <CalendarDays size={10} />
+              {arDate(on)}
+            </span>
+          )}
+          {ev.time && (
+            <span className="inline-flex items-center gap-1" style={{ color: T.muted }}>
+              <Clock size={10} />
+              <span dir="ltr" className="tabular-nums">
+                {prettyTime(ev.time)}
+              </span>
+            </span>
+          )}
+          {ev.place && (
+            <span className="inline-flex min-w-0 items-center gap-1" style={{ color: T.faint }}>
+              <MapPin size={10} className="shrink-0" />
+              <span className="truncate">{ev.place}</span>
+            </span>
+          )}
+          {rep.short && (
+            <span className="inline-flex items-center gap-1" style={{ color: T.violet }}>
+              <Repeat size={10} />
+              {rep.short}
+            </span>
+          )}
+          {!done && (
+            <span
+              className="font-bold"
+              style={{ color: late ? T.danger : on === dayKey() ? T.cta : T.faint }}
+            >
+              {whenWord(on)}
+            </span>
+          )}
+        </div>
+
+        {ev.note && (
+          <p
+            className="mt-1.5 whitespace-pre-wrap pr-1.5 text-[11px] leading-relaxed"
+            style={{ color: T.muted }}
+          >
+            {ev.note}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* The university's deadlines, read-only here. They belong to the other
+   screen and are shown rather than copied — one due date, one owner. */
+function UniDueRow({ task, course, onGo }) {
+  const k = uniKindOf(task.kind);
+  const Icon = k.icon;
+  return (
+    <button
+      onClick={onGo}
+      className="flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-right transition-colors hover:bg-white/[0.06]"
+      style={{
+        borderColor: task.done ? `${T.primary}33` : `${k.tint}33`,
+        backgroundColor: task.done ? `${T.primary}0D` : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+        style={{
+          borderColor: task.done ? `${T.primary}59` : `${k.tint}45`,
+          background: task.done ? `${T.primary}1A` : `${k.tint}18`,
+          color: task.done ? T.primary : k.tint,
+        }}
+      >
+        <Icon size={15} strokeWidth={1.9} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className="block truncate text-[13px] font-bold"
+          style={{
+            color: task.done ? T.primary : T.fg,
+            textDecoration: task.done ? "line-through" : "none",
+          }}
+        >
+          {task.title || k.label}
+        </span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[10.5px]">
+          <span style={{ color: k.tint }}>{k.label}</span>
+          {course && <span style={{ color: T.faint }}>{courseName(course)}</span>}
+          {task.time && (
+            <span dir="ltr" className="tabular-nums" style={{ color: T.muted }}>
+              {prettyTime(task.time)}
+            </span>
+          )}
+        </span>
+      </span>
+      <ArrowLeft size={14} className="shrink-0" style={{ color: T.faint }} />
+    </button>
+  );
+}
+
+function EventModal({ open, draft, setDraft, onClose, onSave }) {
+  const [err, setErr] = useState("");
+  const d = draft || {};
+  const repeating = d.repeat && d.repeat !== "none";
+
+  useEffect(() => {
+    if (open) setErr("");
+  }, [open, d.id]);
+
+  const save = () => {
+    if (!String(d.title || "").trim()) {
+      setErr("اكتب عنوان الموعد أولًا.");
+      return;
+    }
+    if (!isKey(d.date)) {
+      setErr("التاريخ غير صالح.");
+      return;
+    }
+    /* A repeat that ends before it starts is a repeat that never happens,
+       and the grid would simply draw nothing — a save that looks like it
+       worked and loses the entry. Refuse it with a reason instead. */
+    if (repeating && d.until && d.until < d.date) {
+      setErr("تاريخ انتهاء التكرار قبل تاريخ البداية.");
+      return;
+    }
+    onSave();
+  };
+
+  const set = (patch) => setDraft((s) => ({ ...s, ...patch }));
+
+  /* The title reads `isNew`, not `id`: every draft is born through
+     `eventShape`, which hands it an id straight away, so an id proves
+     nothing about whether this entry already exists. */
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={d.isNew ? "موعد جديد" : "تعديل الموعد"}
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={save}>
+            <Check size={15} strokeWidth={3} /> حفظ
+          </Btn>
+          <Btn variant="outline" className="flex-1" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="los-ev-title" className="mb-1.5 block text-xs text-white/45">
+            العنوان
+          </label>
+          <Field
+            id="los-ev-title"
+            autoFocus
+            value={d.title || ""}
+            onChange={(e) => set({ title: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="مثال: اختبار مبادئ الإدارة"
+          />
+        </div>
+
+        <div>
+          <span className="mb-2 block text-xs text-white/45">النوع</span>
+          <div className="grid grid-cols-2 gap-2">
+            {EVENT_KINDS.map((k) => {
+              const on = d.kind === k.id;
+              const Icon = k.icon;
+              return (
+                <button
+                  key={k.id}
+                  type="button"
+                  onClick={() => set({ kind: k.id })}
+                  aria-pressed={on}
+                  className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[11.5px] font-bold transition-all"
+                  style={{
+                    borderColor: on ? `${k.tint}80` : T.border,
+                    background: on ? `${k.tint}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? k.tint : T.muted,
+                  }}
+                >
+                  <Icon size={14} strokeWidth={2} />
+                  {k.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="los-ev-date" className="mb-1.5 block text-xs text-white/45">
+              التاريخ
+            </label>
+            <DateField id="los-ev-date" value={d.date} onChange={(v) => set({ date: v })} />
+          </div>
+          <div>
+            <label htmlFor="los-ev-time" className="mb-1.5 block text-xs text-white/45">
+              الوقت <span style={{ color: T.faint }}>(اختياري)</span>
+            </label>
+            <TimeField id="los-ev-time" value={d.time} onChange={(v) => set({ time: v })} />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="los-ev-place" className="mb-1.5 block text-xs text-white/45">
+            المكان <span style={{ color: T.faint }}>(اختياري)</span>
+          </label>
+          <Field
+            id="los-ev-place"
+            value={d.place || ""}
+            onChange={(e) => set({ place: e.target.value })}
+            placeholder="مثال: قاعة ٢٠٣ — مبنى الإدارة"
+          />
+        </div>
+
+        <div>
+          <span className="mb-2 block text-xs text-white/45">التكرار</span>
+          <div className="grid grid-cols-2 gap-2">
+            {REPEATS.map((r) => {
+              const on = (d.repeat || "none") === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => set({ repeat: r.id, until: r.id === "none" ? null : d.until })}
+                  aria-pressed={on}
+                  className="rounded-xl border px-3 py-2.5 text-[11.5px] font-bold transition-all"
+                  style={{
+                    borderColor: on ? `${T.violet}80` : T.border,
+                    background: on ? `${T.violet}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? T.violet : T.muted,
+                  }}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {repeating && (
+          <div className="los-in">
+            <label htmlFor="los-ev-until" className="mb-1.5 block text-xs text-white/45">
+              يتوقّف التكرار في <span style={{ color: T.faint }}>(اتركه فارغًا ليستمر)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <DateField
+                id="los-ev-until"
+                value={d.until}
+                min={d.date}
+                onChange={(v) => set({ until: v || null })}
+              />
+              {d.until && (
+                <Btn
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => set({ until: null })}
+                  title="إلغاء تاريخ التوقّف"
+                  style={{ borderColor: T.border }}
+                >
+                  <X size={14} />
+                </Btn>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <span className="mb-2 block text-xs text-white/45">
+            ينبّهك قبل الموعد بـ
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {WARN_CHOICES.map((w) => {
+              const on = Number(d.warn || 0) === w;
+              return (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => set({ warn: w })}
+                  aria-pressed={on}
+                  className="rounded-xl border px-3 py-2 text-[11.5px] font-bold transition-all"
+                  style={{
+                    borderColor: on ? `${T.cta}80` : T.border,
+                    background: on ? `${T.cta}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? T.cta : T.muted,
+                  }}
+                >
+                  {w === 0 ? (
+                    "لا تنبيه"
+                  ) : (
+                    <>
+                      <span dir="ltr" className="tabular-nums">
+                        {w}
+                      </span>{" "}
+                      {dayWord(w)}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="los-ev-note" className="mb-1.5 block text-xs text-white/45">
+            ملاحظة <span style={{ color: T.faint }}>(اختياري)</span>
+          </label>
+          <Field
+            id="los-ev-note"
+            as="textarea"
+            rows={3}
+            value={d.note || ""}
+            onChange={(e) => set({ note: e.target.value })}
+            placeholder="ما يجب تحضيره، أو ما لا يجب أن تنساه"
+            className="resize-y leading-relaxed"
+          />
+        </div>
+
+        {err && (
+          <p
+            className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-bold"
+            style={{
+              borderColor: `${T.danger}4D`,
+              background: `${T.danger}14`,
+              color: T.danger,
+            }}
+            role="alert"
+          >
+            <AlertTriangle size={13} /> {err}
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* One square, opened. Everything written on that day in one place —
+   the calendar's own entries and, below them, what the university screen
+   has due. */
+function DaySheet({ open, on, rows, due, uni, onClose, onAdd, onToggle, onEdit, onDelete, onGo }) {
+  const d = keyToDate(on);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={d ? `${DOW_AR[d.getDay()]} · ${arDate(on)}` : "اليوم"}
+      footer={
+        <Btn variant="default" className="flex-1" onClick={onAdd}>
+          <Plus size={15} strokeWidth={3} /> أضف في هذا اليوم
+        </Btn>
+      }
+    >
+      <div className="space-y-4">
+        {on === dayKey() && (
+          <Badge tint={T.cta}>
+            <CircleDot size={11} /> اليوم
+          </Badge>
+        )}
+
+        {rows.length === 0 && due.length === 0 ? (
+          <p className="py-6 text-center text-[12px] leading-relaxed text-white/30">
+            لا شيء في هذا اليوم.
+            <span className="mt-1 block text-[11px] text-white/20">
+              يوم فارغ في التقويم ليس يومًا فارغًا في عمرك.
+            </span>
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {rows.map(({ ev }) => (
+              <EventRow
+                key={ev.id}
+                ev={ev}
+                on={on}
+                onToggle={() => onToggle(ev.id, on)}
+                onEdit={() => onEdit(ev)}
+                onDelete={() => onDelete(ev)}
+              />
+            ))}
+          </div>
+        )}
+
+        {due.length > 0 && (
+          <div>
+            <p
+              className="mb-2 flex items-center gap-1.5 text-[11px] font-bold"
+              style={{ color: T.faint }}
+            >
+              <GraduationCap size={12} /> من الجامعة
+            </p>
+            <div className="space-y-2">
+              {due.map((t) => (
+                <UniDueRow
+                  key={t.id}
+                  task={t}
+                  course={courseIn(uni, t.course)}
+                  onGo={onGo}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function AgendaModule({ state, setState, onGo }) {
+  const today = new Date();
+  const [view, setView] = useState("month");
+  const [cursor, setCursor] = useState({
+    y: today.getFullYear(),
+    m: today.getMonth(),
+  });
+  const [picked, setPicked] = useState(null); // the opened square
+  const [draft, setDraft] = useState(null); // the event form
+
+  const events = state.events || [];
+  const uni = state.uni || uniShape();
+
+  /* The window the month grid covers, including the leading blanks — an
+     entry on the 1st of a month that starts on a Wednesday still has to be
+     found, and the grid asks for its square by key. */
+  const month = useMemo(() => {
+    const first = new Date(cursor.y, cursor.m, 1);
+    const days = new Date(cursor.y, cursor.m + 1, 0).getDate();
+    const lead = (first.getDay() + 1) % 7; // the week starts Saturday
+    const cells = Array.from({ length: lead }, () => null);
+    for (let d = 1; d <= days; d++)
+      cells.push({ d, ds: fmtDay(new Date(cursor.y, cursor.m, d)) });
+    return {
+      cells,
+      from: fmtDay(first),
+      to: fmtDay(new Date(cursor.y, cursor.m, days)),
+    };
+  }, [cursor]);
+
+  const byDate = useMemo(
+    () => eventsIn(events, month.from, month.to),
+    [events, month.from, month.to],
+  );
+  const dueByDate = useMemo(
+    () => uniDue(uni, month.from, month.to),
+    [uni, month.from, month.to],
+  );
+
+  const monthCount = useMemo(() => {
+    let n = 0;
+    for (const row of byDate.values()) n += row.length;
+    return n;
+  }, [byDate]);
+
+  const alerts = useMemo(() => alertsOf(events), [events]);
+  /* One expansion, three readings. Walking the recurrence rules three times
+     over for three counters is the same answer paid for three times. */
+  const list = useMemo(() => upcoming(events), [events]);
+  const next7 = list.filter((r) => {
+    const left = daysUntil(r.on);
+    return left >= 0 && left <= 7 && !isEventDone(r.ev, r.on);
+  }).length;
+  const late = list.filter((r) => r.on < dayKey()).length;
+
+  /* The twelve months of the cursor's year, each with how many entries land
+     in it. Built in one pass over one window instead of twelve calls, which
+     is what keeps a year of weekly entries cheap to draw. */
+  const year = useMemo(() => {
+    const from = fmtDay(new Date(cursor.y, 0, 1));
+    const to = fmtDay(new Date(cursor.y, 11, 31));
+    const map = eventsIn(events, from, to);
+    const months = AR_MONTHS.map((label, m) => ({ label, m, n: 0, days: new Set() }));
+    for (const [ds, row] of map) {
+      const mm = Number(ds.slice(5, 7)) - 1;
+      if (months[mm]) {
+        months[mm].n += row.length;
+        months[mm].days.add(Number(ds.slice(8, 10)));
+      }
+    }
+    return months;
+  }, [events, cursor.y]);
+
+  const shift = (delta) =>
+    setCursor((c) => {
+      const d = new Date(c.y, c.m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+
+  const jumpToday = () => {
+    const now = new Date();
+    setCursor({ y: now.getFullYear(), m: now.getMonth() });
+    setView("month");
+  };
+
+  const toggle = (id, on) =>
+    setState((s) => ({
+      ...s,
+      events: (s.events || []).map((e) =>
+        e.id !== id
+          ? e
+          : {
+              ...e,
+              doneOn: (e.doneOn || []).includes(on)
+                ? e.doneOn.filter((x) => x !== on)
+                : [...(e.doneOn || []), on],
+            },
+      ),
+    }));
+
+  const remove = (ev) => {
+    const rep = repeatOf(ev.repeat);
+    const msg = rep.short
+      ? `حذف «${ev.title}» وكل تكراراته (${rep.label})؟`
+      : `حذف «${ev.title}»؟`;
+    if (!window.confirm(msg)) return;
+    setState((s) => ({
+      ...s,
+      events: (s.events || []).filter((e) => e.id !== ev.id),
+    }));
+  };
+
+  const openNew = (date) =>
+    setDraft({
+      ...eventShape({ date: date || dayKey(), kind: "note", warn: 1 }),
+      isNew: true,
+    });
+
+  const save = () => {
+    const ev = eventShape(draft);
+    ev.title = String(draft.title || "").trim();
+    setState((s) => {
+      const prev = s.events || [];
+      return {
+        ...s,
+        /* The ticks belong to the occurrences, not to the form — an entry
+           edited after being ticked must not come back untouched. */
+        events: prev.some((e) => e.id === ev.id)
+          ? prev.map((e) => (e.id === ev.id ? { ...ev, doneOn: e.doneOn } : e))
+          : [...prev, ev],
+      };
+    });
+    /* Land the user where the entry actually went — saving a date in March
+       while looking at October and seeing nothing change reads as a failed
+       save. */
+    const d = keyToDate(ev.date);
+    if (d) setCursor({ y: d.getFullYear(), m: d.getMonth() });
+    setDraft(null);
+  };
+
+  const stats = [
+    { k: "في هذا الشهر", v: monthCount, c: T.sky, icon: CalendarDays },
+    { k: "خلال أسبوع", v: next7, c: T.cta, icon: CalendarClock },
+    { k: "متأخّر", v: late, c: late ? T.danger : T.faint, icon: AlertTriangle },
+    { k: "كل المواعيد", v: events.length, c: T.accent, icon: Hash },
+  ];
+
+  const pickedRows = picked ? byDate.get(picked) || [] : [];
+  const pickedDue = picked ? dueByDate.get(picked) || [] : [];
+
+  return (
+    <div className="space-y-7">
+      <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:justify-between sm:p-7">
+        <div className="min-w-0">
+          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+            التقويم
+          </h2>
+          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
+            الشهور والسنوات القادمة، وما يستحق أن يُحجز فيها. ما لا تاريخ له لا
+            يحدث.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Btn variant="default" size="sm" onClick={() => openNew()}>
+              <CalendarPlus size={14} strokeWidth={2.6} /> موعد جديد
+            </Btn>
+            <Btn
+              variant="outline"
+              size="sm"
+              onClick={jumpToday}
+              style={{ borderColor: T.border }}
+            >
+              <CircleDot size={13} /> اليوم
+            </Btn>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {AGENDA_VIEWS.map((v) => {
+            const on = v.id === view;
+            const Icon = v.icon;
+            return (
+              <button
+                key={v.id}
+                onClick={() => setView(v.id)}
+                aria-pressed={on}
+                className="flex flex-col items-center gap-1 rounded-xl border px-3.5 py-2.5 text-[11px] font-bold transition-all duration-200"
+                style={{
+                  borderColor: on ? `${T.cta}80` : T.border,
+                  background: on ? `${T.cta}1F` : "rgba(255,255,255,0.03)",
+                  color: on ? T.cta : T.muted,
+                }}
+              >
+                <Icon size={15} strokeWidth={2} />
+                {v.label}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Card key={s.k} className="p-4">
+              <div className="flex items-center gap-2">
+                <Icon size={14} style={{ color: s.c }} />
+                <p className="text-[10.5px]" style={{ color: T.faint }}>
+                  {s.k}
+                </p>
+              </div>
+              <p
+                dir="ltr"
+                className="mt-1 text-[22px] font-extrabold tabular-nums"
+                style={{ color: s.c }}
+              >
+                {s.v}
+              </p>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* The warning window, open. An exam that only speaks on the morning
+          of the exam is a calendar that waited until it was too late. */}
+      {alerts.length > 0 && (
+        <Card className="p-5 sm:p-6" style={{ borderColor: `${T.cta}40` }}>
+          <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.cta }}>
+            <Bell size={15} /> يقترب
+          </p>
+          <div className="mt-3 space-y-2">
+            {alerts.slice(0, 6).map(({ ev, on, left }) => {
+              const k = kindOf(ev.kind);
+              const Icon = k.icon;
+              return (
+                <button
+                  key={`${ev.id}:${on}`}
+                  onClick={() => setPicked(on)}
+                  className="flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-right transition-colors hover:bg-white/[0.06]"
+                  style={{
+                    borderColor: left <= 1 ? `${T.danger}4D` : "rgba(255,255,255,0.08)",
+                    backgroundColor: left <= 1 ? `${T.danger}0F` : "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <Icon size={15} className="shrink-0" style={{ color: k.tint }} />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-bold">
+                    {ev.title || k.label}
+                  </span>
+                  <span
+                    className="shrink-0 text-[11px] font-extrabold"
+                    style={{ color: left <= 1 ? T.danger : T.accent }}
+                  >
+                    {whenWord(on)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {view === "month" && (
+        <Card className="p-4 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            {/* RTL: the chevron pointing right walks back in time. */}
+            <button
+              onClick={() => shift(-1)}
+              aria-label="الشهر السابق"
+              className="rounded-xl border p-2 transition-colors hover:border-white/30"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <div className="text-center">
+              <p className="text-[15px] font-extrabold" style={{ color: T.accent }}>
+                {AR_MONTHS[cursor.m]}
+              </p>
+              <p dir="ltr" className="text-[11px] tabular-nums" style={{ color: T.faint }}>
+                {cursor.y}
+              </p>
+            </div>
+            <button
+              onClick={() => shift(1)}
+              aria-label="الشهر القادم"
+              className="rounded-xl border p-2 transition-colors hover:border-white/30"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+          </div>
+
+          <div className="mb-1.5 grid grid-cols-7 gap-1 sm:gap-1.5">
+            {WEEK_LABELS.map((w, i) => (
+              <p
+                key={i}
+                className="text-center text-[10px] font-bold"
+                style={{ color: T.faint }}
+              >
+                {w}
+              </p>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+            {month.cells.map((cell, i) => {
+              if (!cell) return <div key={`b${i}`} />;
+              const rows = byDate.get(cell.ds) || [];
+              const due = dueByDate.get(cell.ds) || [];
+              const total = rows.length + due.length;
+              const isToday = cell.ds === dayKey();
+              const open = rows.filter((r) => !isEventDone(r.ev, r.on)).length +
+                due.filter((t) => !t.done).length;
+              const dow = keyToDate(cell.ds)?.getDay();
+              const weekend = dow === 5; // Friday
+              return (
+                <button
+                  key={cell.ds}
+                  onClick={() => setPicked(cell.ds)}
+                  aria-label={`${arDate(cell.ds)}${total ? ` — ${total} عنصر` : ""}`}
+                  className="group relative flex min-h-[62px] flex-col rounded-xl border p-1.5 text-right transition-all duration-200 hover:border-white/30 sm:min-h-[84px]"
+                  style={{
+                    borderColor: isToday ? `${T.cta}99` : "rgba(255,255,255,0.08)",
+                    backgroundColor: isToday
+                      ? `${T.cta}14`
+                      : weekend
+                        ? "rgba(255,255,255,0.015)"
+                        : "rgba(255,255,255,0.03)",
+                    boxShadow: isToday ? `0 0 18px -6px ${T.cta}99` : "none",
+                  }}
+                >
+                  <span className="flex items-center justify-between gap-1">
+                    <span
+                      dir="ltr"
+                      className="text-[12px] font-extrabold tabular-nums"
+                      style={{ color: isToday ? T.cta : total ? T.fg : T.faint }}
+                    >
+                      {cell.d}
+                    </span>
+                    {open > 0 && (
+                      <span
+                        dir="ltr"
+                        className="rounded-md px-1 text-[9px] font-extrabold tabular-nums"
+                        style={{ background: `${T.cta}26`, color: T.cta }}
+                      >
+                        {open}
+                      </span>
+                    )}
+                  </span>
+
+                  {/* Phones get dots, desktops get titles: at 375px a
+                      truncated Arabic title in a 44px cell is noise. */}
+                  <span className="mt-1 flex flex-wrap gap-0.5 sm:hidden">
+                    {rows.slice(0, 4).map(({ ev, on }) => (
+                      <span
+                        key={ev.id}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{
+                          background: isEventDone(ev, on) ? T.primary : kindOf(ev.kind).tint,
+                        }}
+                      />
+                    ))}
+                    {/* Ringed, so a university deadline is visibly not one
+                        of the calendar's own entries. */}
+                    {due.slice(0, 2).map((t) => (
+                      <span
+                        key={t.id}
+                        className="h-1.5 w-1.5 rounded-full border"
+                        style={{
+                          background: t.done ? T.primary : uniKindOf(t.kind).tint,
+                          borderColor: "rgba(255,255,255,0.55)",
+                        }}
+                      />
+                    ))}
+                  </span>
+
+                  <span className="mt-1 hidden min-w-0 flex-1 flex-col gap-0.5 sm:flex">
+                    {rows.slice(0, 2).map(({ ev, on }) => {
+                      const done = isEventDone(ev, on);
+                      const tint = done ? T.primary : kindOf(ev.kind).tint;
+                      return (
+                        <span
+                          key={ev.id}
+                          className="truncate rounded px-1 py-0.5 text-[9.5px] font-bold"
+                          style={{
+                            background: `${tint}26`,
+                            color: tint,
+                            textDecoration: done ? "line-through" : "none",
+                          }}
+                        >
+                          {ev.title || kindOf(ev.kind).label}
+                        </span>
+                      );
+                    })}
+                    {due.slice(0, 1).map((t) => (
+                      <span
+                        key={t.id}
+                        className="truncate rounded px-1 py-0.5 text-[9.5px] font-bold"
+                        style={{
+                          background: `${uniKindOf(t.kind).tint}26`,
+                          color: uniKindOf(t.kind).tint,
+                          textDecoration: t.done ? "line-through" : "none",
+                        }}
+                      >
+                        {t.title || uniKindOf(t.kind).label}
+                      </span>
+                    ))}
+                    {total > 3 && (
+                      <span className="px-1 text-[9px]" style={{ color: T.faint }}>
+                        {"+"}
+                        <span dir="ltr" className="tabular-nums">
+                          {total - 3}
+                        </span>
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {view === "year" && (
+        <Card className="p-4 sm:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <button
+              onClick={() => setCursor((c) => ({ ...c, y: c.y - 1 }))}
+              aria-label="السنة السابقة"
+              className="rounded-xl border p-2 transition-colors hover:border-white/30"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <p
+              dir="ltr"
+              className="text-[19px] font-extrabold tabular-nums"
+              style={{ color: T.accent }}
+            >
+              {cursor.y}
+            </p>
+            <button
+              onClick={() => setCursor((c) => ({ ...c, y: c.y + 1 }))}
+              aria-label="السنة القادمة"
+              className="rounded-xl border p-2 transition-colors hover:border-white/30"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {year.map((mo) => {
+              const here =
+                cursor.y === today.getFullYear() && mo.m === today.getMonth();
+              const days = new Date(cursor.y, mo.m + 1, 0).getDate();
+              return (
+                <button
+                  key={mo.m}
+                  onClick={() => {
+                    setCursor({ y: cursor.y, m: mo.m });
+                    setView("month");
+                  }}
+                  className="rounded-2xl border p-3 text-right transition-all duration-200 hover:border-white/30"
+                  style={{
+                    borderColor: here ? `${T.cta}80` : T.border,
+                    backgroundColor: here ? `${T.cta}14` : "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span
+                      className="text-[12.5px] font-extrabold"
+                      style={{ color: here ? T.cta : T.fg }}
+                    >
+                      {mo.label}
+                    </span>
+                    {mo.n > 0 && (
+                      <span
+                        dir="ltr"
+                        className="rounded-md px-1.5 text-[9.5px] font-extrabold tabular-nums"
+                        style={{ background: `${T.sky}26`, color: T.sky }}
+                      >
+                        {mo.n}
+                      </span>
+                    )}
+                  </span>
+                  <span className="mt-2 grid grid-cols-7 gap-[3px]">
+                    {Array.from({ length: days }, (_, i) => i + 1).map((d) => (
+                      <span
+                        key={d}
+                        className="h-[7px] rounded-sm"
+                        style={{
+                          background: mo.days.has(d)
+                            ? T.sky
+                            : "rgba(255,255,255,0.07)",
+                          boxShadow: mo.days.has(d) ? `0 0 6px ${T.sky}80` : "none",
+                        }}
+                      />
+                    ))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {view === "list" && (
+        <Card className="p-5 sm:p-7">
+          <p className="text-[13px] font-extrabold" style={{ color: T.accent }}>
+            القادم
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            المتأخّر أولًا، ثم اليوم، ثم ما بعده — بلا بحث في الشهور.
+          </p>
+          {list.length === 0 ? (
+            <div className="py-10 text-center">
+              <CalendarDays size={28} className="mx-auto" style={{ color: T.faint }} />
+              <p className="mt-3 text-[12.5px] text-white/35">
+                لا مواعيد مسجّلة بعد.
+              </p>
+              <Btn variant="default" size="sm" className="mt-4" onClick={() => openNew()}>
+                <Plus size={14} strokeWidth={3} /> أضف أول موعد
+              </Btn>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {list.map(({ ev, on }) => (
+                <EventRow
+                  key={`${ev.id}:${on}`}
+                  ev={ev}
+                  on={on}
+                  showDate
+                  onToggle={() => toggle(ev.id, on)}
+                  onEdit={() => setDraft({ ...ev })}
+                  onDelete={() => remove(ev)}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      <DaySheet
+        open={!!picked}
+        on={picked}
+        rows={pickedRows}
+        due={pickedDue}
+        uni={uni}
+        onClose={() => setPicked(null)}
+        onAdd={() => {
+          openNew(picked);
+          setPicked(null);
+        }}
+        onToggle={toggle}
+        onEdit={(ev) => {
+          setDraft({ ...ev });
+          setPicked(null);
+        }}
+        onDelete={remove}
+        onGo={() => {
+          setPicked(null);
+          onGo("uni");
+        }}
+      />
+
+      <EventModal
+        open={!!draft}
+        draft={draft}
+        setDraft={setDraft}
+        onClose={() => setDraft(null)}
+        onSave={save}
+      />
+    </div>
+  );
+}
+
+/* ==================================================================== *
+ *  MODULE — the university desk
+ *
+ *  Four screens that read from one another: الجدول (where to be), المقررات
+ *  (the mark sheet and the absences), التسليمات (what is due), المعدّل
+ *  (what all of it rolls up into).
+ * ==================================================================== */
+
+const UNI_VIEWS = [
+  { id: "week", label: "الجدول", icon: CalendarDays },
+  { id: "courses", label: "المقررات", icon: BookMarked },
+  { id: "tasks", label: "التسليمات", icon: ClipboardList },
+  { id: "gpa", label: "المعدّل", icon: Calculator },
+];
+
+/* A number field you can actually type a decimal into. Committing
+   `Number(e.target.value)` straight to state rewrites "8." as "8" between
+   keystrokes, so "8.5" becomes unreachable — the field holds the text while
+   it is being typed and commits the parsed number beside it. */
+function NumField({
+  value,
+  onChange,
+  allowEmpty = false,
+  min = 0,
+  max = 1000,
+  className = "",
+  ...rest
+}) {
+  const show = (v) => (v === null || v === undefined ? "" : String(v));
+  const [text, setText] = useState(() => show(value));
+  const [typing, setTyping] = useState(false);
+
+  /* A change arriving from outside — a reset, an import, another field —
+     has to appear, but not while this one is being typed into: rewriting
+     the text under the cursor is how a caret jumps to the end mid-number. */
+  useEffect(() => {
+    if (!typing) setText(show(value));
+  }, [value, typing]);
+
+  const commit = (raw) => {
+    setText(raw);
+    if (raw.trim() === "") {
+      if (allowEmpty) onChange(null);
+      return;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return; // "-" or "1e" mid-typing: keep the text
+    onChange(Math.min(max, Math.max(min, n)));
+  };
+
+  return (
+    <Field
+      type="text"
+      inputMode="decimal"
+      dir="ltr"
+      value={text}
+      onFocus={() => setTyping(true)}
+      onBlur={() => {
+        setTyping(false);
+        setText(show(value));
+      }}
+      onChange={(e) => commit(e.target.value)}
+      className={`text-left tabular-nums ${className}`}
+      {...rest}
+    />
+  );
+}
+
+/* Letter grades, as a grid. The one the percentage currently earns is
+   ringed so the published grade can be checked against the mark sheet
+   instead of being taken on trust. */
+function GradePicker({ value, onPick, scale, suggest }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+      {GRADES.map((g) => {
+        const on = value === g.id;
+        const hint = !on && suggest === g.id;
+        const pts = gradePoints(g, scale);
+        const tint = g.id === "F" ? T.danger : g.min >= 85 ? T.primary : T.accent;
+        return (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => onPick(on ? null : g.id)}
+            aria-pressed={on}
+            title={`${g.ar} — ${pts}`}
+            className="rounded-xl border px-2 py-2 text-center transition-all"
+            style={{
+              borderColor: on ? `${tint}99` : hint ? `${T.sky}80` : T.border,
+              background: on ? `${tint}26` : hint ? `${T.sky}14` : "rgba(255,255,255,0.03)",
+              color: on ? tint : hint ? T.sky : T.muted,
+            }}
+          >
+            <span dir="ltr" className="block text-[13px] font-extrabold">
+              {g.id}
+            </span>
+            <span dir="ltr" className="block text-[9.5px] tabular-nums opacity-70">
+              {pts}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* A labelled figure. Used wherever a screen states a number it computed,
+   so the unit and the caveat travel with it. */
+function StatTile({ icon: Icon, label, value, sub, tint = T.accent }) {
+  return (
+    /* A Card, not a flat `${tint}0F` fill. These sit straight on the sky in
+       the university header, and a fixed low-alpha tint becomes a pale
+       smear against a noon horizon — the fill has to come from the phase.
+       The tint keeps the rim and the figure, which is all it was for. */
+    <Card className="p-3.5" style={{ borderColor: `${tint}40` }}>
+      <p className="flex items-center gap-1.5 text-[10.5px]" style={{ color: T.faint }}>
+        {Icon && <Icon size={12} style={{ color: tint }} />}
+        {label}
+      </p>
+      <p
+        dir="ltr"
+        className="mt-1 text-[20px] font-extrabold leading-none tabular-nums"
+        style={{ color: tint }}
+      >
+        {value}
+      </p>
+      {sub && (
+        <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: T.faint }}>
+          {sub}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/* --- the course desk -------------------------------------------------- *
+ *  The card is a glance; this is where the term is actually run. The mark
+ *  sheet, the timetable rows, the absence count and the grade all live
+ *  here because they answer one another's questions.
+ * -------------------------------------------------------------------- */
+function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) {
+  if (!course) return null;
+
+  const c = course;
+  const st = courseStanding(c);
+  const cap = absenceCapOf(c, term);
+  const band = attendBand(c.absences, cap);
+  const meetings = meetingsOf(c, term);
+  const need = st.weightOk ? needFor(st, c.target) : null;
+  const suggest =
+    st.projected !== null ? gradeFromPct(st.projected).id : null;
+
+  const patch = (p) => onPatch({ ...c, ...p });
+
+  const addSlot = () =>
+    patch({ slots: [...c.slots, slotShape({ day: 0, from: "08:00", to: "09:50" })] });
+  const setSlot = (id, p) =>
+    patch({ slots: c.slots.map((s) => (s.id === id ? slotShape({ ...s, ...p }) : s)) });
+  const dropSlot = (id) => patch({ slots: c.slots.filter((s) => s.id !== id) });
+
+  const addMark = () =>
+    patch({ marks: [...c.marks, markShape({ label: "", score: null, max: 100, weight: 0 })] });
+  const setMark = (id, p) =>
+    patch({ marks: c.marks.map((m) => (m.id === id ? { ...m, ...p } : m)) });
+  const dropMark = (id) => patch({ marks: c.marks.filter((m) => m.id !== id) });
+
+  /* The four weightings almost every syllabus uses, so the mark sheet is
+     one tap away from being usable instead of five rows of typing. */
+  const preset = () =>
+    patch({
+      marks: [
+        markShape({ label: "أعمال فصلية", max: 100, weight: 20 }),
+        markShape({ label: "كويزات", max: 100, weight: 10 }),
+        markShape({ label: "اختبار فصلي", max: 100, weight: 30 }),
+        markShape({ label: "اختبار نهائي", max: 100, weight: 40 }),
+      ],
+    });
+
+  return (
+    <Modal
+      open={!!course}
+      onClose={onClose}
+      wide
+      title={courseName(c)}
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={onClose}>
+            <Check size={15} strokeWidth={3} /> تم
+          </Btn>
+          <Btn variant="danger" onClick={onDelete} title="حذف المقرّر">
+            <Trash2 size={15} />
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* --- identity --- */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-c-name">
+              اسم المقرّر
+            </label>
+            <Field
+              id="los-c-name"
+              value={c.name}
+              onChange={(e) => patch({ name: e.target.value })}
+              placeholder="مثال: مبادئ الإدارة"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-c-code">
+              الرمز
+            </label>
+            <Field
+              id="los-c-code"
+              dir="ltr"
+              value={c.code}
+              onChange={(e) => patch({ code: e.target.value })}
+              placeholder="MGT 101"
+              style={{ textAlign: "left" }}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-c-dr">
+              المحاضر
+            </label>
+            <Field
+              id="los-c-dr"
+              value={c.instructor}
+              onChange={(e) => patch({ instructor: e.target.value })}
+              placeholder="اسم الدكتور"
+            />
+          </div>
+          <div>
+            <span className="mb-1.5 block text-xs text-white/45">الساعات المعتمدة</span>
+            <NumStep
+              value={c.credits}
+              onChange={(v) => patch({ credits: clampNum(v, 1, 12, 3) })}
+              min={1}
+              max={12}
+              unit="ساعة"
+              tint={c.tint}
+            />
+          </div>
+        </div>
+
+        <div>
+          <span className="mb-2 block text-xs text-white/45">اللون على الجدول</span>
+          <div className="flex flex-wrap gap-2">
+            {COURSE_TINTS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => patch({ tint: t })}
+                aria-label={`اللون ${t}`}
+                aria-pressed={c.tint === t}
+                className="h-8 w-8 rounded-lg border-2 transition-transform hover:scale-110"
+                style={{
+                  background: t,
+                  borderColor: c.tint === t ? T.fg : "transparent",
+                  boxShadow: c.tint === t ? `0 0 14px ${t}` : "none",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* --- the timetable rows --- */}
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.accent }}>
+              <Clock size={13} /> مواعيد المحاضرات
+            </p>
+            <Btn variant="outline" size="sm" onClick={addSlot} style={{ borderColor: T.border }}>
+              <Plus size={13} strokeWidth={3} /> موعد
+            </Btn>
+          </div>
+          {c.slots.length === 0 ? (
+            <p className="rounded-xl border border-dashed p-3 text-center text-[11px] leading-relaxed"
+               style={{ borderColor: T.border, color: T.faint }}>
+              بلا مواعيد لا يظهر المقرّر على الجدول، ولا يُحسب حدّ الغياب.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {c.slots.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex flex-wrap items-end gap-2 rounded-xl border p-2.5"
+                  style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                      اليوم
+                    </span>
+                    <Field
+                      as="select"
+                      value={s.day}
+                      onChange={(e) => setSlot(s.id, { day: Number(e.target.value) })}
+                      className="py-2 text-[12px]"
+                      style={{ borderColor: T.border, colorScheme: "dark" }}
+                    >
+                      {UNI_DAYS.map((d) => (
+                        <option key={d.d} value={d.d}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </Field>
+                  </div>
+                  <div className="w-[88px]">
+                    <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                      من
+                    </span>
+                    <TimeField value={s.from} onChange={(v) => setSlot(s.id, { from: v })} className="py-2 text-[12px]" />
+                  </div>
+                  <div className="w-[88px]">
+                    <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                      إلى
+                    </span>
+                    <TimeField value={s.to} onChange={(v) => setSlot(s.id, { to: v })} className="py-2 text-[12px]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                      القاعة
+                    </span>
+                    <Field
+                      value={s.room}
+                      onChange={(e) => setSlot(s.id, { room: e.target.value })}
+                      placeholder="٢٠٣"
+                      className="py-2 text-[12px]"
+                    />
+                  </div>
+                  <button
+                    onClick={() => dropSlot(s.id)}
+                    aria-label="حذف الموعد"
+                    className="mb-1 rounded-lg p-2 text-white/30 transition-colors hover:text-red-400"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* --- attendance --- */}
+        <div
+          className="rounded-2xl border p-4"
+          style={{
+            borderColor: band ? `${band.tint}3D` : T.border,
+            background: band ? `${band.tint}0F` : "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.accent }}>
+              <UserSearch size={13} /> الحضور والغياب
+            </p>
+            {band && (
+              <Badge tint={band.tint}>
+                <ShieldCheck size={11} /> {band.label}
+              </Badge>
+            )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <span className="mb-1.5 block text-[10.5px]" style={{ color: T.faint }}>
+                مرات الغياب
+              </span>
+              <NumStep
+                value={c.absences}
+                onChange={(v) => patch({ absences: clampNum(v, 0, 200, 0) })}
+                min={0}
+                max={200}
+                unit="مرّة"
+                tint={band ? band.tint : T.sky}
+              />
+            </div>
+            <div>
+              <span className="mb-1.5 block text-[10.5px]" style={{ color: T.faint }}>
+                الحدّ المسموح {c.absenceCap === 0 && cap !== null ? "(محسوب تلقائيًا)" : ""}
+              </span>
+              <NumStep
+                value={c.absenceCap > 0 ? c.absenceCap : cap || 0}
+                onChange={(v) => patch({ absenceCap: clampNum(v, 0, 200, 0) })}
+                min={0}
+                max={200}
+                unit="مرّة"
+                tint={T.accent}
+              />
+            </div>
+          </div>
+
+          {cap ? (
+            <>
+              <div
+                className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+                style={{ background: "rgba(255,255,255,0.07)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min(100, (c.absences / cap) * 100)}%`,
+                    backgroundImage: `linear-gradient(90deg, ${band.tint}, ${band.tint}AA)`,
+                    boxShadow: `0 0 12px ${band.tint}99`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+                {c.absences >= cap ? (
+                  <>تجاوزت الحدّ — راجع المرشد الأكاديمي قبل أن يُثبّت الحرمان.</>
+                ) : (
+                  <>
+                    يتبقّى لك{" "}
+                    <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: band.tint }}>
+                      {cap - c.absences}
+                    </span>{" "}
+                    {timesWord(cap - c.absences)} قبل الحرمان
+                    {meetings > 0 && (
+                      <>
+                        {" "}— من{" "}
+                        <span dir="ltr" className="tabular-nums">
+                          {meetings}
+                        </span>{" "}
+                        {lectureWord(meetings)} في الفصل
+                      </>
+                    )}
+                    .
+                  </>
+                )}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-[11px] leading-relaxed" style={{ color: T.faint }}>
+              أضف مواعيد المحاضرات أو اكتب الحدّ بنفسك ليُحسب الغياب.
+            </p>
+          )}
+        </div>
+
+        {/* --- the mark sheet --- */}
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.accent }}>
+              <Percent size={13} /> توزيع الدرجات
+            </p>
+            <div className="flex gap-2">
+              {c.marks.length === 0 && (
+                <Btn variant="outline" size="sm" onClick={preset} style={{ borderColor: T.border }}>
+                  <Sparkles size={13} /> توزيع شائع
+                </Btn>
+              )}
+              <Btn variant="outline" size="sm" onClick={addMark} style={{ borderColor: T.border }}>
+                <Plus size={13} strokeWidth={3} /> بند
+              </Btn>
+            </div>
+          </div>
+
+          {c.marks.length === 0 ? (
+            <p className="rounded-xl border border-dashed p-3 text-center text-[11px] leading-relaxed"
+               style={{ borderColor: T.border, color: T.faint }}>
+              اكتب بنود التقييم وأوزانها، ثم أدخل الدرجات كما تصل — وسيُحسب
+              كل شيء بعدها وحده.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="hidden gap-2 px-2.5 text-[10px] sm:flex" style={{ color: T.faint }}>
+                <span className="min-w-0 flex-1">البند</span>
+                <span className="w-[72px] text-center">الدرجة</span>
+                <span className="w-[72px] text-center">من</span>
+                <span className="w-[72px] text-center">الوزن ٪</span>
+                <span className="w-[34px]" />
+              </div>
+              {c.marks.map((m) => {
+                const got = m.score !== null ? (m.score / m.max) * m.weight : null;
+                return (
+                  <div
+                    key={m.id}
+                    className="flex flex-wrap items-end gap-2 rounded-xl border p-2.5"
+                    style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+                  >
+                    <div className="min-w-[120px] flex-1">
+                      <span className="mb-1 block text-[10px] sm:hidden" style={{ color: T.faint }}>
+                        البند
+                      </span>
+                      <Field
+                        value={m.label}
+                        onChange={(e) => setMark(m.id, { label: e.target.value })}
+                        placeholder="مثال: اختبار فصلي"
+                        className="py-2 text-[12px]"
+                      />
+                    </div>
+                    <div className="w-[72px]">
+                      <span className="mb-1 block text-[10px] sm:hidden" style={{ color: T.faint }}>
+                        الدرجة
+                      </span>
+                      <NumField
+                        value={m.score}
+                        allowEmpty
+                        min={0}
+                        max={1000}
+                        onChange={(v) => setMark(m.id, { score: v })}
+                        placeholder="—"
+                        className="py-2 text-[12px]"
+                      />
+                    </div>
+                    <div className="w-[72px]">
+                      <span className="mb-1 block text-[10px] sm:hidden" style={{ color: T.faint }}>
+                        من
+                      </span>
+                      <NumField
+                        value={m.max}
+                        min={0.01}
+                        max={1000}
+                        onChange={(v) => setMark(m.id, { max: v })}
+                        className="py-2 text-[12px]"
+                      />
+                    </div>
+                    <div className="w-[72px]">
+                      <span className="mb-1 block text-[10px] sm:hidden" style={{ color: T.faint }}>
+                        الوزن ٪
+                      </span>
+                      <NumField
+                        value={m.weight}
+                        min={0}
+                        max={100}
+                        onChange={(v) => setMark(m.id, { weight: v })}
+                        className="py-2 text-[12px]"
+                      />
+                    </div>
+                    <button
+                      onClick={() => dropMark(m.id)}
+                      aria-label="حذف البند"
+                      className="mb-1 rounded-lg p-2 text-white/30 transition-colors hover:text-red-400"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    {got !== null && (
+                      <p className="w-full text-[10px]" style={{ color: T.muted }}>
+                        حصّلت{" "}
+                        <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: c.tint }}>
+                          {got.toFixed(1)}
+                        </span>{" "}
+                        من{" "}
+                        <span dir="ltr" className="tabular-nums">
+                          {m.weight}
+                        </span>{" "}
+                        نقطة من المئة
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!st.weightOk && c.marks.length > 0 && (
+            <p
+              className="mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold"
+              style={{ borderColor: `${T.accent}40`, background: `${T.accent}12`, color: T.accent }}
+            >
+              <AlertTriangle size={13} className="shrink-0" />
+              مجموع الأوزان{" "}
+              <span dir="ltr" className="tabular-nums">
+                {st.totalW}
+              </span>
+              ٪ لا ١٠٠٪ — أكمله ليعمل حاسب «كم أحتاج».
+            </p>
+          )}
+        </div>
+
+        {/* --- where it stands --- */}
+        {c.marks.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile
+              icon={BadgeCheck}
+              label="محصّل من ١٠٠"
+              value={st.earned.toFixed(1)}
+              sub={`من ${st.gradedW}٪ رُصدت`}
+              tint={c.tint}
+            />
+            <StatTile
+              icon={Gauge}
+              label="متوسط ما رُصد"
+              value={st.pace === null ? "—" : `${st.pace.toFixed(1)}%`}
+              sub={st.pace === null ? "لا درجات بعد" : gradeFromPct(st.pace).ar}
+              tint={T.sky}
+            />
+            <StatTile
+              icon={TrendingUp}
+              label="المتوقّع"
+              value={st.projected === null ? "—" : `${st.projected.toFixed(1)}%`}
+              sub={
+                st.projected === null
+                  ? "يظهر بعد أول درجة"
+                  : `بهذا المستوى: ${gradeFromPct(st.projected).id}`
+              }
+              tint={T.accent}
+            />
+            <StatTile
+              icon={Hourglass}
+              label="لم يُرصد بعد"
+              value={`${st.pending}%`}
+              sub="الوزن المتبقّي من المئة"
+              tint={T.violet}
+            />
+          </div>
+        )}
+
+        {/* --- what the rest has to average --- */}
+        {st.weightOk && st.pending > 0 && (
+          <div
+            className="rounded-2xl border p-4"
+            style={{ borderColor: `${T.cta}3D`, background: `${T.cta}0F` }}
+          >
+            <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.cta }}>
+              <Crosshair size={13} /> كم أحتاج في الباقي؟
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              <div className="min-w-[180px] flex-1">
+                <span className="mb-1.5 block text-[10.5px]" style={{ color: T.faint }}>
+                  هدفي في المقرّر
+                </span>
+                <NumStep
+                  value={c.target}
+                  onChange={(v) => patch({ target: clampNum(v, 0, 100, 90) })}
+                  min={0}
+                  max={100}
+                  step={5}
+                  unit="٪"
+                  tint={T.cta}
+                />
+              </div>
+              <div className="min-w-[160px] flex-1">
+                {need === null ? null : need > 100 ? (
+                  <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.danger }}>
+                    الهدف لم يبقَ ممكنًا — أعلى ما يمكن بلوغه الآن{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {(st.earned + st.pending).toFixed(1)}
+                    </span>
+                    ٪. أنزل الهدف إلى ما يُدرك.
+                  </p>
+                ) : need <= 0 ? (
+                  <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.primary }}>
+                    بلغت الهدف فعلًا — الباقي تثبيت لا إنقاذ.
+                  </p>
+                ) : (
+                  <p className="text-[12px] leading-relaxed" style={{ color: T.muted }}>
+                    تحتاج متوسط{" "}
+                    <span
+                      dir="ltr"
+                      className="text-[17px] font-extrabold tabular-nums"
+                      style={{ color: need >= 90 ? T.danger : T.primary }}
+                    >
+                      {need.toFixed(1)}%
+                    </span>{" "}
+                    في البنود المتبقّية (
+                    <span dir="ltr" className="tabular-nums">
+                      {st.pending}
+                    </span>
+                    ٪ من الدرجة) لتصل إلى{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {c.target}
+                    </span>
+                    ٪.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- the published grade --- */}
+        <div>
+          <p className="mb-2 flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.accent }}>
+            <Award size={13} /> التقدير النهائي
+          </p>
+          <p className="mb-2.5 text-[11px] leading-relaxed" style={{ color: T.faint }}>
+            لا يُحسب في المعدّل حتى تختاره بنفسك — والمحاط بالأزرق هو ما
+            يستحقّه المقرّر بحسب درجاتك الآن.
+          </p>
+          <GradePicker
+            value={c.grade}
+            onPick={(id) => patch({ grade: id })}
+            scale={scale}
+            suggest={suggest}
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-c-notes">
+            ملاحظات المقرّر
+          </label>
+          <Field
+            id="los-c-notes"
+            as="textarea"
+            rows={3}
+            value={c.notes}
+            onChange={(e) => patch({ notes: e.target.value })}
+            placeholder="ما يطلبه الدكتور، شكل الاختبار، ما يجب ألّا تنساه"
+            className="resize-y leading-relaxed"
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CourseCard({ course, term, onOpen, onAbsence }) {
+  const c = course;
+  const st = courseStanding(c);
+  const cap = absenceCapOf(c, term);
+  const band = attendBand(c.absences, cap);
+  const g = gradeOf(c.grade);
+  const days = c.slots
+    .map((s) => uniDayOf(s.day))
+    .filter(Boolean)
+    .map((d) => d.short);
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-[12px] font-extrabold"
+          style={{
+            borderColor: `${c.tint}45`,
+            background: `${c.tint}18`,
+            color: c.tint,
+          }}
+        >
+          <span dir="ltr">{c.credits}</span>
+        </span>
+        <button onClick={onOpen} className="min-w-0 flex-1 text-right">
+          <p className="truncate text-[14.5px] font-extrabold">{courseName(c)}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[10.5px]" style={{ color: T.faint }}>
+            {c.code && <span dir="ltr">{c.code}</span>}
+            {c.instructor && <span className="truncate">{c.instructor}</span>}
+            {days.length > 0 && <span>{days.join(" · ")}</span>}
+          </p>
+        </button>
+        {g && (
+          <Badge tint={g.id === "F" ? T.danger : g.min >= 85 ? T.primary : T.accent}>
+            <span dir="ltr">{g.id}</span>
+          </Badge>
+        )}
+      </div>
+
+      {/* The card stays a glance: a bar and two figures. Everything else is
+          on the desk, one tap away. */}
+      <div className="mt-4 space-y-3">
+        <div>
+          <p className="mb-1 flex items-center justify-between text-[10.5px]" style={{ color: T.faint }}>
+            <span>محصّل من ١٠٠</span>
+            <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: c.tint }}>
+              {st.earned.toFixed(1)} / {st.totalW || 100}
+            </span>
+          </p>
+          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${Math.min(100, st.earned)}%`,
+                backgroundImage: `linear-gradient(90deg, ${c.tint}, ${c.tint}AA)`,
+                boxShadow: `0 0 12px ${c.tint}99`,
+              }}
+            />
+          </div>
+        </div>
+
+        {cap !== null && (
+          <div>
+            <p className="mb-1 flex items-center justify-between text-[10.5px]" style={{ color: T.faint }}>
+              <span>الغياب</span>
+              <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: band.tint }}>
+                {c.absences} / {cap}
+              </span>
+            </p>
+            <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${Math.min(100, (c.absences / cap) * 100)}%`,
+                  backgroundImage: `linear-gradient(90deg, ${band.tint}, ${band.tint}AA)`,
+                  boxShadow: `0 0 12px ${band.tint}99`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Btn variant="outline" size="sm" onClick={onOpen} className="flex-1" style={{ borderColor: T.border }}>
+          <SquarePen size={13} /> مكتب المقرّر
+        </Btn>
+        <Btn variant="ghost" size="sm" onClick={onAbsence} style={{ borderColor: T.border }} title="سجّل غيابًا">
+          <Plus size={13} strokeWidth={3} /> غياب
+        </Btn>
+      </div>
+    </Card>
+  );
+}
+
+function CourseModal({ open, draft, setDraft, terms, onClose, onSave }) {
+  const d = draft || {};
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (open) setErr("");
+  }, [open]);
+
+  const save = () => {
+    if (!String(d.name || "").trim() && !String(d.code || "").trim()) {
+      setErr("اكتب اسم المقرّر أو رمزه.");
+      return;
+    }
+    onSave();
+  };
+  const set = (p) => setDraft((s) => ({ ...s, ...p }));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="مقرّر جديد"
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={save}>
+            <Check size={15} strokeWidth={3} /> أضف
+          </Btn>
+          <Btn variant="outline" className="flex-1" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-nc-name">
+            اسم المقرّر
+          </label>
+          <Field
+            id="los-nc-name"
+            autoFocus
+            value={d.name || ""}
+            onChange={(e) => set({ name: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="مثال: محاسبة إدارية"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-nc-code">
+              الرمز
+            </label>
+            <Field
+              id="los-nc-code"
+              dir="ltr"
+              value={d.code || ""}
+              onChange={(e) => set({ code: e.target.value })}
+              placeholder="ACC 201"
+              style={{ textAlign: "left" }}
+            />
+          </div>
+          <div>
+            <span className="mb-1.5 block text-xs text-white/45">الساعات</span>
+            <NumStep
+              value={d.credits ?? 3}
+              onChange={(v) => set({ credits: v })}
+              min={1}
+              max={12}
+              unit="ساعة"
+              tint={d.tint || COURSE_TINTS[0]}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-nc-dr">
+            المحاضر <span style={{ color: T.faint }}>(اختياري)</span>
+          </label>
+          <Field
+            id="los-nc-dr"
+            value={d.instructor || ""}
+            onChange={(e) => set({ instructor: e.target.value })}
+            placeholder="اسم الدكتور"
+          />
+        </div>
+        {terms.length > 1 && (
+          <div>
+            <span className="mb-2 block text-xs text-white/45">الفصل</span>
+            <Field
+              as="select"
+              value={d.term || ""}
+              onChange={(e) => set({ term: e.target.value })}
+              style={{ borderColor: T.border, colorScheme: "dark" }}
+            >
+              {terms.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label || "فصل بلا اسم"}
+                </option>
+              ))}
+            </Field>
+          </div>
+        )}
+        <div>
+          <span className="mb-2 block text-xs text-white/45">اللون</span>
+          <div className="flex flex-wrap gap-2">
+            {COURSE_TINTS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => set({ tint: t })}
+                aria-label={`اللون ${t}`}
+                aria-pressed={d.tint === t}
+                className="h-8 w-8 rounded-lg border-2 transition-transform hover:scale-110"
+                style={{
+                  background: t,
+                  borderColor: d.tint === t ? T.fg : "transparent",
+                  boxShadow: d.tint === t ? `0 0 14px ${t}` : "none",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        {err && (
+          <p
+            className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-bold"
+            style={{ borderColor: `${T.danger}4D`, background: `${T.danger}14`, color: T.danger }}
+            role="alert"
+          >
+            <AlertTriangle size={13} /> {err}
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function TermModal({ open, draft, setDraft, onClose, onSave, onDelete }) {
+  const d = draft || {};
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (open) setErr("");
+  }, [open, d.id]);
+
+  const save = () => {
+    if (!String(d.label || "").trim()) {
+      setErr("اكتب اسم الفصل.");
+      return;
+    }
+    if (!isKey(d.start) || !isKey(d.end)) {
+      setErr("تواريخ الفصل غير صالحة.");
+      return;
+    }
+    if (d.end < d.start) {
+      setErr("نهاية الفصل قبل بدايته.");
+      return;
+    }
+    onSave();
+  };
+  const set = (p) => setDraft((s) => ({ ...s, ...p }));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={d.isNew ? "فصل دراسي جديد" : "تعديل الفصل"}
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={save}>
+            <Check size={15} strokeWidth={3} /> حفظ
+          </Btn>
+          {!d.isNew && (
+            <Btn variant="danger" onClick={onDelete} title="حذف الفصل">
+              <Trash2 size={15} />
+            </Btn>
+          )}
+          <Btn variant="outline" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-tm-label">
+            اسم الفصل
+          </label>
+          <Field
+            id="los-tm-label"
+            autoFocus
+            value={d.label || ""}
+            onChange={(e) => set({ label: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="مثال: الفصل الأول ١٤٤٨"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-tm-start">
+              البداية
+            </label>
+            <DateField id="los-tm-start" value={d.start} onChange={(v) => set({ start: v })} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-tm-end">
+              النهاية
+            </label>
+            <DateField id="los-tm-end" value={d.end} min={d.start} onChange={(v) => set({ end: v })} />
+          </div>
+        </div>
+        <div>
+          <span className="mb-1.5 block text-xs text-white/45">عدد أسابيع الدراسة</span>
+          <NumStep
+            value={d.weeks ?? TERM_WEEKS_DEFAULT}
+            onChange={(v) => set({ weeks: v })}
+            min={1}
+            max={40}
+            unit="أسبوع"
+            tint={T.sky}
+          />
+          <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            منه يُحسب عدد المحاضرات، ومنه حدّ الغياب (
+            <span dir="ltr" className="tabular-nums">
+              25
+            </span>
+            ٪).
+          </p>
+        </div>
+        {err && (
+          <p
+            className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-bold"
+            style={{ borderColor: `${T.danger}4D`, background: `${T.danger}14`, color: T.danger }}
+            role="alert"
+          >
+            <AlertTriangle size={13} /> {err}
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function UniTaskModal({ open, draft, setDraft, courses, onClose, onSave }) {
+  const d = draft || {};
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (open) setErr("");
+  }, [open, d.id]);
+
+  const save = () => {
+    if (!String(d.title || "").trim()) {
+      setErr("اكتب عنوان التسليم.");
+      return;
+    }
+    if (!isKey(d.due)) {
+      setErr("تاريخ الاستحقاق غير صالح.");
+      return;
+    }
+    onSave();
+  };
+  const set = (p) => setDraft((s) => ({ ...s, ...p }));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={d.id && !d.isNew ? "تعديل التسليم" : "تسليم أو اختبار جديد"}
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={save}>
+            <Check size={15} strokeWidth={3} /> حفظ
+          </Btn>
+          <Btn variant="outline" className="flex-1" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-ut-title">
+            العنوان
+          </label>
+          <Field
+            id="los-ut-title"
+            autoFocus
+            value={d.title || ""}
+            onChange={(e) => set({ title: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="مثال: تقرير الفصل الثالث"
+          />
+        </div>
+
+        <div>
+          <span className="mb-2 block text-xs text-white/45">النوع</span>
+          <div className="grid grid-cols-2 gap-2">
+            {UNI_TASK_KINDS.map((k) => {
+              const on = d.kind === k.id;
+              const Icon = k.icon;
+              return (
+                <button
+                  key={k.id}
+                  type="button"
+                  onClick={() => set({ kind: k.id })}
+                  aria-pressed={on}
+                  className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[11.5px] font-bold transition-all"
+                  style={{
+                    borderColor: on ? `${k.tint}80` : T.border,
+                    background: on ? `${k.tint}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? k.tint : T.muted,
+                  }}
+                >
+                  <Icon size={14} strokeWidth={2} />
+                  {k.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-ut-course">
+            المقرّر
+          </label>
+          <Field
+            as="select"
+            id="los-ut-course"
+            value={d.course || ""}
+            onChange={(e) => set({ course: e.target.value })}
+            style={{ borderColor: T.border, colorScheme: "dark" }}
+          >
+            <option value="">بلا مقرّر</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {courseName(c)}
+              </option>
+            ))}
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-ut-due">
+              الاستحقاق
+            </label>
+            <DateField id="los-ut-due" value={d.due} onChange={(v) => set({ due: v })} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-ut-time">
+              الوقت <span style={{ color: T.faint }}>(اختياري)</span>
+            </label>
+            <TimeField id="los-ut-time" value={d.time} onChange={(v) => set({ time: v })} />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-ut-place">
+            المكان <span style={{ color: T.faint }}>(اختياري)</span>
+          </label>
+          <Field
+            id="los-ut-place"
+            value={d.place || ""}
+            onChange={(e) => set({ place: e.target.value })}
+            placeholder="قاعة الاختبار، أو منصّة التسليم"
+          />
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-xs text-white/45">وزنه من الدرجة</span>
+          <NumStep
+            value={d.weight ?? 0}
+            onChange={(v) => set({ weight: v })}
+            min={0}
+            max={100}
+            step={5}
+            unit="٪"
+            tint={T.accent}
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-ut-notes">
+            ملاحظة <span style={{ color: T.faint }}>(اختياري)</span>
+          </label>
+          <Field
+            id="los-ut-notes"
+            as="textarea"
+            rows={2}
+            value={d.notes || ""}
+            onChange={(e) => set({ notes: e.target.value })}
+            placeholder="المطلوب بالضبط، وشروط الدكتور"
+            className="resize-y leading-relaxed"
+          />
+        </div>
+
+        {err && (
+          <p
+            className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-bold"
+            style={{ borderColor: `${T.danger}4D`, background: `${T.danger}14`, color: T.danger }}
+            role="alert"
+          >
+            <AlertTriangle size={13} /> {err}
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function UniTaskRow({ task, course, onToggle, onEdit, onDelete }) {
+  const k = uniKindOf(task.kind);
+  const Icon = k.icon;
+  const left = daysUntil(task.due);
+  const late = !task.done && left < 0;
+  const soon = !task.done && left >= 0 && left <= 2;
+  const [burst, fireBurst] = useBurst(700);
+
+  const handle = () => {
+    if (!task.done) fireBurst();
+    onToggle();
+  };
+
+  return (
+    <div
+      className={`group flex items-start gap-2 rounded-xl border p-2.5 transition-all duration-200${
+        burst ? " los-reward" : ""
+      }`}
+      style={{
+        borderColor: burst
+          ? T.primary
+          : late
+            ? `${T.danger}4D`
+            : soon
+              ? `${T.cta}40`
+              : "rgba(255,255,255,0.08)",
+        backgroundColor: burst
+          ? `${T.primary}26`
+          : task.done
+            ? `${T.primary}0F`
+            : late
+              ? `${T.danger}0F`
+              : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <span
+        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+        style={{
+          borderColor: task.done ? `${T.primary}59` : `${k.tint}45`,
+          background: task.done ? `${T.primary}1A` : `${k.tint}18`,
+          color: task.done ? T.primary : k.tint,
+        }}
+      >
+        <Icon size={15} strokeWidth={1.9} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-start gap-2">
+          <Checkbox
+            checked={task.done}
+            onToggle={handle}
+            label={task.title || k.label}
+            tint={T.primary}
+            size="sm"
+          />
+          <button
+            onClick={onEdit}
+            aria-label={`تعديل ${task.title || k.label}`}
+            className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-white/70 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={onDelete}
+            aria-label={`حذف ${task.title || k.label}`}
+            className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 pr-1.5 text-[10.5px]">
+          <span style={{ color: k.tint }}>{k.label}</span>
+          {course && (
+            <span className="inline-flex min-w-0 items-center gap-1" style={{ color: course.tint }}>
+              <BookMarked size={10} className="shrink-0" />
+              <span className="truncate">{courseName(course)}</span>
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1" style={{ color: T.faint }}>
+            <CalendarDays size={10} />
+            {arDate(task.due)}
+          </span>
+          {task.time && (
+            <span className="inline-flex items-center gap-1" style={{ color: T.muted }}>
+              <Clock size={10} />
+              <span dir="ltr" className="tabular-nums">
+                {prettyTime(task.time)}
+              </span>
+            </span>
+          )}
+          {task.place && (
+            <span className="inline-flex min-w-0 items-center gap-1" style={{ color: T.faint }}>
+              <MapPin size={10} className="shrink-0" />
+              <span className="truncate">{task.place}</span>
+            </span>
+          )}
+          {task.weight > 0 && (
+            <span className="inline-flex items-center gap-1" style={{ color: T.accent }}>
+              <Percent size={10} />
+              <span dir="ltr" className="tabular-nums">
+                {task.weight}
+              </span>
+            </span>
+          )}
+          {!task.done && (
+            <span
+              className="font-bold"
+              style={{ color: late ? T.danger : soon ? T.cta : T.faint }}
+            >
+              {whenWord(task.due)}
+            </span>
+          )}
+        </div>
+        {task.notes && (
+          <p className="mt-1.5 whitespace-pre-wrap pr-1.5 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+            {task.notes}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* The week, drawn. A six-column grid is unreadable at 375px, so the phone
+   gets the same data as a day at a time and the grid appears from `lg` up —
+   the arrows are not a fallback, they are the only thing that works under
+   a finger. */
+function WeekGrid({ courses, mins, dow }) {
+  const hours = useMemo(() => {
+    const out = [];
+    for (let h = Math.floor(DAY_FROM / 60); h <= Math.floor(DAY_TO / 60); h += 2) out.push(h);
+    return out;
+  }, []);
+
+  const nowLine =
+    mins >= DAY_FROM && mins <= DAY_TO
+      ? ((mins - DAY_FROM) / (DAY_TO - DAY_FROM)) * 100
+      : null;
+
+  return (
+    <div className="hidden lg:block">
+      <div className="flex gap-2">
+        <div className="relative w-12 shrink-0" style={{ height: 560 }}>
+          {hours.map((h) => {
+            const { top } = spanPct(h * 60, h * 60 + 10);
+            return (
+              <span
+                key={h}
+                dir="ltr"
+                className="absolute left-0 -translate-y-1/2 text-[10px] tabular-nums"
+                style={{ top: `${top}%`, color: T.faint }}
+              >
+                {String(h).padStart(2, "0")}:00
+              </span>
+            );
+          })}
+        </div>
+        <div className="grid min-w-0 flex-1 grid-cols-6 gap-2">
+          {UNI_DAYS.map((d) => {
+            const rows = daySections(courses, d.d, mins);
+            const isToday = d.d === dow;
+            return (
+              <div key={d.d} className="min-w-0">
+                <p
+                  className="mb-1.5 truncate text-center text-[11px] font-extrabold"
+                  style={{ color: isToday ? T.cta : T.muted }}
+                >
+                  {d.label}
+                </p>
+                <div
+                  className="relative rounded-xl border"
+                  style={{
+                    height: 560,
+                    borderColor: isToday ? `${T.cta}59` : "rgba(255,255,255,0.08)",
+                    backgroundColor: isToday ? `${T.cta}0A` : "rgba(255,255,255,0.025)",
+                  }}
+                >
+                  {hours.map((h) => {
+                    const { top } = spanPct(h * 60, h * 60 + 10);
+                    return (
+                      <span
+                        key={h}
+                        className="absolute inset-x-0 border-t"
+                        style={{ top: `${top}%`, borderColor: "rgba(255,255,255,0.05)" }}
+                      />
+                    );
+                  })}
+
+                  {isToday && nowLine !== null && (
+                    <span
+                      className="absolute inset-x-0 z-10 border-t-2"
+                      style={{
+                        top: `${nowLine}%`,
+                        borderColor: T.cta,
+                        boxShadow: `0 0 10px ${T.cta}`,
+                      }}
+                      aria-hidden="true"
+                    />
+                  )}
+
+                  {rows.map((r) => {
+                    const { top, height } = spanPct(r.from, r.to);
+                    return (
+                      <span
+                        key={`${r.course.id}:${r.slot.id}`}
+                        className="absolute inset-x-1 overflow-hidden rounded-lg border p-1.5"
+                        style={{
+                          top: `${top}%`,
+                          height: `${height}%`,
+                          borderColor: r.now ? r.course.tint : `${r.course.tint}59`,
+                          background: `${r.course.tint}26`,
+                          boxShadow: r.now ? `0 0 16px -4px ${r.course.tint}` : "none",
+                        }}
+                        title={`${courseName(r.course)} — ${r.slot.from} إلى ${r.slot.to}`}
+                      >
+                        <span
+                          className="block truncate text-[10px] font-extrabold leading-tight"
+                          style={{ color: r.course.tint }}
+                        >
+                          {courseName(r.course)}
+                        </span>
+                        <span dir="ltr" className="block truncate text-[9px] tabular-nums" style={{ color: T.muted }}>
+                          {r.slot.from}–{r.slot.to}
+                        </span>
+                        {r.slot.room && (
+                          <span className="block truncate text-[9px]" style={{ color: T.faint }}>
+                            {r.slot.room}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UniModule({ state, setState, onGo }) {
+  const uni = state.uni || uniShape();
+  const mins = useMinuteClock();
+  const dow = new Date().getDay();
+
+  const [view, setView] = useState("week");
+  const [deskId, setDeskId] = useState(null);
+  const [newCourse, setNewCourse] = useState(null);
+  const [termDraft, setTermDraft] = useState(null);
+  const [taskDraft, setTaskDraft] = useState(null);
+  const [pickDay, setPickDay] = useState(() =>
+    uniDayOf(dow) ? dow : UNI_DAYS[0].d,
+  );
+
+  const term = termOf(uni, uni.term);
+  const courses = useMemo(() => coursesIn(uni, uni.term), [uni]);
+  const desk = deskId ? courseIn(uni, deskId) : null;
+
+  const patchUni = useCallback(
+    (fn) =>
+      setState((s) => {
+        const prev = s.uni || uniShape();
+        return { ...s, uni: { ...prev, ...fn(prev) } };
+      }),
+    [setState],
+  );
+
+  const patchCourse = useCallback(
+    (next) =>
+      patchUni((u) => ({
+        courses: u.courses.map((c) => (c.id === next.id ? courseShape(next) : c)),
+      })),
+    [patchUni],
+  );
+
+  const dropCourse = (c) => {
+    if (!window.confirm(`حذف «${courseName(c)}» بكل درجاته وملاحظاته؟`)) return;
+    patchUni((u) => ({
+      courses: u.courses.filter((x) => x.id !== c.id),
+      /* A deliverable pointing at a deleted course would render under a
+         blank name forever, so the link is cut rather than left dangling —
+         the deliverable itself is the user's and stays. */
+      tasks: u.tasks.map((t) => (t.course === c.id ? { ...t, course: "" } : t)),
+    }));
+    setDeskId(null);
+  };
+
+  const addAbsence = (c) =>
+    patchCourse({ ...c, absences: clampNum(c.absences + 1, 0, 200, 0) });
+
+  const saveCourse = () => {
+    const c = courseShape({ ...newCourse, term: newCourse.term || uni.term });
+    c.name = String(newCourse.name || "").trim();
+    c.code = String(newCourse.code || "").trim();
+    patchUni((u) => ({ courses: [...u.courses, c] }));
+    setNewCourse(null);
+    setDeskId(c.id);
+  };
+
+  const saveTerm = () => {
+    const t = termShape(termDraft);
+    t.label = String(termDraft.label || "").trim();
+    patchUni((u) => ({
+      terms: termDraft.isNew
+        ? [...u.terms, t]
+        : u.terms.map((x) => (x.id === t.id ? t : x)),
+      term: termDraft.isNew ? t.id : u.term,
+    }));
+    setTermDraft(null);
+  };
+
+  const dropTerm = () => {
+    const t = termDraft;
+    const n = coursesIn(uni, t.id).length;
+    if (
+      !window.confirm(
+        n
+          ? `حذف «${t.label}» و${n} ${courseWord(n)} فيه؟`
+          : `حذف «${t.label}»؟`,
+      )
+    )
+      return;
+    patchUni((u) => {
+      const terms = u.terms.filter((x) => x.id !== t.id);
+      const courses = u.courses.filter((c) => c.term !== t.id);
+      const ids = new Set(courses.map((c) => c.id));
+      return {
+        terms,
+        courses,
+        /* Same reason as deleting one course: the deliverable survives, the
+           dead link does not. */
+        tasks: u.tasks.map((x) => (x.course && !ids.has(x.course) ? { ...x, course: "" } : x)),
+        term: terms.length ? terms[0].id : "",
+      };
+    });
+    setTermDraft(null);
+  };
+
+  const saveTask = () => {
+    const t = uniTaskShape(taskDraft);
+    t.title = String(taskDraft.title || "").trim();
+    patchUni((u) => ({
+      tasks: u.tasks.some((x) => x.id === t.id)
+        ? u.tasks.map((x) => (x.id === t.id ? t : x))
+        : [...u.tasks, t],
+    }));
+    setTaskDraft(null);
+  };
+
+  const toggleTask = (id) =>
+    patchUni((u) => ({
+      tasks: u.tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+    }));
+
+  const dropTask = (t) => {
+    if (!window.confirm(`حذف «${t.title}»؟`)) return;
+    patchUni((u) => ({ tasks: u.tasks.filter((x) => x.id !== t.id) }));
+  };
+
+  const setScale = (n) =>
+    patchUni(() => ({ scale: Number(n) === 4 ? 4 : 5 }));
+
+  /* --- the figures ---------------------------------------------------- */
+  const termGpa = useMemo(() => gpaOf(courses, uni.scale), [courses, uni.scale]);
+  const allGraded = useMemo(() => gpaOf(uni.courses, uni.scale), [uni.courses, uni.scale]);
+  /* The prior figure is only usable on the scale it was typed on. Rather
+     than fold a four-point average into a five-point cumulative, the screen
+     says it cannot and asks for the number again. */
+  const priorUsable = uni.priorCredits === 0 || uni.priorScale === uni.scale;
+  const cumulative = useMemo(() => {
+    if (!priorUsable) return null;
+    const credits = allGraded.credits + uni.priorCredits;
+    if (!credits) return 0;
+    return (allGraded.points + uni.priorGpa * uni.priorCredits) / credits;
+  }, [allGraded, uni.priorGpa, uni.priorCredits, priorUsable]);
+  const cumCredits = allGraded.credits + uni.priorCredits;
+
+  const loadHours = courses.reduce((n, c) => n + c.credits, 0);
+  const todayRows = useMemo(
+    () => daySections(courses, dow, mins),
+    [courses, dow, mins],
+  );
+  const next = useMemo(
+    () => nextSection(courses, dow, mins),
+    [courses, dow, mins],
+  );
+
+  const openTasks = useMemo(
+    () =>
+      (uni.tasks || [])
+        .filter((t) => !t.done)
+        .sort((a, b) => (a.due === b.due ? 0 : a.due < b.due ? -1 : 1)),
+    [uni.tasks],
+  );
+  const doneTasks = useMemo(
+    () => (uni.tasks || []).filter((t) => t.done).sort((a, b) => (a.due < b.due ? 1 : -1)),
+    [uni.tasks],
+  );
+  const lateTasks = openTasks.filter((t) => t.due < dayKey()).length;
+  const week1 = openTasks.filter((t) => {
+    const n = daysUntil(t.due);
+    return n >= 0 && n <= 7;
+  }).length;
+
+  /* The one number that matters more than the GPA: who is close to being
+     barred from a final. Surfaced at the top rather than buried in a desk. */
+  const atRisk = useMemo(
+    () =>
+      courses
+        .map((c) => {
+          const cap = absenceCapOf(c, term);
+          return cap ? { c, cap, band: attendBand(c.absences, cap) } : null;
+        })
+        .filter((r) => r && r.band.min >= 0.75),
+    [courses, term],
+  );
+
+  const stats = [
+    {
+      k: "الساعات المسجّلة",
+      v: loadHours,
+      c: T.sky,
+      icon: Hash,
+      sub: `${courses.length} ${courseWord(courses.length)}`,
+    },
+    {
+      k: "معدّل الفصل",
+      v: termGpa.credits ? termGpa.gpa.toFixed(2) : "—",
+      c: termGpa.credits ? gpaBand(termGpa.gpa, uni.scale).tint : T.faint,
+      icon: Calculator,
+      sub: termGpa.credits ? `من ${uni.scale}` : "بعد رصد التقديرات",
+    },
+    { k: "تسليمات قادمة", v: week1, c: T.cta, icon: ClipboardList, sub: "خلال أسبوع" },
+    {
+      k: "متأخّر",
+      v: lateTasks,
+      c: lateTasks ? T.danger : T.faint,
+      icon: AlertTriangle,
+      sub: lateTasks ? "سلّمه أو ألغه" : "لا شيء متأخّر",
+    },
+  ];
+
+  return (
+    <div className="space-y-7">
+      <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:justify-between sm:p-7">
+        <div className="min-w-0">
+          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+            الجامعة
+          </h2>
+          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
+            الجدول والدرجات والغياب والمعدّل في شاشة واحدة — لأن كل رقم منها
+            يجيب عن سؤال الآخر.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {(uni.terms || []).map((t) => {
+              const on = t.id === uni.term;
+              const live = t.start <= dayKey() && dayKey() <= t.end;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => patchUni(() => ({ term: t.id }))}
+                  onDoubleClick={() => setTermDraft({ ...t })}
+                  aria-pressed={on}
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11.5px] font-bold transition-all"
+                  style={{
+                    borderColor: on ? `${T.cta}80` : T.border,
+                    background: on ? `${T.cta}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? T.cta : T.muted,
+                  }}
+                >
+                  {t.label || "فصل بلا اسم"}
+                  {live && (
+                    <span
+                      aria-label="الفصل الحالي"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: T.primary, boxShadow: `0 0 8px ${T.primary}` }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+            {term && (
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => setTermDraft({ ...term })}
+                style={{ borderColor: T.border }}
+                title="تعديل الفصل الحالي"
+              >
+                <Pencil size={12} />
+              </Btn>
+            )}
+            <Btn
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setTermDraft({
+                  ...termShape({ label: "", start: dayKey() }),
+                  isNew: true,
+                })
+              }
+              style={{ borderColor: T.border }}
+            >
+              <Plus size={13} strokeWidth={3} /> فصل
+            </Btn>
+          </div>
+          {term && (
+            <p className="mt-2.5 text-[10.5px]" style={{ color: T.faint }}>
+              {arDate(term.start)} — {arDate(term.end)} ·{" "}
+              <span dir="ltr" className="tabular-nums">
+                {term.weeks}
+              </span>{" "}
+              {weekWord(term.weeks)}
+            </p>
+          )}
+        </div>
+        <div className="grid shrink-0 grid-cols-4 gap-2">
+          {UNI_VIEWS.map((v) => {
+            const on = v.id === view;
+            const Icon = v.icon;
+            return (
+              <button
+                key={v.id}
+                onClick={() => setView(v.id)}
+                aria-pressed={on}
+                className="flex flex-col items-center gap-1 rounded-xl border px-2.5 py-2.5 text-[10.5px] font-bold transition-all duration-200"
+                style={{
+                  borderColor: on ? `${T.cta}80` : T.border,
+                  background: on ? `${T.cta}1F` : "rgba(255,255,255,0.03)",
+                  color: on ? T.cta : T.muted,
+                }}
+              >
+                <Icon size={15} strokeWidth={2} />
+                {v.label}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => (
+          <StatTile
+            key={s.k}
+            icon={s.icon}
+            label={s.k}
+            value={s.v}
+            sub={s.sub}
+            tint={s.c}
+          />
+        ))}
+      </div>
+
+      {atRisk.length > 0 && (
+        <Card className="p-5 sm:p-6" style={{ borderColor: `${T.danger}40` }}>
+          <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.danger }}>
+            <AlertTriangle size={15} /> الغياب يقترب من الحدّ
+          </p>
+          <div className="mt-3 space-y-2">
+            {atRisk.map(({ c, cap, band }) => (
+              <button
+                key={c.id}
+                onClick={() => setDeskId(c.id)}
+                className="flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-right transition-colors hover:bg-white/[0.06]"
+                style={{ borderColor: `${band.tint}40`, backgroundColor: `${band.tint}0F` }}
+              >
+                <BookMarked size={15} className="shrink-0" style={{ color: c.tint }} />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-bold">
+                  {courseName(c)}
+                </span>
+                <span dir="ltr" className="shrink-0 text-[11.5px] font-extrabold tabular-nums" style={{ color: band.tint }}>
+                  {c.absences} / {cap}
+                </span>
+                <Badge tint={band.tint}>{band.label}</Badge>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ---------------- الجدول ---------------- */}
+      {view === "week" && (
+        <>
+          {next && (
+            <Card className="p-5 sm:p-6" style={{ borderColor: `${next.course.tint}40` }}>
+              <p className="flex items-center gap-2 text-[11px] font-bold" style={{ color: T.faint }}>
+                <AlarmClock size={13} style={{ color: next.course.tint }} />
+                {next.now ? "أنت الآن في" : next.inDays === 0 ? "القادمة اليوم" : next.inDays === 1 ? "أوّل محاضرة غدًا" : `أوّل محاضرة ${DOW_AR[(dow + next.inDays) % 7]}`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-[18px] font-extrabold" style={{ color: next.course.tint }}>
+                    {courseName(next.course)}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 text-[11.5px]" style={{ color: T.muted }}>
+                    <span dir="ltr" className="tabular-nums">
+                      {prettyTime(next.slot.from)} – {prettyTime(next.slot.to)}
+                    </span>
+                    {next.slot.room && (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin size={11} /> {next.slot.room}
+                      </span>
+                    )}
+                    {next.course.instructor && (
+                      <span className="inline-flex items-center gap-1">
+                        <Users size={11} /> {next.course.instructor}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                {next.inDays === 0 && !next.now && (
+                  <Badge tint={T.cta}>
+                    <Clock size={11} /> بعد{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {Math.max(1, next.from - mins)}
+                    </span>{" "}
+                    {minWord(Math.max(1, next.from - mins))}
+                  </Badge>
+                )}
+                {next.now && (
+                  <Badge tint={T.primary}>
+                    <CircleDot size={11} /> جارية الآن
+                  </Badge>
+                )}
+              </div>
+            </Card>
+          )}
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.accent }}>
+                <CalendarDays size={15} /> الجدول الأسبوعي
+              </p>
+              <Btn
+                variant="outline"
+                size="sm"
+                onClick={() => setView("courses")}
+                style={{ borderColor: T.border }}
+              >
+                <SquarePen size={13} /> عدّل المواعيد
+              </Btn>
+            </div>
+
+            {courses.length === 0 ? (
+              <div className="py-10 text-center">
+                <School size={28} className="mx-auto" style={{ color: T.faint }} />
+                <p className="mt-3 text-[12.5px] leading-relaxed text-white/35">
+                  لا مقرّرات في هذا الفصل بعد.
+                </p>
+                <Btn
+                  variant="default"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() =>
+                    setNewCourse(courseShape({ term: uni.term, tint: COURSE_TINTS[0] }))
+                  }
+                  disabled={!uni.term}
+                >
+                  <Plus size={14} strokeWidth={3} /> أضف أول مقرّر
+                </Btn>
+              </div>
+            ) : (
+              <>
+                <WeekGrid courses={courses} mins={mins} dow={dow} />
+
+                {/* phone: a day at a time */}
+                <div className="lg:hidden">
+                  <div className="mb-3 grid grid-cols-6 gap-1.5">
+                    {UNI_DAYS.map((d) => {
+                      const on = d.d === pickDay;
+                      const isToday = d.d === dow;
+                      const n = daySections(courses, d.d, -1).length;
+                      return (
+                        <button
+                          key={d.d}
+                          onClick={() => setPickDay(d.d)}
+                          aria-pressed={on}
+                          className="rounded-xl border px-1 py-2 text-center transition-all"
+                          style={{
+                            borderColor: on ? `${T.cta}80` : isToday ? `${T.cta}40` : T.border,
+                            background: on ? `${T.cta}1F` : "rgba(255,255,255,0.03)",
+                            color: on ? T.cta : T.muted,
+                          }}
+                        >
+                          <span className="block text-[12px] font-extrabold">{d.short}</span>
+                          <span dir="ltr" className="block text-[9px] tabular-nums opacity-70">
+                            {n}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="space-y-2">
+                    {daySections(courses, pickDay, pickDay === dow ? mins : -1).length === 0 ? (
+                      <p className="py-6 text-center text-[12px] text-white/30">
+                        لا محاضرات في {uniDayOf(pickDay)?.label}.
+                      </p>
+                    ) : (
+                      daySections(courses, pickDay, pickDay === dow ? mins : -1).map((r) => (
+                        <div
+                          key={`${r.course.id}:${r.slot.id}`}
+                          className="flex items-center gap-3 rounded-xl border p-3"
+                          style={{
+                            borderColor: r.now ? r.course.tint : `${r.course.tint}40`,
+                            backgroundColor: `${r.course.tint}12`,
+                          }}
+                        >
+                          <span
+                            dir="ltr"
+                            className="shrink-0 text-center text-[10.5px] font-extrabold tabular-nums leading-tight"
+                            style={{ color: r.course.tint }}
+                          >
+                            {r.slot.from}
+                            <br />
+                            {r.slot.to}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-extrabold">
+                              {courseName(r.course)}
+                            </span>
+                            <span className="mt-0.5 flex flex-wrap gap-x-2.5 text-[10.5px]" style={{ color: T.faint }}>
+                              {r.slot.room && (
+                                <span className="inline-flex items-center gap-1">
+                                  <MapPin size={10} /> {r.slot.room}
+                                </span>
+                              )}
+                              {r.course.instructor && <span className="truncate">{r.course.instructor}</span>}
+                            </span>
+                          </span>
+                          {r.now && <Badge tint={T.primary}>الآن</Badge>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+
+          {todayRows.length > 0 && (
+            <Card className="p-5 sm:p-6">
+              <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.accent }}>
+                <ClipboardCheck size={15} /> محاضرات اليوم
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed" style={{ color: T.faint }}>
+                سجّل الغياب في يومه — غياب يُسجَّل بعد أسبوع هو غياب لا يُسجَّل.
+              </p>
+              <div className="mt-3 space-y-2">
+                {todayRows.map((r) => {
+                  const cap = absenceCapOf(r.course, term);
+                  const band = attendBand(r.course.absences, cap);
+                  return (
+                    <div
+                      key={`${r.course.id}:${r.slot.id}`}
+                      className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
+                      style={{
+                        borderColor: r.now ? r.course.tint : "rgba(255,255,255,0.08)",
+                        backgroundColor: r.now ? `${r.course.tint}14` : "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <span dir="ltr" className="shrink-0 text-[11px] font-extrabold tabular-nums" style={{ color: r.course.tint }}>
+                        {r.slot.from}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-bold">
+                        {courseName(r.course)}
+                      </span>
+                      {cap !== null && (
+                        <span dir="ltr" className="shrink-0 text-[10.5px] tabular-nums" style={{ color: band.tint }}>
+                          {r.course.absences}/{cap}
+                        </span>
+                      )}
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => addAbsence(r.course)}
+                        style={{ borderColor: T.border }}
+                      >
+                        <Plus size={12} strokeWidth={3} /> غياب
+                      </Btn>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ---------------- المقررات ---------------- */}
+      {view === "courses" && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[12.5px]" style={{ color: T.faint }}>
+              {courses.length === 0
+                ? "ابدأ بمقرّر واحد، وأكمل الباقي من مكتبه."
+                : "اضغط المقرّر لتفتح مكتبه: المواعيد، الدرجات، الغياب، والتقدير."}
+            </p>
+            <Btn
+              variant="default"
+              size="sm"
+              onClick={() =>
+                setNewCourse(
+                  courseShape({
+                    term: uni.term,
+                    tint: COURSE_TINTS[courses.length % COURSE_TINTS.length],
+                  }),
+                )
+              }
+              disabled={!uni.term}
+            >
+              <Plus size={14} strokeWidth={3} /> مقرّر جديد
+            </Btn>
+          </div>
+
+          {!uni.term ? (
+            <Card className="p-8 text-center">
+              <School size={28} className="mx-auto" style={{ color: T.faint }} />
+              <p className="mt-3 text-[12.5px] leading-relaxed text-white/35">
+                أضف فصلًا دراسيًا أولًا — المقرّرات تعيش داخل فصل.
+              </p>
+            </Card>
+          ) : courses.length === 0 ? (
+            <Card className="p-8 text-center">
+              <BookMarked size={28} className="mx-auto" style={{ color: T.faint }} />
+              <p className="mt-3 text-[12.5px] leading-relaxed text-white/35">
+                لا مقرّرات في «{term?.label || "هذا الفصل"}» بعد.
+              </p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {courses.map((c) => (
+                <CourseCard
+                  key={c.id}
+                  course={c}
+                  term={term}
+                  onOpen={() => setDeskId(c.id)}
+                  onAbsence={() => addAbsence(c)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ---------------- التسليمات ---------------- */}
+      {view === "tasks" && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[12.5px]" style={{ color: T.faint }}>
+              كل تسليم هنا يظهر تلقائيًا في التقويم — تاريخ واحد في مكان واحد.
+            </p>
+            <div className="flex gap-2">
+              <Btn
+                variant="outline"
+                size="sm"
+                onClick={() => onGo("agenda")}
+                style={{ borderColor: T.border }}
+              >
+                <CalendarDays size={13} /> في التقويم
+              </Btn>
+              <Btn
+                variant="default"
+                size="sm"
+                onClick={() =>
+                  setTaskDraft({
+                    ...uniTaskShape({ due: dayKey(), kind: "assign" }),
+                    isNew: true,
+                  })
+                }
+              >
+                <Plus size={14} strokeWidth={3} /> تسليم جديد
+              </Btn>
+            </div>
+          </div>
+
+          <Card className="p-5 sm:p-7">
+            <p className="text-[13px] font-extrabold" style={{ color: T.accent }}>
+              المطلوب
+            </p>
+            {openTasks.length === 0 ? (
+              <div className="py-10 text-center">
+                <ClipboardCheck size={28} className="mx-auto" style={{ color: T.primary }} />
+                <p className="mt-3 text-[12.5px] text-white/35">
+                  لا شيء مستحقّ. أضف ما تعرف أنه قادم قبل أن يفاجئك.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {openTasks.map((t) => (
+                  <UniTaskRow
+                    key={t.id}
+                    task={t}
+                    course={courseIn(uni, t.course)}
+                    onToggle={() => toggleTask(t.id)}
+                    onEdit={() => setTaskDraft({ ...t })}
+                    onDelete={() => dropTask(t)}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {doneTasks.length > 0 && (
+            <Card className="p-5 sm:p-7">
+              <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.primary }}>
+                <CheckCheck size={15} /> مُنجز
+                <span dir="ltr" className="tabular-nums opacity-60">
+                  ({doneTasks.length})
+                </span>
+              </p>
+              <div className="mt-4 space-y-2">
+                {doneTasks.slice(0, 20).map((t) => (
+                  <UniTaskRow
+                    key={t.id}
+                    task={t}
+                    course={courseIn(uni, t.course)}
+                    onToggle={() => toggleTask(t.id)}
+                    onEdit={() => setTaskDraft({ ...t })}
+                    onDelete={() => dropTask(t)}
+                  />
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ---------------- المعدّل ---------------- */}
+      {view === "gpa" && (
+        <>
+          <Card className="p-5 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.accent }}>
+                  <Calculator size={15} /> حاسب المعدّل
+                </p>
+                <p className="mt-1.5 max-w-lg text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+                  لا يُحسب مقرّر إلا بعد أن ترصد تقديره — المقرّر بلا تقدير
+                  ليس صفرًا، وحسابه صفرًا يكذب عليك.
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                {[5, 4].map((n) => {
+                  const on = uni.scale === n;
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => setScale(n)}
+                      aria-pressed={on}
+                      className="rounded-xl border px-4 py-2 text-[12px] font-extrabold transition-all"
+                      style={{
+                        borderColor: on ? `${T.cta}80` : T.border,
+                        background: on ? `${T.cta}1F` : "rgba(255,255,255,0.03)",
+                        color: on ? T.cta : T.muted,
+                      }}
+                    >
+                      من <span dir="ltr">{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div
+                className="rounded-2xl border p-5 text-center"
+                style={{
+                  borderColor: `${termGpa.credits ? gpaBand(termGpa.gpa, uni.scale).tint : T.border}40`,
+                  background: `${termGpa.credits ? gpaBand(termGpa.gpa, uni.scale).tint : "#ffffff"}0F`,
+                }}
+              >
+                <p className="text-[10.5px]" style={{ color: T.faint }}>
+                  معدّل الفصل
+                </p>
+                <p
+                  dir="ltr"
+                  className="mt-1 text-[32px] font-extrabold leading-none tabular-nums"
+                  style={{
+                    color: termGpa.credits ? gpaBand(termGpa.gpa, uni.scale).tint : T.faint,
+                  }}
+                >
+                  {termGpa.credits ? termGpa.gpa.toFixed(2) : "—"}
+                </p>
+                <p className="mt-1.5 text-[10.5px]" style={{ color: T.muted }}>
+                  {termGpa.credits ? (
+                    <>
+                      {gpaBand(termGpa.gpa, uni.scale).label} ·{" "}
+                      <span dir="ltr" className="tabular-nums">
+                        {termGpa.credits}
+                      </span>{" "}
+                      {hourWord(termGpa.credits)} محسوبة
+                    </>
+                  ) : (
+                    "لا تقديرات مرصودة"
+                  )}
+                </p>
+              </div>
+
+              <div
+                className="rounded-2xl border p-5 text-center"
+                style={{
+                  borderColor: `${
+                    cumulative !== null && cumCredits
+                      ? gpaBand(cumulative, uni.scale).tint
+                      : T.border
+                  }40`,
+                  background: `${
+                    cumulative !== null && cumCredits
+                      ? gpaBand(cumulative, uni.scale).tint
+                      : "#ffffff"
+                  }0F`,
+                }}
+              >
+                <p className="text-[10.5px]" style={{ color: T.faint }}>
+                  المعدّل التراكمي
+                </p>
+                <p
+                  dir="ltr"
+                  className="mt-1 text-[32px] font-extrabold leading-none tabular-nums"
+                  style={{
+                    color:
+                      cumulative !== null && cumCredits
+                        ? gpaBand(cumulative, uni.scale).tint
+                        : T.faint,
+                  }}
+                >
+                  {cumulative !== null && cumCredits ? cumulative.toFixed(2) : "—"}
+                </p>
+                <p className="mt-1.5 text-[10.5px]" style={{ color: T.muted }}>
+                  {cumulative === null ? (
+                    "المعدّل السابق على مقياس آخر"
+                  ) : cumCredits ? (
+                    <>
+                      <span dir="ltr" className="tabular-nums">
+                        {cumCredits}
+                      </span>{" "}
+                      {hourWord(cumCredits)} إجمالًا
+                    </>
+                  ) : (
+                    "لا ساعات بعد"
+                  )}
+                </p>
+              </div>
+
+              <div
+                className="rounded-2xl border p-5"
+                style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+              >
+                <p className="text-[10.5px]" style={{ color: T.faint }}>
+                  ما قبل هذه الفصول
+                </p>
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                      المعدّل السابق
+                    </span>
+                    <NumField
+                      value={uni.priorGpa}
+                      min={0}
+                      max={uni.scale}
+                      onChange={(v) =>
+                        patchUni(() => ({ priorGpa: v, priorScale: uni.scale }))
+                      }
+                      className="py-2 text-[12px]"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                      ساعاته المعتمدة
+                    </span>
+                    <NumField
+                      value={uni.priorCredits}
+                      min={0}
+                      max={500}
+                      onChange={(v) =>
+                        patchUni(() => ({ priorCredits: v, priorScale: uni.scale }))
+                      }
+                      className="py-2 text-[12px]"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {!priorUsable && (
+              <p
+                className="mt-4 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-[11.5px] font-bold leading-relaxed"
+                style={{ borderColor: `${T.accent}40`, background: `${T.accent}12`, color: T.accent }}
+                role="alert"
+              >
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                المعدّل السابق مُدخل على مقياس «من{" "}
+                <span dir="ltr">{uni.priorScale}</span>» وأنت تحسب الآن على «من{" "}
+                <span dir="ltr">{uni.scale}</span>». أعد كتابته من سجلك
+                الأكاديمي ليُحسب التراكمي — تحويله تلقائيًا رقمٌ مخترع.
+              </p>
+            )}
+          </Card>
+
+          <Card className="p-5 sm:p-7">
+            <p className="text-[13px] font-extrabold" style={{ color: T.accent }}>
+              تقديرات {term?.label || "الفصل"}
+            </p>
+            {courses.length === 0 ? (
+              <p className="py-8 text-center text-[12px] text-white/30">
+                لا مقرّرات في هذا الفصل.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {courses.map((c) => {
+                  const st = courseStanding(c);
+                  const g = gradeOf(c.grade);
+                  const suggest = st.projected !== null ? gradeFromPct(st.projected).id : null;
+                  return (
+                    <div
+                      key={c.id}
+                      className="rounded-2xl border p-3.5"
+                      style={{ borderColor: `${c.tint}2E`, background: `${c.tint}0A` }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <button onClick={() => setDeskId(c.id)} className="min-w-0 flex-1 text-right">
+                          <p className="truncate text-[13.5px] font-extrabold" style={{ color: c.tint }}>
+                            {courseName(c)}
+                          </p>
+                          <p className="mt-0.5 text-[10.5px]" style={{ color: T.faint }}>
+                            <span dir="ltr" className="tabular-nums">
+                              {c.credits}
+                            </span>{" "}
+                            {hourWord(c.credits)}
+                            {st.projected !== null && (
+                              <>
+                                {" · المتوقّع "}
+                                <span dir="ltr" className="tabular-nums">
+                                  {st.projected.toFixed(1)}%
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        </button>
+                        {g && (
+                          <span
+                            dir="ltr"
+                            className="shrink-0 text-[13px] font-extrabold tabular-nums"
+                            style={{ color: gradePoints(g, uni.scale) >= 4 ? T.primary : T.accent }}
+                          >
+                            {gradePoints(g, uni.scale).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3">
+                        <GradePicker
+                          value={c.grade}
+                          onPick={(id) => patchCourse({ ...c, grade: id })}
+                          scale={uni.scale}
+                          suggest={suggest}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      <CourseDesk
+        course={desk}
+        term={term}
+        scale={uni.scale}
+        onClose={() => setDeskId(null)}
+        onPatch={patchCourse}
+        onDelete={() => desk && dropCourse(desk)}
+      />
+
+      <CourseModal
+        open={!!newCourse}
+        draft={newCourse}
+        setDraft={setNewCourse}
+        terms={uni.terms || []}
+        onClose={() => setNewCourse(null)}
+        onSave={saveCourse}
+      />
+
+      <TermModal
+        open={!!termDraft}
+        draft={termDraft}
+        setDraft={setTermDraft}
+        onClose={() => setTermDraft(null)}
+        onSave={saveTerm}
+        onDelete={dropTerm}
+      />
+
+      <UniTaskModal
+        open={!!taskDraft}
+        draft={taskDraft}
+        setDraft={setTaskDraft}
+        courses={uni.courses || []}
+        onClose={() => setTaskDraft(null)}
+        onSave={saveTask}
+      />
+    </div>
+  );
+}
+
 function NavList({ items, tab, onGo, showLabels }) {
   return (
     <nav className="flex flex-col gap-1.5">
@@ -12393,13 +16616,15 @@ function SettingsModal({ open, onClose, state, setState }) {
     { k: "مهمة", n: state.tasks?.length || 0 },
     { k: "هدف", n: state.goals?.length || 0 },
     { k: "كتاب", n: state.books?.length || 0 },
+    { k: "موعد", n: state.events?.length || 0 },
+    { k: "مقرّر", n: state.uni?.courses?.length || 0 },
   ];
 
   return (
     <Modal open={open} onClose={onClose} title="الإعدادات والنسخ الاحتياطي">
       <div className="space-y-5">
         <div
-          className="grid grid-cols-4 gap-2 rounded-2xl border p-3 text-center"
+          className="grid grid-cols-3 gap-2 rounded-2xl border p-3 text-center"
           style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
         >
           {counts.map((c) => (
@@ -13098,6 +17323,12 @@ export default function LifeOS() {
                   savedAt={savedAt}
                   onOpenMirror={() => setMirror(true)}
                 />
+              )}
+              {tab === "agenda" && (
+                <AgendaModule state={state} setState={setState} onGo={go} />
+              )}
+              {tab === "uni" && (
+                <UniModule state={state} setState={setState} onGo={go} />
               )}
               {tab === "career" && (
                 <CareerModule state={state} setState={setState} />
