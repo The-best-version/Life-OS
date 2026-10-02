@@ -923,6 +923,22 @@ const yesterdayKey = () => {
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+/* --- the two guards every stored shape is built on -------------------- *
+ *  A default parameter fires for `undefined` and for nothing else, so
+ *  `shape(null)` sailed straight past `(x = {})` and threw on the first
+ *  property read. That is not a theoretical payload: a hand-edited backup,
+ *  a half-written download and another app's JSON all produce exactly it,
+ *  and `[null]` passes the import check because it is still an array.
+ *
+ *  `obj` makes a shape total — anything that is not an object becomes an
+ *  empty one and every field falls back to its default. `rows` does the
+ *  same for a list: the holes are dropped rather than carried forward to
+ *  throw later, somewhere with no try/catch around it.
+ * ---------------------------------------------------------------------- */
+const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
+const rows = (v) =>
+  Array.isArray(v) ? v.filter((x) => x && typeof x === "object" && !Array.isArray(x)) : [];
+
 /* The "بعد العشاء" block was split out of "المساء" in schema 4. These labels
    drive both the seed and the migration, so an existing user's صلاة العشاء
    moves into the new block instead of being duplicated beside it. */
@@ -1181,7 +1197,9 @@ const daysBetween = (fromKey, toKey = dayKey()) => {
    on one scale — a screen that only records the losses makes the user look
    weaker than he is, and he stops opening it. A log written before the tags
    existed keeps `tag: ""` and is simply skipped by the breakdowns. */
-const urgeShape = (u = {}, kind = "hold") => ({
+const urgeShape = (u, kind = "hold") => (
+  (u = obj(u)),
+  {
   id: u.id || uid(),
   at: typeof u.at === "string" ? u.at : dayKey(),
   kind: u.kind === "fall" || kind === "fall" ? "fall" : "hold",
@@ -1208,7 +1226,9 @@ const stamp = () => ({
 
 /* The one place a bad habit's fields are written — add form, migration and
    import all pass through here, so the shape cannot drift between them. */
-const badHabitShape = (b = {}) => ({
+const badHabitShape = (b) => (
+  (b = obj(b)),
+  {
   id: b.id || uid(),
   title: typeof b.title === "string" ? b.title : "",
   startDate: typeof b.startDate === "string" ? b.startDate : dayKey(),
@@ -1470,7 +1490,9 @@ const SEED_TASKS = [
    with the page they came from, and a page counter. `bookShape` is the one
    place that shape is written, so the seed, the add form and the migration
    cannot drift apart. */
-const bookShape = (b = {}) => ({
+const bookShape = (b) => (
+  (b = obj(b)),
+  {
   title: "",
   author: "",
   status: "planned",
@@ -1499,15 +1521,22 @@ function bookForHabit(habit, books) {
   return books.find((b) => b.id === habit.book) || null;
 }
 
+/* `(log || [])` like every other list reader here. These two were the only
+   ones that assumed an array outright, which made them the only two that
+   could take the render down over a field the data layer had not filled. */
 const sumPages = (log) =>
-  log.reduce((n, r) => n + (Number.isFinite(r.pages) ? r.pages : 0), 0);
+  rows(log).reduce((n, r) => n + (Number.isFinite(r.pages) ? r.pages : 0), 0);
 
 /* Days in a row, counting back from today, on which the goal was met. A
    streak that ended yesterday still counts today — the day is not over. */
 function readStreak(log, goal) {
-  if (!log.length || goal <= 0) return 0;
+  /* Through `rows`, not just `|| []`: it also drops a hole, so one bad
+     entry cannot throw on `r.date` halfway through the walk. The local
+     name avoids shadowing the helper itself. */
+  const list = rows(log);
+  if (!list.length || goal <= 0) return 0;
   const byDay = new Map();
-  for (const r of log)
+  for (const r of list)
     byDay.set(r.date, (byDay.get(r.date) || 0) + (r.pages || 0));
 
   const d = logicalNow();
@@ -2318,7 +2347,9 @@ const stageOf = (id) => APP_STAGES.find((s) => s.id === id) || APP_STAGES[0];
 
 /* One place each career row's fields are written — add form, migration and
    import all pass through here, so the shape cannot drift between them. */
-const sprintShape = (s = {}) => ({
+const sprintShape = (s) => (
+  (s = obj(s)),
+  {
   id: s.id || uid(),
   company: typeof s.company === "string" ? s.company : "",
   role: typeof s.role === "string" ? s.role : "",
@@ -2330,7 +2361,9 @@ const sprintShape = (s = {}) => ({
   notes: s.notes && typeof s.notes === "object" ? s.notes : {},
 });
 
-const appShape = (a = {}) => ({
+const appShape = (a) => (
+  (a = obj(a)),
+  {
   id: a.id || uid(),
   company: typeof a.company === "string" ? a.company : "",
   role: typeof a.role === "string" ? a.role : "",
@@ -2340,7 +2373,9 @@ const appShape = (a = {}) => ({
   note: typeof a.note === "string" ? a.note : "",
 });
 
-const storyShape = (s = {}) => ({
+const storyShape = (s) => (
+  (s = obj(s)),
+  {
   id: s.id || uid(),
   title: typeof s.title === "string" ? s.title : "",
   situation: typeof s.situation === "string" ? s.situation : "",
@@ -2349,7 +2384,9 @@ const storyShape = (s = {}) => ({
   result: typeof s.result === "string" ? s.result : "",
 });
 
-const careerShape = (c = {}) => ({
+const careerShape = (c) => (
+  (c = obj(c)),
+  {
   startedAt: typeof c.startedAt === "string" ? c.startedAt : null,
   /* The one-time Saudi registrations. An object keyed by id rather than an
      array of done ids, so adding a row later cannot shift anyone's ticks. */
@@ -2607,7 +2644,9 @@ const repeatOf = (id) => REPEATS.find((r) => r.id === id) || REPEATS[0];
    means it only speaks on the day — which for an exam is far too late. */
 const WARN_CHOICES = [0, 1, 3, 7, 14, 30];
 
-const eventShape = (e = {}) => ({
+const eventShape = (e) => (
+  (e = obj(e)),
+  {
   id: e.id || uid(),
   title: typeof e.title === "string" ? e.title : "",
   date: isKey(e.date) ? e.date : dayKey(),
@@ -2914,7 +2953,9 @@ const uniKindOf = (id) =>
 /* The ones that cannot be rescheduled by asking nicely. */
 const UNI_EXAM_KINDS = new Set(["quiz", "mid", "final"]);
 
-const slotShape = (s = {}) => ({
+const slotShape = (s) => (
+  (s = obj(s)),
+  {
   id: s.id || uid(),
   day: uniDayOf(s.day) ? Number(s.day) : 0,
   from: hhmm(s.from, "08:00"),
@@ -2922,7 +2963,9 @@ const slotShape = (s = {}) => ({
   room: typeof s.room === "string" ? s.room : "",
 });
 
-const markShape = (m = {}) => ({
+const markShape = (m) => (
+  (m = obj(m)),
+  {
   id: m.id || uid(),
   label: typeof m.label === "string" ? m.label : "",
   /* `null` is "not returned yet" and has to survive as null. A zero is a
@@ -2938,7 +2981,9 @@ const markShape = (m = {}) => ({
   weight: clampNum(m.weight, 0, 100, 0),
 });
 
-const courseShape = (c = {}) => ({
+const courseShape = (c) => (
+  (c = obj(c)),
+  {
   id: c.id || uid(),
   code: typeof c.code === "string" ? c.code : "",
   name: typeof c.name === "string" ? c.name : "",
@@ -2972,7 +3017,9 @@ const courseShape = (c = {}) => ({
   notes: typeof c.notes === "string" ? c.notes : "",
 });
 
-const termShape = (t = {}) => ({
+const termShape = (t) => (
+  (t = obj(t)),
+  {
   id: t.id || uid(),
   label: typeof t.label === "string" ? t.label : "",
   start: isKey(t.start) ? t.start : dayKey(),
@@ -2980,7 +3027,9 @@ const termShape = (t = {}) => ({
   weeks: clampNum(t.weeks, 1, 40, TERM_WEEKS_DEFAULT),
 });
 
-const uniTaskShape = (t = {}) => ({
+const uniTaskShape = (t) => (
+  (t = obj(t)),
+  {
   id: t.id || uid(),
   title: typeof t.title === "string" ? t.title : "",
   kind: UNI_TASK_KINDS.some((k) => k.id === t.kind) ? t.kind : "assign",
@@ -2996,7 +3045,8 @@ const uniTaskShape = (t = {}) => ({
 /* The whole desk, reshaped. The active-term pointer is normalised here and
    nowhere else: a dangling id — a term deleted, or a hand-edited backup —
    would otherwise render an empty screen that looks exactly like lost data. */
-const uniShape = (u = {}) => {
+const uniShape = (u) => {
+  u = obj(u);
   const terms = Array.isArray(u.terms) ? u.terms.map(termShape) : [];
   const ids = new Set(terms.map((t) => t.id));
   let term = typeof u.term === "string" && ids.has(u.term) ? u.term : "";
@@ -3264,10 +3314,19 @@ const freshState = (carry = {}) => ({
 
 /* Reshapes a saved payload without discarding anything the user typed. */
 function migrate(saved) {
+  saved = obj(saved);
   const from = saved.schema || 0;
-  let habits = saved.habits;
 
-  if (from < 4 && Array.isArray(habits)) {
+  /* Every list is cleaned of holes before a single branch below touches it.
+     A row that is `null`, a number or a string is not data this app can
+     repair — it is damage — and carrying it forward only moves the throw
+     somewhere further from a try/catch. The one that mattered was
+     `history`: it survived migration untouched and then took the render
+     down on `.find(h => h.date === today)`, which is a white screen that
+     reloading cannot clear because the payload is already saved. */
+  let habits = rows(saved.habits);
+
+  if (from < 4) {
     habits = habits.map((h) =>
       h.group === "evening" && LEGACY_POSTISHA.has(h.label)
         ? { ...h, group: "postisha", label: h.label === "تقييم يومي" ? "تقييم اليوم: التزمت؟" : h.label }
@@ -3287,17 +3346,17 @@ function migrate(saved) {
 
   /* Goals predate quarters. Park every existing one in the quarter the user
      is living in, so nothing they wrote disappears behind a tab. */
-  let goals = saved.goals;
-  if (from < 5 && Array.isArray(goals)) {
+  let goals = rows(saved.goals);
+  if (from < 5) {
     const here = currentQuarter();
     goals = goals.map((g) => (g.quarter ? g : { ...g, quarter: here }));
   }
 
   /* Top up with the routines added in schema 6, matching on label so a
      profile that already has one (or renamed it) never gets a duplicate. */
-  let tasks = saved.tasks;
+  let tasks = rows(saved.tasks);
   if (from < 6) {
-    if (Array.isArray(habits)) {
+    {
       const have = new Set(habits.map((h) => h.label));
       habits = [
         ...habits,
@@ -3308,7 +3367,7 @@ function migrate(saved) {
         })),
       ];
     }
-    if (Array.isArray(tasks)) {
+    {
       const have = new Set(tasks.map((t) => t.text));
       tasks = [
         ...tasks,
@@ -3325,7 +3384,7 @@ function migrate(saved) {
   /* "المساء" became "بعد المغرب", and "بعد العصر" is new. The old block's
      habits move rather than being recreated, so nothing the user wrote in
      it is lost or duplicated. */
-  if (from < 8 && Array.isArray(habits)) {
+  if (from < 8) {
     habits = habits.map((h) => {
       if (h.group === "evening") return { ...h, group: "maghrib" };
       if (h.group === "afternoon" && h.label === "صلاة العصر")
@@ -3344,29 +3403,26 @@ function migrate(saved) {
   /* Schema 9 hands the cue list to the user. An older payload has no
      quotes of its own, so it inherits the seed rather than opening on an
      empty card; one that already has them is left exactly as written. */
-  let quotes = saved.quotes;
-  if (!Array.isArray(quotes) || quotes.length === 0) quotes = SEED_QUOTES();
+  let quotes = rows(saved.quotes);
+  if (quotes.length === 0) quotes = SEED_QUOTES();
   else quotes = quotes.map((q) => (q.id ? q : { ...q, id: uid() }));
 
-  let reads = saved.reads;
-  if (!Array.isArray(reads) || reads.length === 0) reads = SEED_READS();
+  let reads = rows(saved.reads);
+  if (reads.length === 0) reads = SEED_READS();
   else reads = reads.map((q) => (q.id ? q : { ...q, id: uid() }));
 
   /* Schema 10 gave every book a workspace. Run the existing rows through
      bookShape so the new fields appear with sane defaults — spread last is
      wrong here, the saved values must win over the defaults. */
-  let books = saved.books;
-  if (Array.isArray(books)) {
-    books = books.map((b) => ({
-      ...bookShape(b),
-      notes: Array.isArray(b.notes) ? b.notes : [],
-    }));
-  }
+  let books = rows(saved.books).map((b) => ({
+    ...bookShape(b),
+    notes: rows(b.notes),
+  }));
 
   /* Schema 11 links habits to books. Existing habits are ordinary unless
      they are the reading one, which is pointed at the active book so the
      feature works on the first open instead of after a settings hunt. */
-  if (from < 11 && Array.isArray(habits)) {
+  if (from < 11) {
     habits = habits.map((h) =>
       h.book === undefined
         ? { ...h, book: h.label === "قراءة" ? READ_ACTIVE : null }
@@ -3384,9 +3440,7 @@ function migrate(saved) {
      and every log through urgeShape on the way in, so an older relapse
      simply arrives with an empty tag and is skipped by the breakdowns
      instead of counted as an unknown cause. */
-  const badHabits = Array.isArray(saved.badHabits)
-    ? saved.badHabits.map(badHabitShape)
-    : [];
+  const badHabits = rows(saved.badHabits).map(badHabitShape);
 
   /* Schema 13 lets the user order the tabs. Stored as ids and normalised on
      the way in, so a payload from a build with different tabs still resolves
@@ -3437,7 +3491,7 @@ function migrate(saved) {
      value, and `uniShape` already runs over the whole payload on the way
      in — so a schema-17 profile simply arrives with an empty absence log
      and the two totals switched off, which is what it means. */
-  const events = Array.isArray(saved.events) ? saved.events.map(eventShape) : [];
+  const events = rows(saved.events).map(eventShape);
   const uni = saved.uni ? uniShape(saved.uni) : SEED_UNI();
 
   /* Both are daily screens for a student, so — like `career` before them —
@@ -3476,7 +3530,16 @@ function migrate(saved) {
     events,
     uni,
     navOrder,
-    reading: Array.isArray(saved.reading) ? saved.reading : [],
+    /* The archive row the whole app writes to. A hole here is the one that
+       reaches the render rather than a shape, so it is cleaned here too. */
+    history: rows(saved.history).filter((h) => typeof h.date === "string"),
+    sessions: rows(saved.sessions),
+    income: rows(saved.income),
+    ventures: rows(saved.ventures),
+    prompts: rows(saved.prompts),
+    reviews: rows(saved.reviews),
+    pipeline: rows(saved.pipeline),
+    reading: rows(saved.reading),
     readGoal: Number.isFinite(saved.readGoal)
       ? saved.readGoal
       : READ_GOAL_DEFAULT,
@@ -3875,7 +3938,12 @@ function Checkbox({ checked, onToggle, label, tint = T.primary, size = "md" }) {
         className="min-w-0 flex-1 truncate text-[13.5px] transition-all duration-300"
         style={{
           color: checked ? tint : "rgba(248,250,252,0.86)",
-          textDecoration: checked ? "line-through" : "none",
+          /* Longhands, not the `textDecoration` shorthand beside its own
+             colour. React applies the two in object order and warns that
+             a re-render can have the shorthand wipe the longhand — the
+             same trap as `background` erasing `backgroundImage`, which
+             already cost this project the sheen on its cards once. */
+          textDecorationLine: checked ? "line-through" : "none",
           textDecorationColor: `${tint}80`,
         }}
       >
@@ -17100,6 +17168,20 @@ function NavOrderEditor({ order, onChange, onReset }) {
 /* Mobile navigation. Floats clear of the bottom edge so it reads as a
    separate pane of glass rather than a docked strip, and clears the home
    indicator via safe-area inset. */
+/* The lit bar over the active tab. Declared out here, not inside
+   `BottomTabs`: a component defined during render is a new type on every
+   render, so React throws the old node away and builds a fresh one each
+   time instead of updating it. */
+function Pip() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute top-0.5 h-[3px] w-7 rounded-full"
+      style={{ background: T.ctaLift, boxShadow: `0 0 10px 1px ${T.cta}` }}
+    />
+  );
+}
+
 const TAB_BAR = 4; // four fit a phone legibly; the rest live behind "المزيد"
 
 function BottomTabs({ items, tab, onGo, onSettings }) {
@@ -17124,14 +17206,6 @@ function BottomTabs({ items, tab, onGo, onSettings }) {
       : "none",
     boxShadow: on ? `0 10px 22px -14px ${T.cta}` : "none",
   });
-
-  const Pip = () => (
-    <span
-      aria-hidden="true"
-      className="absolute top-0.5 h-[3px] w-7 rounded-full"
-      style={{ background: T.ctaLift, boxShadow: `0 0 10px 1px ${T.cta}` }}
-    />
-  );
 
   return (
     <>
