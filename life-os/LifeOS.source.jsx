@@ -474,6 +474,36 @@ function SkyBackdrop({ phase }) {
 
 /* Date and time, small, beside the wordmark. Its own component so the
    second-by-second tick re-renders this line and nothing else. */
+/* The failure banner shouts; nothing ever said the quiet half. A tick that
+   lands and is never confirmed looks exactly like one that was dropped, and
+   this app is the kind a person leaves open for days and trusts blindly.
+   The timestamp is the save effect's own — it is set after the write
+   returned, never guessed from a render. */
+function SaveStamp({ at }) {
+  if (!at) return null;
+  const t = new Date(at).toLocaleTimeString("ar-EG", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return (
+    <span
+      className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold"
+      style={{
+        borderColor: `${T.primary}44`,
+        color: T.primary,
+        background: `${T.primary}14`,
+      }}
+    >
+      <Check size={10} strokeWidth={3.2} />
+      {"محفوظ "}
+      <span dir="ltr" className="tabular-nums">
+        {t}
+      </span>
+    </span>
+  );
+}
+
 function NowStamp({ compact = false }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -3783,6 +3813,7 @@ function RoutineModule({
   quote,
   onShuffleQuote,
   mirror,
+  savedAt,
   onOpenMirror,
 }) {
   const [editing, setEditing] = useState(null); // {id?, label, group}
@@ -3993,6 +4024,7 @@ function RoutineModule({
           <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
             <CalendarDays size={13} /> {dateLabel}
           </p>
+          <SaveStamp at={savedAt} />
           <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
             {done} من {state.habits.length} عادة. المؤشر يمتلئ مع كل علامة —
             وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
@@ -8309,7 +8341,11 @@ function UrgeModal({ open, habit, onClose, onConfirm, onFell }) {
      number: a throttled background tab skips ticks, and a wave that pauses
      while the user looks away is a wave that never ends. */
   useEffect(() => {
-    if (mode !== "wave") return;
+    /* `open` belongs in the guard, not only in the reset above: closing the
+       modal mid-wave leaves this component mounted, and without it the
+       interval ran on in the background until the wave it no longer owned
+       hit zero. */
+    if (mode !== "wave" || !open) return;
     const tick = () => {
       const l = Math.max(0, Math.round((endAt - Date.now()) / 1000));
       setLeft(l);
@@ -8318,7 +8354,7 @@ function UrgeModal({ open, habit, onClose, onConfirm, onFell }) {
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [mode, endAt]);
+  }, [mode, endAt, open]);
 
   if (!habit) return null;
 
@@ -11807,7 +11843,9 @@ function AnalyticsModule({ state, discipline, streak }) {
                 title={
                   cell.pct === undefined
                     ? `${cell.ds} — لا سجلّ`
-                    : `${cell.ds} — ${cell.pct}٪${note ? " — فيه وقفة" : ""}`
+                    : `${cell.ds} — ${cell.pct}٪${note ? " — فيه وقفة" : ""}${
+                        row?.holds ? ` — صمدت ${row.holds}` : ""
+                      }${row?.falls ? ` — سقطت ${row.falls}` : ""}`
                 }
                 className="relative flex aspect-square items-center justify-center rounded-lg border text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default"
                 style={{
@@ -12319,7 +12357,12 @@ function SettingsModal({ open, onClose, state, setState }) {
         setNote({ ok: false, text: "الملف ليس نسخة صالحة من Life OS." });
         return;
       }
-      setState(migrate({ ...freshState(), ...parsed }));
+      /* Through rollDay, exactly as the load path does it. A backup taken
+         yesterday carries yesterday's date and yesterday's ticks; without
+         this the app wears them as today until the minute poll catches up —
+         long enough for the archive effect to stamp today's history row with
+         a day the user did not live. */
+      setState(rollDay(migrate({ ...freshState(), ...parsed })));
       setNote({ ok: true, text: "تم استيراد البيانات واستبدال الحالي." });
     } catch {
       setNote({ ok: false, text: "تعذّرت قراءة الملف — تأكّد أنه JSON سليم." });
@@ -12524,6 +12567,7 @@ export default function LifeOS() {
   const [collapsed, setCollapsed] = useState(() => !!readUI().collapsed);
   const [streakToast, setStreakToast] = useState(null); // streak count when banked
   const [saveFailed, setSaveFailed] = useState(false);
+  const [savedAt, setSavedAt] = useState(null); // when the last write landed
   const [settings, setSettings] = useState(false);
   const [editNav, setEditNav] = useState(false);
   const [reflect, setReflect] = useState(false);
@@ -12534,6 +12578,7 @@ export default function LifeOS() {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       setSaveFailed(false);
+      setSavedAt(Date.now());
     } catch {
       /* Swallowing this silently is how a week of work disappears without
          anyone noticing. The app keeps running — but it has to say so. */
@@ -12592,7 +12637,7 @@ export default function LifeOS() {
      day's roll call can show them. */
   const breakerDay = useMemo(
     () => breakerToday(state.badHabits || []),
-    [state.badHabits],
+    [state.badHabits, state.date],
   );
 
   /* archive today's score continuously so analytics never needs a save button.
@@ -13031,6 +13076,7 @@ export default function LifeOS() {
                   quote={quote}
                   onShuffleQuote={shuffleQuote}
                   mirror={todayEntry?.mirror || ""}
+                  savedAt={savedAt}
                   onOpenMirror={() => setMirror(true)}
                 />
               )}
