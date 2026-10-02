@@ -2,6 +2,16 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * A raised steel plate.
+ *
+ * The lit edge and the sheen come from the `.steel` class in `globals.css`,
+ * which paints them through `background-image` and leaves `background-color` to
+ * the `bg-card` token. Re-tint a card with `backgroundColor` (or a `bg-*`
+ * utility) and it keeps its sheen; override the `background` *shorthand* and the
+ * shorthand resets `background-image` too, so the card flattens into a plain
+ * rectangle. That is the one mistake to avoid here.
+ */
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -9,7 +19,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border border-border bg-card text-card-foreground",
+      "steel rounded-lg border bg-card text-card-foreground",
       className,
     )}
     {...props}

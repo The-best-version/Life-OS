@@ -6,7 +6,7 @@ import type {
 } from "./types";
 import { createId } from "./utils";
 
-export const DB_VERSION = 1;
+export const DB_VERSION = 3;
 
 /**
  * The exercise catalogue, keyed by a stable slug.
@@ -262,6 +262,23 @@ export const DEFAULT_SETTINGS = {
   weeklyGoal: 5,
   bodyWeightKg: null,
   targets: { kcal: 2600, protein: 160, carbs: 300, fat: 80 },
+  /* Two minutes is the compromise a hypertrophy session actually lives on:
+     long enough that the next set is not cut short by residual fatigue, short
+     enough that eight exercises still fit in an hour. */
+  restSeconds: 120,
+  repMin: 8,
+  repMax: 12,
+  incrementKg: 2.5,
+  restSound: true,
+  restVibrate: true,
+  restAutoStart: true,
+  heightCm: null,
+  /* 7 hours, 8,000 steps, 2.5 litres.
+     Each is the low end of its useful band rather than the ideal: a target you
+     clear four days out of seven teaches you to ignore it, and the point of
+     these three is that they are met most nights, not that they are impressive
+     once. */
+  healthTargets: { sleepHours: 7, steps: 8000, waterMl: 2500 },
 };
 
 /** A pristine database: the full split, zero history. */
@@ -279,6 +296,11 @@ export function createSeedDatabase(now = Date.now()): Database {
       equipment: meta.equipment,
       createdAt: now,
       archived: false,
+      setup: "",
+      repMin: null,
+      repMax: null,
+      incrementKg: null,
+      restSeconds: null,
     });
   }
 
@@ -301,7 +323,13 @@ export function createSeedDatabase(now = Date.now()): Database {
     setEntries: [],
     attendance: {},
     nutrition: {},
-    settings: { ...DEFAULT_SETTINGS, targets: { ...DEFAULT_SETTINGS.targets } },
+    bodyMetrics: {},
+    health: {},
+    settings: {
+      ...DEFAULT_SETTINGS,
+      targets: { ...DEFAULT_SETTINGS.targets },
+      healthTargets: { ...DEFAULT_SETTINGS.healthTargets },
+    },
     updatedAt: now,
   };
 }

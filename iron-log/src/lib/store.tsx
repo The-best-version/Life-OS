@@ -55,7 +55,13 @@ const EMPTY_DB: Database = {
   setEntries: [],
   attendance: {},
   nutrition: {},
-  settings: { ...DEFAULT_SETTINGS, targets: { ...DEFAULT_SETTINGS.targets } },
+  bodyMetrics: {},
+  health: {},
+  settings: {
+    ...DEFAULT_SETTINGS,
+    targets: { ...DEFAULT_SETTINGS.targets },
+    healthTargets: { ...DEFAULT_SETTINGS.healthTargets },
+  },
   updatedAt: 0,
 };
 
@@ -74,8 +80,13 @@ export interface IronLogActions {
     equipment?: string;
     dayId?: Id | null;
   }): repo.Result<Id>;
+  updateExercise(exerciseId: Id, patch: repo.ExercisePatch): repo.Result<null>;
   removeExerciseFromDay(dayId: Id, exerciseId: Id): void;
   reorderDayExercises(dayId: Id, exerciseId: Id, direction: -1 | 1): void;
+
+  setSessionReadiness(date: IsoDate, readiness: number | null): void;
+  setBodyMetric(date: IsoDate, patch: repo.BodyPatch): void;
+  setHealth(date: IsoDate, patch: repo.HealthPatch): void;
 
   toggleAttendance(date: IsoDate): void;
   setNutrition(date: IsoDate, patch: Partial<Omit<NutritionLog, "date">>): void;
@@ -219,6 +230,25 @@ export function IronLogProvider({ children }: { children: ReactNode }) {
         if (!result.ok) return result;
         commit(result.value.db);
         return { ok: true, value: result.value.exercise.id };
+      },
+
+      updateExercise(exerciseId, patch) {
+        const result = repo.updateExercise(dbRef.current, exerciseId, patch);
+        if (!result.ok) return result;
+        commit(result.value);
+        return { ok: true, value: null };
+      },
+
+      setSessionReadiness(date, readiness) {
+        commit(repo.setSessionReadiness(dbRef.current, date, readiness));
+      },
+
+      setHealth(date, patch) {
+        commit(repo.setHealth(dbRef.current, date, patch));
+      },
+
+      setBodyMetric(date, patch) {
+        commit(repo.setBodyMetric(dbRef.current, date, patch));
       },
 
       removeExerciseFromDay(dayId, exerciseId) {

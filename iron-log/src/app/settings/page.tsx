@@ -3,6 +3,7 @@
 import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { PageHero } from "@/components/layout/page-hero";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,11 +15,54 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { importBackupText } from "@/lib/legacy-import";
 import { useIronLog } from "@/lib/store";
 import type { WeightUnit } from "@/lib/types";
 import { clamp, toFiniteNumber, toIsoDate } from "@/lib/utils";
+
+/**
+ * A labelled switch row.
+ *
+ * Boolean preferences write straight through — there is nothing to validate and
+ * nothing to lose, so making the user press save for a toggle would only add a
+ * way to forget.
+ */
+function ToggleRow({
+  id,
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <Label htmlFor={id} className="text-[11.5px] normal-case tracking-normal">
+          {label}
+        </Label>
+        {hint ? (
+          <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        className="mt-0.5 shrink-0"
+      />
+    </div>
+  );
+}
 
 /** A destructive action gated behind a second tap, with a 3s cool-off. */
 function useArmedAction(timeoutMs = 3000) {
@@ -56,10 +100,28 @@ export default function SettingsPage() {
   const [bodyWeight, setBodyWeight] = useState(
     db.settings.bodyWeightKg === null ? "" : String(db.settings.bodyWeightKg),
   );
+  const [restSeconds, setRestSeconds] = useState(
+    String(db.settings.restSeconds),
+  );
+  const [repMin, setRepMin] = useState(String(db.settings.repMin));
+  const [repMax, setRepMax] = useState(String(db.settings.repMax));
+  const [increment, setIncrement] = useState(String(db.settings.incrementKg));
   const [kcal, setKcal] = useState(String(db.settings.targets.kcal));
   const [protein, setProtein] = useState(String(db.settings.targets.protein));
   const [carbs, setCarbs] = useState(String(db.settings.targets.carbs));
   const [fat, setFat] = useState(String(db.settings.targets.fat));
+  const [heightCm, setHeightCm] = useState(
+    db.settings.heightCm === null ? "" : String(db.settings.heightCm),
+  );
+  const [sleepTarget, setSleepTarget] = useState(
+    String(db.settings.healthTargets.sleepHours),
+  );
+  const [stepsTarget, setStepsTarget] = useState(
+    String(db.settings.healthTargets.steps),
+  );
+  const [waterTarget, setWaterTarget] = useState(
+    String(db.settings.healthTargets.waterMl),
+  );
 
   const fileInput = useRef<HTMLInputElement | null>(null);
   const resetHistory = useArmedAction();
@@ -68,10 +130,58 @@ export default function SettingsPage() {
   function handleSavePreferences() {
     const goal = toFiniteNumber(weeklyGoal);
     const weight = toFiniteNumber(bodyWeight);
+    const height = toFiniteNumber(heightCm);
+
+    // The rep window is saved as a window, not two independent numbers: a max
+    // below the min would make double progression ask for a target it can never
+    // reach, so the max is floored at the min rather than rejected.
+    const nextRepMin = clamp(
+      Math.round(toFiniteNumber(repMin) ?? db.settings.repMin),
+      1,
+      30,
+    );
+    const nextRepMax = clamp(
+      Math.round(toFiniteNumber(repMax) ?? db.settings.repMax),
+      nextRepMin,
+      50,
+    );
 
     actions.updateSettings({
       weeklyGoal: goal === null ? db.settings.weeklyGoal : clamp(Math.round(goal), 1, 7),
       bodyWeightKg: bodyWeight.trim() === "" || weight === null ? null : weight,
+      /* Blank clears it rather than falling back to the stored value: an empty
+         height is a real state (it just hides the waist ratio), and a field you
+         cannot empty is a field that lies after the first mistyped number. */
+      heightCm: heightCm.trim() === "" || height === null ? null : height,
+      healthTargets: {
+        sleepHours: clamp(
+          toFiniteNumber(sleepTarget) ?? db.settings.healthTargets.sleepHours,
+          4,
+          12,
+        ),
+        steps: clamp(
+          Math.round(toFiniteNumber(stepsTarget) ?? db.settings.healthTargets.steps),
+          1_000,
+          50_000,
+        ),
+        waterMl: clamp(
+          Math.round(toFiniteNumber(waterTarget) ?? db.settings.healthTargets.waterMl),
+          500,
+          8_000,
+        ),
+      },
+      restSeconds: clamp(
+        Math.round(toFiniteNumber(restSeconds) ?? db.settings.restSeconds),
+        15,
+        600,
+      ),
+      repMin: nextRepMin,
+      repMax: nextRepMax,
+      incrementKg: clamp(
+        toFiniteNumber(increment) ?? db.settings.incrementKg,
+        0.5,
+        50,
+      ),
       targets: {
         kcal: Math.max(0, Math.round(toFiniteNumber(kcal) ?? db.settings.targets.kcal)),
         protein: Math.max(
@@ -135,12 +245,11 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-3 pb-6">
-      <section className="relative iron-ember overflow-hidden py-5">
-        <p className="font-mono text-[11px] text-muted-foreground">الإعدادات</p>
-        <h1 className="mt-1 text-[34px] font-black leading-none animate-rise-in">
-          الإعدادات
-        </h1>
-      </section>
+      <PageHero
+        eyebrow="Iron Log"
+        title="الإعدادات"
+        subtitle="القواعد العامة للتدريب والراحة والتغذية، ونسخك الاحتياطية"
+      />
 
       <Card>
         <CardHeader>
@@ -199,6 +308,174 @@ export default function SettingsPage() {
             <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
               التخزين دائماً بالكيلوجرام — الوحدة للعرض فقط، فتغييرها لا يمسّ سجلك.
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>الراحة والتقدم</CardTitle>
+          <CardDescription>
+            هذه هي القواعد العامة. أي تمرين يقدر يخالفها من زر الإعداد في بطاقته
+            — والحقل الفاضي هناك يعني «اتبع هذه القيم».
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <Label htmlFor="rest-seconds">الراحة بين المجموعات (ثانية)</Label>
+              <Input
+                id="rest-seconds"
+                type="number"
+                inputMode="numeric"
+                value={restSeconds}
+                onChange={(event) => setRestSeconds(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
+            <div>
+              <Label htmlFor="increment">خطوة الوزن (كجم)</Label>
+              <Input
+                id="increment"
+                type="number"
+                inputMode="decimal"
+                value={increment}
+                onChange={(event) => setIncrement(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
+            <div>
+              <Label htmlFor="rep-min">أقل تكرارات في المدى</Label>
+              <Input
+                id="rep-min"
+                type="number"
+                inputMode="numeric"
+                value={repMin}
+                onChange={(event) => setRepMin(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
+            <div>
+              <Label htmlFor="rep-max">أكثر تكرارات في المدى</Label>
+              <Input
+                id="rep-max"
+                type="number"
+                inputMode="numeric"
+                value={repMax}
+                onChange={(event) => setRepMax(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
+          </div>
+
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            التقدم المزدوج: تثبت على نفس الوزن حتى تكمل{" "}
+            <bdi dir="ltr">{db.settings.repMax}</bdi> تكرار في كل مجموعة، بعدها
+            تزيد خطوة وزن واحدة وترجع إلى{" "}
+            <bdi dir="ltr">{db.settings.repMin}</bdi>. هذا هو ما يحسب «هدف اليوم»
+            في كل بطاقة تمرين.
+          </p>
+
+          <div className="space-y-2.5 border-t border-border pt-3">
+            <ToggleRow
+              id="rest-auto"
+              label="ابدأ المؤقّت تلقائياً بعد كل مجموعة"
+              hint="مجموعة التسخين لا تشغّله — تدخل منها للمجموعة الفعلية مباشرة."
+              checked={db.settings.restAutoStart}
+              onChange={(value) =>
+                actions.updateSettings({ restAutoStart: value })
+              }
+            />
+            <ToggleRow
+              id="rest-sound"
+              label="نغمة عند انتهاء الراحة"
+              checked={db.settings.restSound}
+              onChange={(value) => actions.updateSettings({ restSound: value })}
+            />
+            <ToggleRow
+              id="rest-vibrate"
+              label="اهتزاز عند انتهاء الراحة"
+              hint="سفاري على iPhone ما يدعم الاهتزاز — النغمة تكفي هناك."
+              checked={db.settings.restVibrate}
+              onChange={(value) =>
+                actions.updateSettings({ restVibrate: value })
+              }
+            />
+          </div>
+
+          {/* The switches write immediately; the numbers above are drafts, so
+              they need a commit. One button saves every draft on this screen. */}
+          <Button onClick={handleSavePreferences} className="w-full">
+            حفظ الإعدادات
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>أهداف الصحة اليومية</CardTitle>
+          <CardDescription>
+            الطول يُستخدم لحساب نسبة الخصر إلى الطول فقط
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <Label htmlFor="t-height">الطول (سم)</Label>
+              <Input
+                id="t-height"
+                type="number"
+                inputMode="decimal"
+                min="100"
+                max="250"
+                value={heightCm}
+                onChange={(event) => setHeightCm(event.target.value)}
+                placeholder="ما سجّلت"
+                className="mt-1 tnum"
+              />
+            </div>
+            <div>
+              <Label htmlFor="t-sleep">هدف النوم (ساعة)</Label>
+              <Input
+                id="t-sleep"
+                type="number"
+                inputMode="decimal"
+                min="4"
+                max="12"
+                step="0.5"
+                value={sleepTarget}
+                onChange={(event) => setSleepTarget(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
+            <div>
+              <Label htmlFor="t-steps">هدف الخطوات</Label>
+              <Input
+                id="t-steps"
+                type="number"
+                inputMode="numeric"
+                min="1000"
+                max="50000"
+                step="500"
+                value={stepsTarget}
+                onChange={(event) => setStepsTarget(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
+            <div>
+              <Label htmlFor="t-water">هدف الماء (مل)</Label>
+              <Input
+                id="t-water"
+                type="number"
+                inputMode="numeric"
+                min="500"
+                max="8000"
+                step="250"
+                value={waterTarget}
+                onChange={(event) => setWaterTarget(event.target.value)}
+                className="mt-1 tnum"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

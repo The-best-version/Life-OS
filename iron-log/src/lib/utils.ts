@@ -152,18 +152,30 @@ export function startOfWeek(date: Date): Date {
   return start;
 }
 
-const SHORT_DATE = new Intl.DateTimeFormat("ar", {
+/*
+  `ar-u-nu-latn`, not plain `ar`.
+
+  Every figure in this app is formatted through `NUMBER_FORMAT`, which is pinned
+  to `en-US` and therefore always Latin. Plain `ar` leaves the numbering system
+  to ICU, and ICU's default for Arabic is `arab` on some builds and `latn` on
+  others — so the same bundle can render "١ أكتوبر" beside "53,235 كجم" on one
+  machine and agree with itself on the next. The digits are pinned here so the
+  screen can never disagree with itself about what a number looks like.
+*/
+const DATE_LOCALE = "ar-u-nu-latn";
+
+const SHORT_DATE = new Intl.DateTimeFormat(DATE_LOCALE, {
   day: "numeric",
   month: "short",
 });
 
-const FULL_DATE = new Intl.DateTimeFormat("ar", {
+const FULL_DATE = new Intl.DateTimeFormat(DATE_LOCALE, {
   weekday: "long",
   day: "numeric",
   month: "long",
 });
 
-const WEEKDAY_SHORT = new Intl.DateTimeFormat("ar", { weekday: "short" });
+const WEEKDAY_SHORT = new Intl.DateTimeFormat(DATE_LOCALE, { weekday: "short" });
 
 export function formatShortDate(value: IsoDate): string {
   const date = fromIsoDate(value);

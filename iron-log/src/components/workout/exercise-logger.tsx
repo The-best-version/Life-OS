@@ -1,6 +1,16 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Trash2, Trophy, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Flame,
+  Settings2,
+  Target,
+  Trash2,
+  Trophy,
+  Wrench,
+  X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,15 +19,26 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
+import { useRestTimer } from "@/components/workout/rest-timer";
 import {
   bestSetFor,
   estimate1rm,
   isWorkingSet,
+  overloadTarget,
   previousSessionSets,
+  progressionRules,
+  warmupRamp,
 } from "@/lib/metrics";
 import { useIronLog } from "@/lib/store";
-import type { Id, IsoDate, SetEntry } from "@/lib/types";
 import {
+  MUSCLE_GROUP_LABELS,
+  type Id,
+  type IsoDate,
+  type OverloadReason,
+  type SetEntry,
+} from "@/lib/types";
+import {
+  cn,
   formatNumber,
   formatRelativeDay,
   maxOf,
@@ -32,13 +53,21 @@ interface ExerciseLoggerProps {
   editable: boolean;
 }
 
+const REASON_TEXT: Record<OverloadReason, string> = {
+  first: "أول مرة — ابدأ بوزن تقدر تكمل به المدى كامل",
+  "add-reps": "كمّل تكرارات على نفس الوزن قبل ما تزيد",
+  "increase-weight": "وصلت أعلى المدى آخر مرة — زِد الوزن ونزّل التكرارات",
+  hold: "آخر مرة كانت أقل من المدى — ثبّت الوزن حتى تضبطه",
+  repeat: "كرّر آخر حصة",
+};
+
 /**
- * One exercise, one card: what you did last time, what you are doing now, and
- * every set logged today.
+ * One exercise, one card: the target for today, what you did last time, the
+ * machine's own settings, what you are doing now, and every set logged today.
  *
- * The inputs start pre-filled with the most recent set for this lift, because the
- * overwhelmingly common case is "same weight, same reps, next set" — and after a
- * save they keep those values, so a 4-set exercise is four taps.
+ * The inputs start pre-filled with the target rather than with the last set,
+ * because the point of the screen is the next step, not the last one — and after
+ * a save they hold what was just logged, so a 4-set exercise is four taps.
  */
 export function ExerciseLogger({
   exerciseId,
@@ -48,6 +77,7 @@ export function ExerciseLogger({
 }: ExerciseLoggerProps) {
   const { db, index, actions } = useIronLog();
   const toast = useToast();
+  const rest = useRestTimer();
 
   const exercise = db.exercises.find((item) => item.id === exerciseId);
 
@@ -70,18 +100,34 @@ export function ExerciseLogger({
 
   const best = useMemo(() => bestSetFor(index, exerciseId), [index, exerciseId]);
 
-  /** Pre-fill source: the last set today, else the last set last time. */
+  const target = useMemo(
+    () => overloadTarget(db, index, exerciseId, session?.id ?? null),
+    [db, index, exerciseId, session],
+  );
+
+  const rules = useMemo(
+    () => (exercise ? progressionRules(db, exercise) : null),
+    [db, exercise],
+  );
+
+  /**
+   * Pre-fill source, in order of usefulness: the last set logged today (you are
+   * mid-exercise), else today's target (you are starting it), else nothing.
+   */
   const suggestion = useMemo(() => {
     const lastToday = todaysSets[todaysSets.length - 1];
     if (lastToday) return { weight: lastToday.weightKg, reps: lastToday.reps };
+    if (target && target.weightKg > 0) {
+      return { weight: target.weightKg, reps: target.reps };
+    }
     const lastPrevious = previous?.sets[previous.sets.length - 1];
     if (lastPrevious) {
       return { weight: lastPrevious.weightKg, reps: lastPrevious.reps };
     }
     return null;
-  }, [todaysSets, previous]);
+  }, [todaysSets, target, previous]);
 
-  // Initial value only — afterwards the fields are the user's, and `onSave`
+  // Initial value only — afterwards the fields are the user's, and `handleSave`
   // rewrites them to what was just logged so the next set repeats it.
   const [weight, setWeight] = useState(() =>
     suggestion ? String(suggestion.weight) : "",
@@ -89,10 +135,19 @@ export function ExerciseLogger({
   const [reps, setReps] = useState(() =>
     suggestion ? String(suggestion.reps) : "",
   );
+  const [rpe, setRpe] = useState<number | null>(null);
+  const [isWarmup, setIsWarmup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
-  if (!exercise) return null;
+  if (!exercise || !rules) return null;
+
+  /* Re-bound after the guard so the closures below carry the narrowed type:
+     TypeScript does not propagate a narrowing from the enclosing scope into a
+     function body, because it cannot prove when that function runs. */
+  const lift = exercise;
+  const progression = rules;
 
   const previousTop = maxOf(
     (previous?.sets ?? []).filter(isWorkingSet).map((s) => s.weightKg),
@@ -106,6 +161,19 @@ export function ExerciseLogger({
     todayTop >= best.set.weightKg &&
     previousTop !== null &&
     todayTop > previousTop;
+
+  const ramp =
+    todaysSets.length === 0 && target && target.weightKg > 0
+      ? warmupRamp(target.weightKg, rules.incrementKg)
+      : [];
+
+  function applyTarget() {
+    if (!target) return;
+    if (target.weightKg > 0) setWeight(String(target.weightKg));
+    setReps(String(target.reps));
+    setIsWarmup(false);
+    setError(null);
+  }
 
   function handleSave() {
     const weightValue = toFiniteNumber(weight);
@@ -126,6 +194,8 @@ export function ExerciseLogger({
       exerciseId,
       weightKg: weightValue,
       reps: repsValue,
+      rpe,
+      isWarmup,
     });
 
     if (!result.ok) {
@@ -139,6 +209,18 @@ export function ExerciseLogger({
     setReps(String(result.value.reps));
 
     const beatsBest = best === null || result.value.weightKg > best.set.weightKg;
+
+    /* Rest starts after the set has landed, never before: the save can still be
+       refused by validation, and a clock already counting down on a set that was
+       never recorded is the kind of thing that makes a user stop trusting it.
+       A warm-up gets no auto-rest — you walk straight into the working set. */
+    if (db.settings.restAutoStart && !isWarmup) {
+      rest.start(progression.restSeconds, lift.name);
+    }
+    // The warm-up flag is a per-set choice, not a mode; it resets after each save.
+    setIsWarmup(false);
+    setRpe(null);
+
     toast.success(
       beatsBest && best !== null ? "🏆 رقم قياسي جديد!" : "انحفظت المجموعة",
     );
@@ -151,9 +233,12 @@ export function ExerciseLogger({
           <h3 className="text-[14.5px] font-extrabold leading-snug">
             {exercise.name}
           </h3>
-          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground">
+            <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-sans text-[10px] font-bold">
+              {MUSCLE_GROUP_LABELS[exercise.muscleGroup]}
+            </span>
             {previous ? (
-              <>
+              <span>
                 {`آخر مرة (${formatRelativeDay(previous.date)}): `}
                 {previous.sets.map((entry, position) => (
                   <span key={entry.id}>
@@ -164,69 +249,158 @@ export function ExerciseLogger({
                     </bdi>
                   </span>
                 ))}
-              </>
+              </span>
             ) : (
-              "ما فيه تسجيل سابق"
+              <span>ما فيه تسجيل سابق</span>
             )}
           </p>
           {best ? (
             <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-              أفضل رقم: {formatNumber(best.set.weightKg)} كجم ×{" "}
+              أفضل رقم: <bdi>{formatNumber(best.set.weightKg)} كجم</bdi> ×{" "}
               {best.set.reps}
             </p>
           ) : null}
         </div>
 
-        {editable ? (
-          <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setPanelOpen((open) => !open)}
+            aria-expanded={panelOpen}
+            aria-label="إعدادات المكينة والتقدم"
+            className={cn(
+              "rounded-sm p-1.5 transition-colors",
+              panelOpen
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Settings2 className="size-4" aria-hidden />
+          </button>
+          {editable ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  dayId && actions.reorderDayExercises(dayId, exerciseId, -1)
+                }
+                aria-label="تحريك لأعلى"
+                className="rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronUp className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  dayId && actions.reorderDayExercises(dayId, exerciseId, 1)
+                }
+                aria-label="تحريك لأسفل"
+                className="rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronDown className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!dayId) return;
+                  if (!confirmRemove) {
+                    setConfirmRemove(true);
+                    window.setTimeout(() => setConfirmRemove(false), 3000);
+                    return;
+                  }
+                  actions.removeExerciseFromDay(dayId, exerciseId);
+                  toast.toast("شيلنا التمرين من هذا اليوم (السجل محفوظ)");
+                }}
+                aria-label={
+                  confirmRemove
+                    ? "اضغط للتأكيد: حذف التمرين من اليوم"
+                    : "حذف التمرين من اليوم"
+                }
+                className={
+                  confirmRemove
+                    ? "rounded-sm p-1.5 text-primary"
+                    : "rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                }
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {/* The machine's own settings — the thing that makes the load repeatable. */}
+      {exercise.setup ? (
+        <p className="mt-2.5 flex items-start gap-1.5 rounded-md border border-border bg-secondary/60 px-2.5 py-2 font-mono text-[11.5px] leading-relaxed text-muted-foreground">
+          <Wrench className="mt-[2px] size-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1 break-words">{exercise.setup}</span>
+        </p>
+      ) : null}
+
+      {/* Today's target. */}
+      {target ? (
+        <button
+          type="button"
+          onClick={applyTarget}
+          className="mt-2.5 flex w-full items-center gap-2.5 rounded-md border border-primary/30 p-2.5 text-start transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{ backgroundImage: "var(--molten-soft)" }}
+        >
+          <Target className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-[10.5px] font-bold text-muted-foreground">
+                هدف اليوم
+              </span>
+              <span className="figure text-[17px] text-foreground" dir="ltr">
+                {target.weightKg > 0
+                  ? `${formatNumber(target.weightKg)} × ${target.reps}`
+                  : `× ${target.reps}`}
+              </span>
+              <span className="text-[10px] font-bold text-muted-foreground">
+                {target.weightKg > 0 ? "كجم" : "تكرار"}
+              </span>
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+              {REASON_TEXT[target.reason]}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-sm border border-primary/40 px-2 py-1 text-[10.5px] font-extrabold text-primary">
+            طبّقه
+          </span>
+        </button>
+      ) : null}
+
+      {/* Warm-up ramp: offered only before the first set of the exercise. */}
+      {ramp.length > 0 ? (
+        <p className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+          <span className="font-sans font-bold">تسخين مقترح:</span>
+          {ramp.map((step) => (
             <button
-              type="button"
-              onClick={() =>
-                dayId && actions.reorderDayExercises(dayId, exerciseId, -1)
-              }
-              aria-label="تحريك لأعلى"
-              className="rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ChevronUp className="size-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                dayId && actions.reorderDayExercises(dayId, exerciseId, 1)
-              }
-              aria-label="تحريك لأسفل"
-              className="rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ChevronDown className="size-4" aria-hidden />
-            </button>
-            <button
+              key={step.weightKg}
               type="button"
               onClick={() => {
-                if (!dayId) return;
-                if (!confirmRemove) {
-                  setConfirmRemove(true);
-                  window.setTimeout(() => setConfirmRemove(false), 3000);
-                  return;
-                }
-                actions.removeExerciseFromDay(dayId, exerciseId);
-                toast.toast("شيلنا التمرين من هذا اليوم (السجل محفوظ)");
+                setWeight(String(step.weightKg));
+                setReps(String(step.reps));
+                setIsWarmup(true);
+                setError(null);
               }}
-              aria-label={
-                confirmRemove
-                  ? "اضغط للتأكيد: حذف التمرين من اليوم"
-                  : "حذف التمرين من اليوم"
-              }
-              className={
-                confirmRemove
-                  ? "rounded-sm p-1.5 text-primary"
-                  : "rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-primary"
-              }
+              className="rounded-sm border border-border px-2 py-1 transition-colors hover:border-primary/50 hover:text-foreground"
             >
-              <X className="size-4" aria-hidden />
+              <bdi dir="ltr">
+                {formatNumber(step.weightKg)}×{step.reps}
+              </bdi>
             </button>
-          </div>
-        ) : null}
-      </div>
+          ))}
+        </p>
+      ) : null}
+
+      {/* Per-machine configuration. */}
+      {panelOpen ? (
+        <ExercisePanel
+          exerciseId={exerciseId}
+          onClose={() => setPanelOpen(false)}
+        />
+      ) : null}
 
       {/* Entry row */}
       <div className="mt-3 flex items-end gap-2">
@@ -277,6 +451,44 @@ export function ExerciseLogger({
         </Button>
       </div>
 
+      {/* Set qualifiers: effort and whether this one counts. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <button
+          type="button"
+          onClick={() => setIsWarmup((value) => !value)}
+          aria-pressed={isWarmup}
+          className={cn(
+            "rounded-full border px-2.5 py-1 text-[10.5px] font-extrabold transition-colors",
+            isWarmup
+              ? "border-primary/50 bg-primary/15 text-primary"
+              : "border-border text-muted-foreground hover:text-foreground",
+          )}
+        >
+          تسخين
+        </button>
+
+        <span className="ms-1 font-mono text-[10px] text-muted-foreground">
+          الجهد
+        </span>
+        {[6, 7, 8, 9, 10].map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setRpe((current) => (current === value ? null : value))}
+            aria-pressed={rpe === value}
+            aria-label={`جهد ${value} من 10`}
+            className={cn(
+              "figure size-7 rounded-full border text-[11px] transition-colors",
+              rpe === value
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+
       {error ? (
         <p role="alert" className="mt-2 text-[11.5px] font-bold text-primary">
           {error}
@@ -289,20 +501,45 @@ export function ExerciseLogger({
           {todaysSets.map((entry) => (
             <li
               key={entry.id}
-              className="flex items-center gap-2 rounded-md bg-secondary px-2.5 py-2"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2.5 py-2",
+                entry.isWarmup
+                  ? "border border-dashed border-border bg-transparent"
+                  : "bg-secondary",
+              )}
             >
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background font-mono text-[10px] text-muted-foreground">
-                {entry.setIndex}
+              <span
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px]",
+                  entry.isWarmup
+                    ? "text-muted-foreground"
+                    : "bg-background text-muted-foreground",
+                )}
+              >
+                {entry.isWarmup ? (
+                  <Flame className="size-3" aria-hidden />
+                ) : (
+                  entry.setIndex
+                )}
               </span>
               {/* <bdi> isolates each run: without it the trailing rep count and
                   the leading "1RM" reorder into one unreadable "101RM". */}
-              <span className="tnum flex flex-1 items-baseline gap-2 font-mono text-[12.5px] font-bold">
+              <span className="tnum flex flex-1 flex-wrap items-baseline gap-x-2 font-mono text-[12.5px] font-bold">
                 <bdi>
                   {formatNumber(entry.weightKg)} كجم × {entry.reps}
                 </bdi>
-                <bdi className="font-normal text-muted-foreground">
-                  1RM ≈ {formatNumber(estimate1rm(entry.weightKg, entry.reps))}
-                </bdi>
+                {entry.isWarmup ? (
+                  <bdi className="font-normal text-muted-foreground">تسخين</bdi>
+                ) : (
+                  <bdi className="font-normal text-muted-foreground">
+                    1RM ≈ {formatNumber(estimate1rm(entry.weightKg, entry.reps))}
+                  </bdi>
+                )}
+                {entry.rpe !== null ? (
+                  <bdi className="font-normal text-muted-foreground">
+                    RPE {formatNumber(entry.rpe)}
+                  </bdi>
+                ) : null}
               </span>
               <button
                 type="button"
@@ -350,5 +587,143 @@ export function ExerciseLogger({
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * Per-machine configuration: the setup note, the rep window progression works
+ * inside, the load step this machine actually offers, and its rest.
+ *
+ * Every numeric field here may be left empty, and empty means "use the global
+ * setting" rather than zero — so clearing a field is a real action, not a
+ * validation error.
+ */
+function ExercisePanel({
+  exerciseId,
+  onClose,
+}: {
+  exerciseId: Id;
+  onClose: () => void;
+}) {
+  const { db, actions } = useIronLog();
+  const toast = useToast();
+  const exercise = db.exercises.find((item) => item.id === exerciseId);
+  if (!exercise) return null;
+
+  const rules = progressionRules(db, exercise);
+
+  function commit(patch: Parameters<typeof actions.updateExercise>[1]) {
+    const result = actions.updateExercise(exerciseId, patch);
+    if (!result.ok) toast.error(result.error);
+  }
+
+  /** Empty field → `null` (follow the global setting), not zero. */
+  function parseOptional(raw: string): number | null {
+    if (raw.trim() === "") return null;
+    return toFiniteNumber(raw);
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-md border border-border bg-background/60 p-3 animate-sheet-up">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[12px] font-extrabold">
+          <Wrench className="size-3.5 text-primary" aria-hidden />
+          إعداد المكينة والتقدم
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="إغلاق الإعداد"
+          className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      </div>
+
+      <div>
+        <Label htmlFor={`setup-${exerciseId}`}>ضبط المكينة</Label>
+        <Input
+          id={`setup-${exerciseId}`}
+          value={exercise.setup}
+          onChange={(event) => commit({ setup: event.target.value })}
+          placeholder="مثال: المقعد على 4، المسند 2، القبضة عريضة"
+          maxLength={240}
+          className="mt-1 text-sm font-normal"
+        />
+        <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
+          الوزن بلا ضبط ما يتكرر — أي تغيير في المقعد يغيّر المدى ويغيّر معنى الرقم.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <div>
+          <Label htmlFor={`repmin-${exerciseId}`}>أقل تكرارات</Label>
+          <Input
+            id={`repmin-${exerciseId}`}
+            type="number"
+            inputMode="numeric"
+            value={exercise.repMin === null ? "" : String(exercise.repMin)}
+            onChange={(event) =>
+              commit({ repMin: parseOptional(event.target.value) })
+            }
+            placeholder={String(db.settings.repMin)}
+            className="mt-1 tnum"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`repmax-${exerciseId}`}>أكثر تكرارات</Label>
+          <Input
+            id={`repmax-${exerciseId}`}
+            type="number"
+            inputMode="numeric"
+            value={exercise.repMax === null ? "" : String(exercise.repMax)}
+            onChange={(event) =>
+              commit({ repMax: parseOptional(event.target.value) })
+            }
+            placeholder={String(db.settings.repMax)}
+            className="mt-1 tnum"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`inc-${exerciseId}`}>خطوة الوزن (كجم)</Label>
+          <Input
+            id={`inc-${exerciseId}`}
+            type="number"
+            inputMode="decimal"
+            value={
+              exercise.incrementKg === null ? "" : String(exercise.incrementKg)
+            }
+            onChange={(event) =>
+              commit({ incrementKg: parseOptional(event.target.value) })
+            }
+            placeholder={String(db.settings.incrementKg)}
+            className="mt-1 tnum"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`rest-${exerciseId}`}>الراحة (ثانية)</Label>
+          <Input
+            id={`rest-${exerciseId}`}
+            type="number"
+            inputMode="numeric"
+            value={
+              exercise.restSeconds === null ? "" : String(exercise.restSeconds)
+            }
+            onChange={(event) =>
+              commit({ restSeconds: parseOptional(event.target.value) })
+            }
+            placeholder={String(db.settings.restSeconds)}
+            className="mt-1 tnum"
+          />
+        </div>
+      </div>
+
+      <p className="font-mono text-[10.5px] text-muted-foreground">
+        المطبّق الآن: <bdi dir="ltr">{rules.repMin}–{rules.repMax}</bdi> تكرار ·
+        خطوة <bdi dir="ltr">{formatNumber(rules.incrementKg)}</bdi> كجم · راحة{" "}
+        <bdi dir="ltr">{rules.restSeconds}</bdi> ثانية. الحقل الفاضي يعني
+        «اتبع الإعدادات العامة».
+      </p>
+    </div>
   );
 }

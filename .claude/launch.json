@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "iron-log-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "iron-log", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "life-os",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "life-os", "-l", "4310", "--no-clipboard"],
+      "port": 4310
+    }
+  ]
+}

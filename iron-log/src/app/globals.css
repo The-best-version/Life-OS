@@ -3,77 +3,304 @@
 @tailwind utilities;
 
 /*
- * IRON LOG — design tokens
- * ------------------------------------------------------------------
- * The app is dark-only by design (a gym floor is not a light-mode place).
- * `--*` HSL triplets feed the shadcn/ui primitives; the `--viz-*` hexes feed
- * the SVG chart layer, where values are written against roles, never raw hex.
+ * IRON LOG — design tokens: "IRON STUDIO"
+ * ==================================================================
+ * A bright studio with the energy of a loaded bar. Red leads, and four vivid
+ * secondaries (gold, cyan, violet, lime) keep the screen alive — a tracker you
+ * want to open, not a console you have to read.
+ *
+ * Why this replaced what came before: the app shipped as near-black with a dull
+ * orange, and a flat dark field behind a progress tracker reads as gloom. The
+ * ground here is near-white and it is NEVER flat — four coloured washes sit in
+ * the corners, so the page has depth and warmth before a single card lands on
+ * it. That glow is the identity. Do not flatten it to one solid colour.
+ *
+ * Light is the default on every device, including a machine whose OS is dark.
+ * That is deliberate and it is the whole point of the redesign — see
+ * `lib/theme-script.ts`. Dark stays available from the toggle, and it is a warm
+ * plum-charcoal carrying the same four washes, never a dead grey.
+ *
+ * ---- the one rule that governs this file ----
+ * Every colour role exists twice: a FILL and an INK.
+ *
+ *   --success       the chart mark, the bar, the progress arc, the icon glyph
+ *   --success-ink   the same role as *small text*
+ *
+ * The brand values are tuned for saturation, which is exactly what stops them
+ * carrying 13px type on a near-white page. Each `-ink` is that same hue pushed
+ * down to the lightest value clearing 4.5:1 on BOTH light surfaces. In dark mode
+ * they diverge the other way — the ink LIFTS, because the saturated value is
+ * already legible there and darkening it would be the unreadable direction.
+ *
+ * Use a fill for anything you look at; use an ink for anything you read.
  */
 
 @layer base {
   :root {
-    /* ---- shadcn/ui surface + ink scale (Iron) ---- */
-    --background: 240 8% 6%; /* #0D0D0F — page plane */
-    --foreground: 40 20% 95%; /* #F5F3EF — primary ink */
+    color-scheme: light;
 
-    --card: 240 4% 10%; /* #18181A — chart & card surface */
-    --card-foreground: 40 20% 95%;
+    /* ---- surfaces ---------------------------------------------------- */
+    /* Never pure white for the page: a white card on a white field has no edge.
+       This is a hair warm so the coloured washes have something to sit in. */
+    --background: 20 60% 98%; /* #FEFBFA */
+    --foreground: 330 12% 8%; /* #171316 — 17.4:1 on the page */
 
-    --popover: 240 5% 14%; /* #212124 */
-    --popover-foreground: 40 20% 95%;
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 330 12% 8%;
 
-    /* Energetic accent — the only loud colour in the UI */
-    --primary: 4 76% 53%; /* #E3392C */
+    --popover: 0 0% 100%;
+    --popover-foreground: 330 12% 8%;
+
+    /* shadcn's `--secondary` / `--muted` / `--accent` are SURFACES, not brand
+       colours — the hover fill, the inert chip, the pressed row. The brand
+       colour is `--primary`. Keeping shadcn's meaning intact is what lets the
+       existing ui/ primitives carry over untouched. */
+    --secondary: 20 20% 95%; /* #F5F1EF */
+    --secondary-foreground: 330 12% 8%;
+    --muted: 20 20% 95%;
+    --muted-foreground: 20 8% 42%; /* #736B67 — 5.2:1, the only muted ink */
+    --accent: 18 18% 92%; /* #EEE7E4 hover / pressed */
+    --accent-foreground: 330 12% 8%;
+
+    --border: 18 22% 93%; /* #F0E9E7 hairline */
+    --border-strong: 14 16% 85%; /* #DFD5D1 a divider meant to be seen */
+    --input: 14 16% 85%; /* an input's edge is a hit target: darker */
+    --ring: 350 100% 56%;
+
+    /* ---- the accent: iron red ---------------------------------------- */
+    /* One loud red, and it is loud on purpose. It fills arcs, marks, hero
+       figures and every primary action. */
+    --primary: 350 100% 56%; /* #FF1F44 */
+    --primary-ink: 348 91% 45%; /* #DC0A34 small accent text — 5.1:1 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 5% 14%; /* #212124 — metallic grey */
-    --secondary-foreground: 40 20% 95%;
+    /* The primary-button ramp, and the only gradient in the system. Red into a
+       deeper crimson, because a flat red button at this saturation vibrates.
+       A gradient's contrast is set by its LIGHTEST end: white on #F5123C is
+       4.62:1, and 7.9:1 at the dark end — so a 14px label clears AA. */
+    --grad-primary-from: #f5123c;
+    --grad-primary-to: #a80a3f;
 
-    --muted: 240 5% 14%;
-    --muted-foreground: 240 4% 56%; /* #8D8D93 */
+    /* ---- semantic ---------------------------------------------------- */
+    --success: 150 100% 36%; /* #00B85C a PR, a target hit, a green day */
+    --success-ink: 150 100% 26%; /* #008542 — 4.7:1 */
+    --caution: 40 100% 50%; /* #FFA800 a stall, a warning */
+    --caution-ink: 39 100% 27%; /* #8A5A00 — 5.9:1 */
+    --danger: 350 80% 40%; /* #B8123A a regression, a destructive act */
+    --danger-ink: 350 85% 38%; /* #B30B35 — 6.3:1 */
+    --recovery: 186 100% 42%; /* #00BFD4 rest, deload, cool-down */
+    --recovery-ink: 186 100% 28%; /* #00808F — 4.7:1 */
 
-    --accent: 240 7% 17%; /* #2A2A2E */
-    --accent-foreground: 40 20% 95%;
-
-    --destructive: 4 76% 53%;
+    /* shadcn aliases, so the ui/ primitives need no edit */
+    --destructive: 350 80% 40%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 158 57% 57%; /* #4FD1A0 */
-    --success-foreground: 240 8% 6%;
+    /* ---- the four secondaries --------------------------------------- */
+    /* The "touches" that keep the screen from being a one-colour app. Red is
+       the brand; these carry everything else — a chart series, a muscle chip, a
+       glow in the ground. They are a spectrum on purpose: iron is not
+       monochrome and neither is a set of ten muscle groups. */
+    --spark-gold: #ffa800;
+    --spark-cyan: #00bfd4;
+    --spark-violet: #8b5cf6;
+    --spark-lime: #7fb800;
+    /* Each secondary's ink twin, by the same fill/ink rule as the roles above:
+       measured to clear 4.5:1 on both #FFFFFF and the page. Gold and cyan reuse
+       the caution / recovery inks rather than growing a second value for the
+       same hue. */
+    --spark-gold-ink: #8a5a00;
+    --spark-cyan-ink: #00808f;
+    --spark-violet-ink: #6d28d9;
+    --spark-lime-ink: #4d7c0f;
 
-    --border: 240 7% 17%; /* #2A2A2E — hairline */
-    --input: 240 5% 14%;
-    --ring: 4 76% 53%;
+    /* ---- muscle-group palette --------------------------------------- */
+    /* Ten hues walking the full wheel from the brand red round to green. Each
+       value is the lightness that puts the mark at 3.5:1 ± 0.15 on white, so
+       all ten carry the SAME visual weight — which is what makes a categorical
+       set read as one palette instead of ten separate decisions. */
+    --muscle-chest: #f5123c; /* red — the brand, on the biggest push */
+    --muscle-shoulders: #e06a00; /* orange */
+    --muscle-triceps: #c08400; /* gold */
+    --muscle-biceps: #6b9e00; /* lime */
+    --muscle-core: #00a651; /* green */
+    --muscle-hamstrings: #009478; /* teal */
+    --muscle-calves: #009aab; /* cyan */
+    --muscle-back: #0a84ff; /* electric blue — the biggest pull */
+    --muscle-quads: #7c4dff; /* violet */
+    --muscle-glutes: #d6339e; /* magenta */
 
-    --radius: 1rem;
+    /* ---- chart layer ------------------------------------------------- */
+    /* Charts are hand-rolled SVG, where `stroke` / `fill` want a colour and not
+       an HSL triplet — hence plain hexes. Roles, never raw values, at the call
+       site. */
+    --viz-surface: #ffffff;
+    --viz-plane: #fefbfa;
+    --viz-ink: #171316;
+    --viz-ink-secondary: #4a4247;
+    --viz-ink-muted: #736b67; /* axis labels are text: 5.2:1 */
+    --viz-grid: #f0e9e7;
+    --viz-baseline: #dfd5d1;
 
-    --font-sans: "Tajawal", system-ui, -apple-system, "Segoe UI", Tahoma, Arial,
-      sans-serif;
-    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono",
-      "Roboto Mono", monospace;
+    --viz-accent: #ff1f44;
+    --viz-accent-wash: rgba(255, 31, 68, 0.14);
+    /* De-emphasised history sitting behind the accent mark. Deliberately below
+       3:1 — it is context, and the accent mark carries the meaning. */
+    --viz-recessive: #b3a8a4;
 
-    /* ---- chart layer (dataviz roles) ----
-     * Single-series charts wear the brand accent; the 3-slot categorical set is
-     * the validated dark stepping (blue / orange / aqua) and is only used where
-     * two or more series share one plot. */
-    --viz-surface: #18181a;
-    --viz-plane: #0d0d0f;
-    --viz-ink: #f5f3ef;
-    --viz-ink-secondary: #c3c2b7;
-    --viz-ink-muted: #898781;
-    --viz-grid: #2c2c2a;
-    --viz-baseline: #383835;
+    --viz-series-1: #0a84ff;
+    --viz-series-2: #ffa800;
+    --viz-series-3: #00bfd4;
+    --viz-series-4: #7c4dff;
 
-    --viz-accent: #e3392c; /* single-series + "current" */
-    --viz-accent-wash: rgba(227, 57, 44, 0.1);
-    --viz-recessive: #3a3a3f; /* de-emphasised marks (sparkline history) */
+    --viz-good: #008542;
+    --viz-critical: #b30b35;
 
-    --viz-series-1: #3987e5; /* blue */
-    --viz-series-2: #d95926; /* orange */
-    --viz-series-3: #199e70; /* aqua */
+    /* ---- type ------------------------------------------------------- */
+    /* One family for everything. IBM Plex Sans Arabic has a real Arabic design
+       rather than a Latin face with Arabic bolted on, a matching Latin
+       companion, and tabular figures — so Latin figures and Arabic text share
+       one run without a mid-heading fallback. */
+    --font-sans: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI",
+      Tahoma, Arial, sans-serif;
+    --font-display: var(--font-sans);
+    --font-mono: "IBM Plex Sans Arabic", ui-monospace, "SF Mono",
+      "Segoe UI Mono", monospace;
 
-    --viz-good: #0ca30c;
-    --viz-critical: #d03b3b;
+    /* ---- elevation -------------------------------------------------- */
+    /* Two layers maximum, and very soft. This system leans on borders: a card
+       is found by its hairline, not by a drop shadow, which is what keeps a
+       screen of eight cards from looking like it is hovering. */
+    --shadow-sm: 0 1px 2px rgba(35, 15, 22, 0.04),
+      0 1px 3px rgba(35, 15, 22, 0.03);
+    --shadow-md: 0 1px 2px rgba(35, 15, 22, 0.04),
+      0 8px 18px -10px rgba(35, 15, 22, 0.12);
+    --shadow-lg: 0 2px 4px rgba(35, 15, 22, 0.05),
+      0 24px 38px -18px rgba(35, 15, 22, 0.16);
+    /* The brand's own glow, for a streak badge and a PR celebration. */
+    --glow-accent: 0 0 0 1px rgba(255, 31, 68, 0.24),
+      0 8px 24px -6px rgba(255, 31, 68, 0.48);
+    /* Named separately because three components still reach for it by this
+       name. Same value; it dies with the last of them. */
+    --ember-glow: rgba(255, 31, 68, 0.55);
+
+    /* ---- geometry & motion ------------------------------------------ */
+    --radius: 20px;
+    /* Interactive motion eases OUT. An ease-in-out on a press or a panel makes
+       the first third of the movement look like lag. */
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --dur-fast: 150ms;
+    --dur: 200ms;
+    --dur-slow: 250ms;
+  }
+
+  /*
+   * Dark: the same roles in a warm plum-charcoal, never a neutral grey and
+   * never near-black. Selected by `data-theme` on <html>, which an inline script
+   * in the document head sets before first paint — so the theme never flashes
+   * and the server render is never contradicted.
+   *
+   * Reached only from the toggle: a dark OS no longer drags the app into it.
+   */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --background: 340 12% 8%; /* #171216 */
+    --foreground: 20 30% 96%; /* #F9F5F3 — 16.8:1 */
+
+    --card: 340 10% 12%; /* #221C20 */
+    --card-foreground: 20 30% 96%;
+    --popover: 340 10% 15%;
+    --popover-foreground: 20 30% 96%;
+
+    --secondary: 340 8% 17%;
+    --secondary-foreground: 20 30% 96%;
+    --muted: 340 8% 17%;
+    --muted-foreground: 20 10% 66%; /* #ADA4A0 — 6.6:1 on the card */
+    --accent: 340 8% 21%;
+    --accent-foreground: 20 30% 96%;
+
+    --border: 340 8% 19%; /* #342C30 */
+    --border-strong: 340 8% 27%; /* #4A3E44 */
+    --input: 340 8% 27%;
+    --ring: 350 100% 68%;
+
+    /* The brand hex does not move — a brand that changes colour with the theme
+       is two brands. Only the INK lifts, because #FF1F44 is already 5.1:1 on
+       the dark card and darkening it would be the unreadable direction. */
+    --primary: 350 100% 56%;
+    --primary-ink: 350 100% 71%; /* #FF6B84 — 7.1:1 */
+    --primary-foreground: 0 0% 100%;
+
+    /* Same ramp in both themes: a button is its own surface, so its label's
+       contrast is a property of the button, not of the page behind it. */
+    --grad-primary-from: #f5123c;
+    --grad-primary-to: #a80a3f;
+
+    /* Fill and ink converge or lift — every value below already clears 4.5:1. */
+    --success: 150 72% 48%; /* #23D183 — 8.9:1 */
+    --success-ink: 150 72% 48%;
+    --caution: 42 100% 58%; /* #FFBC29 — 10.4:1 */
+    --caution-ink: 42 100% 58%;
+    --danger: 350 100% 71%; /* #FF6B84 — 7.1:1 */
+    --danger-ink: 350 100% 71%;
+    --recovery: 186 80% 52%; /* #1FD3E8 — 9.6:1 */
+    --recovery-ink: 186 80% 52%;
+
+    --destructive: 350 100% 71%;
+    --destructive-foreground: 340 12% 8%;
+
+    --spark-gold: #ffbc29;
+    --spark-cyan: #1fd3e8;
+    --spark-violet: #a78bfa;
+    --spark-lime: #a3e635;
+    /* Fill and ink converge here, as everywhere in dark. */
+    --spark-gold-ink: #ffbc29;
+    --spark-cyan-ink: #1fd3e8;
+    --spark-violet-ink: #a78bfa;
+    --spark-lime-ink: #a3e635;
+
+    /* Lifted to 5.2:1 ± 0.3 on #221C20 — the same equal-weight rule as light. */
+    --muscle-chest: #ff4d6a;
+    --muscle-shoulders: #ff9333;
+    --muscle-triceps: #e8b423;
+    --muscle-biceps: #a3d626;
+    --muscle-core: #2bd472;
+    --muscle-hamstrings: #1fc9a8;
+    --muscle-calves: #22c9dd;
+    --muscle-back: #4da3ff;
+    --muscle-quads: #a78bfa;
+    --muscle-glutes: #f065c0;
+
+    --viz-surface: #221c20;
+    --viz-plane: #171216;
+    --viz-ink: #f9f5f3;
+    --viz-ink-secondary: #d8cfcb;
+    --viz-ink-muted: #ada4a0;
+    --viz-grid: #342c30;
+    --viz-baseline: #4a3e44;
+
+    --viz-accent: #ff4d6a;
+    --viz-accent-wash: rgba(255, 77, 106, 0.16);
+    --viz-recessive: #6b5c62;
+
+    --viz-series-1: #4da3ff;
+    --viz-series-2: #ffbc29;
+    --viz-series-3: #1fd3e8;
+    --viz-series-4: #a78bfa;
+
+    --viz-good: #23d183;
+    --viz-critical: #ff6b84;
+
+    /* In the dark the page absorbs a shadow, so elevation is carried by the
+       border and the shadows only stop a card from looking pasted on. */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.5),
+      0 10px 20px -12px rgba(0, 0, 0, 0.8);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.55),
+      0 24px 40px -20px rgba(0, 0, 0, 0.9);
+    --glow-accent: 0 0 0 1px rgba(255, 31, 68, 0.34),
+      0 8px 26px -6px rgba(255, 31, 68, 0.6);
+    --ember-glow: rgba(255, 77, 106, 0.6);
   }
 
   * {
@@ -82,15 +309,24 @@
   }
 
   html {
-    color-scheme: dark;
     scroll-padding-top: env(safe-area-inset-top, 0px);
+    /* The overscroll bounce has to show the page plane, not white. */
+    background-color: hsl(var(--background));
+    /* A theme flip is a whole-screen colour change; easing it stops the switch
+       from reading as a flash. Declared on html only, so it cannot leak into a
+       component's own transition. */
+    transition: background-color var(--dur-slow) var(--ease);
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-transparent text-foreground antialiased;
     font-family: var(--font-sans);
+    /* Every figure in this app updates in place — a streak, a tonnage, a
+       countdown. Proportional digits re-layout on each tick, so tabular is the
+       global default and never a per-component decision. */
+    font-variant-numeric: tabular-nums;
     /* Room for the fixed bottom nav + the iOS home indicator. */
-    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
     overscroll-behavior-y: none;
   }
 
@@ -104,41 +340,181 @@
     -webkit-appearance: none;
     margin: 0;
   }
+
+  /* A visible focus ring is the only thing making this app keyboard-operable,
+     and it has to be visible against both the page and a card. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
 }
 
 @layer components {
-  /* The knurled-steel motif: a lattice hairline that tops the app shell. */
-  .iron-lattice {
-    height: 5px;
-    width: 100%;
-    opacity: 0.6;
-    background-image: repeating-linear-gradient(
-        135deg,
-        hsl(var(--primary)) 0 2px,
-        transparent 2px 13px
+  /*
+   * The ground — and the single most important rule in this file.
+   *
+   * Four coloured washes sit in the four corners of the viewport: red top-right
+   * (the brand), gold top-left, cyan bottom-left, violet bottom-right. They are
+   * what make a near-white page feel like a lit room rather than a blank sheet,
+   * and they are the reason this identity reads as energetic instead of clinical.
+   *
+   * Do NOT reduce this to `background-color` alone. A flat ground behind a
+   * discipline tracker is what the previous two identities both died of — first
+   * as near-black, then as flat cream.
+   */
+  .daylight-ground,
+  .studio-ground {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    pointer-events: none;
+    background-color: hsl(var(--background));
+    background-image: radial-gradient(
+        58% 42% at 88% -6%,
+        rgba(255, 31, 68, 0.2) 0%,
+        transparent 64%
       ),
-      repeating-linear-gradient(
-        45deg,
-        hsl(var(--primary)) 0 2px,
-        transparent 2px 13px
+      radial-gradient(
+        46% 34% at 10% 2%,
+        rgba(255, 168, 0, 0.16) 0%,
+        transparent 62%
+      ),
+      radial-gradient(
+        52% 40% at 2% 96%,
+        rgba(0, 191, 212, 0.16) 0%,
+        transparent 66%
+      ),
+      radial-gradient(
+        46% 36% at 98% 88%,
+        rgba(139, 92, 246, 0.16) 0%,
+        transparent 64%
       );
   }
 
-  /* Soft ember behind page headers. */
-  .iron-ember::before {
-    content: "";
-    position: absolute;
-    inset: -30px -16px auto -16px;
-    height: 170px;
-    /* Origin sits on the inline-start edge — which is the RIGHT in this RTL
-       layout, i.e. behind the heading rather than opposite it. */
-    background: radial-gradient(
-      120% 100% at 85% 0%,
-      #4a130f 0%,
-      transparent 62%
+  /* Dark keeps every wash and pushes them harder: on a dark plane a 16% wash
+     disappears, and a dark ground with no colour in it is exactly the gloom
+     this identity replaced. */
+  :root[data-theme="dark"] .daylight-ground,
+  :root[data-theme="dark"] .studio-ground {
+    background-image: radial-gradient(
+        58% 42% at 88% -6%,
+        rgba(255, 31, 68, 0.3) 0%,
+        transparent 62%
+      ),
+      radial-gradient(
+        46% 34% at 10% 2%,
+        rgba(255, 168, 0, 0.16) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        52% 40% at 2% 96%,
+        rgba(0, 191, 212, 0.2) 0%,
+        transparent 64%
+      ),
+      radial-gradient(
+        46% 36% at 98% 88%,
+        rgba(139, 92, 246, 0.22) 0%,
+        transparent 62%
+      );
+  }
+
+  /*
+   * A surface. One border, one soft shadow, and `background-color` left free so
+   * a card can be re-tinted without losing its edge.
+   */
+  .surface {
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-sm);
+  }
+  .surface-raised {
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-md);
+  }
+
+  /* The accent ramp as a fill. The one gradient in the system, and only ever a
+     primary action. */
+  .grad-primary {
+    background-image: linear-gradient(
+      135deg,
+      var(--grad-primary-from) 0%,
+      var(--grad-primary-to) 100%
     );
-    z-index: -1;
-    pointer-events: none;
+  }
+
+  /* The spectrum bar: the four secondaries plus the brand, as one thin rule.
+     It is the app's signature — used at the top of the shell and nowhere it
+     would compete with a chart. */
+  .grad-spectrum {
+    background-image: linear-gradient(
+      90deg,
+      var(--spark-violet) 0%,
+      var(--spark-cyan) 22%,
+      var(--spark-lime) 44%,
+      var(--spark-gold) 68%,
+      hsl(var(--primary)) 100%
+    );
+  }
+
+  /*
+   * Type in the accent ramp, for a hero figure only.
+   *
+   * The clip is ALWAYS paired with a transparent text fill, and nothing on this
+   * element may ever be animated with a transform: Chrome collapses a clipped
+   * background the moment the element gets its own transform, and the text
+   * paints as one solid block. Animate a wrapper instead.
+   */
+  .ink-gradient {
+    background-image: linear-gradient(
+      180deg,
+      hsl(var(--primary)) 0%,
+      var(--grad-primary-to) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* A hero number. Heavy, tight, tabular — the star of the screen. */
+  .figure {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 0.95;
+  }
+
+  .display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  /* A section rule: small Arabic label, accent tick, hairline tail. */
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+  .section-label::before {
+    content: "";
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background-color: hsl(var(--primary));
+    flex: none;
+  }
+  .section-label::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background-image: linear-gradient(
+      to left,
+      hsl(var(--border-strong)),
+      transparent
+    );
   }
 
   .no-scrollbar {
@@ -152,8 +528,180 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
+
+  /* ------------------------------------------------------------------
+   * DEPRECATION SHIM — deleted during the screen-by-screen restyle.
+   *
+   * The forge identity is retired, but its class names are still on ~50 call
+   * sites. Redefining them in the studio palette here means no screen is left
+   * behind: the whole app moves in one step, and each rule below dies as its
+   * call sites are rewritten. Do not use them in new code.
+   * ------------------------------------------------------------------ */
+  .steel {
+    background-color: hsl(var(--card));
+    border-color: hsl(var(--border));
+    box-shadow: var(--shadow-sm);
+  }
+  .molten {
+    background-image: linear-gradient(
+      135deg,
+      var(--grad-primary-from) 0%,
+      var(--grad-primary-to) 100%
+    );
+  }
+  .molten-text {
+    background-image: linear-gradient(
+      180deg,
+      hsl(var(--primary)) 0%,
+      var(--grad-primary-to) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .edge-molten {
+    position: relative;
+  }
+  .edge-molten::after {
+    content: "";
+    position: absolute;
+    inset-inline: 14%;
+    top: -1px;
+    height: 2px;
+    border-radius: 999px;
+    background-color: hsl(var(--primary));
+    pointer-events: none;
+  }
+  .iron-ground {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    pointer-events: none;
+    background-color: hsl(var(--background));
+  }
+  /* The shell's top rule. Now the full spectrum rather than a red-only bar —
+     it is the first thing on the screen and it sets the tone for the rest. */
+  .iron-lattice {
+    height: 3px;
+    width: 100%;
+    background-image: linear-gradient(
+      90deg,
+      var(--spark-violet) 0%,
+      var(--spark-cyan) 22%,
+      var(--spark-lime) 44%,
+      var(--spark-gold) 68%,
+      hsl(var(--primary)) 100%
+    );
+  }
 }
 
+@layer utilities {
+  /* ---- motion -----------------------------------------------------
+   * Everything here animates opacity / transform / stroke only, so none of it
+   * triggers layout. The two traps this UI has already hit are load-bearing:
+   * never a transform on background-clipped text, and never drive a reward off
+   * requestAnimationFrame — it does not run in a hidden tab, so the reward is
+   * swallowed and then replays when the tab returns. Set state synchronously
+   * and clear it on a timer.
+   * ---------------------------------------------------------------- */
+
+  /* A chart line drawing itself in on scroll. The component sets
+     --draw-length from the path's own measured length. */
+  @keyframes draw-in {
+    from {
+      stroke-dashoffset: var(--draw-length, 1000);
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .animate-draw-in {
+    stroke-dasharray: var(--draw-length, 1000);
+    animation: draw-in 900ms var(--ease) both;
+  }
+
+  /* A logged set: one short, unmistakable confirm. */
+  @keyframes confirm-pop {
+    0% {
+      transform: scale(1);
+    }
+    38% {
+      transform: scale(1.06);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .animate-confirm {
+    animation: confirm-pop 280ms var(--ease) both;
+  }
+
+  /* A PR: the card itself glows once. */
+  @keyframes celebrate {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--success) / 0.5), var(--shadow-sm);
+    }
+    55% {
+      box-shadow: 0 0 0 12px hsl(var(--success) / 0), var(--shadow-md);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--success) / 0), var(--shadow-sm);
+    }
+  }
+  .animate-celebrate {
+    animation: celebrate 900ms var(--ease) both;
+  }
+
+  /* The streak badge, breathing. Opacity only — it sits under clipped text. */
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.85;
+    }
+  }
+  .animate-pulse-glow {
+    animation: pulse-glow 4.5s ease-in-out infinite;
+  }
+
+  @keyframes ring-out {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5);
+    }
+    100% {
+      box-shadow: 0 0 0 14px hsl(var(--primary) / 0);
+    }
+  }
+  .animate-ring-out {
+    animation: ring-out 1.1s var(--ease) infinite;
+  }
+  /* Legacy names, still on the rest timer and the hero. */
+  .animate-ember-pulse {
+    animation: ring-out 1.1s var(--ease) infinite;
+  }
+  .animate-forge {
+    animation: pulse-glow 4.5s ease-in-out infinite;
+  }
+
+  /* Press feedback: a real 44px target that visibly gives under a thumb. */
+  .press {
+    transition: transform var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease),
+      border-color var(--dur-fast) var(--ease);
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+}
+
+/*
+ * Reduced motion. Outside every layer and with `!important`, because it has to
+ * beat any animation declared anywhere — including the ones above and anything
+ * tailwindcss-animate emits.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -161,5 +709,6 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

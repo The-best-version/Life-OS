@@ -11,10 +11,17 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { AddExerciseForm } from "@/components/workout/add-exercise-form";
+import { PageHero } from "@/components/layout/page-hero";
 import { ExerciseLogger } from "@/components/workout/exercise-logger";
-import { sessionVolume } from "@/lib/metrics";
+import { sessionDurationMin, sessionVolume } from "@/lib/metrics";
 import { useIronLog } from "@/lib/store";
-import { formatFullDate, formatNumber, isIsoDate, toIsoDate } from "@/lib/utils";
+import {
+  cn,
+  formatFullDate,
+  formatNumber,
+  isIsoDate,
+  toIsoDate,
+} from "@/lib/utils";
 
 /**
  * The logging screen — the one that has to work with one hand, mid-set, on a
@@ -65,6 +72,7 @@ export default function WorkoutPage() {
   const setsToday = session
     ? (index.setsBySession.get(session.id) ?? []).length
     : 0;
+  const durationToday = session ? sessionDurationMin(index, session.id) : null;
 
   if (days.length === 0) {
     return (
@@ -79,25 +87,31 @@ export default function WorkoutPage() {
 
   return (
     <div className="space-y-3 pb-6">
-      <section className="relative iron-ember overflow-hidden py-5">
-        <p className="font-mono text-[11px] text-muted-foreground">
-          {formatFullDate(date)}
-        </p>
-        <h1 className="mt-1 text-[38px] font-black leading-none animate-rise-in">
-          {activeDay?.name ?? "تمرين"}
-        </h1>
-        <p className="mt-2 text-[13px] font-medium text-muted-foreground">
-          {activeDay?.focus}
-        </p>
+      <PageHero
+        eyebrow={formatFullDate(date)}
+        latinTitle
+        title={activeDay?.name ?? "تمرين"}
+        subtitle={activeDay?.focus}
+      >
         {setsToday > 0 ? (
-          <p className="tnum mt-3 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 font-mono text-xs text-muted-foreground">
+          <p className="tnum inline-flex flex-wrap items-center gap-1.5 rounded-full border border-border bg-background/60 px-3 py-1.5 font-mono text-xs text-muted-foreground backdrop-blur">
             {setsToday} مجموعة ·{" "}
             <span className="font-bold text-foreground">
               {formatNumber(volumeToday)} كجم
             </span>
+            {durationToday !== null ? (
+              <span>
+                {" · "}
+                {durationToday} دقيقة
+              </span>
+            ) : null}
           </p>
-        ) : null}
-      </section>
+        ) : (
+          <p className="text-[12px] text-muted-foreground">
+            ما سجّلت شيء اليوم بعد — أول مجموعة تفتح الحصة.
+          </p>
+        )}
+      </PageHero>
 
       <Tabs
         value={dayId ?? ""}
@@ -140,6 +154,51 @@ export default function WorkoutPage() {
                 }}
               />
             </div>
+          </div>
+
+          {/* Readiness, rated on the way in.
+              It is logged and not acted on automatically: a screen that cuts
+              your target because you tapped "2" would teach you to stop being
+              honest with it. The number is here so a bad session has an
+              explanation three weeks later, when the curve dips and you cannot
+              remember why. */}
+          <div>
+            <Label htmlFor="readiness">جاهزيتك اليوم</Label>
+            <div
+              id="readiness"
+              role="group"
+              aria-label="جاهزيتك اليوم من ١ إلى ٥"
+              className="mt-1.5 flex items-center gap-1.5"
+            >
+              {[1, 2, 3, 4, 5].map((value) => {
+                const selected = session?.readiness === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={selected}
+                    aria-label={`جاهزية ${value} من 5`}
+                    onClick={() =>
+                      actions.setSessionReadiness(
+                        date,
+                        selected ? null : value,
+                      )
+                    }
+                    className={cn(
+                      "figure h-9 flex-1 rounded-md border text-[13px] transition-colors",
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-secondary text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[10.5px] text-muted-foreground">
+              ١ = منهك · ٥ = جاهز تماماً. تُسجَّل للمراجعة فقط ولا تغيّر أهدافك.
+            </p>
           </div>
 
           <div>

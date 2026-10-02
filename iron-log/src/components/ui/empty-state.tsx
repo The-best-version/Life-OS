@@ -11,6 +11,15 @@ interface EmptyStateProps {
   className?: string;
 }
 
+/**
+ * The state most of this app is in on day one.
+ *
+ * A dashed grey rectangle with a grey icon says "nothing here"; on a first run
+ * that is most of the screen, and the whole product reads as broken. So an empty
+ * state is built like a card instead — the same steel plate, its own ember, and
+ * an icon that is lit rather than greyed. It is still visibly empty, but it looks
+ * like a place waiting to be filled.
+ */
 export function EmptyState({
   icon: Icon,
   title,
@@ -21,20 +30,38 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-2 rounded-lg border border-dashed border-border px-6 py-10 text-center",
+        "steel relative flex flex-col items-center gap-2 overflow-hidden rounded-lg border bg-card px-6 py-9 text-center",
         className,
       )}
     >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.05]"
+        style={{ backgroundImage: "var(--tread)", backgroundSize: "48px 48px" }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-16 h-32"
+        style={{
+          background:
+            "radial-gradient(50% 100% at 50% 100%, rgba(255,122,47,0.17) 0%, transparent 70%)",
+        }}
+      />
+
       {Icon ? (
-        <Icon className="size-6 text-muted-foreground" aria-hidden />
+        <span className="relative flex size-11 items-center justify-center rounded-full border border-primary/25 bg-primary/10">
+          <Icon className="size-5 text-primary" aria-hidden />
+        </span>
       ) : null}
-      <p className="text-sm font-bold text-foreground">{title}</p>
+      <p className="relative mt-0.5 text-[13.5px] font-extrabold text-foreground">
+        {title}
+      </p>
       {description ? (
-        <p className="max-w-[34ch] text-xs leading-relaxed text-muted-foreground">
+        <p className="relative max-w-[34ch] text-xs leading-relaxed text-muted-foreground">
           {description}
         </p>
       ) : null}
-      {action ? <div className="mt-2">{action}</div> : null}
+      {action ? <div className="relative mt-2">{action}</div> : null}
     </div>
   );
 }

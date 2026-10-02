@@ -20,12 +20,14 @@
 import { createSeedDatabase, DB_VERSION, DEFAULT_SETTINGS } from "./seed";
 import {
   MUSCLE_GROUPS,
+  type BodyMetric,
   type Database,
   type Exercise,
   type IsoDate,
   type MuscleGroup,
   type NutritionLog,
   type ProgramDay,
+  type HealthLog,
   type Session,
   type SetEntry,
   type Settings,
@@ -113,6 +115,27 @@ function asMuscleGroup(value: unknown): MuscleGroup {
 /** Weight is allowed to be 0 (bodyweight work) but never negative or absurd. */
 export const MAX_WEIGHT_KG = 750;
 export const MAX_REPS = 200;
+export const MIN_REST_SECONDS = 15;
+export const MAX_REST_SECONDS = 600;
+
+/**
+ * A measurement that is allowed to be absent.
+ *
+ * Returns `null` rather than a default, because every caller here stores a body
+ * measurement or a per-machine override: a missing tape reading must stay
+ * missing, and a zero substituted for it would drag an average down as if the
+ * user had shrunk.
+ */
+function asNullableNumber(
+  value: unknown,
+  min: number,
+  max: number,
+  digits = 1,
+): number | null {
+  const n = toFiniteNumber(value);
+  if (n === null) return null;
+  return round(clamp(n, min, max), digits);
+}
 
 function normalizeExercise(raw: unknown, now: number): Exercise | null {
   if (!isRecord(raw)) return null;
@@ -125,6 +148,16 @@ function normalizeExercise(raw: unknown, now: number): Exercise | null {
     equipment: asString(raw.equipment, "other").slice(0, 40),
     createdAt: asTimestamp(raw.createdAt, now),
     archived: raw.archived === true,
+    setup: asString(raw.setup).slice(0, 240),
+    repMin: asNullableNumber(raw.repMin, 1, MAX_REPS, 0),
+    repMax: asNullableNumber(raw.repMax, 1, MAX_REPS, 0),
+    incrementKg: asNullableNumber(raw.incrementKg, 0.5, 50, 2),
+    restSeconds: asNullableNumber(
+      raw.restSeconds,
+      MIN_REST_SECONDS,
+      MAX_REST_SECONDS,
+      0,
+    ),
   };
 }
 
@@ -166,6 +199,7 @@ function normalizeSession(
     note: asString(raw.note).slice(0, 500),
     createdAt,
     updatedAt: asTimestamp(raw.updatedAt, createdAt),
+    readiness: asNullableNumber(raw.readiness, 1, 5, 0),
   };
 }
 
@@ -227,22 +261,108 @@ function normalizeNutrition(raw: unknown): Record<IsoDate, NutritionLog> {
   return out;
 }
 
+function normalizeBodyMetrics(raw: unknown): Record<IsoDate, BodyMetric> {
+  const out: Record<IsoDate, BodyMetric> = {};
+  if (!isRecord(raw)) return out;
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isIsoDate(key) || !isRecord(value)) continue;
+    const entry: BodyMetric = {
+      date: key,
+      weightKg: asNullableNumber(value.weightKg, 20, 400),
+      waistCm: asNullableNumber(value.waistCm, 40, 200),
+      chestCm: asNullableNumber(value.chestCm, 50, 200),
+      armCm: asNullableNumber(value.armCm, 15, 80),
+      thighCm: asNullableNumber(value.thighCm, 25, 120),
+      shoulderCm: asNullableNumber(value.shoulderCm, 60, 250),
+      note: asString(value.note).slice(0, 240),
+    };
+    // A row where every field came back empty is not a check-in.
+    const hasValue =
+      entry.weightKg !== null ||
+      entry.waistCm !== null ||
+      entry.chestCm !== null ||
+      entry.armCm !== null ||
+      entry.thighCm !== null ||
+      entry.shoulderCm !== null ||
+      entry.note !== "";
+    if (hasValue) out[key] = entry;
+  }
+  return out;
+}
+
+/**
+ * A day's health markers.
+ *
+ * `bedtime` is validated as a clock string rather than coerced to a number,
+ * because the only thing it has to survive is a round trip through an
+ * <input type="time"> — anything that is not "HH:MM" came from a hand-edited
+ * payload and is dropped rather than guessed at.
+ */
+function normalizeHealth(raw: unknown): Record<IsoDate, HealthLog> {
+  const out: Record<IsoDate, HealthLog> = {};
+  if (!isRecord(raw)) return out;
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isIsoDate(key) || !isRecord(value)) continue;
+    const bedtimeRaw = asString(value.bedtime);
+    const entry: HealthLog = {
+      date: key,
+      sleepHours: asNullableNumber(value.sleepHours, 0, 16, 1),
+      bedtime: /^([01]\d|2[0-3]):[0-5]\d$/.test(bedtimeRaw) ? bedtimeRaw : null,
+      steps: asNullableNumber(value.steps, 0, 100_000, 0),
+      waterMl: asNullableNumber(value.waterMl, 0, 10_000, 0),
+      restingHr: asNullableNumber(value.restingHr, 25, 150, 0),
+      note: asString(value.note).slice(0, 240),
+    };
+    // Same rule as a body check-in: an all-empty row is not a reading.
+    const hasValue =
+      entry.sleepHours !== null ||
+      entry.bedtime !== null ||
+      entry.steps !== null ||
+      entry.waterMl !== null ||
+      entry.restingHr !== null ||
+      entry.note !== "";
+    if (hasValue) out[key] = entry;
+  }
+  return out;
+}
+
 function normalizeSettings(raw: unknown): Settings {
   const base: Settings = {
     ...DEFAULT_SETTINGS,
     targets: { ...DEFAULT_SETTINGS.targets },
+    healthTargets: { ...DEFAULT_SETTINGS.healthTargets },
   };
   if (!isRecord(raw)) return base;
 
   const unit: WeightUnit = raw.unit === "lb" ? "lb" : "kg";
   const bodyWeight = toFiniteNumber(raw.bodyWeightKg);
   const targets = isRecord(raw.targets) ? raw.targets : {};
+  const healthTargets = isRecord(raw.healthTargets) ? raw.healthTargets : {};
+  const height = toFiniteNumber(raw.heightCm);
 
   return {
     unit,
     weeklyGoal: clamp(asPositiveInt(raw.weeklyGoal, base.weeklyGoal), 1, 7),
     bodyWeightKg:
       bodyWeight === null ? null : round(clamp(bodyWeight, 20, 400), 1),
+    restSeconds: clamp(
+      asPositiveInt(raw.restSeconds, base.restSeconds),
+      MIN_REST_SECONDS,
+      MAX_REST_SECONDS,
+    ),
+    repMin: clamp(asPositiveInt(raw.repMin, base.repMin), 1, 30),
+    repMax: clamp(
+      asPositiveInt(raw.repMax, base.repMax),
+      clamp(asPositiveInt(raw.repMin, base.repMin), 1, 30),
+      50,
+    ),
+    incrementKg: round(
+      clamp(toFiniteNumber(raw.incrementKg) ?? base.incrementKg, 0.5, 50),
+      2,
+    ),
+    restSound: raw.restSound !== false,
+    restVibrate: raw.restVibrate !== false,
+    restAutoStart: raw.restAutoStart !== false,
     targets: {
       kcal: clamp(asPositiveInt(targets.kcal, base.targets.kcal), 0, 20_000),
       protein: clamp(
@@ -252,6 +372,24 @@ function normalizeSettings(raw: unknown): Settings {
       ),
       carbs: clamp(asPositiveInt(targets.carbs, base.targets.carbs), 0, 2_000),
       fat: clamp(asPositiveInt(targets.fat, base.targets.fat), 0, 1_000),
+    },
+    heightCm: height === null ? null : round(clamp(height, 100, 250), 1),
+    healthTargets: {
+      sleepHours: clamp(
+        toFiniteNumber(healthTargets.sleepHours) ?? base.healthTargets.sleepHours,
+        4,
+        12,
+      ),
+      steps: clamp(
+        asPositiveInt(healthTargets.steps, base.healthTargets.steps),
+        1_000,
+        50_000,
+      ),
+      waterMl: clamp(
+        asPositiveInt(healthTargets.waterMl, base.healthTargets.waterMl),
+        500,
+        8_000,
+      ),
     },
   };
 }
@@ -311,6 +449,8 @@ export function normalizeDatabase(raw: unknown, now = Date.now()): Database {
     setEntries,
     attendance: normalizeAttendance(raw.attendance),
     nutrition: normalizeNutrition(raw.nutrition),
+    bodyMetrics: normalizeBodyMetrics(raw.bodyMetrics),
+    health: normalizeHealth(raw.health),
     settings: normalizeSettings(raw.settings),
     updatedAt: asTimestamp(raw.updatedAt, now),
   };
@@ -329,6 +469,30 @@ function migrate(raw: Record<string, unknown>): Record<string, unknown> {
   let working = raw;
   if (version < 1) {
     working = { ...working, version: 1 };
+  }
+  if (version < 2) {
+    /* v2 added the rest timer, double-progression targets, per-machine setup
+       notes and body check-ins. Every new field is either nullable or carries a
+       default in `DEFAULT_SETTINGS`, so the normalisers below fill them in —
+       the only thing that has to exist here is the container for the new
+       collection. Missing it would mean a v1 backup loaded fine today and threw
+       on the first body check-in tomorrow. */
+    working = {
+      ...working,
+      version: 2,
+      bodyMetrics: isRecord(working.bodyMetrics) ? working.bodyMetrics : {},
+    };
+  }
+  if (version < 3) {
+    /* v3 added the daily health log. The container has to be created here and
+       not left to the normaliser: `heightCm` and `healthTargets` carry defaults
+       from DEFAULT_SETTINGS, but a missing `health` key would mean the first
+       sleep entry of the day wrote into a record that did not exist. */
+    working = {
+      ...working,
+      version: 3,
+      health: isRecord(working.health) ? working.health : {},
+    };
   }
   return working;
 }

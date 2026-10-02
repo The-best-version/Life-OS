@@ -3,10 +3,15 @@
 import { CalendarDays, ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { PageHero } from "@/components/layout/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { isWorkingSet, sessionVolume } from "@/lib/metrics";
+import {
+  isWorkingSet,
+  sessionDurationMin,
+  sessionVolume,
+} from "@/lib/metrics";
 import { useIronLog } from "@/lib/store";
 import type { Id } from "@/lib/types";
 import {
@@ -36,15 +41,20 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-3 pb-6">
-      <section className="relative iron-ember overflow-hidden py-5">
-        <p className="font-mono text-[11px] text-muted-foreground">السجل</p>
-        <h1 className="mt-1 text-[34px] font-black leading-none animate-rise-in">
-          {sessions.length}
-          <span className="ms-2 text-base font-bold text-muted-foreground">
-            حصة مسجّلة
+      <PageHero
+        eyebrow="السجل"
+        title={
+          <span className="flex items-baseline gap-2">
+            <span className="molten-text figure text-[46px]">
+              {sessions.length}
+            </span>
+            <span className="text-base font-bold text-muted-foreground">
+              حصة مسجّلة
+            </span>
           </span>
-        </h1>
-      </section>
+        }
+        subtitle="كل حصة قابلة للفتح حتى آخر مجموعة فيها"
+      />
 
       {sessions.length === 0 ? (
         <EmptyState
@@ -75,6 +85,7 @@ export default function HistoryPage() {
                 });
             }
 
+            const duration = sessionDurationMin(index, session.id);
             const isOpen = expanded === session.id;
 
             return (
@@ -98,6 +109,10 @@ export default function HistoryPage() {
                       <p className="tnum mt-1 font-mono text-[11px] text-muted-foreground">
                         {formatFullDate(session.date)} · {sets.length} مجموعة ·{" "}
                         {formatNumber(sessionVolume(index, session.id))} كجم
+                        {duration !== null ? ` · ${duration} دقيقة` : null}
+                        {session.readiness !== null
+                          ? ` · جاهزية ${session.readiness}/5`
+                          : null}
                       </p>
                       {session.note ? (
                         <p className="mt-1 truncate text-[11.5px] text-muted-foreground">
@@ -127,6 +142,9 @@ export default function HistoryPage() {
                                     inside RTL text. */}
                                 <bdi dir="ltr">
                                   {formatNumber(entry.weightKg)}×{entry.reps}
+                                  {entry.rpe !== null
+                                    ? ` @${formatNumber(entry.rpe)}`
+                                    : null}
                                 </bdi>
                               </span>
                             ))}

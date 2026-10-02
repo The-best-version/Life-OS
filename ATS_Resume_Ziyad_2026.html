@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ziyad Almutairi - Resume</title>
+<style>
+  /* ============================================================
+     ATS-SAFE STYLESHEET
+     No grid, no flexbox, no tables, no images, no columns, no floats.
+     Pure linear block flow so parsers read strictly top-to-bottom.
+     ============================================================ */
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: Arial, Helvetica, "Segoe UI", sans-serif;
+    font-size: 9.2pt;
+    line-height: 1.3;
+    color: #000;
+    background: #fff;
+    max-width: 7.9in;
+    margin: 0 auto;
+    padding: 10mm;
+  }
+
+  /* ---------- Header ---------- */
+  h1 {
+    font-size: 20pt;
+    font-weight: bold;
+    letter-spacing: 2.8px;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.1;
+    margin-bottom: 3pt;
+  }
+
+  .headline {
+    text-align: center;
+    font-size: 10pt;
+    font-weight: bold;
+    letter-spacing: 0.4px;
+    line-height: 1.25;
+    color: #222;
+    margin-bottom: 3.5pt;
+  }
+
+  .contact {
+    text-align: center;
+    font-size: 9.2pt;
+    line-height: 1.45;
+    color: #222;
+    margin-bottom: 7pt;
+  }
+
+  .contact a { color: #222; text-decoration: none; }
+
+  /* ---------- Section headings ---------- */
+  h2 {
+    font-size: 10pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    line-height: 1.2;
+    border-bottom: 1px solid #000;
+    padding-bottom: 1.5pt;
+    margin-top: 7pt;
+    margin-bottom: 3.5pt;
+  }
+
+  /* ---------- Entry blocks ---------- */
+  .entry { margin-bottom: 5pt; }
+  .entry:last-child { margin-bottom: 0; }
+
+  /* Employer / institution */
+  h3 {
+    font-size: 10.8pt;
+    font-weight: bold;
+    letter-spacing: 0.2px;
+    line-height: 1.25;
+    margin-bottom: 0;
+  }
+
+  /* Job title - the field an ATS specifically looks for */
+  .role {
+    font-size: 10pt;
+    font-weight: bold;
+    line-height: 1.3;
+    color: #222;
+    margin-bottom: 0;
+  }
+
+  /* Location and dates */
+  .meta {
+    font-size: 9.2pt;
+    line-height: 1.3;
+    color: #444;
+    margin-bottom: 2.5pt;
+  }
+
+  p { margin-bottom: 3pt; text-align: left; }
+
+  /* ---------- Lists ---------- */
+  ul { margin: 0 0 0 13pt; padding: 0; }
+
+  li {
+    margin-bottom: 1.8pt;
+    text-align: left;
+    padding-left: 2pt;
+  }
+
+  ul li:last-child { margin-bottom: 0; }
+
+  /* Keyword runs - compact, comma-separated, fully ATS-readable */
+  .skills { margin-bottom: 3.5pt; }
+  .skills:last-of-type { margin-bottom: 0; }
+
+  strong { font-weight: bold; }
+
+  /* ---------- Print / PDF (Ctrl+P) ---------- */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  @media print {
+    html, body {
+      background: #fff !important;
+      color: #000 !important;
+      max-width: none;
+      width: auto;
+      margin: 0;
+      padding: 0;
+      font-size: 9.2pt;
+      line-height: 1.3;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Strip every background so nothing burns ink or confuses a scanner */
+    * { background: transparent !important; box-shadow: none !important; }
+
+    /* Force true black on paper - screen greys wash out in print */
+    h1, h2, h3, .headline, .role, .meta, .contact, p, li, a {
+      color: #000 !important;
+    }
+
+    a { text-decoration: none !important; }
+
+    /* Never split a heading from the content it introduces */
+    h1, h2, h3, .role { page-break-after: avoid; break-after: avoid; }
+    h2 { margin-top: 7pt; }
+
+    /* Never cut an entry, a bullet, or a paragraph across pages */
+    .entry, li, p { page-break-inside: avoid; break-inside: avoid; }
+
+    /* A list never starts on a page its heading did not reach */
+    ul { page-break-before: avoid; break-before: avoid; }
+
+    /* No stranded single lines */
+    p, li { orphans: 3; widows: 3; }
+
+    /* Keep the header block whole at the top of page 1 */
+    h1, .headline, .contact { page-break-inside: avoid; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER
+     Plain characters only ( | and - ). All non-breaking-space, bullet,
+     em-dash, en-dash and curly-quote HTML entities were removed: those
+     mangled the bullet that rendered badly, and some ATS parsers drop them.
+     ============================================================ -->
+<h1>Ziyad Almutairi</h1>
+
+<p class="headline">Project Coordination &amp; Administrative Support | Business Administration Graduate</p>
+
+<p class="contact">
+  Riyadh, Saudi Arabia | +966 53 345 1254 | ziyad.almutairi@outlook.sa<br>
+  <a href="https://www.linkedin.com/in/ziyad-almutairi-1a341a379">linkedin.com/in/ziyad-almutairi-1a341a379</a>
+</p>
+
+<!-- ============ SUMMARY - 5 lines. HR scans this in about 6 seconds ============ -->
+<h2>Professional Summary</h2>
+<p>
+  Business Administration graduate (GPA 4.20/5.00) with hands-on experience in administrative
+  support, document control, and internal reporting, gained through a five-month cooperative
+  training placement in the Administrative and Facility Department of an investment company.
+  Previously completed seven months in a high-volume quick-service operation governed by strict SOP
+  and cash-handling standards. Organized and detail-oriented, with a habit of working accurately to
+  written procedures and deadlines. Seeking a project coordination, administrative, or office
+  support role in Riyadh.
+</p>
+
+<!-- ============ EDUCATION ============ -->
+<h2>Education</h2>
+
+<div class="entry">
+  <h3>Imam Mohammad Ibn Saud Islamic University</h3>
+  <p class="role">Diploma in Business Administration</p>
+  <p class="meta">Riyadh, Saudi Arabia | 2023 - 2026</p>
+  <ul>
+    <li><strong>Cumulative GPA: 4.20 out of 5.00</strong>, maintained while working.</li>
+  </ul>
+</div>
+
+<!-- ============================================================
+     EXPERIENCE
+     Sanabel is a confirmed cooperative training placement (co-op),
+     labelled as such: it explains the 5-month duration instead of
+     leaving a recruiter to wonder why the role ended. Verbs are kept
+     to claims a trainee can defend in an interview.
+     ============================================================ -->
+<h2>Professional Experience</h2>
+
+<div class="entry">
+  <h3>Sanabel Investment Company</h3>
+  <p class="role">Administrative Trainee - Cooperative Training Program</p>
+  <p class="meta">Administrative &amp; Facility Department | Riyadh, Saudi Arabia | January 2026 - May 2026 (5 Months)</p>
+  <ul>
+    <li>Processed and tracked daily administrative requests across facility, procurement, and
+        management stakeholders, logging each item from intake to closure so no request was lost
+        between departments.</li>
+    <li>Organized and maintained departmental records including contracts, invoices, maintenance
+        documentation, and official correspondence, applying a consistent filing and naming
+        structure that shortened retrieval time for routine requests.</li>
+    <li>Prepared recurring internal reports covering facility activity, open requests, and service
+        status for departmental review.</li>
+    <li>Followed up with external service providers on scheduled maintenance, verified completion
+        against the requested scope, and escalated delays to the department supervisor.</li>
+    <li>Supported the department in applying administrative procedures and flagged duplicated steps
+        in manual routines for simplification.</li>
+    <li>Coordinated departmental meetings and recorded minutes, circulating action points and
+        tracking them to completion.</li>
+    <li>Monitored departmental stock and custody items, maintaining records of issued assets and
+        reordering supplies before shortfalls affected daily operations.</li>
+    <li>Handled confidential administrative and financial documents in line with company policy.</li>
+  </ul>
+</div>
+
+<div class="entry">
+  <h3>McDonald's</h3>
+  <p class="role">Crew Member, Operations &amp; Customer Service</p>
+  <p class="meta">Riyadh, Saudi Arabia | June 2025 - December 2025 (7 Months)</p>
+  <ul>
+    <li>Operated front-counter and kitchen stations during peak service hours in a high-volume
+        branch, working to speed-of-service and order-accuracy targets.</li>
+    <li>Applied food safety, hygiene, and SOP standards on every shift, including temperature
+        checks, product hold times, and sanitation routines.</li>
+    <li>Handled cash and card payments and reconciled the till at shift close, with personal
+        accountability for drawer balance.</li>
+    <li>Resolved customer complaints and order corrections at the counter, de-escalating under
+        pressure without delaying service.</li>
+    <li>Rotated across multiple stations within the shift team and supported new crew members on
+        station procedures and equipment handling.</li>
+  </ul>
+</div>
+
+<!-- ============ SKILLS - keyword-dense and comma-separated for ATS extraction ============ -->
+<h2>Core Competencies</h2>
+<p class="skills"><strong>Coordination &amp; Administration:</strong> Project Support, Task Tracking, Meeting Coordination, Minutes of Meetings, Workflow Coordination, Administrative Support, Document Management, Records Control, Internal Reporting, Office Management, Data Entry, Filing &amp; Archiving.</p>
+<p class="skills"><strong>Process &amp; Compliance:</strong> SOP Compliance, Quality Standards, Process Improvement, Status Reporting, Inventory &amp; Stock Monitoring, Cash Handling, Transaction Accuracy, Confidentiality, Document Security.</p>
+<p class="skills"><strong>Communication &amp; Tools:</strong> Stakeholder Communication, Vendor Follow-up, Customer Service, Complaint Resolution, Time Management, Teamwork, Problem Solving, Multitasking, Working Under Pressure, Bilingual Arabic/English, Microsoft Excel, Word, PowerPoint, Outlook.</p>
+
+<!-- ============================================================
+     OPTIONAL SECTION - CERTIFICATIONS AND TRAINING
+     Uncomment the block below and fill it in if you hold any
+     course, training or certificate (Microsoft Office, Doroob,
+     soft skills, English). A fresh-graduate CV gains real weight
+     from this section. Delete it entirely if you have none -
+     never leave an empty heading on the page.
+
+<h2>Certifications &amp; Training</h2>
+<ul>
+  <li>Certificate name, issuing body, year.</li>
+  <li>Certificate name, issuing body, year.</li>
+</ul>
+     ============================================================ -->
+
+<!-- ============ LANGUAGES ============ -->
+<h2>Languages</h2>
+<p class="skills"><strong>Arabic:</strong> Native. | <strong>English:</strong> Intermediate.</p>
+
+</body>
+</html>

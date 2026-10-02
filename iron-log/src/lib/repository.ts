@@ -7,17 +7,28 @@
  * — the UI needs to show the user a specific Arabic message, not a stack trace.
  */
 
-import { MAX_REPS, MAX_WEIGHT_KG } from "./storage";
-import type {
-  Database,
-  Exercise,
+import {
+  MAX_REPS,
+  MAX_REST_SECONDS,
+  MAX_WEIGHT_KG,
+  MIN_REST_SECONDS,
+} from "./storage";
+import {
+  BODY_FIELD_META,
+  BODY_FIELDS,
+  type BodyMetric,
+  type Database,
+  type Exercise,
+  HEALTH_FIELD_META,
+  HEALTH_FIELDS,
+  type HealthLog,
   Id,
   IsoDate,
-  MuscleGroup,
-  NutritionLog,
-  Session,
-  SetEntry,
-  Settings,
+  type MuscleGroup,
+  type NutritionLog,
+  type Session,
+  type SetEntry,
+  type Settings,
 } from "./types";
 import { clamp, createId, isIsoDate, round, toIsoDate } from "./utils";
 
@@ -84,6 +95,7 @@ export function ensureSession(
     note: "",
     createdAt: now,
     updatedAt: now,
+    readiness: null,
   };
 
   return {
@@ -311,6 +323,11 @@ export function addExercise(
       equipment: (input.equipment ?? "other").slice(0, 40),
       createdAt: Date.now(),
       archived: false,
+      setup: "",
+      repMin: null,
+      repMax: null,
+      incrementKg: null,
+      restSeconds: null,
     };
 
   let next: Database = duplicate
@@ -430,6 +447,246 @@ export function setNutrition(
 }
 
 /* ------------------------------------------------------------------ */
+/* Exercise configuration                                              */
+/* ------------------------------------------------------------------ */
+
+export type ExercisePatch = Partial<
+  Pick<Exercise, "setup" | "repMin" | "repMax" | "incrementKg" | "restSeconds">
+>;
+
+/**
+ * Edit how one machine is configured and progressed.
+ *
+ * Every field here is nullable and `null` is meaningful: it means "follow the
+ * global setting", which is a different fact from a number that happens to equal
+ * the global setting today. So `undefined` (absent from the patch) leaves a
+ * field alone, while an explicit `null` clears it back to the default.
+ */
+export function updateExercise(
+  db: Database,
+  exerciseId: Id,
+  patch: ExercisePatch,
+): Result<Database> {
+  const existing = db.exercises.find((item) => item.id === exerciseId);
+  if (!existing) return fail("التمرين غير موجود");
+
+  const repMin = patch.repMin === undefined ? existing.repMin : patch.repMin;
+  const repMax = patch.repMax === undefined ? existing.repMax : patch.repMax;
+
+  if (repMin !== null && repMax !== null && repMin > repMax) {
+    return fail("أقل عدد تكرارات لازم يكون أصغر من الأكثر");
+  }
+
+  const next: Exercise = {
+    ...existing,
+    setup:
+      patch.setup === undefined ? existing.setup : patch.setup.slice(0, 240),
+    repMin: repMin === null ? null : Math.round(clamp(repMin, 1, MAX_REPS)),
+    repMax: repMax === null ? null : Math.round(clamp(repMax, 1, MAX_REPS)),
+    incrementKg:
+      patch.incrementKg === undefined
+        ? existing.incrementKg
+        : patch.incrementKg === null
+          ? null
+          : round(clamp(patch.incrementKg, 0.5, 50), 2),
+    restSeconds:
+      patch.restSeconds === undefined
+        ? existing.restSeconds
+        : patch.restSeconds === null
+          ? null
+          : Math.round(
+              clamp(patch.restSeconds, MIN_REST_SECONDS, MAX_REST_SECONDS),
+            ),
+  };
+
+  return ok(
+    touch({
+      ...db,
+      exercises: db.exercises.map((item) =>
+        item.id === exerciseId ? next : item,
+      ),
+    }),
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Readiness & body check-ins                                          */
+/* ------------------------------------------------------------------ */
+
+/** Self-rated readiness, 1–5. Pass `null` to clear it. */
+export function setSessionReadiness(
+  db: Database,
+  date: IsoDate,
+  readiness: number | null,
+): Database {
+  if (!isIsoDate(date)) return db;
+  const value = readiness === null ? null : Math.round(clamp(readiness, 1, 5));
+
+  const existing = findSessionByDate(db, date);
+  // Rating a day before training it is the normal case — you rate on the way in
+  // — so the session row is created for the rating rather than refused.
+  if (!existing) {
+    if (value === null) return db;
+    const { db: withSession, sessionId } = ensureSession(db, date, null);
+    return touch({
+      ...withSession,
+      sessions: withSession.sessions.map((item) =>
+        item.id === sessionId ? { ...item, readiness: value } : item,
+      ),
+    });
+  }
+
+  return touch({
+    ...db,
+    sessions: db.sessions.map((item) =>
+      item.id === existing.id
+        ? { ...item, readiness: value, updatedAt: Date.now() }
+        : item,
+    ),
+  });
+}
+
+export type BodyPatch = Partial<Omit<BodyMetric, "date">>;
+
+/**
+ * Write one body check-in. Each measurement is clamped to its own plausible
+ * range from `BODY_FIELD_META`, and a row whose every field ends up empty is
+ * deleted rather than left behind as a blank date in the chart.
+ */
+export function setBodyMetric(
+  db: Database,
+  date: IsoDate,
+  patch: BodyPatch,
+): Database {
+  if (!isIsoDate(date)) return db;
+
+  const current: BodyMetric = db.bodyMetrics[date] ?? {
+    date,
+    weightKg: null,
+    waistCm: null,
+    chestCm: null,
+    armCm: null,
+    thighCm: null,
+    shoulderCm: null,
+    note: "",
+  };
+
+  const entry: BodyMetric = { ...current, date };
+
+  for (const field of BODY_FIELDS) {
+    const incoming = patch[field];
+    if (incoming === undefined) continue;
+    if (incoming === null) {
+      entry[field] = null;
+      continue;
+    }
+    const meta = BODY_FIELD_META[field];
+    entry[field] = round(clamp(incoming, meta.min, meta.max), 1);
+  }
+
+  if (patch.note !== undefined) entry.note = patch.note.slice(0, 240);
+
+  const empty =
+    BODY_FIELDS.every((field) => entry[field] === null) &&
+    entry.note.trim() === "";
+
+  const bodyMetrics = { ...db.bodyMetrics };
+  if (empty) delete bodyMetrics[date];
+  else bodyMetrics[date] = entry;
+
+  /* The scale reading is also the body weight the rest of the app quotes, so the
+     newest weigh-in keeps `settings.bodyWeightKg` in step — otherwise the
+     protein guidance would be computed against a number from three months ago. */
+  const latestWeight = latestBodyWeight(bodyMetrics);
+
+  return touch({
+    ...db,
+    bodyMetrics,
+    settings:
+      latestWeight === null
+        ? db.settings
+        : { ...db.settings, bodyWeightKg: latestWeight },
+  });
+}
+
+export type HealthPatch = Partial<Omit<HealthLog, "date">>;
+
+/**
+ * Write one day's health markers.
+ *
+ * Deliberately the same shape as `setBodyMetric`: every field clamped to its own
+ * plausible range, and a row that ends up entirely empty deleted rather than
+ * left behind as a blank date that every average would then have to skip.
+ */
+export function setHealth(
+  db: Database,
+  date: IsoDate,
+  patch: HealthPatch,
+): Database {
+  if (!isIsoDate(date)) return db;
+
+  const current: HealthLog = db.health[date] ?? {
+    date,
+    sleepHours: null,
+    bedtime: null,
+    steps: null,
+    waterMl: null,
+    restingHr: null,
+    note: "",
+  };
+
+  const entry: HealthLog = { ...current, date };
+
+  for (const field of HEALTH_FIELDS) {
+    const incoming = patch[field];
+    if (incoming === undefined) continue;
+    if (incoming === null) {
+      entry[field] = null;
+      continue;
+    }
+    const meta = HEALTH_FIELD_META[field];
+    /* Sleep is the only one of the four that is meaningful in halves; steps,
+       millilitres and a pulse are whole numbers, and a "7,431.5 steps" would be
+       a tell that the field was never thought about. */
+    const digits = field === "sleepHours" ? 1 : 0;
+    entry[field] = round(clamp(incoming, meta.min, meta.max), digits);
+  }
+
+  if (patch.bedtime !== undefined) {
+    entry.bedtime =
+      patch.bedtime && /^([01]\d|2[0-3]):[0-5]\d$/.test(patch.bedtime)
+        ? patch.bedtime
+        : null;
+  }
+
+  if (patch.note !== undefined) entry.note = patch.note.slice(0, 240);
+
+  const empty =
+    HEALTH_FIELDS.every((field) => entry[field] === null) &&
+    entry.bedtime === null &&
+    entry.note.trim() === "";
+
+  const health = { ...db.health };
+  if (empty) delete health[date];
+  else health[date] = entry;
+
+  return touch({ ...db, health });
+}
+
+function latestBodyWeight(metrics: Record<IsoDate, BodyMetric>): number | null {
+  let bestDate: IsoDate | null = null;
+  let bestWeight: number | null = null;
+  for (const entry of Object.values(metrics)) {
+    if (entry.weightKg === null) continue;
+    if (bestDate === null || entry.date > bestDate) {
+      bestDate = entry.date;
+      bestWeight = entry.weightKg;
+    }
+  }
+  return bestWeight;
+}
+
+/* ------------------------------------------------------------------ */
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -459,6 +716,8 @@ export function clearHistory(db: Database): Database {
     setEntries: [],
     attendance: {},
     nutrition: {},
+    bodyMetrics: {},
+    health: {},
   });
 }
 

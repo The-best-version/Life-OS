@@ -1,13 +1,15 @@
 "use client";
 
-import { Flame } from "lucide-react";
 import { useMemo } from "react";
 
 import { ConsistencyCard } from "@/components/dashboard/consistency-card";
 import { ExerciseProgressCard } from "@/components/dashboard/exercise-progress-card";
+import { StudioHero } from "@/components/dashboard/studio-hero";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { MuscleSplitCard } from "@/components/dashboard/muscle-split-card";
 import { RecordsCard } from "@/components/dashboard/records-card";
+import { StallCard } from "@/components/dashboard/stall-card";
+import { VolumeLandmarksCard } from "@/components/dashboard/volume-landmarks-card";
 import { VolumeTrendCard } from "@/components/dashboard/volume-trend-card";
 import { dashboardSummary } from "@/lib/metrics";
 import { useIronLog } from "@/lib/store";
@@ -15,9 +17,15 @@ import { useIronLog } from "@/lib/store";
 /**
  * Progress dashboard.
  *
- * Order is deliberate: one hero figure, then the four numbers, then the charts
- * from broadest to most specific — total output → per-lift progression →
- * consistency → distribution → records.
+ * Order is deliberate: the hero, then the four numbers, then the charts from
+ * broadest to most specific — total output → per-lift progression → the weekly
+ * dose per muscle → consistency → distribution → what has stalled → records. The
+ * two diagnostic cards sit late on purpose: they are the ones that ask for a
+ * decision, and a decision is easier after the context above it.
+ *
+ * On a wide window the sections split into two columns rather than growing one
+ * 1000px-wide chart. A chart that wide is not more readable, it is just further
+ * from the number beside it.
  */
 export default function DashboardPage() {
   const { db, index } = useIronLog();
@@ -25,43 +33,40 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-3 pb-6">
-      <section className="relative iron-ember overflow-hidden py-5">
-        <p className="font-mono text-[11px] text-muted-foreground">
-          سلسلة أيام التدريب
-        </p>
-        {/* The one hero figure on this view. */}
-        <p className="mt-1 flex items-baseline gap-2 text-[46px] font-black leading-none animate-rise-in">
-          {summary.streak}
-          <span className="text-base font-bold text-muted-foreground">يوم</span>
-          {summary.streak > 0 ? (
-            <Flame className="size-6 text-primary" aria-hidden />
-          ) : null}
-        </p>
-        <p className="mt-2 text-[13px] font-medium text-muted-foreground">
-          {summary.streak > 0
-            ? `أطول سلسلة وصلتها ${summary.longestStreak} يوم · ${summary.totalSessions} حصة مسجّلة`
-            : "ابدأ سلسلتك اليوم — سجّل حضورك أو أول مجموعة"}
-        </p>
-      </section>
+      <StudioHero summary={summary} />
 
       <KpiGrid />
 
-      <h2 className="pt-3 text-[12.5px] font-bold text-muted-foreground">
-        الحِمل والتقدم
-      </h2>
-      <VolumeTrendCard />
-      <ExerciseProgressCard />
+      <div className="gap-x-4 lg:grid lg:grid-cols-2 lg:items-start">
+        <div className="space-y-3">
+          <SectionLabel>الحِمل والتقدم</SectionLabel>
+          <VolumeTrendCard />
+          <ExerciseProgressCard />
 
-      <h2 className="pt-3 text-[12.5px] font-bold text-muted-foreground">
-        الالتزام والتوزيع
-      </h2>
-      <ConsistencyCard />
-      <MuscleSplitCard />
+          <SectionLabel>الالتزام والتوزيع</SectionLabel>
+          <ConsistencyCard />
+          <MuscleSplitCard />
+        </div>
 
-      <h2 className="pt-3 text-[12.5px] font-bold text-muted-foreground">
-        الإنجازات
-      </h2>
-      <RecordsCard />
+        <div className="space-y-3">
+          <SectionLabel>الجرعة الأسبوعية لكل عضلة</SectionLabel>
+          <VolumeLandmarksCard />
+
+          <SectionLabel>تشخيص</SectionLabel>
+          <StallCard />
+
+          <SectionLabel>الإنجازات</SectionLabel>
+          <RecordsCard />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <h2 className="section-label pt-4 text-[12.5px] font-bold text-muted-foreground">
+      {children}
+    </h2>
   );
 }

@@ -42,6 +42,32 @@ export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
   core: "البطن",
 };
 
+/**
+ * Weekly working-set landmarks per muscle group.
+ *
+ * `mev` is the least weekly volume that still grows the muscle, `mav` the middle
+ * of the productive band, `mrv` the ceiling past which extra sets buy fatigue
+ * instead of growth. These are the published hypertrophy ranges, not something
+ * derived from the user's own log — they are the yardstick the log is measured
+ * against, which is exactly why they are constants and not settings: a target
+ * that moves with the behaviour it measures cannot tell the user anything.
+ */
+export const MUSCLE_LANDMARKS: Record<
+  MuscleGroup,
+  { mev: number; mav: number; mrv: number }
+> = {
+  chest: { mev: 10, mav: 18, mrv: 22 },
+  back: { mev: 10, mav: 20, mrv: 25 },
+  shoulders: { mev: 8, mav: 18, mrv: 26 },
+  biceps: { mev: 8, mav: 16, mrv: 20 },
+  triceps: { mev: 6, mav: 14, mrv: 18 },
+  quads: { mev: 8, mav: 16, mrv: 20 },
+  hamstrings: { mev: 6, mav: 14, mrv: 20 },
+  glutes: { mev: 4, mav: 12, mrv: 16 },
+  calves: { mev: 8, mav: 16, mrv: 20 },
+  core: { mev: 6, mav: 16, mrv: 25 },
+};
+
 export interface Exercise {
   id: Id;
   name: string;
@@ -50,6 +76,21 @@ export interface Exercise {
   equipment: string;
   createdAt: number;
   archived: boolean;
+  /**
+   * The machine's own settings — seat notch, pin hole, pad height.
+   *
+   * On a machine-based program this is the most perishable knowledge in a
+   * session: the load means nothing if the seat moved, because the range of
+   * motion moved with it. Free text, because no two gyms label a machine alike.
+   */
+  setup: string;
+  /** Target rep range for double progression. `null` → use the global setting. */
+  repMin: number | null;
+  repMax: number | null;
+  /** Smallest load step this machine offers, kg. `null` → the global setting. */
+  incrementKg: number | null;
+  /** Default rest between sets, seconds. `null` → the global setting. */
+  restSeconds: number | null;
 }
 
 /** One template day of the training split (Push / Pull / Legs / …). */
@@ -74,6 +115,15 @@ export interface Session {
   note: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * 1–5 self-rated readiness logged before training. `null` when unrated.
+   *
+   * Session *length* is deliberately not stored beside it: it is derived from
+   * the first and last set of the day in `metrics.ts`, because a stored duration
+   * depends on the user remembering to stop a stopwatch, and a forgotten
+   * stopwatch reports a six-hour session — worse than no number at all.
+   */
+  readiness: number | null;
 }
 
 /** A single logged set. This is the atomic fact the whole app is built on. */
@@ -101,6 +151,102 @@ export interface NutritionLog {
   fat: number;
 }
 
+/**
+ * A body check-in. Every field is nullable on purpose: someone who steps on the
+ * scale daily but reaches for a tape measure once a month must not be forced to
+ * invent the numbers he did not take, and a stored zero would poison every
+ * average that reads the column.
+ */
+export interface BodyMetric {
+  date: IsoDate;
+  weightKg: number | null;
+  waistCm: number | null;
+  chestCm: number | null;
+  armCm: number | null;
+  thighCm: number | null;
+  shoulderCm: number | null;
+  note: string;
+}
+
+/**
+ * A day's health markers — the half of the picture a barbell cannot see.
+ *
+ * These sit apart from `BodyMetric` because they are measured on a different
+ * clock: a tape measure comes out once a fortnight, whereas sleep and steps are
+ * a daily reading whose *streak* is the point. Keeping them in one record would
+ * mean a body check-in and a night's sleep sharing a row, and the sparse one
+ * would drag the dense one's averages around.
+ *
+ * Every field is nullable, for the same reason `BodyMetric`'s are: a stored
+ * zero is a claim ("I slept 0 hours"), and it would poison every mean that
+ * reads the column. Absent must stay distinguishable from none.
+ */
+export interface HealthLog {
+  date: IsoDate;
+  /**
+   * Hours slept. The single biggest lever here: it moves recovery, appetite,
+   * and how hard a session feels, and it is the one the user already suspects.
+   */
+  sleepHours: number | null;
+  /**
+   * When the lights went out, "HH:MM" on a 24-hour clock.
+   *
+   * Logged beside the duration and not derived from it, because the two fail
+   * differently — seven hours starting at 02:00 is not seven hours starting at
+   * 23:00, and only the bedtime shows a drift that is still invisible in the
+   * total.
+   */
+  bedtime: string | null;
+  /** Daily steps: everything burnt outside the gym, which is most of it. */
+  steps: number | null;
+  waterMl: number | null;
+  /** Resting heart rate, bpm — the cheapest conditioning marker there is. */
+  restingHr: number | null;
+  note: string;
+}
+
+export const HEALTH_FIELDS = [
+  "sleepHours",
+  "steps",
+  "waterMl",
+  "restingHr",
+] as const;
+
+export type HealthField = (typeof HEALTH_FIELDS)[number];
+
+export const HEALTH_FIELD_META: Record<
+  HealthField,
+  { label: string; unit: string; min: number; max: number; step: number }
+> = {
+  sleepHours: { label: "النوم", unit: "ساعة", min: 0, max: 16, step: 0.5 },
+  steps: { label: "الخطوات", unit: "خطوة", min: 0, max: 100_000, step: 100 },
+  waterMl: { label: "الماء", unit: "مل", min: 0, max: 10_000, step: 250 },
+  restingHr: { label: "نبض الراحة", unit: "ن/د", min: 25, max: 150, step: 1 },
+};
+
+export const BODY_FIELDS = [
+  "weightKg",
+  "waistCm",
+  "chestCm",
+  "armCm",
+  "thighCm",
+  "shoulderCm",
+] as const;
+
+export type BodyField = (typeof BODY_FIELDS)[number];
+
+export const BODY_FIELD_META: Record<
+  BodyField,
+  { label: string; unit: string; min: number; max: number }
+> = {
+  weightKg: { label: "الوزن", unit: "كجم", min: 20, max: 400 },
+  waistCm: { label: "الخصر", unit: "سم", min: 40, max: 200 },
+  chestCm: { label: "الصدر", unit: "سم", min: 50, max: 200 },
+  armCm: { label: "البايسبس", unit: "سم", min: 15, max: 80 },
+  thighCm: { label: "الفخذ", unit: "سم", min: 25, max: 120 },
+  shoulderCm: { label: "الأكتاف", unit: "سم", min: 60, max: 250 },
+};
+
 export type WeightUnit = "kg" | "lb";
 
 export interface Settings {
@@ -114,6 +260,34 @@ export interface Settings {
     carbs: number;
     fat: number;
   };
+  /** Default rest between sets, seconds. A per-exercise value overrides it. */
+  restSeconds: number;
+  /** The rep window double progression works inside. */
+  repMin: number;
+  repMax: number;
+  /** Default load step when a machine has no value of its own, kg. */
+  incrementKg: number;
+  /** Chime when the rest timer ends. */
+  restSound: boolean;
+  /** Buzz when the rest timer ends (Android; iOS Safari ignores it). */
+  restVibrate: boolean;
+  /** Start the rest timer by itself the moment a set is saved. */
+  restAutoStart: boolean;
+  /**
+   * Standing height, cm.
+   *
+   * Only here to make waist-to-height computable. That ratio is the one body
+   * number on this screen with a published threshold behind it — keep the waist
+   * under half your height — which is worth more than a weight that cannot tell
+   * muscle from fat.
+   */
+  heightCm: number | null;
+  /** Daily health targets. Same role as `targets` does for macros. */
+  healthTargets: {
+    sleepHours: number;
+    steps: number;
+    waterMl: number;
+  };
 }
 
 /** The entire persisted document. One row, versioned, atomically written. */
@@ -126,6 +300,10 @@ export interface Database {
   /** Explicit gym check-ins, including rest-day cardio. Keyed by date. */
   attendance: Record<IsoDate, boolean>;
   nutrition: Record<IsoDate, NutritionLog>;
+  /** Body check-ins, keyed by date. */
+  bodyMetrics: Record<IsoDate, BodyMetric>;
+  /** Daily health markers — sleep, steps, water, resting pulse. */
+  health: Record<IsoDate, HealthLog>;
   settings: Settings;
   updatedAt: number;
 }
@@ -167,6 +345,22 @@ export interface MuscleGroupVolume {
   share: number;
 }
 
+/** Where a muscle's weekly set count falls against its landmarks. */
+export type VolumeStatus = "none" | "under" | "optimal" | "peak" | "over";
+
+export interface MuscleVolumeRow {
+  group: MuscleGroup;
+  label: string;
+  /** Working sets in the trailing week. */
+  sets: number;
+  mev: number;
+  mav: number;
+  mrv: number;
+  status: VolumeStatus;
+  /** One short Arabic line: what to do about it. */
+  advice: string;
+}
+
 export interface PersonalRecord {
   exerciseId: Id;
   exerciseName: string;
@@ -185,4 +379,46 @@ export interface WeeklyBucket {
   sessions: number;
   volumeKg: number;
   attended: number;
+}
+
+/** Why a target was chosen — drives the one-line explanation printed under it. */
+export type OverloadReason =
+  | "first"
+  | "add-reps"
+  | "increase-weight"
+  | "hold"
+  | "repeat";
+
+/** The next set the app is asking for, and the reasoning behind it. */
+export interface OverloadTarget {
+  exerciseId: Id;
+  weightKg: number;
+  reps: number;
+  reason: OverloadReason;
+  /** Session the target was derived from. `null` on a first-ever attempt. */
+  basedOn: IsoDate | null;
+  repMin: number;
+  repMax: number;
+  incrementKg: number;
+}
+
+/** A lift that has stopped moving — the change-something signal. */
+export interface StallRow {
+  exerciseId: Id;
+  exerciseName: string;
+  /** Sessions logged since the last estimated-1RM improvement. */
+  sessionsStalled: number;
+  daysSinceBest: number;
+  best1rm: number;
+  latest1rm: number;
+  lastDate: IsoDate;
+}
+
+/** One body check-in, ready to chart: the raw value and its smoothed twin. */
+export interface BodyPoint {
+  date: IsoDate;
+  label: string;
+  value: number;
+  /** Trailing 7-day mean — the line that should actually be read. */
+  average: number;
 }
