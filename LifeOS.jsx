@@ -886,7 +886,7 @@ function syncOut(payload) {
   }, 2500);
 }
 const UI_KEY = "life-os-2027:ui";
-const SCHEMA = 17;
+const SCHEMA = 18;
 const HISTORY_CAP = 500;
 const STREAK_TARGET = 80;
 /* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
@@ -2563,6 +2563,25 @@ const clampNum = (v, min, max, fallback) => {
   return Math.min(max, Math.max(min, n));
 };
 
+/* A link the app is willing to put in an `href`, or nothing.
+ *
+ *  Only http and https pass. `javascript:` in an href runs as the page when
+ *  it is clicked, and this field is reachable through an imported backup —
+ *  a file the app already treats as untrusted. A bare «blackboard.ksu.edu.sa»
+ *  is what people actually paste, so a missing scheme is filled in rather
+ *  than refused. */
+const safeUrl = (v) => {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const u = new URL(withScheme);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : "";
+  } catch {
+    return "";
+  }
+};
+
 const EVENT_KINDS = [
   { id: "exam", label: "اختبار", icon: GraduationCap, tint: "#FF3B5C" },
   { id: "deadline", label: "موعد تسليم", icon: ClipboardList, tint: "#FF7A45" },
@@ -2705,8 +2724,17 @@ function eventsIn(list, fromKey, toKey) {
 /* What is coming, flattened and ordered — including anything still unticked
    behind today, because an overdue entry that scrolls out of sight is an
    entry the calendar failed to carry. A ticked past occurrence is done and
-   drops out. */
-function upcoming(list, days = 180, backlog = 60) {
+   drops out.
+
+   The backlog runs a year and a half rather than two months: a one-off
+   deadline from last spring that was never ticked used to fall out of the
+   window and then existed nowhere on the screen — still counted in «كل
+   المواعيد», still absent from every list. Silence is the one thing an
+   overdue entry must not get. */
+const UPCOMING_AHEAD = 365;
+const UPCOMING_BACKLOG = 540;
+
+function upcoming(list, days = UPCOMING_AHEAD, backlog = UPCOMING_BACKLOG) {
   const today = dayKey();
   const from = addDays(today, -backlog);
   const to = addDays(today, days);
@@ -2718,6 +2746,31 @@ function upcoming(list, days = 180, backlog = 60) {
     }
   out.sort((a, b) => (a.on === b.on ? byClock(a, b) : a.on < b.on ? -1 : 1));
   return out;
+}
+
+/* The same list, one row per entry instead of one per occurrence.
+ *
+ *  A weekly class expanded over a year is fifty rows that say the same
+ *  thing, and they bury every other entry — the list stops being a list of
+ *  what is coming and becomes a printout of one repetition. So a repeating
+ *  entry shows the occurrence that actually needs attention (the oldest
+ *  overdue one if it has any, otherwise the next) and carries a count of
+ *  the rest. Nothing is hidden: every occurrence is still on the grid, and
+ *  this is the summary view of it.
+ */
+function upcomingRows(list) {
+  const rows = upcoming(list);
+  const seen = new Map();
+  for (const r of rows) {
+    const at = seen.get(r.ev.id);
+    if (at) at.more += 1;
+    else seen.set(r.ev.id, { ...r, more: 0 });
+  }
+  /* `rows` is already in date order and the first hit per entry is kept,
+     so each survivor is that entry's earliest pending occurrence. */
+  return [...seen.values()].sort((a, b) =>
+    a.on === b.on ? byClock(a, b) : a.on < b.on ? -1 : 1,
+  );
 }
 
 /* The entries whose warning window is open today and that are not ticked.
@@ -2784,6 +2837,21 @@ const gradeOf = (id) => GRADES.find((g) => g.id === id) || null;
 const gradePoints = (g, scale) => (Number(scale) === 4 ? g.p4 : g.p5);
 const gradeFromPct = (pct) =>
   GRADES.find((g) => pct >= g.min) || GRADES[GRADES.length - 1];
+
+/* The letter whose points sit closest to a required average — «تحتاج 4.33»
+   means nothing until it is «أي B+ في كل مقرّر تقريبًا». */
+const nearestGrade = (points, scale) => {
+  let best = GRADES[0];
+  let gap = Infinity;
+  for (const g of GRADES) {
+    const d = Math.abs(gradePoints(g, scale) - points);
+    if (d < gap) {
+      gap = d;
+      best = g;
+    }
+  }
+  return best.id;
+};
 
 /* Where an average sits, named. The number alone does not tell a student
    whether he is safe, and «٣.١ من ٥» is a different sentence from
@@ -2884,8 +2952,23 @@ const courseShape = (c = {}) => ({
      sheet projects one and the GPA leaves the course out entirely. */
   grade: gradeOf(c.grade) ? c.grade : null,
   absences: clampNum(c.absences, 0, 200, 0),
+  /* The days the quick button recorded. `absences` stays the authoritative
+     count — it has to, because a term usually starts with absences taken
+     before the app did — and this is what lets the button refuse a second
+     tap on a day it already recorded. Tapping «غياب» twice after one
+     lecture is the easiest mistake on this screen and the hardest to
+     notice: the number is simply wrong from then on. */
+  absentOn: Array.isArray(c.absentOn)
+    ? c.absentOn.filter((d) => typeof d === "string" && isKey(d))
+    : [],
   absenceCap: clampNum(c.absenceCap, 0, 200, 0), // 0 → derive from the slots
   target: clampNum(c.target, 0, 100, 90),
+  /* Blackboard, Teams, a shared drive — whatever the course actually lives
+     in. Stored exactly as typed: running it through `safeUrl` here would
+     rewrite the field between keystrokes, so «b» became «https://b/» before
+     the second letter arrived. It is sanitised where it is used as an
+     `href` instead, which is the only place it can do harm. */
+  link: typeof c.link === "string" ? c.link : "",
   notes: typeof c.notes === "string" ? c.notes : "",
 });
 
@@ -2932,11 +3015,30 @@ const uniShape = (u = {}) => {
        folds a four-point average into a five-point cumulative — a wrong
        number stated confidently, which is worse than no number at all. */
     priorScale: Number(u.priorScale) === 4 ? 4 : 5,
+    /* The degree's total credit hours, for the graduation bar. Zero means
+       «not set» and the bar stays hidden — a progress bar against a number
+       the user never gave is a progress bar against a guess. */
+    gradCredits: clampNum(u.gradCredits, 0, 400, 0),
+    /* The cumulative he is aiming at, for the «كم أحتاج هذا الفصل»
+       calculator. Zero means «not set», same reasoning. */
+    targetGpa: clampNum(u.targetGpa, 0, 5, 0),
     term,
     terms,
     courses: Array.isArray(u.courses) ? u.courses.map(courseShape) : [],
     tasks: Array.isArray(u.tasks) ? u.tasks.map(uniTaskShape) : [],
   };
+};
+
+/* What this term has to average for the cumulative to land on the target.
+ *
+ *  target = (bankedPoints + g · hours) / (bankedCredits + hours), solved for
+ *  g. Returns null when there is nothing registered to earn it with, and a
+ *  figure above the scale's ceiling when the target is simply out of reach
+ *  this term — which the screen says plainly instead of printing «5.4».
+ */
+const gpaNeeded = (target, banked, hours) => {
+  if (!hours || hours <= 0) return null;
+  return (target * (banked.credits + hours) - banked.points) / hours;
 };
 
 /* One term, so the screen opens on a timetable to fill rather than on a
@@ -3327,7 +3429,14 @@ function migrate(saved) {
   /* Schema 17 adds the calendar and the university desk. An older payload
      has neither and starts them empty; one written by a newer build is run
      back through the shapes, so a row that lost a field to a hand-edited
-     backup comes back whole instead of crashing a render. */
+     backup comes back whole instead of crashing a render.
+
+     Schema 18 adds the recorded absence days, the course link, the
+     graduation total and the target cumulative. None of them needs a
+     branch of its own: every one is a new field with a defined empty
+     value, and `uniShape` already runs over the whole payload on the way
+     in — so a schema-17 profile simply arrives with an empty absence log
+     and the two totals switched off, which is what it means. */
   const events = Array.isArray(saved.events) ? saved.events.map(eventShape) : [];
   const uni = saved.uni ? uniShape(saved.uni) : SEED_UNI();
 
@@ -3552,8 +3661,14 @@ function Btn({
   size = "md",
   className = "",
   style,
+  /* Same escape hatch `Card` and `Field` already carry: a control that
+     navigates has to be an anchor, or it loses middle-click, "open in new
+     tab" and the status bar — and a button with an `href` simply does
+     nothing. The styling is identical either way. */
+  as = "button",
   ...rest
 }) {
+  const Tag = as;
   const sizes = {
     sm: "px-3 py-1.5 text-xs gap-1.5",
     md: "px-4 py-2.5 text-sm gap-2",
@@ -3596,13 +3711,13 @@ function Btn({
     },
   };
   return (
-    <button
+    <Tag
       className={`los-btn inline-flex items-center justify-center rounded-xl border font-bold transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${sizes[size]} ${className}`}
       style={{ ...variants[variant], ...style }}
       {...rest}
     >
       {children}
-    </button>
+    </Tag>
   );
 }
 
@@ -12789,7 +12904,7 @@ function TimeField({ value, onChange, id, ...rest }) {
 /* One occurrence, as a row. The tick is per-day — the same weekly entry is
    ticked this Sunday and open the next — so the reward has to fire on the
    occurrence, not on the entry. */
-function EventRow({ ev, on, onToggle, onEdit, onDelete, showDate = false }) {
+function EventRow({ ev, on, onToggle, onEdit, onDelete, showDate = false, more = 0 }) {
   const k = kindOf(ev.kind);
   const Icon = k.icon;
   const done = isEventDone(ev, on);
@@ -12887,6 +13002,19 @@ function EventRow({ ev, on, onToggle, onEdit, onDelete, showDate = false }) {
             <span className="inline-flex items-center gap-1" style={{ color: T.violet }}>
               <Repeat size={10} />
               {rep.short}
+              {/* The row stands for the whole series in the summary list, so
+                  it has to say how much of the series it is standing for —
+                  otherwise collapsing fifty occurrences into one reads as
+                  forty-nine of them having gone missing. */}
+              {more > 0 && (
+                <span className="font-bold">
+                  {"+ "}
+                  <span dir="ltr" className="tabular-nums">
+                    {more}
+                  </span>{" "}
+                  {timesWord(more)}
+                </span>
+              )}
             </span>
           )}
           {!done && (
@@ -13316,14 +13444,20 @@ function AgendaModule({ state, setState, onGo }) {
   }, [byDate]);
 
   const alerts = useMemo(() => alertsOf(events), [events]);
-  /* One expansion, three readings. Walking the recurrence rules three times
-     over for three counters is the same answer paid for three times. */
-  const list = useMemo(() => upcoming(events), [events]);
-  const next7 = list.filter((r) => {
+  /* One expansion, four readings. Walking the recurrence rules once per
+     counter is the same answer paid for four times. The counters read the
+     occurrence-level list so «متأخّر ٣» means three real dates; the screen
+     shows the entry-level one so a weekly class is a single row. */
+  const all = useMemo(() => upcoming(events), [events]);
+  const list = useMemo(() => upcomingRows(events), [events]);
+  /* Ticked-but-still-ahead occurrences stay in the list (seeing that next
+     week's exam is already prepared for is the point) but must not be
+     counted as work outstanding. */
+  const next7 = all.filter((r) => {
     const left = daysUntil(r.on);
     return left >= 0 && left <= 7 && !isEventDone(r.ev, r.on);
   }).length;
-  const late = list.filter((r) => r.on < dayKey()).length;
+  const late = all.filter((r) => r.on < dayKey()).length;
 
   /* The twelve months of the cursor's year, each with how many entries land
      in it. Built in one pass over one window instead of twelve calls, which
@@ -13795,12 +13929,13 @@ function AgendaModule({ state, setState, onGo }) {
             </div>
           ) : (
             <div className="mt-4 space-y-2">
-              {list.map(({ ev, on }) => (
+              {list.map(({ ev, on, more }) => (
                 <EventRow
                   key={`${ev.id}:${on}`}
                   ev={ev}
                   on={on}
                   showDate
+                  more={more}
                   onToggle={() => toggle(ev.id, on)}
                   onEdit={() => setDraft({ ...ev })}
                   onDelete={() => remove(ev)}
@@ -13997,19 +14132,34 @@ function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) {
   const suggest =
     st.projected !== null ? gradeFromPct(st.projected).id : null;
 
-  const patch = (p) => onPatch({ ...c, ...p });
+  /* Every edit is expressed against `prev` — the course as it stands in
+     state — not against `c`, the copy this render was drawn from. Two
+     clicks on a stepper inside one frame otherwise both read the same
+     starting number and one of them is lost. */
+  const patch = (p) =>
+    onPatch((prev) => ({ ...prev, ...(typeof p === "function" ? p(prev) : p) }));
 
   const addSlot = () =>
-    patch({ slots: [...c.slots, slotShape({ day: 0, from: "08:00", to: "09:50" })] });
+    patch((prev) => ({
+      slots: [...prev.slots, slotShape({ day: 0, from: "08:00", to: "09:50" })],
+    }));
   const setSlot = (id, p) =>
-    patch({ slots: c.slots.map((s) => (s.id === id ? slotShape({ ...s, ...p }) : s)) });
-  const dropSlot = (id) => patch({ slots: c.slots.filter((s) => s.id !== id) });
+    patch((prev) => ({
+      slots: prev.slots.map((s) => (s.id === id ? slotShape({ ...s, ...p }) : s)),
+    }));
+  const dropSlot = (id) =>
+    patch((prev) => ({ slots: prev.slots.filter((s) => s.id !== id) }));
 
   const addMark = () =>
-    patch({ marks: [...c.marks, markShape({ label: "", score: null, max: 100, weight: 0 })] });
+    patch((prev) => ({
+      marks: [...prev.marks, markShape({ label: "", score: null, max: 100, weight: 0 })],
+    }));
   const setMark = (id, p) =>
-    patch({ marks: c.marks.map((m) => (m.id === id ? { ...m, ...p } : m)) });
-  const dropMark = (id) => patch({ marks: c.marks.filter((m) => m.id !== id) });
+    patch((prev) => ({
+      marks: prev.marks.map((m) => (m.id === id ? { ...m, ...p } : m)),
+    }));
+  const dropMark = (id) =>
+    patch((prev) => ({ marks: prev.marks.filter((m) => m.id !== id) }));
 
   /* The four weightings almost every syllabus uses, so the mark sheet is
      one tap away from being usable instead of five rows of typing. */
@@ -14129,11 +14279,20 @@ function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) {
             </p>
           ) : (
             <div className="space-y-2">
-              {c.slots.map((s) => (
+              {c.slots.map((s) => {
+                /* A section that ends before it starts draws as a sliver on
+                   the week grid and quietly halves the meeting count behind
+                   the absence limit. Flagged where it is typed, not left to
+                   be discovered on the timetable. */
+                const bad = (minsOf(s.to) ?? 0) <= (minsOf(s.from) ?? 0);
+                return (
                 <div
                   key={s.id}
                   className="flex flex-wrap items-end gap-2 rounded-xl border p-2.5"
-                  style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+                  style={{
+                    borderColor: bad ? `${T.danger}59` : T.border,
+                    background: bad ? `${T.danger}0F` : "rgba(255,255,255,0.03)",
+                  }}
                 >
                   <div className="min-w-0 flex-1">
                     <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
@@ -14183,8 +14342,17 @@ function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) {
                   >
                     <Trash2 size={14} />
                   </button>
+                  {bad && (
+                    <p
+                      className="flex w-full items-center gap-1.5 text-[10.5px] font-bold"
+                      style={{ color: T.danger }}
+                    >
+                      <AlertTriangle size={11} /> وقت النهاية ليس بعد وقت البداية.
+                    </p>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -14211,7 +14379,7 @@ function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) {
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <span className="mb-1.5 block text-[10.5px]" style={{ color: T.faint }}>
-                مرات الغياب
+                إجمالي مرات الغياب
               </span>
               <NumStep
                 value={c.absences}
@@ -14281,6 +14449,71 @@ function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) {
               أضف مواعيد المحاضرات أو اكتب الحدّ بنفسك ليُحسب الغياب.
             </p>
           )}
+
+          {/* The days the quick button recorded. A bare counter cannot be
+              audited — «ستّ مرات» is unarguable and unverifiable at once,
+              and the day you were actually present is the one you want to
+              find. Removing a day puts the total back with it. */}
+          {(c.absentOn || []).length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1.5 text-[10.5px]" style={{ color: T.faint }}>
+                الأيام المسجّلة من هذه الشاشة
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...c.absentOn].sort().reverse().map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() =>
+                      patch((prev) => ({
+                        absences: clampNum(prev.absences - 1, 0, 200, 0),
+                        absentOn: (prev.absentOn || []).filter((x) => x !== d),
+                      }))
+                    }
+                    aria-label={`حذف غياب ${arDate(d)}`}
+                    title="احذف هذا اليوم"
+                    className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-bold transition-colors hover:border-white/40"
+                    style={{ borderColor: T.border, color: T.muted }}
+                  >
+                    {arDate(d)}
+                    <X size={10} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* --- where the course lives --- */}
+        <div>
+          <label className="mb-1.5 block text-xs text-white/45" htmlFor="los-c-link">
+            رابط المقرّر <span style={{ color: T.faint }}>(بلاك بورد، تيمز، درايف)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <Field
+              id="los-c-link"
+              dir="ltr"
+              value={c.link}
+              onChange={(e) => patch({ link: e.target.value })}
+              placeholder="https://..."
+              style={{ textAlign: "left" }}
+            />
+            {safeUrl(c.link) && (
+              <Btn
+                as="a"
+                variant="outline"
+                size="icon"
+                href={safeUrl(c.link)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="افتح الرابط"
+                className="shrink-0"
+                style={{ borderColor: T.border }}
+              >
+                <ExternalLink size={15} />
+              </Btn>
+            )}
+          </div>
         </div>
 
         {/* --- the mark sheet --- */}
@@ -14557,6 +14790,8 @@ function CourseCard({ course, term, onOpen, onAbsence }) {
   const cap = absenceCapOf(c, term);
   const band = attendBand(c.absences, cap);
   const g = gradeOf(c.grade);
+  const link = safeUrl(c.link);
+  const absentToday = (c.absentOn || []).includes(dayKey());
   const days = c.slots
     .map((s) => uniDayOf(s.day))
     .filter(Boolean)
@@ -14638,8 +14873,42 @@ function CourseCard({ course, term, onOpen, onAbsence }) {
         <Btn variant="outline" size="sm" onClick={onOpen} className="flex-1" style={{ borderColor: T.border }}>
           <SquarePen size={13} /> مكتب المقرّر
         </Btn>
-        <Btn variant="ghost" size="sm" onClick={onAbsence} style={{ borderColor: T.border }} title="سجّل غيابًا">
-          <Plus size={13} strokeWidth={3} /> غياب
+        {link && (
+          <Btn
+            as="a"
+            variant="ghost"
+            size="sm"
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ borderColor: T.border }}
+            title="افتح صفحة المقرّر"
+          >
+            <ExternalLink size={13} /> الصفحة
+          </Btn>
+        )}
+        {/* The label says which way the next tap goes — a button that
+            silently flips between adding and removing is a button you stop
+            trusting with a count that matters this much. */}
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={onAbsence}
+          style={{
+            borderColor: absentToday ? `${T.danger}59` : T.border,
+            color: absentToday ? T.danger : undefined,
+          }}
+          title={absentToday ? "تراجع عن غياب اليوم" : "سجّل غياب اليوم"}
+        >
+          {absentToday ? (
+            <>
+              <Minus size={13} strokeWidth={3} /> ألغِ غياب اليوم
+            </>
+          ) : (
+            <>
+              <Plus size={13} strokeWidth={3} /> غياب اليوم
+            </>
+          )}
         </Btn>
       </div>
     </Card>
@@ -15303,9 +15572,12 @@ function UniModule({ state, setState, onGo }) {
   const [newCourse, setNewCourse] = useState(null);
   const [termDraft, setTermDraft] = useState(null);
   const [taskDraft, setTaskDraft] = useState(null);
-  const [pickDay, setPickDay] = useState(() =>
-    uniDayOf(dow) ? dow : UNI_DAYS[0].d,
-  );
+  /* `null` means "follow today". Pinning the weekday at mount looked right
+     until the screen was left open overnight and the phone kept opening on
+     yesterday; resolving it at render costs nothing and cannot drift. A
+     weekday the user picks himself is his until he leaves the screen. */
+  const [pickDay, setPickDay] = useState(null);
+  const day = pickDay ?? (uniDayOf(dow) ? dow : UNI_DAYS[0].d);
 
   const term = termOf(uni, uni.term);
   const courses = useMemo(() => coursesIn(uni, uni.term), [uni]);
@@ -15320,10 +15592,19 @@ function UniModule({ state, setState, onGo }) {
     [setState],
   );
 
+  /* `fn` receives the course as it stands in state, not as it stood when
+     the button was drawn.
+   *
+   *  `{ ...c, absences: c.absences + 1 }` reads `c` out of the render that
+   *  drew the button, so two taps inside one frame both compute 1 and the
+   *  second absence is silently swallowed — the counter is then wrong for
+   *  the rest of the term with nothing on screen to suggest it. Every write
+   *  goes through a function so the arithmetic is always done against the
+   *  value that is actually stored. */
   const patchCourse = useCallback(
-    (next) =>
+    (id, fn) =>
       patchUni((u) => ({
-        courses: u.courses.map((c) => (c.id === next.id ? courseShape(next) : c)),
+        courses: u.courses.map((c) => (c.id === id ? courseShape(fn(c)) : c)),
       })),
     [patchUni],
   );
@@ -15340,8 +15621,60 @@ function UniModule({ state, setState, onGo }) {
     setDeskId(null);
   };
 
-  const addAbsence = (c) =>
-    patchCourse({ ...c, absences: clampNum(c.absences + 1, 0, 200, 0) });
+  /* One tap, one absence, once per day. The quick button is pressed in a
+     corridor on the way out of a lecture, and a second tap — a fat finger,
+     a re-render, coming back to the screen later the same day — used to add
+     a second absence that nothing on screen contradicted. The day is
+     recorded, so the second tap is recognised and refused with a reason
+     rather than quietly counted. Removing it is the same button again. */
+  const [absenceNote, setAbsenceNote] = useState(null); // {id, text, undo}
+  const noteTimer = useRef(null);
+  const flash = useCallback((msg) => {
+    clearTimeout(noteTimer.current);
+    setAbsenceNote(msg);
+    noteTimer.current = setTimeout(() => setAbsenceNote(null), 4000);
+  }, []);
+  useEffect(() => () => clearTimeout(noteTimer.current), []);
+
+  /* One button, both directions, and the direction is written on it. The
+     test for "already recorded" happens inside the updater, against the
+     stored row rather than the drawn one, so the day can never be counted
+     twice however fast the button is pressed.
+
+     A second press inside half a second is a slipped finger, not a change
+     of mind: without this it toggles straight back off, so the tap the user
+     meant to register leaves nothing behind and the confirmation underneath
+     announces the opposite of what happened. A deliberate undo comes after
+     reading that line, which takes far longer. */
+  const lastAbsence = useRef({ id: null, at: 0 });
+  const toggleTodayAbsence = (c) => {
+    const now = Date.now();
+    if (lastAbsence.current.id === c.id && now - lastAbsence.current.at < 500) return;
+    lastAbsence.current = { id: c.id, at: now };
+
+    const today = dayKey();
+    const marked = (c.absentOn || []).includes(today);
+    patchCourse(c.id, (prev) => {
+      const was = (prev.absentOn || []).includes(today);
+      return was
+        ? {
+            ...prev,
+            absences: clampNum(prev.absences - 1, 0, 200, 0),
+            absentOn: prev.absentOn.filter((d) => d !== today),
+          }
+        : {
+            ...prev,
+            absences: clampNum(prev.absences + 1, 0, 200, 0),
+            absentOn: [...(prev.absentOn || []), today],
+          };
+    });
+    flash({
+      id: c.id,
+      text: marked
+        ? `أُلغي غياب اليوم في «${courseName(c)}».`
+        : `سُجّل غياب اليوم في «${courseName(c)}».`,
+    });
+  };
 
   const saveCourse = () => {
     const c = courseShape({ ...newCourse, term: newCourse.term || uni.term });
@@ -15428,12 +15761,80 @@ function UniModule({ state, setState, onGo }) {
     if (!credits) return 0;
     return (allGraded.points + uni.priorGpa * uni.priorCredits) / credits;
   }, [allGraded, uni.priorGpa, uni.priorCredits, priorUsable]);
+  /* The term's whole registered load. Declared up here because the
+     graduation projection below reads it — a `const` used above its own
+     declaration is a temporal-dead-zone throw, which takes the module
+     down to a blank screen rather than warning about anything. */
+  const loadHours = courses.reduce((n, c) => n + c.credits, 0);
   const cumCredits = allGraded.credits + uni.priorCredits;
 
-  const loadHours = courses.reduce((n, c) => n + c.credits, 0);
+  /* Everything already banked, as one pair: the published terms plus the
+     figure off his transcript. This is the floor the target calculator
+     builds on, so it is computed once and read by all of them. */
+  const banked = useMemo(
+    () => ({
+      points: allGraded.points + uni.priorGpa * uni.priorCredits,
+      credits: cumCredits,
+    }),
+    [allGraded.points, uni.priorGpa, uni.priorCredits, cumCredits],
+  );
+  /* The hours he is registered in right now — the only ones this term's
+     average can be earned with. Ungraded on purpose: a course already
+     graded is in `banked`, and counting it twice would ask him to re-earn
+     marks he has. */
+  const termHours = useMemo(
+    () => courses.filter((c) => !gradeOf(c.grade)).reduce((n, c) => n + c.credits, 0),
+    [courses],
+  );
+  const needThisTerm =
+    uni.targetGpa > 0 && priorUsable
+      ? gpaNeeded(uni.targetGpa, banked, termHours)
+      : null;
+  /* Where the cumulative lands if every registered hour comes out perfect. */
+  const bestPossible =
+    banked.credits + termHours > 0
+      ? (banked.points + uni.scale * termHours) / (banked.credits + termHours)
+      : 0;
+  /* Projected on the term's whole registered load, not on `termHours`.
+     `termHours` deliberately drops a course once its grade is published,
+     which is right for "what do I still have to earn" and wrong here: as
+     the term gets marked, the hours-per-term figure would shrink and the
+     number of terms to graduation would climb every time a grade arrived. */
+  const termsLeft =
+    uni.gradCredits > 0 && loadHours > 0
+      ? Math.max(0, Math.ceil((uni.gradCredits - cumCredits) / loadHours))
+      : null;
+
+  /* Each term with its own average, so «هل أنا أتحسّن؟» has an answer. */
+  const termRecord = useMemo(
+    () =>
+      (uni.terms || []).map((t) => {
+        const list = coursesIn(uni, t.id);
+        return { t, n: list.length, ...gpaOf(list, uni.scale) };
+      }),
+    [uni, uni.scale],
+  );
+
+  /* Which week of the term today is, or null outside it. Counted from the
+     term's own start date rather than from the calendar, and capped at the
+     declared length so a term that runs past its end date does not report
+     «الأسبوع ١٨ من ١٥». */
+  const termWeek = useMemo(() => {
+    if (!term) return null;
+    const today = dayKey();
+    if (today < term.start || today > term.end) return null;
+    const n = Math.floor((daysUntil(today, term.start) || 0) / 7) + 1;
+    return Math.min(term.weeks, Math.max(1, n));
+  }, [term]);
   const todayRows = useMemo(
     () => daySections(courses, dow, mins),
     [courses, dow, mins],
+  );
+  /* The weekday the phone is showing — today unless the user swiped to
+     another one. Only the real today gets a live "now" reading. */
+  const dayRows = useMemo(
+    () => daySections(courses, day, day === dow ? mins : -1),
+    [courses, day, dow, mins],
   );
   const next = useMemo(
     () => nextSection(courses, dow, mins),
@@ -15483,7 +15884,12 @@ function UniModule({ state, setState, onGo }) {
       v: termGpa.credits ? termGpa.gpa.toFixed(2) : "—",
       c: termGpa.credits ? gpaBand(termGpa.gpa, uni.scale).tint : T.faint,
       icon: Calculator,
-      sub: termGpa.credits ? `من ${uni.scale}` : "بعد رصد التقديرات",
+      /* «من ٥» alone hides the thing worth knowing: how much of the term
+         that average actually covers. An average over four of eighteen
+         hours is not the term's average yet, and should not be read as one. */
+      sub: termGpa.credits
+        ? `من ${uni.scale} · ${termGpa.credits} ${hourWord(termGpa.credits)} من ${loadHours}`
+        : "بعد رصد التقديرات",
     },
     { k: "تسليمات قادمة", v: week1, c: T.cta, icon: ClipboardList, sub: "خلال أسبوع" },
     {
@@ -15560,13 +15966,41 @@ function UniModule({ state, setState, onGo }) {
             </Btn>
           </div>
           {term && (
-            <p className="mt-2.5 text-[10.5px]" style={{ color: T.faint }}>
-              {arDate(term.start)} — {arDate(term.end)} ·{" "}
-              <span dir="ltr" className="tabular-nums">
-                {term.weeks}
-              </span>{" "}
-              {weekWord(term.weeks)}
-            </p>
+            <div className="mt-2.5">
+              <p className="text-[10.5px]" style={{ color: T.faint }}>
+                {arDate(term.start)} — {arDate(term.end)} ·{" "}
+                <span dir="ltr" className="tabular-nums">
+                  {term.weeks}
+                </span>{" "}
+                {weekWord(term.weeks)}
+                {/* Which week of the term it is, because «الأسبوع العاشر من
+                    ١٥» is the sentence that decides whether there is still
+                    room to fix a mark — the two dates alone are not. */}
+                {termWeek !== null && (
+                  <>
+                    {" · الأسبوع "}
+                    <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.accent }}>
+                      {termWeek}
+                    </span>
+                  </>
+                )}
+              </p>
+              {termWeek !== null && (
+                <div
+                  className="mt-1.5 h-1 w-full max-w-[280px] overflow-hidden rounded-full"
+                  style={{ background: "rgba(255,255,255,0.07)" }}
+                >
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(100, (termWeek / term.weeks) * 100)}%`,
+                      backgroundImage: `linear-gradient(90deg, ${T.cta}, ${T.ctaLift})`,
+                      boxShadow: `0 0 10px ${T.cta}99`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="grid shrink-0 grid-cols-4 gap-2">
@@ -15606,6 +16040,22 @@ function UniModule({ state, setState, onGo }) {
         ))}
       </div>
 
+      {/* An absence is recorded by one tap and changes a number that can
+          end a course. It has to say out loud what it just did — a silent
+          counter is one nobody checks until it is too late. */}
+      {absenceNote && (
+        <Card
+          className="los-in flex items-center gap-2.5 p-3.5"
+          style={{ borderColor: `${T.accent}59` }}
+          role="status"
+        >
+          <ShieldCheck size={15} className="shrink-0" style={{ color: T.accent }} />
+          <p className="text-[12px] font-bold" style={{ color: T.accent }}>
+            {absenceNote.text}
+          </p>
+        </Card>
+      )}
+
       {atRisk.length > 0 && (
         <Card className="p-5 sm:p-6" style={{ borderColor: `${T.danger}40` }}>
           <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.danger }}>
@@ -15640,7 +16090,18 @@ function UniModule({ state, setState, onGo }) {
             <Card className="p-5 sm:p-6" style={{ borderColor: `${next.course.tint}40` }}>
               <p className="flex items-center gap-2 text-[11px] font-bold" style={{ color: T.faint }}>
                 <AlarmClock size={13} style={{ color: next.course.tint }} />
-                {next.now ? "أنت الآن في" : next.inDays === 0 ? "القادمة اليوم" : next.inDays === 1 ? "أوّل محاضرة غدًا" : `أوّل محاضرة ${DOW_AR[(dow + next.inDays) % 7]}`}
+                {/* At seven days out the weekday name is today's own, so
+                    «أوّل محاضرة الجمعة» would read as a lecture a few hours
+                    away when it is a full week off. */}
+                {next.now
+                  ? "أنت الآن في"
+                  : next.inDays === 0
+                    ? "القادمة اليوم"
+                    : next.inDays === 1
+                      ? "أوّل محاضرة غدًا"
+                      : next.inDays >= 7
+                        ? "أوّل محاضرة الأسبوع القادم"
+                        : `أوّل محاضرة ${DOW_AR[(dow + next.inDays) % 7]}`}
               </p>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
@@ -15722,7 +16183,7 @@ function UniModule({ state, setState, onGo }) {
                 <div className="lg:hidden">
                   <div className="mb-3 grid grid-cols-6 gap-1.5">
                     {UNI_DAYS.map((d) => {
-                      const on = d.d === pickDay;
+                      const on = d.d === day;
                       const isToday = d.d === dow;
                       const n = daySections(courses, d.d, -1).length;
                       return (
@@ -15746,12 +16207,15 @@ function UniModule({ state, setState, onGo }) {
                     })}
                   </div>
                   <div className="space-y-2">
-                    {daySections(courses, pickDay, pickDay === dow ? mins : -1).length === 0 ? (
+                    {/* Built once. Calling `daySections` for the emptiness
+                        test and again for the rows walks every slot twice
+                        on every tick of the clock. */}
+                    {dayRows.length === 0 ? (
                       <p className="py-6 text-center text-[12px] text-white/30">
-                        لا محاضرات في {uniDayOf(pickDay)?.label}.
+                        لا محاضرات في {uniDayOf(day)?.label}.
                       </p>
                     ) : (
-                      daySections(courses, pickDay, pickDay === dow ? mins : -1).map((r) => (
+                      dayRows.map((r) => (
                         <div
                           key={`${r.course.id}:${r.slot.id}`}
                           className="flex items-center gap-3 rounded-xl border p-3"
@@ -15827,7 +16291,7 @@ function UniModule({ state, setState, onGo }) {
                       <Btn
                         variant="ghost"
                         size="sm"
-                        onClick={() => addAbsence(r.course)}
+                        onClick={() => toggleTodayAbsence(r.course)}
                         style={{ borderColor: T.border }}
                       >
                         <Plus size={12} strokeWidth={3} /> غياب
@@ -15889,7 +16353,7 @@ function UniModule({ state, setState, onGo }) {
                   course={c}
                   term={term}
                   onOpen={() => setDeskId(c.id)}
-                  onAbsence={() => addAbsence(c)}
+                  onAbsence={() => toggleTodayAbsence(c)}
                 />
               ))}
             </div>
@@ -16154,6 +16618,234 @@ function UniModule({ state, setState, onGo }) {
             )}
           </Card>
 
+          {/* --- what this term has to average ------------------------- *
+               The cumulative is the number he is judged on, but it is not
+               the number he can act on — this term's average is. So the
+               target is entered once and the screen turns it into the only
+               figure that is actionable: what the hours he is registered in
+               right now have to come out at.                              */}
+          <Card className="p-5 sm:p-7">
+            <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.cta }}>
+              <Crosshair size={15} /> كم أحتاج هذا الفصل؟
+            </p>
+            <div className="mt-4 flex flex-wrap items-start gap-5">
+              <div className="min-w-[200px] flex-1">
+                <span className="mb-1.5 block text-[10.5px]" style={{ color: T.faint }}>
+                  المعدّل التراكمي الذي أريده
+                </span>
+                <NumField
+                  value={uni.targetGpa}
+                  min={0}
+                  max={uni.scale}
+                  onChange={(v) => patchUni(() => ({ targetGpa: v }))}
+                  placeholder="0"
+                  className="py-2 text-[13px]"
+                />
+                <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: T.faint }}>
+                  على مقياس «من <span dir="ltr">{uni.scale}</span>». اتركه صفرًا
+                  لإخفاء الحاسب.
+                </p>
+              </div>
+              <div className="min-w-[220px] flex-[2]">
+                {uni.targetGpa <= 0 ? (
+                  <p className="text-[12px] leading-relaxed" style={{ color: T.faint }}>
+                    اكتب المعدّل الذي تريد الوصول إليه، ويقول لك كم يجب أن يكون
+                    معدّل هذا الفصل بالضبط.
+                  </p>
+                ) : !priorUsable ? (
+                  <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.accent }}>
+                    حدّث المعدّل السابق على المقياس الحالي أولًا — بدونه لا
+                    يُعرف من أين تبدأ.
+                  </p>
+                ) : termHours <= 0 ? (
+                  <p className="text-[12px] leading-relaxed" style={{ color: T.faint }}>
+                    لا ساعات مسجّلة في «{term?.label || "هذا الفصل"}» — أضف
+                    مقرّراتك ليُحسب المطلوب.
+                  </p>
+                ) : needThisTerm === null ? null : needThisTerm > uni.scale ? (
+                  <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.danger }}>
+                    لا يُدرَك هذا الفصل مهما فعلت: حتى بمعدّل{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {uni.scale}
+                    </span>{" "}
+                    كاملًا سينتهي تراكميك عند{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {bestPossible.toFixed(2)}
+                    </span>
+                    . اخفض الهدف أو وزّعه على فصلين.
+                  </p>
+                ) : needThisTerm <= 0 ? (
+                  <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.primary }}>
+                    أنت فوق هدفك فعلًا — هذا الفصل تثبيت لا إنقاذ.
+                  </p>
+                ) : (
+                  <p className="text-[12.5px] leading-relaxed" style={{ color: T.muted }}>
+                    معدّل هذا الفصل يجب أن يكون{" "}
+                    <span
+                      dir="ltr"
+                      className="text-[22px] font-extrabold tabular-nums"
+                      style={{ color: gpaBand(needThisTerm, uni.scale).tint }}
+                    >
+                      {needThisTerm.toFixed(2)}
+                    </span>{" "}
+                    على الأقل، عبر{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {termHours}
+                    </span>{" "}
+                    {hourWord(termHours)} مسجّلة — أي ما يقارب تقدير{" "}
+                    <span dir="ltr" className="font-bold">
+                      {nearestGrade(needThisTerm, uni.scale)}
+                    </span>{" "}
+                    في كل مقرّر.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* --- the degree, not the term ------------------------------- */}
+          <Card className="p-5 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.accent }}>
+                <Milestone size={15} /> الطريق إلى التخرّج
+              </p>
+              <div className="w-[160px]">
+                <span className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                  ساعات الخطة كاملة
+                </span>
+                <NumField
+                  value={uni.gradCredits}
+                  min={0}
+                  max={400}
+                  onChange={(v) => patchUni(() => ({ gradCredits: v }))}
+                  placeholder="0"
+                  className="py-1.5 text-[12px]"
+                />
+              </div>
+            </div>
+
+            {uni.gradCredits > 0 ? (
+              <>
+                <div
+                  className="mt-4 h-2 w-full overflow-hidden rounded-full"
+                  style={{ background: "rgba(255,255,255,0.07)" }}
+                >
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(100, (cumCredits / uni.gradCredits) * 100)}%`,
+                      backgroundImage: `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`,
+                      boxShadow: `0 0 14px ${T.primary}99`,
+                    }}
+                  />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatTile
+                    icon={BadgeCheck}
+                    label="أُنجز"
+                    value={cumCredits}
+                    sub={`${Math.round((cumCredits / uni.gradCredits) * 100)}٪ من الخطة`}
+                    tint={T.primary}
+                  />
+                  <StatTile
+                    icon={Hourglass}
+                    label="يتبقّى"
+                    value={Math.max(0, uni.gradCredits - cumCredits)}
+                    sub={`${hourWord(Math.max(0, uni.gradCredits - cumCredits))} معتمدة`}
+                    tint={T.accent}
+                  />
+                  <StatTile
+                    icon={Hash}
+                    label="مسجّل الآن"
+                    value={loadHours}
+                    sub={term?.label || "هذا الفصل"}
+                    tint={T.sky}
+                  />
+                  <StatTile
+                    icon={Flag}
+                    label="فصول متبقّية"
+                    value={termsLeft === null ? "—" : termsLeft}
+                    sub={
+                      termsLeft === null
+                        ? "يظهر بعد تسجيل ساعاتك"
+                        : `بمعدّل ${loadHours} ${hourWord(loadHours)} للفصل`
+                    }
+                    tint={T.violet}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+                اكتب عدد ساعات خطتك الدراسية كاملة، ويتحوّل عدّاد الساعات إلى
+                شريط تخرّج يقول لك كم بقي وكم فصلًا.
+              </p>
+            )}
+          </Card>
+
+          {/* --- every term, not just this one -------------------------- *
+               The term switcher shows one term's average at a time, which
+               is the one view that cannot answer «هل أنا أتحسّن؟». The
+               whole record on one card can.                               */}
+          {(uni.terms || []).length > 1 && (
+            <Card className="p-5 sm:p-7">
+              <p className="flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.accent }}>
+                <BarChart3 size={15} /> سجلّ الفصول
+              </p>
+              <div className="mt-4 space-y-2">
+                {termRecord.map((row) => {
+                  const on = row.t.id === uni.term;
+                  const band = row.credits ? gpaBand(row.gpa, uni.scale) : null;
+                  return (
+                    <button
+                      key={row.t.id}
+                      onClick={() => patchUni(() => ({ term: row.t.id }))}
+                      aria-pressed={on}
+                      className="flex w-full flex-wrap items-center gap-3 rounded-xl border p-3 text-right transition-colors hover:bg-white/[0.06]"
+                      style={{
+                        borderColor: on ? `${T.cta}59` : "rgba(255,255,255,0.08)",
+                        backgroundColor: on ? `${T.cta}0F` : "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-extrabold">
+                          {row.t.label || "فصل بلا اسم"}
+                        </span>
+                        <span className="mt-0.5 block text-[10.5px]" style={{ color: T.faint }}>
+                          {arDate(row.t.start)} — {arDate(row.t.end)} ·{" "}
+                          <span dir="ltr" className="tabular-nums">
+                            {row.n}
+                          </span>{" "}
+                          {courseWord(row.n)}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-left">
+                        <span
+                          dir="ltr"
+                          className="block text-[17px] font-extrabold tabular-nums"
+                          style={{ color: band ? band.tint : T.faint }}
+                        >
+                          {row.credits ? row.gpa.toFixed(2) : "—"}
+                        </span>
+                        <span className="block text-[10px]" style={{ color: T.faint }}>
+                          {row.credits ? (
+                            <>
+                              <span dir="ltr" className="tabular-nums">
+                                {row.credits}
+                              </span>{" "}
+                              {hourWord(row.credits)}
+                            </>
+                          ) : (
+                            "بلا تقديرات"
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
           <Card className="p-5 sm:p-7">
             <p className="text-[13px] font-extrabold" style={{ color: T.accent }}>
               تقديرات {term?.label || "الفصل"}
@@ -16207,7 +16899,7 @@ function UniModule({ state, setState, onGo }) {
                       <div className="mt-3">
                         <GradePicker
                           value={c.grade}
-                          onPick={(id) => patchCourse({ ...c, grade: id })}
+                          onPick={(id) => patchCourse(c.id, (prev) => ({ ...prev, grade: id }))}
                           scale={uni.scale}
                           suggest={suggest}
                         />
@@ -16226,7 +16918,7 @@ function UniModule({ state, setState, onGo }) {
         term={term}
         scale={uni.scale}
         onClose={() => setDeskId(null)}
-        onPatch={patchCourse}
+        onPatch={(fn) => patchCourse(desk.id, fn)}
         onDelete={() => desk && dropCourse(desk)}
       />
 
@@ -16807,7 +17499,14 @@ function ReflectionModal({ open, onClose, onSave, pct }) {
  * ==================================================================== */
 export default function LifeOS() {
   const [state, setState] = useState(loadState);
-  const [tab, setTab] = useState(() => readUI().tab || "routine");
+  /* Validated, not just defaulted. A saved id this build no longer has —
+     a tab renamed or dropped, or a hand-edited preferences key — renders
+     no module at all: an empty page with a working sidebar, which reads as
+     the app having lost everything. */
+  const [tab, setTab] = useState(() => {
+    const saved = readUI().tab;
+    return NAV_IDS.includes(saved) ? saved : "routine";
+  });
   const [collapsed, setCollapsed] = useState(() => !!readUI().collapsed);
   const [streakToast, setStreakToast] = useState(null); // streak count when banked
   const [saveFailed, setSaveFailed] = useState(false);
