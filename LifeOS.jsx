@@ -12362,8 +12362,27 @@ function SettingsModal({ open, onClose, state, setState }) {
          this the app wears them as today until the minute poll catches up —
          long enough for the archive effect to stamp today's history row with
          a day the user did not live. */
-      setState(rollDay(migrate({ ...freshState(), ...parsed })));
-      setNote({ ok: true, text: "تم استيراد البيانات واستبدال الحالي." });
+      /* An unversioned payload is an *old* payload, not a current one.
+         Spreading it over freshState left SCHEMA standing, so a hand-edited
+         or third-party file skipped every migration and arrived looking
+         modern while carrying shapes this build stopped understanding
+         versions ago. Unknown means oldest, and migrate stamps the current
+         version on the way out, so the walk happens once and never again.
+
+         A file from a *newer* build keeps its own number: no branch can run
+         for a version this build has not been taught, and pretending
+         otherwise would reshape data it does not understand. */
+      const ver = Number(parsed.schema);
+      const from = Number.isFinite(ver) && ver > 0 ? ver : 0;
+      setState(rollDay(migrate({ ...freshState(), ...parsed, schema: from })));
+      setNote({
+        ok: true,
+        text: !from
+          ? "تم الاستيراد — الملف بلا رقم إصدار، فرُقّي من أقدم نسخة احتياطًا."
+          : ver > SCHEMA
+            ? "تم الاستيراد — الملف من إصدار أحدث من هذا البناء؛ راجع بياناتك."
+            : "تم استيراد البيانات واستبدال الحالي.",
+      });
     } catch {
       setNote({ ok: false, text: "تعذّرت قراءة الملف — تأكّد أنه JSON سليم." });
     }
