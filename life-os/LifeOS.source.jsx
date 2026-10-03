@@ -899,6 +899,26 @@ const TOP_TASK_CAP = 3;
    midnight and this hour belongs to the previous day. */
 const DAY_START_HOUR = 4;
 
+/* --- the evening prompt's window -------------------------------------- *
+ *  The day here does not end at midnight, it ends at DAY_START_HOUR — so
+ *  its evening runs from 20:00 round past midnight to that hour. Testing
+ *  the wall clock with `h >= 20` left 00:00–03:59 silent, which is exactly
+ *  when someone reviewing «the day that just ended» is awake, and exactly
+ *  the hours this app's own «السهر بعد منتصف الليل» assumes he is up for.
+ *  Past midnight the prompt never came, and at 04:00 the day rolled over
+ *  and took the question with it.
+ * ---------------------------------------------------------------------- */
+const REFLECT_FROM_HOUR = 20;
+const inReflectWindow = (d = new Date()) => {
+  const h = d.getHours();
+  return h >= REFLECT_FROM_HOUR || h < DAY_START_HOUR;
+};
+/* «لاحقًا» is a button that says *later*, so it has to mean later. Three
+   showings an evening, an hour apart, then silence — a prompt that returns
+   forever is one you learn to dismiss without reading. */
+const REFLECT_SNOOZE_MS = 60 * 60 * 1000;
+const REFLECT_MAX_SHOWS = 3;
+
 /* "Now", shifted onto the logical day it belongs to. */
 const logicalNow = (d = new Date()) => {
   const x = new Date(d.getTime());
@@ -4728,6 +4748,8 @@ function RoutineModule({
   mirror,
   savedAt,
   onOpenMirror,
+  onOpenReflect,
+  reflected,
 }) {
   const [editing, setEditing] = useState(null); // {id?, label, group}
   const [quotesOpen, setQuotesOpen] = useState(false);
@@ -4966,6 +4988,24 @@ function RoutineModule({
             >
               <Plus size={14} strokeWidth={3} /> عادة جديدة
             </Btn>
+            {/* The evening prompt comes on its own, but only inside its
+                window and only on a day that fell short. This is how you
+                reach it the rest of the time — and how you reopen what you
+                already wrote to read or change it. */}
+            <button
+              onClick={onOpenReflect}
+              title="وقفة آخر اليوم"
+              aria-label="وقفة آخر اليوم"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+              style={{
+                borderColor: reflected ? `${T.cta}80` : `${T.cta}3D`,
+                background: reflected ? `${T.cta}24` : `${T.cta}0F`,
+                color: T.cta,
+                boxShadow: reflected ? `0 0 18px -6px ${T.cta}` : "none",
+              }}
+            >
+              <MessageSquareQuote size={16} strokeWidth={2} />
+            </button>
             <button
               onClick={onOpenMirror}
               title="مرآة المحاسبة"
@@ -17518,9 +17558,19 @@ function SettingsModal({ open, onClose, state, setState }) {
 /* ==================================================================== *
  *  End-of-day reflection — only on a day that fell short
  * ==================================================================== */
-function ReflectionModal({ open, onClose, onSave, pct }) {
+function ReflectionModal({ open, onClose, onSave, pct, value, fixValue }) {
   const [distraction, setDistraction] = useState("");
   const [fix, setFix] = useState("");
+
+  /* Seeded from the archive each time it opens. Without this, opening it a
+     second time showed two empty boxes and saving overwrote what was
+     already written with nothing — a reflection silently erased by the act
+     of going back to read it. */
+  useEffect(() => {
+    if (!open) return;
+    setDistraction(value || "");
+    setFix(fixValue || "");
+  }, [open, value, fixValue]);
 
   return (
     <Modal
@@ -17611,7 +17661,16 @@ export default function LifeOS() {
   const [settings, setSettings] = useState(false);
   const [editNav, setEditNav] = useState(false);
   const [reflect, setReflect] = useState(false);
-  const [reflectDone, setReflectDone] = useState(null); // the day already asked about
+  /* How often the evening prompt has shown today and when it may show
+     again. Kept with the other per-viewer preferences, not in the archive:
+     it is a reminder's snooze, not something written about the day. In
+     memory only, a reload reset it and the prompt reappeared at once. */
+  const [nag, setNagState] = useState(() => obj(readUI().reflect));
+  const nagRef = useRef(nag);
+  const setNag = useCallback((next) => {
+    nagRef.current = next;
+    setNagState(next);
+  }, []);
   const [mirror, setMirror] = useState(false);
 
   useEffect(() => {
@@ -17644,11 +17703,14 @@ export default function LifeOS() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(UI_KEY, JSON.stringify({ tab, collapsed }));
+      window.localStorage.setItem(
+        UI_KEY,
+        JSON.stringify({ tab, collapsed, reflect: nag }),
+      );
     } catch {
       /* per-viewer convenience only */
     }
-  }, [tab, collapsed]);
+  }, [tab, collapsed, nag]);
 
   const habitsDone = state.habits.filter((h) => h.done).length;
   const discipline = state.habits.length
@@ -17733,20 +17795,26 @@ export default function LifeOS() {
     };
   }, [phase.body]);
 
-  /* After 20:00, on a day that fell short, once — and never again if today's
-     reflection is already written. Polled because the app is often left open. */
+  /* Through the logical evening, on a day that fell short, up to three
+     times an hour apart — and never once today's reflection is written.
+     Polled because the app is often left open for days. */
   const todayEntry = (state.history || []).find((h) => h.date === dayKey());
   const alreadyReflected = !!(todayEntry?.distraction || todayEntry?.fix);
   useEffect(() => {
-    /* Keyed to the day, not to the session: the window stays open for days
-       at a time, and a plain "already asked" flag would mean the evening
-       prompt fired once and never again. */
-    if (alreadyReflected || reflectDone === dayKey()) return;
+    if (alreadyReflected) return;
     const check = () => {
-      if (new Date().getHours() >= 20 && discipline < STREAK_TARGET) {
-        setReflect(true);
-        setReflectDone(dayKey());
-      }
+      const day = dayKey();
+      /* The snooze is read fresh on every tick rather than captured, so a
+         dismissal lands immediately without re-running the effect. */
+      const n = nagRef.current;
+      const seen = n.day === day ? n.shown || 0 : 0;
+      if (seen >= REFLECT_MAX_SHOWS) return;
+      if (n.day === day && n.until && Date.now() < n.until) return;
+      if (!inReflectWindow() || discipline >= STREAK_TARGET) return;
+      setReflect(true);
+      /* Counted when it is shown, not when it is dismissed: a prompt the
+         user walks away from has still been asked. */
+      setNag({ day, shown: seen + 1, until: Date.now() + REFLECT_SNOOZE_MS });
     };
     check();
     /* A background tab throttles intervals hard, so also check the moment
@@ -17759,7 +17827,7 @@ export default function LifeOS() {
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [alreadyReflected, reflectDone, discipline]);
+  }, [alreadyReflected, discipline, setNag]);
 
   const saveReflection = useCallback(
     (distraction, fix) => {
@@ -18118,6 +18186,8 @@ export default function LifeOS() {
                   mirror={todayEntry?.mirror || ""}
                   savedAt={savedAt}
                   onOpenMirror={() => setMirror(true)}
+                  onOpenReflect={() => setReflect(true)}
+                  reflected={alreadyReflected}
                 />
               )}
               {tab === "agenda" && (
@@ -18212,6 +18282,8 @@ export default function LifeOS() {
         onClose={() => setReflect(false)}
         onSave={saveReflection}
         pct={discipline}
+        value={todayEntry?.distraction || ""}
+        fixValue={todayEntry?.fix || ""}
       />
 
       <MirrorModal
