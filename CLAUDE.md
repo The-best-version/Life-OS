@@ -63,6 +63,8 @@ Four rendering traps this UI has already hit:
 - **A `history` entry is merged, never rebuilt.** The archive effect rewrites today's row on every discipline change, and that row also holds everything written about the day — the evening reflection (`distraction` / `fix`) and the accountability mirror (`mirror`). Spread the previous entry before writing, or a single habit toggle erases it. Anything new that is written per-day belongs on this row and inherits the same rule.
 - **An imported file is untrusted.** `SettingsModal` refuses a payload that is not shaped like this app's state before touching anything, then runs it through `migrate()` — an older backup must come back upgraded, not broken.
 - **Changing seed data is a migration, never an edit.** `SCHEMA` in `LifeOS.jsx` is the version; `migrate()` runs on load and reshapes an older payload. Bump `SCHEMA` and add a branch — moving a habit between groups must *move* the user's own row, not append a second copy beside it. Verify against a pre-migration payload before shipping.
+- **The browser holds the working copy; the disk holds the one that survives.** Every save also goes to `local-sync-server.js`, which writes `graphify-out/data/lifeos.json` atomically, keeps the write before it as `lifeos.prev.json`, and stamps an hourly snapshot into `backups/auto/` (72 deep). `pullDisk()` reads it back — but **only when `localStorage` is empty**, and **before the first render**: mounting first and adopting after would paint a seeded empty day, and the save effect fires on that seed and writes emptiness over the recovery still in flight. A cleared profile, a new profile or an evicted bucket heals itself on the next open.
+- **Only the served origin writes to disk.** `syncOut` refuses unless `served()`. A copy opened as a file has its own `localStorage`, its own idea of the day, and is invisible to the window lease — letting it sync would drop a snapshot from whenever it was last used on top of the live one. It can still read and still recover; it is just never the copy that gets saved.
 - Wrap every read and write in `try/catch` — the app must render correctly when storage is blocked.
 - Never silently delete text the user typed. On a new day, uncheck; do not clear.
 
@@ -79,28 +81,41 @@ Four rendering traps this UI has already hit:
 | Path | What it is |
 |---|---|
 | `LifeOS.jsx` | The app. Single file, current version. |
-| `life-os/index.html` | Built standalone site — what the Chrome shortcut opens. |
-| `life-os/LifeOS.source.jsx` | Copy of the source shipped beside the build. |
+| `build-life-os.mjs` | The build. `node build-life-os.mjs` — the only way the site is produced. |
+| `life-os/index.html` | Built site, served at `http://127.0.0.1:47615/`. |
+| `life-os/LifeOS.source.jsx` | Copy of the source, written by the build. Never edited by hand. |
+| `life-os/sw.js` | Service worker. Caches the shell so the app opens with the server down. |
 | `life-os/archive/` | Previous versions. Never delete; supersede. |
-| `افتح 2027 Life OS.lnk` | Chrome shortcut (app mode). |
+| `local-sync-server.js` | Serves the site and keeps the state on disk. Starts with Windows. |
+| `graphify-out/data/lifeos.json` | The state, on disk. `.prev.json` beside it is the write before. |
+| `backups/auto/` | Hourly snapshots, 72 deep, pruned by the server. |
+| `run-life-os.vbs` | Starts the server if it is down, waits for it, then opens Chrome. |
+| `افتح 2027 Life OS.lnk` | Shortcut → `run-life-os.vbs`. The one way in. |
 
 ## Build
 
-The standalone site is produced by bundling the component with esbuild and generating the exact Tailwind CSS with the Tailwind CLI, then inlining both into one HTML file. React and ReactDOM load from cdnjs UMD.
+```bash
+node build-life-os.mjs
+```
 
-There is no build script in the repo and no `node_modules` beside `LifeOS.jsx`. The build resolves `react`, `lucide-react` and `tailwindcss` from `iron-log/node_modules` (junction a `node_modules` link into a scratch dir), aliases `react` / `react-dom` to two-line shims that re-export `window.React` / `window.ReactDOM`, and bundles with `--format=iife --jsx-factory=React.createElement`. esbuild itself comes from `npx --yes esbuild@0.24.2`.
+It bundles `LifeOS.jsx` with esbuild, generates the exact Tailwind CSS by scanning that same file, and inlines both into `life-os/index.html` — then copies the source to `life-os/LifeOS.source.jsx`, so the two cannot drift. Run it after **every** change to `LifeOS.jsx`; editing `index.html` by hand is editing a build artefact.
 
-Two things that have bitten this build before:
+There is no `node_modules` beside `LifeOS.jsx` and no `package.json`. esbuild and tailwindcss are imported straight out of `iron-log/node_modules`, and `lucide-react` resolves there through esbuild's `nodePaths` — nothing is installed and nothing is fetched. React is **not** bundled: it loads as UMD 18.3.1 from cdnjs and the bundle reaches it through shims that read `window.React`. Bundling the React 19 that sits in `iron-log` beside a page loading 18.3.1 would give the app two Reacts and one of them would own the hooks.
 
-- **Never use `String.replace` with the bundle as the replacement string** — `$&`, `$'` and friends are substitution patterns and will corrupt the output. Use a function replacement or array `join`.
+Three things that have bitten this build before:
+
+- **Never use `String.replace` with the bundle as the replacement string** — `$&`, `$'` and friends are substitution patterns and will corrupt the output. The build joins an array instead.
 - **The project path contains a space** (`E:\claude code`). Any `file:///` URL must percent-encode it as `%20`, or Chrome opens nothing at all with no error.
+- **The sync log prints characters, the disk holds bytes.** Arabic is two bytes a letter in UTF-8, so a payload logged at 24,627 is 28,839 on disk. It is not shrinking.
 
 ## Workflow
 
-After building or updating the site, open it in the user's own Google Chrome so he can verify it himself:
+The app is served, not opened as a file. A `file://` page has no origin of its own: Chrome files every local html document on the machine into one shared storage bucket, will not install it, and will not mark its data persistent — so an ordinary "clear browsing data" takes the year with it. Served from `127.0.0.1` it has its own origin, and that is what buys persistence, installability and a service worker.
+
+After building, restart the server if `local-sync-server.js` changed, then open it in the user's own Chrome so he can verify it himself:
 
 ```powershell
-Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" -ArgumentList '--app=file:///E:/claude%20code/life-os/index.html'
+Start-Process 'C:\Windows\System32\wscript.exe' -ArgumentList '"E:\claude code\run-life-os.vbs"'
 ```
 
-Confirm the window actually appeared before reporting success.
+Confirm the window actually appeared before reporting success. **Never open a second copy while his is open** — the preview pane, a headless check, anything. Each one loads the state and writes its snapshot straight back on mount, so a window opened for twenty seconds of verification can land on top of a habit he ticked in that time. Verify against a copy, or snapshot `graphify-out/data/lifeos.json` first and diff it after.

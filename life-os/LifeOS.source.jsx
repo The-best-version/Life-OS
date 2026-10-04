@@ -936,28 +936,50 @@ const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
 const STORAGE_KEY = "life-os-2027:v3";
 
 /* --- local sync -------------------------------------------------------
-   Mirrors the state to report-agent's sync server so the charts refresh
-   without a manual export. Entirely optional: if the server is down the
-   rejection is swallowed and localStorage remains the source of truth. */
-const SYNC_URL = "http://127.0.0.1:47615/sync";
-let syncTimer = null;
-function syncLocal() {
+   Mirrors the state to the local sync server, which keeps it on disk and
+   feeds the charts without a manual export. localStorage stays the source
+   of truth while the app is running; the disk copy is what survives the
+   browser, and `pullDisk` below reads it back when the browser turns up
+   empty. If the server is down the rejection is swallowed and nothing else
+   changes. */
+const LOCAL_HOST = "http://127.0.0.1:47615";
+/* Same-origin when the server is also the one serving the page, absolute
+   when it is not — a file:// page has no origin to be relative to. */
+function served() {
   try {
     return (
-      location.protocol === "file:" ||
-      location.hostname === "localhost" ||
-      location.hostname === "127.0.0.1"
+      location.protocol.startsWith("http") &&
+      (location.hostname === "127.0.0.1" || location.hostname === "localhost")
     );
   } catch {
     return false;
   }
 }
+const api = (p) => (served() ? p : LOCAL_HOST + p);
+let syncTimer = null;
+/* Reading the disk copy is safe from anywhere local — a page opened as a
+   file still deserves to find the data. */
+function syncLocal() {
+  try {
+    return location.protocol === "file:" || served();
+  } catch {
+    return false;
+  }
+}
 function syncOut(payload) {
-  if (!syncLocal()) return;
+  /* Writing it is not. The served origin is the one the shortcut opens and
+     the only one anybody works in; a copy opened as a file has its own
+     separate localStorage, which means its own separate idea of the day,
+     and the window lease cannot see across the two. Letting it write would
+     put a snapshot from whenever it was last used on top of the real one —
+     the same clobbering the lease exists to prevent, one layer down. It
+     stays readable, and it keeps its own working copy. It just is not the
+     one that gets saved. */
+  if (!served()) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     try {
-      fetch(SYNC_URL, {
+      fetch(api("/sync"), {
         method: "POST",
         headers: { "Content-Type": "text/plain", "X-Local-Sync": "1" },
         body: JSON.stringify({ project: "lifeos", payload }),
@@ -20152,6 +20174,91 @@ function BottomTabs({ items, tab, onGo, onSettings }) {
 }
 
 /* ==================================================================== *
+ *  Where the data actually lives
+ *
+ *  Four promises get made about this app's data and none of them are
+ *  visible from the screen: it is served from an origin of its own, there
+ *  is a copy on disk, the browser has been asked not to evict it, and the
+ *  page opens without the server. A promise you cannot check is one you
+ *  end up re-exporting by hand every week just in case — so each one is
+ *  stated here with whether it currently holds.
+ * ==================================================================== */
+function DataHealth({ open }) {
+  const [info, setInfo] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      const out = { origin: served(), persisted: false, offline: false, disk: null };
+      try {
+        out.persisted = !!(await navigator.storage?.persisted?.());
+      } catch {}
+      try {
+        out.offline = ((await navigator.serviceWorker?.getRegistrations?.()) || []).length > 0;
+      } catch {}
+      try {
+        const stop = new AbortController();
+        const t = setTimeout(() => stop.abort(), 2500);
+        const res = await fetch(api("/state?project=lifeos"), {
+          signal: stop.signal,
+          cache: "no-store",
+        });
+        clearTimeout(t);
+        if (res.ok) {
+          const saved = await res.json();
+          out.disk = Array.isArray(saved?.habits) ? saved.date || true : null;
+        }
+      } catch {
+        /* server down — reported as such, not as an error */
+      }
+      if (alive) setInfo(out);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  const rows = info
+    ? [
+        [info.origin, "يعمل من الخادم المحلي", "يعمل كملف — التخزين مشترك مع بقيّة الصفحات"],
+        [!!info.disk, "نسخة محفوظة على القرص", "لا توجد نسخة على القرص — الخادم متوقّف"],
+        [info.persisted, "المتصفّح يحفظ البيانات دائمًا", "المتصفّح لم يثبّت الحفظ بعد"],
+        [info.offline, "يفتح بلا إنترنت", "يحتاج الإنترنت في أول تشغيل"],
+      ]
+    : [];
+
+  return (
+    <div
+      className="rounded-2xl border px-3.5 py-3"
+      style={{ borderColor: T.border, backgroundColor: T.card }}
+    >
+      <p className="mb-2 flex items-center gap-2 text-[12px] font-extrabold" style={{ color: T.accent }}>
+        <ShieldCheck size={14} /> حماية البيانات
+      </p>
+      {!info ? (
+        <p className="text-[11px] text-white/45">جارٍ الفحص…</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map(([ok, yes, no], i) => (
+            <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
+              <span
+                className="mt-[3px] inline-block h-2 w-2 shrink-0 rounded-full"
+                style={{
+                  backgroundColor: ok ? T.primary : T.ember,
+                  boxShadow: `0 0 8px ${ok ? T.primary : T.ember}`,
+                }}
+              />
+              <span style={{ color: ok ? "rgba(255,255,255,0.72)" : T.ember }}>{ok ? yes : no}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ==================================================================== *
  *  Backup — export / import the whole payload
  * ==================================================================== */
 function SettingsModal({ open, onClose, state, setState }) {
@@ -20381,6 +20488,8 @@ function SettingsModal({ open, onClose, state, setState }) {
             </div>
           )}
         </div>
+
+        <DataHealth open={open} />
 
         <div className="space-y-2.5">
           <Btn variant="default" className="w-full" onClick={exportData}>
@@ -21311,4 +21420,77 @@ export default function LifeOS() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<LifeOS />);
+/* --- starting up ------------------------------------------------------ *
+ *  Three things have to happen before the first render, and all three are
+ *  about the data outliving the browser.
+ *
+ *  localStorage is not a safe place to keep a year. Chrome evicts it under
+ *  storage pressure, "clear browsing data" wipes it without asking what was
+ *  in it, and on a file:// page every local document on the machine shares
+ *  one bucket — so an unrelated page can push this one out. Served from
+ *  127.0.0.1 the app has an origin of its own, and that is what makes the
+ *  other two possible.
+ * --------------------------------------------------------------------- */
+
+/* Ask Chrome to stop treating this like a cache. Granted outright for an
+   installed app; for a plain tab it depends on how the site is used. Either
+   way asking costs nothing and the answer only ever improves things. */
+function keepStorage() {
+  try {
+    navigator.storage?.persist?.().catch(() => {});
+  } catch {}
+}
+
+/* The app shell, kept offline. The server starts with Windows, but "the
+   server was not up yet" must not be the same thing as "your day is gone" —
+   so the one html file is cached and served from there when the network
+   fails. Never the data: the data is localStorage, and it is already local. */
+function cacheShell() {
+  if (!served()) return; // a service worker needs a real origin
+  try {
+    navigator.serviceWorker?.register("sw.js").catch(() => {});
+  } catch {}
+}
+
+/* The disk copy, read back. This runs only when localStorage has nothing —
+   a new browser profile, a profile that was cleared, a move from file:// to
+   this origin. It writes what the server has straight into localStorage and
+   then lets `loadState` do its ordinary job on it, migration and day-roll
+   and all, so there is one path into the app and not two.
+
+   Awaited before the first render on purpose. Mounting first and adopting
+   after would put a seeded, empty day on screen, and the save effect fires
+   on that seed — writing emptiness over the recovery that was still in
+   flight. The whole point is that this cannot happen. */
+async function pullDisk() {
+  try {
+    if (window.localStorage.getItem(STORAGE_KEY)) return; // the browser has it
+  } catch {
+    return; // storage blocked: nothing to recover into
+  }
+  if (!syncLocal()) return;
+  try {
+    const stop = new AbortController();
+    const t = setTimeout(() => stop.abort(), 3000); // a dead server must not hang the app
+    const res = await fetch(api("/state?project=lifeos"), { signal: stop.signal });
+    clearTimeout(t);
+    if (!res.ok) return;
+    const saved = await res.json();
+    /* Shaped like this app's state, or it does not get written. Same bar the
+       import in settings holds a file to. */
+    if (!saved || typeof saved !== "object" || !Array.isArray(saved.habits)) return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+  } catch {
+    /* Server down, blocked, or serving something unreadable. The app opens
+       on seed data, which is the same as it did before any of this existed. */
+  }
+}
+
+async function boot() {
+  keepStorage();
+  await pullDisk();
+  createRoot(document.getElementById("root")).render(<LifeOS />);
+  cacheShell(); // after paint: it is a safety net, not a dependency
+}
+
+boot();
