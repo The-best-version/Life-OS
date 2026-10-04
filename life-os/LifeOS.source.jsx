@@ -122,6 +122,12 @@ import {
   CircleDot,
   Hash,
   SquarePen,
+  Droplets,
+  Compass,
+  Telescope,
+  CalendarRange,
+  Link2,
+  Layers,
 } from "lucide-react";
 
 /* ==================================================================== *
@@ -557,7 +563,7 @@ const NAV = [
   { id: "career", label: "مسار التوظيف", short: "التوظيف", icon: Briefcase },
   { id: "matrix", label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
   { id: "deep", label: "العمل العميق", short: "التركيز", icon: Timer },
-  { id: "goals", label: "أهداف ٢٠٢٧", short: "الأهداف", icon: Flag },
+  { id: "goals", label: "أهدافي على ثلاث سنوات", short: "الأهداف", icon: Flag },
   { id: "pipeline", label: "خط سير المشاريع", short: "المسار", icon: Kanban },
   { id: "tactical", label: "المراجعة التكتيكية", short: "التكتيك", icon: Swords },
   { id: "finance", label: "الدخل والمشاريع", short: "الدخل", icon: Wallet },
@@ -630,6 +636,8 @@ const QUARTERS = [
   { id: "q4", label: "الربع الرابع", months: "أكتوبر — ديسمبر", tint: "#FF4D8D" },
 ];
 const currentQuarter = (d = new Date()) => QUARTERS[Math.floor(d.getMonth() / 3)].id;
+const QUARTER_IDS = new Set(QUARTERS.map((q) => q.id));
+const quarterOf = (id) => QUARTERS.find((q) => q.id === id) || QUARTERS[0];
 
 /* --- the six pillars of 2027 ----------------------------------------- */
 const PILLARS = [
@@ -640,6 +648,56 @@ const PILLARS = [
   { id: "social", label: "الاجتماعي", icon: Users, tint: "#FF4D8D" },
   { id: "self", label: "الشخصي", icon: Sparkles, tint: "#5B8CFF" },
 ];
+const PILLAR_IDS = new Set(PILLARS.map((p) => p.id));
+const pillarOf = (id) => PILLARS.find((p) => p.id === id) || PILLARS[5];
+
+/* --- the three horizons ---------------------------------------------- *
+ *  A 90-day goal that serves nothing is a chore with a deadline. Three
+ *  horizons, each answering the one above it: who you intend to be in three
+ *  years, what this year has to deliver for that, and what the next ninety
+ *  days actually execute. The order matters — `HORIZONS` is read top-down
+ *  everywhere, and `parentHorizon` is the only place the chain is written.
+ * ---------------------------------------------------------------------- */
+const HORIZONS = [
+  {
+    id: "h3",
+    label: "ثلاث سنوات",
+    short: "٣ سنوات",
+    hint: "من تريد أن تكون في نهاية ٢٠٢٩ — لا قائمة مهام، بل صورة رجل.",
+    icon: Telescope,
+    tint: "#9D5CFF",
+    child: "هدف سنوي",
+  },
+  {
+    id: "year",
+    label: "هذه السنة",
+    short: "السنة",
+    hint: "ما يجب أن يتحقّق هذه السنة كي تصل الثلاث سنوات.",
+    icon: CalendarRange,
+    tint: "#FFB020",
+    child: "هدف ربعي",
+  },
+  {
+    id: "quarter",
+    label: "تسعون يومًا",
+    short: "٩٠ يومًا",
+    hint: "ما تنفّذه الآن. هنا فقط يتحوّل الطموح إلى عمل.",
+    icon: Target,
+    tint: "#FF5722",
+    child: null,
+  },
+];
+const HORIZON_IDS = new Set(HORIZONS.map((h) => h.id));
+const horizonOf = (id) => HORIZONS.find((h) => h.id === id) || HORIZONS[2];
+/* The horizon a goal's parent must belong to. The top of the chain has none,
+   which is also how the editor knows to hide the parent picker. */
+const parentHorizon = (id) =>
+  id === "quarter" ? "year" : id === "year" ? "h3" : null;
+
+/* The three-year arc. 2027 is the year this whole app is named for, so it
+   anchors the window and the two after it complete the horizon. */
+const GOAL_YEARS = [2027, 2028, 2029];
+const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
 
 /* --- routine groups -------------------------------------------------- */
 const GROUPS = [
@@ -886,7 +944,7 @@ function syncOut(payload) {
   }, 2500);
 }
 const UI_KEY = "life-os-2027:ui";
-const SCHEMA = 18;
+const SCHEMA = 19;
 const HISTORY_CAP = 500;
 const STREAK_TARGET = 80;
 /* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
@@ -993,6 +1051,194 @@ const ADDED_TASKS = [
 
 const READ_ACTIVE = "active";
 const READ_GOAL_DEFAULT = 20;
+
+/* --- water ------------------------------------------------------------ *
+ *  Eight cups is the figure everyone already knows, so it is the default.
+ *  The count is per-day and deliberately absent from `carryOf`: yesterday's
+ *  water is not today's. The cap exists because the cups are rendered one
+ *  per glass, and a hand-edited backup asking for four hundred of them
+ *  would lock the routine screen up drawing them.
+ * ---------------------------------------------------------------------- */
+const WATER_GOAL_DEFAULT = 8;
+const WATER_GOAL_MAX = 20;
+const clampGoal = (n) =>
+  Number.isFinite(+n) && +n >= 1
+    ? Math.min(WATER_GOAL_MAX, Math.round(+n))
+    : WATER_GOAL_DEFAULT;
+const CUP_FORMS = ["كوب", "كوبان", "أكواب", "كوبًا"];
+const cupWord = (n) => arCount(n, CUP_FORMS);
+
+/* --- prayer times ----------------------------------------------------- *
+ *  Computed here, never fetched. The routine's six blocks are anchored to
+ *  the prayers, so the times they are anchored to cannot be the one part of
+ *  the screen that needs a network: this file is opened straight off disk as
+ *  `file://`, where a fetch is at the mercy of CORS and of being offline,
+ *  and a blank prayer card would take the meaning of «بعد العصر» with it.
+ *
+ *  The maths is the standard solar-position method (the same one the public
+ *  APIs run server-side) with Umm al-Qura's parameters: Fajr at 18.5° of
+ *  depression and Isha a fixed ninety minutes after Maghrib. Verified
+ *  against Umm al-Qura's own published times for Riyadh on five dates spread
+ *  across a year — every prayer landed within a single minute.
+ * ---------------------------------------------------------------------- */
+const RAD = Math.PI / 180;
+const dSin = (d) => Math.sin(d * RAD);
+const dCos = (d) => Math.cos(d * RAD);
+const dTan = (d) => Math.tan(d * RAD);
+const fixAngle = (a) => ((a % 360) + 360) % 360;
+const fixHour = (h) => ((h % 24) + 24) % 24;
+
+/* Julian day at 00:00 UT of a civil date (Gregorian). */
+function julianDay(y, m, d) {
+  if (m <= 2) {
+    y -= 1;
+    m += 12;
+  }
+  const a = Math.floor(y / 100);
+  const b = 2 - a + Math.floor(a / 4);
+  return (
+    Math.floor(365.25 * (y + 4716)) +
+    Math.floor(30.6001 * (m + 1)) +
+    d +
+    b -
+    1524.5
+  );
+}
+
+function sunPosition(jd) {
+  const D = jd - 2451545.0; // days from J2000
+  const g = fixAngle(357.529 + 0.98560028 * D); // mean anomaly
+  const q = fixAngle(280.459 + 0.98564736 * D); // mean longitude
+  const L = fixAngle(q + 1.915 * dSin(g) + 0.02 * dSin(2 * g)); // apparent
+  const e = 23.439 - 0.00000036 * D; // obliquity
+  const decl = Math.asin(dSin(e) * dSin(L)) / RAD;
+  const ra = fixHour(Math.atan2(dCos(e) * dSin(L), dCos(L)) / RAD / 15);
+  /* Both terms are already wrapped into [0,24), so their difference lands a
+     whole day out whenever one of them has just crossed zero. Folding
+     through 12 puts it back in [-12,12), where the equation of time lives. */
+  const eqt = fixHour(q / 15 - ra + 12) - 12;
+  return { decl, eqt };
+}
+
+/* Hours between solar noon and the moment the sun sits `angle` degrees below
+   the horizon. `null` when the day has no such moment at all — a polar
+   summer has no Fajr, and inventing one would be worse than an honest dash. */
+function hourAngle(angle, decl, lat) {
+  const x =
+    (-dSin(angle) - dSin(decl) * dSin(lat)) / (dCos(decl) * dCos(lat));
+  if (!(x >= -1 && x <= 1)) return null;
+  return Math.acos(x) / RAD / 15;
+}
+
+/* Asr is a shadow length, not an angle: the sun's altitude at the moment a
+   shadow has grown `factor` object-heights past its noon length. One for the
+   Shafii school, two for the Hanafi. */
+const asrAltitude = (factor, decl, lat) =>
+  -Math.atan(1 / (factor + dTan(Math.abs(lat - decl)))) / RAD;
+
+const FAJR_ANGLE = 18.5; // Umm al-Qura
+const ISHA_GAP_MIN = 90; // Umm al-Qura: ninety minutes after Maghrib
+
+/* Returns decimal hours in the place's own standard time, or null per prayer
+   where the sun never reaches that depression. */
+function prayerTimes(place, date) {
+  const { lat, lng, tz, asr = 1 } = place;
+  /* The sun's position is wanted at local noon, not at 00:00 UT — a whole
+     time zone's worth of drift otherwise shows up as a minute or two of
+     error at the solstices, which is exactly where it is most visible. */
+  const jd = julianDay(date.getFullYear(), date.getMonth() + 1, date.getDate()) - lng / 360;
+  const { decl, eqt } = sunPosition(jd);
+  const noon = 12 - eqt - lng / 15 + tz;
+  const riseSet = hourAngle(0.833, decl, lat); // refraction + solar radius
+  const fajrT = hourAngle(FAJR_ANGLE, decl, lat);
+  const asrT = hourAngle(asrAltitude(asr, decl, lat), decl, lat);
+  const maghrib = riseSet === null ? null : noon + riseSet;
+  return {
+    fajr: fajrT === null ? null : noon - fajrT,
+    sunrise: riseSet === null ? null : noon - riseSet,
+    dhuhr: noon,
+    asr: asrT === null ? null : noon + asrT,
+    maghrib,
+    isha: maghrib === null ? null : maghrib + ISHA_GAP_MIN / 60,
+  };
+}
+
+/* The six rows, in the order of the day. «الشروق» is not a prayer and is
+   marked so: it is the end of Fajr's window, which is why it is shown. */
+const PRAYERS = [
+  { id: "fajr", label: "الفجر", icon: Sunrise, tint: "#5B8CFF" },
+  { id: "sunrise", label: "الشروق", icon: Sun, tint: "#FFB020", mark: true },
+  { id: "dhuhr", label: "الظهر", icon: Sun, tint: "#FF7A45" },
+  { id: "asr", label: "العصر", icon: Sunset, tint: "#FF4D8D" },
+  { id: "maghrib", label: "المغرب", icon: Moon, tint: "#9D5CFF" },
+  { id: "isha", label: "العشاء", icon: MoonStar, tint: "#00C2FF" },
+];
+
+/* Saudi first, because that is where this is lived. Coordinates are the city
+   centre and the offset is standard time — the Kingdom has no DST, so a
+   stored number is safe here in a way it would not be in Europe. */
+const PLACES = [
+  { id: "riyadh", label: "الرياض", lat: 24.7136, lng: 46.6753, tz: 3 },
+  { id: "makkah", label: "مكة المكرمة", lat: 21.3891, lng: 39.8579, tz: 3 },
+  { id: "madinah", label: "المدينة المنورة", lat: 24.5247, lng: 39.5692, tz: 3 },
+  { id: "jeddah", label: "جدة", lat: 21.4858, lng: 39.1925, tz: 3 },
+  { id: "dammam", label: "الدمام", lat: 26.4207, lng: 50.0888, tz: 3 },
+  { id: "abha", label: "أبها", lat: 18.2164, lng: 42.5053, tz: 3 },
+  { id: "buraydah", label: "بريدة", lat: 26.326, lng: 43.975, tz: 3 },
+  { id: "tabuk", label: "تبوك", lat: 28.3835, lng: 36.5662, tz: 3 },
+  { id: "hail", label: "حائل", lat: 27.5114, lng: 41.7208, tz: 3 },
+  { id: "jizan", label: "جازان", lat: 16.8892, lng: 42.5611, tz: 3 },
+];
+const PLACE_BY_ID = new Map(PLACES.map((p) => [p.id, p]));
+
+const placeShape = (p) => {
+  const o = obj(p);
+  const seed = PLACE_BY_ID.get(o.id) || PLACES[0];
+  const num = (v, fb, lim) =>
+    Number.isFinite(+v) && Math.abs(+v) <= lim ? +v : fb;
+  return {
+    id: PLACE_BY_ID.has(o.id) ? o.id : o.id === "custom" ? "custom" : seed.id,
+    label: typeof o.label === "string" && o.label.trim() ? o.label.trim() : seed.label,
+    lat: num(o.lat, seed.lat, 90),
+    lng: num(o.lng, seed.lng, 180),
+    tz: num(o.tz, seed.tz, 14),
+    /* 1 = Shafii, 2 = Hanafi. Anything else is not a school. */
+    asr: +o.asr === 2 ? 2 : 1,
+  };
+};
+
+/* Decimal hours → "07:18". Named apart from `hhmm`, which validates a time
+   the user typed; this one formats one the solar maths produced. Rendered
+   LTR by the caller — this only builds the string. */
+const clockAt = (h) => {
+  if (h === null || !Number.isFinite(h)) return "—";
+  const total = Math.round(fixHour(h) * 60);
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(
+    total % 60,
+  ).padStart(2, "0")}`;
+};
+
+/* Which prayer is next, and how long until it. Isha is the last row of the
+   day, so after it the answer is tomorrow's Fajr — computed from tomorrow's
+   own date rather than reused, because a date boundary moves it by minutes.
+   «الشروق» is skipped: it is a window's end, not something you wait for. */
+function nextPrayer(place, now = new Date()) {
+  const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  const today = prayerTimes(place, now);
+  for (const p of PRAYERS) {
+    if (p.mark) continue;
+    const t = today[p.id];
+    if (t === null || !Number.isFinite(t)) continue;
+    const at = fixHour(t) * 60;
+    if (at > mins) return { ...p, at, left: Math.round(at - mins) };
+  }
+  const tomorrow = new Date(now.getTime());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const t = prayerTimes(place, tomorrow).fajr;
+  if (t === null || !Number.isFinite(t)) return null;
+  const at = fixHour(t) * 60;
+  return { ...PRAYERS[0], at, left: Math.round(at + 1440 - mins), tomorrow: true };
+}
 
 /* --- habit breaker ---------------------------------------------------- *
  *  The mirror image of a routine habit: a streak you defend rather than
@@ -1570,6 +1816,97 @@ function readStreak(log, goal) {
   }
 }
 
+/* --- the habit ledger ------------------------------------------------- *
+ *  Every figure here is derived from `history` and nothing is stored twice.
+ *  The archive already writes, per day, which habit ids were ticked (`done`)
+ *  and which were on the roster at all (`all`) — which is exactly enough to
+ *  answer «ما العادة التي أصمد عليها؟» without a second ledger that could
+ *  drift out of step with the first.
+ *
+ *  `all` is what makes the answers honest. A habit added in November was not
+ *  "missed" every day of October: it was not asked. A day whose row predates
+ *  the roster is unknown, not a miss, and renders as a gap.
+ * ---------------------------------------------------------------------- */
+const historyIndex = (history) => {
+  const by = new Map();
+  for (const h of rows(history))
+    if (typeof h.date === "string" && Array.isArray(h.done)) by.set(h.date, h);
+  return by;
+};
+
+/* Was this habit on the roster that day? A row written before the roster was
+   archived has no `all`, so it can only say "there was a day here". */
+const askedOn = (row, id) =>
+  !row ? false : Array.isArray(row.all) ? row.all.includes(id) : true;
+const keptOn = (row, id) => !!row && row.done.includes(id);
+
+/* Days in a row, walking back from today. A run that ended yesterday still
+   stands today — the day is not over, and zeroing it at 00:00 would punish
+   someone who ticks his night habits at eleven. Bounded by HISTORY_CAP: the
+   walk stops at the first day with no row at all. */
+function habitStreak(by, id) {
+  const d = logicalNow();
+  if (!keptOn(by.get(dayKey(d)), id)) d.setDate(d.getDate() - 1);
+  let n = 0;
+  for (;;) {
+    if (!keptOn(by.get(dayKey(d)), id)) return n;
+    n += 1;
+    d.setDate(d.getDate() - 1);
+  }
+}
+
+/* The longest run ever recorded, which outlives the streak that ended it.
+   Walks the archive in date order and only treats two rows as consecutive
+   when their dates genuinely are — a gap in the archive breaks the run
+   rather than silently joining across it. */
+function habitBest(by, id) {
+  const days = [...by.keys()].filter((k) => keptOn(by.get(k), id)).sort();
+  let best = 0;
+  let run = 0;
+  let prev = null;
+  for (const k of days) {
+    const [y, m, d] = k.split("-").map(Number);
+    const t = new Date(y, m - 1, d).getTime();
+    run = prev !== null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = t;
+  }
+  return best;
+}
+
+/* Kept out of asked, over a window of days — `0` means the whole archive.
+   The denominator counts only days the habit was actually on the roster. */
+function habitTally(by, id, win = 0) {
+  let kept = 0;
+  let asked = 0;
+  for (const [k, row] of by) {
+    if (win && daysBetween(k) >= win) continue;
+    if (!askedOn(row, id)) continue;
+    asked += 1;
+    if (keptOn(row, id)) kept += 1;
+  }
+  return { kept, asked, pct: asked ? Math.round((kept / asked) * 100) : 0 };
+}
+
+/* The last `n` days as a strip, oldest first, for the dot grid. Three states
+   and they are not interchangeable: kept, asked-and-missed, and never asked
+   — drawing the third as a miss is the lie this whole file exists to avoid. */
+function habitStrip(by, id, n = 30) {
+  const out = [];
+  const d = logicalNow();
+  d.setDate(d.getDate() - (n - 1));
+  for (let i = 0; i < n; i += 1) {
+    const key = dayKey(d);
+    const row = by.get(key);
+    out.push({
+      key,
+      state: !askedOn(row, id) ? "off" : keptOn(row, id) ? "kept" : "missed",
+    });
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 const SEED_BOOKS = [
   {
     id: uid(),
@@ -1597,26 +1934,294 @@ const SEED_BOOKS = [
   },
 ];
 
-const SEED_GOALS = [
-  { text: "ختم القرآن تدبّرًا مرّة", pillar: "faith", quarter: "q1" },
-  { text: "قيام الليل ٣ مرّات أسبوعيًّا", pillar: "faith", quarter: "q2" },
-  { text: "حفظ جزء عمّ إتقانًا", pillar: "faith", quarter: "q3" },
-  { text: "المحافظة على الصلوات في وقتها", pillar: "faith", quarter: "q4" },
-  { text: "نادي ٤ مرّات أسبوعيًّا بلا انقطاع", pillar: "health", quarter: "q1" },
-  { text: "الوصول إلى وزن صحّي وثباته", pillar: "health", quarter: "q3" },
-  { text: "نوم ٧ ساعات ثابتة كل ليلة", pillar: "health", quarter: "q2" },
-  { text: "اجتياز اختبار STEP بدرجة عالية", pillar: "career", quarter: "q1" },
-  { text: "إتقان الإنجليزية محادثةً", pillar: "career", quarter: "q3" },
-  { text: "إنهاء مشروع تخرّج يُفتخر به", pillar: "career", quarter: "q4" },
-  { text: "بناء صندوق طوارئ يغطّي ٦ أشهر", pillar: "money", quarter: "q2" },
-  { text: "ادّخار ٢٠٪ من كل دخل", pillar: "money", quarter: "q3" },
-  { text: "مصدر دخل ثانٍ", pillar: "money", quarter: "q4" },
-  { text: "صلة الرحم أسبوعيًّا", pillar: "social", quarter: "q1" },
-  { text: "بناء دائرة صحبة صالحة", pillar: "social", quarter: "q3" },
-  { text: "قراءة ٦ كتب", pillar: "self", quarter: "q3" },
-  { text: "تقليل وقت الشاشات إلى ساعة يوميًّا", pillar: "self", quarter: "q2" },
-  { text: "تعلّم مهارة جديدة كليًّا", pillar: "self", quarter: "q4" },
-].map((g) => ({ id: uid(), done: false, ...g }));
+/* --- the goal, in one place ------------------------------------------- *
+ *  Every goal row is written through here — seed, the add form, and the
+ *  migration all go through `goalShape`, so the three can never drift apart.
+ *  A goal carries more than a label now: the horizon it belongs to, the
+ *  goal one horizon up that it serves, the reason it exists, an optional
+ *  meter, its own milestones and a deadline.
+ *
+ *  Nothing here is permissive by accident. `parent` is validated for shape
+ *  only; whether it points at a goal that exists, in the right horizon, is
+ *  checked in `migrate` where the whole list is in hand — a shape function
+ *  that can only see one row has no way to answer it.
+ * ---------------------------------------------------------------------- */
+/* --- the word and the vision ------------------------------------------ *
+ *  One word for the arc and a paragraph under it. It sits above every goal
+ *  on the screen because it is the thing the goals are for: a list of
+ *  eighteen targets with no sentence explaining who they are building is a
+ *  list you abandon in March. Capped because it is a motto and a paragraph,
+ *  not a journal — and because every byte here shares one storage quota
+ *  with the habits and the history, which never give way.
+ * ---------------------------------------------------------------------- */
+const WORD_MAX = 24;
+const VISION_MAX = 600;
+const northStarShape = (n) => {
+  const o = obj(n);
+  const str = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
+  return { word: str(o.word, WORD_MAX), vision: str(o.vision, VISION_MAX) };
+};
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const goalShape = (g) => {
+  const o = obj(g);
+  const horizon = HORIZON_IDS.has(o.horizon) ? o.horizon : "quarter";
+  const num = (v, fb = 0) => (Number.isFinite(+v) && +v >= 0 ? +v : fb);
+  const target = num(o.target);
+  return {
+    id: typeof o.id === "string" && o.id ? o.id : uid(),
+    text: typeof o.text === "string" ? o.text : "",
+    pillar: PILLAR_IDS.has(o.pillar) ? o.pillar : "self",
+    horizon,
+    /* A quarter is meaningless above the 90-day horizon and a year is
+       meaningless below it, but both are stored regardless: changing a
+       goal's horizon and changing it back must not lose where it sat. */
+    quarter: QUARTER_IDS.has(o.quarter) ? o.quarter : currentQuarter(),
+    year: GOAL_YEARS.includes(+o.year) ? +o.year : GOAL_YEARS[0],
+    parent: typeof o.parent === "string" && o.parent ? o.parent : null,
+    why: typeof o.why === "string" ? o.why : "",
+    /* A target of zero is not a broken meter, it is a goal that has none —
+       a yes/no goal, scored by its milestones or its children instead. */
+    target,
+    current: target > 0 ? Math.min(target, num(o.current)) : num(o.current),
+    unit: typeof o.unit === "string" ? o.unit.slice(0, 16) : "",
+    step: num(o.step, 1) > 0 ? num(o.step, 1) : 1,
+    deadline: DATE_RE.test(o.deadline) ? o.deadline : "",
+    steps: rows(o.steps).map((s) => ({
+      id: typeof s.id === "string" && s.id ? s.id : uid(),
+      text: typeof s.text === "string" ? s.text : "",
+      done: !!s.done,
+    })),
+    done: !!o.done,
+  };
+};
+
+/* How far along a goal is, read from whatever evidence it actually has: a
+   meter first, then its own milestones, then the goals one horizon down
+   that serve it. An explicit «مُحقَّق» wins over all three — declaring a goal
+   done is a judgement the owner is allowed to make, and a meter that reads
+   94% must not argue with it.
+ *
+ *  The depth guard is not theoretical. The chain is three deep by design, but
+ *  a hand-edited backup can point a goal at its own descendant, and without
+ *  a floor the recursion would never return — a white screen that reloading
+ *  cannot clear, because the payload on disk is already the bad one. */
+function goalPct(goal, all, depth = 0) {
+  if (goal.done) return 100;
+  if (goal.target > 0)
+    return Math.min(100, Math.round((goal.current / goal.target) * 100));
+  if (goal.steps.length)
+    return Math.round(
+      (goal.steps.filter((s) => s.done).length / goal.steps.length) * 100,
+    );
+  if (depth < HORIZONS.length) {
+    const kids = all.filter((g) => g.parent === goal.id);
+    if (kids.length)
+      return Math.round(
+        kids.reduce((n, k) => n + goalPct(k, all, depth + 1), 0) / kids.length,
+      );
+  }
+  return 0;
+}
+
+/* The last day a goal has. Its own deadline when it set one, otherwise the
+   end of the window it lives in — a 90-day goal expires with its quarter and
+   a yearly one with its December, whether or not anyone typed a date. */
+function goalEnd(goal) {
+  if (goal.deadline) return goal.deadline;
+  if (goal.horizon === "quarter") {
+    const qi = QUARTERS.findIndex((q) => q.id === goal.quarter);
+    const y = goal.year || GOAL_YEARS[0];
+    return fmtDay(new Date(y, (qi < 0 ? 0 : qi) * 3 + 3, 0));
+  }
+  if (goal.horizon === "year") return `${goal.year}-12-31`;
+  return `${GOAL_YEARS[GOAL_YEARS.length - 1]}-12-31`;
+}
+
+/* Days remaining, counted from calendar boundaries rather than the clock: on
+   the last day of a quarter you still have that whole day, so the floor of a
+   live window is 1. Negative means the window has closed. */
+function daysTo(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  if (!Number.isFinite(y)) return null;
+  const end = new Date(y, m - 1, d);
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((end - midnight) / 86400000) + 1;
+}
+
+/* The seed, written as the tree it actually is so the links between the three
+   horizons are real rather than implied. `kids` is flattened away on build —
+   nothing downstream of here knows about nesting; a goal only ever knows the
+   one id above it, which is what keeps a reparent from having to rewrite a
+   subtree. */
+const GOAL_TREE = [
+  {
+    text: "أكون من أهل القرآن: حفظًا وتدبّرًا وعملًا",
+    pillar: "faith",
+    why: "لأن كل ما بعده يُسأل عنه، وهذا وحده يبقى.",
+    kids: [
+      {
+        text: "ختم القرآن تدبّرًا ثلاث مرّات",
+        year: 2027,
+        target: 3,
+        unit: "ختمة",
+        kids: [
+          { text: "ختم القرآن تدبّرًا مرّة", quarter: "q1" },
+          { text: "المحافظة على الصلوات في وقتها", quarter: "q4" },
+        ],
+      },
+      {
+        text: "حفظ جزأين إتقانًا لا كمًّا",
+        year: 2027,
+        target: 2,
+        unit: "جزء",
+        kids: [
+          { text: "حفظ جزء عمّ إتقانًا", quarter: "q3" },
+          { text: "قيام الليل ٣ مرّات أسبوعيًّا", quarter: "q2" },
+        ],
+      },
+    ],
+  },
+  {
+    text: "جسد قويّ لا يعتذر: وزن صحّي ثابت وقوّة تُرى",
+    pillar: "health",
+    why: "الانضباط يبدأ من الجسد — ما لا تقدر عليه بدنك لن تقدر عليه بعزمك.",
+    kids: [
+      {
+        text: "الوصول إلى الوزن الصحّي وثباته ثلاثة أشهر",
+        year: 2027,
+        kids: [
+          { text: "الوصول إلى وزن صحّي وثباته", quarter: "q3" },
+          { text: "نوم ٧ ساعات ثابتة كل ليلة", quarter: "q2" },
+        ],
+      },
+      {
+        text: "مئتا حصّة نادي هذه السنة",
+        year: 2027,
+        target: 200,
+        unit: "حصّة",
+        step: 1,
+        kids: [{ text: "نادي ٤ مرّات أسبوعيًّا بلا انقطاع", quarter: "q1" }],
+      },
+    ],
+  },
+  {
+    text: "وظيفة أحبّها بدخل يكفيني ويزيد",
+    pillar: "career",
+    why: "الشهادة لا تُوظّف، النظام يُوظّف — وثلاث سنوات تكفي لبناء سيرة لا تُرَدّ.",
+    kids: [
+      {
+        text: "التخرّج ثم التوظيف في وظيفة إدارية",
+        year: 2027,
+        kids: [
+          { text: "إنهاء مشروع تخرّج يُفتخر به", quarter: "q4" },
+          { text: "إرسال ٦٠ طلب توظيف مدروس", quarter: "q2", target: 60, unit: "طلب", step: 5 },
+        ],
+      },
+      {
+        text: "اجتياز STEP بتسعين أو أكثر",
+        year: 2027,
+        kids: [
+          { text: "اجتياز اختبار STEP بدرجة عالية", quarter: "q1" },
+          { text: "إتقان الإنجليزية محادثةً", quarter: "q3" },
+        ],
+      },
+    ],
+  },
+  {
+    text: "استقلال مالي: لا دَين، وصندوق يكفي سنة",
+    pillar: "money",
+    why: "المال لا يشترى به الوقت إلا إذا كان فائضًا — والفائض يُبنى، لا يُنتظر.",
+    kids: [
+      {
+        text: "صندوق طوارئ يغطّي ستة أشهر",
+        year: 2027,
+        kids: [
+          { text: "بناء صندوق طوارئ يغطّي ٦ أشهر", quarter: "q2" },
+          { text: "ادّخار ٢٠٪ من كل دخل", quarter: "q3" },
+        ],
+      },
+      {
+        text: "مصدر دخل ثانٍ يغطّي مصاريفي الشهرية",
+        year: 2027,
+        kids: [{ text: "مصدر دخل ثانٍ", quarter: "q4" }],
+      },
+    ],
+  },
+  {
+    text: "صحبة وأهل يُعينونني على الآخرة",
+    pillar: "social",
+    why: "المرء على دين خليله — وهذه الدائرة تُختار مرّة وتُحمل عمرًا.",
+    kids: [
+      {
+        text: "صلة الرحم أسبوعيًّا بلا انقطاع",
+        year: 2027,
+        kids: [
+          { text: "صلة الرحم أسبوعيًّا", quarter: "q1" },
+          { text: "بناء دائرة صحبة صالحة", quarter: "q3" },
+        ],
+      },
+    ],
+  },
+  {
+    text: "عقل مقروء: مئة كتاب ولغة ثانية أتكلّمها بثقة",
+    pillar: "self",
+    why: "ما تقرؤه في ثلاث سنوات هو من ستكون عليه في الرابعة.",
+    kids: [
+      {
+        text: "قراءة أربعة وعشرين كتابًا",
+        year: 2027,
+        target: 24,
+        unit: "كتاب",
+        kids: [{ text: "قراءة ٦ كتب", quarter: "q3", target: 6, unit: "كتاب" }],
+      },
+      {
+        text: "مهارة واحدة تُتقنها إتقانًا يُدفع فيه",
+        year: 2027,
+        kids: [
+          { text: "تعلّم مهارة جديدة كليًّا", quarter: "q4" },
+          { text: "تقليل وقت الشاشات إلى ساعة يوميًّا", quarter: "q2" },
+        ],
+      },
+    ],
+  },
+];
+
+/* Walks the tree into the flat list the app stores, stamping each level with
+   its horizon and each row with the id of the one above it. */
+function buildGoals(tree) {
+  const out = [];
+  const walk = (node, depth, parent, pillar) => {
+    const horizon = HORIZONS[Math.min(depth, HORIZONS.length - 1)].id;
+    const row = goalShape({ ...node, horizon, parent, pillar });
+    out.push(row);
+    for (const kid of node.kids || []) walk(kid, depth + 1, row.id, pillar);
+  };
+  for (const root of tree) walk(root, 0, null, root.pillar);
+  return out;
+}
+
+const SEED_GOALS = () => buildGoals(GOAL_TREE);
+
+/* The rows a profile written before the horizons existed is topped up with:
+   everything above the 90-day line, which it has none of. Matched on text so
+   a user who already typed one of these never gets a second copy beside it. */
+const ADDED_GOALS = () =>
+  SEED_GOALS().filter((g) => g.horizon !== "quarter");
+
+/* Which yearly goal each seeded 90-day goal was written to serve, by text.
+   An existing profile's eighteen goals came from this same seed list before
+   the horizons existed, so matching on text is what lets the migration wire
+   the user's own rows into the tree instead of leaving them orphans beside a
+   duplicate set that does have parents. */
+const SEED_LINKS = (() => {
+  const map = new Map();
+  for (const root of GOAL_TREE)
+    for (const year of root.kids || [])
+      for (const q of year.kids || []) map.set(q.text, year.text);
+  return map;
+})();
 
 const SEED_PROMPTS = [
   {
@@ -3304,7 +3909,7 @@ const freshState = (carry = {}) => ({
   habits: (carry.habits || SEED_HABITS).map((h) => ({ ...h, done: false })),
   tasks: (carry.tasks || SEED_TASKS).map((t) => ({ ...t, done: false })),
   books: carry.books || SEED_BOOKS,
-  goals: carry.goals || SEED_GOALS,
+  goals: carry.goals || SEED_GOALS(),
   sessions: carry.sessions || [],
   income: carry.income || [],
   ventures: carry.ventures || [],
@@ -3325,6 +3930,13 @@ const freshState = (carry = {}) => ({
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
   readGoal: carry.readGoal ?? READ_GOAL_DEFAULT,
+  /* The word and the vision outlive every goal underneath them, so they
+     carry; the glasses of water do not, and are deliberately absent from
+     `carryOf` below — yesterday's water is not today's. */
+  northStar: northStarShape(carry.northStar),
+  place: placeShape(carry.place),
+  waterGoal: clampGoal(carry.waterGoal),
+  water: 0,
   cueImage: carry.cueImage ?? null,
   history: carry.history || [],
   streakBase: carry.streakBase || 0,
@@ -3370,6 +3982,78 @@ function migrate(saved) {
   if (from < 5) {
     const here = currentQuarter();
     goals = goals.map((g) => (g.quarter ? g : { ...g, quarter: here }));
+  }
+
+  /* Schema 19 stacks the goals into three horizons. Everything a schema-18
+     profile holds was a 90-day goal, so that is the horizon it lands in —
+     `goalShape` defaults to it, which is why there is no mapping step here. */
+  goals = goals.map(goalShape);
+
+  if (from < 19) {
+    /* Top up with the two horizons above the 90-day line, which this payload
+       has none of. Matched on text so a user who already wrote one of these
+       himself never ends up with a second copy beside it, and the seed's own
+       ids are kept — the parent links between the added rows are what makes
+       them a tree rather than two flat lists.
+       The match is per horizon, not across all of them: «قراءة ٢٤ كتابًا» as a
+       90-day goal and the same words as a yearly one are two different
+       commitments, and treating the first as proof of the second would leave
+       the yearly row missing and its children with nothing to serve. */
+    const have = new Set(goals.map((g) => `${g.horizon} ${g.text.trim()}`));
+    const added = ADDED_GOALS().filter(
+      (g) => !have.has(`${g.horizon} ${g.text.trim()}`),
+    );
+    goals = [...goals, ...added];
+
+    /* Wire the user's own 90-day goals into the tree. They came from this
+       same seed list before the horizons existed, so the text is the join —
+       and the yearly row matched here may be one just added above or one he
+       had already written, which is exactly why the lookup runs over the
+       merged list rather than over `added`. */
+    const yearByText = new Map(
+      goals
+        .filter((g) => g.horizon === "year")
+        .map((g) => [g.text.trim(), g.id]),
+    );
+    goals = goals.map((g) => {
+      if (g.horizon !== "quarter" || g.parent) return g;
+      const wanted = SEED_LINKS.get(g.text.trim());
+      const parent = wanted ? yearByText.get(wanted.trim()) : null;
+      return parent ? { ...g, parent } : g;
+    });
+  }
+
+  /* A parent is only a shape to `goalShape`; whether it points anywhere real
+     can only be answered with the whole list in hand. Three ways it can be
+     wrong — a goal that no longer exists, one in the wrong horizon, and a
+     goal pointed at itself — and all three are cut to null rather than
+     carried, because `goalPct` would otherwise walk a chain that has no end
+     and take the render down with it. */
+  {
+    const byId = new Map(goals.map((g) => [g.id, g]));
+    goals = goals.map((g) => {
+      if (!g.parent) return g;
+      const up = byId.get(g.parent);
+      const want = parentHorizon(g.horizon);
+      if (!up || up.id === g.id || !want || up.horizon !== want)
+        return { ...g, parent: null };
+      return g;
+    });
+    /* A cycle needs no bad horizon to exist: year→h3 is legal in both
+       directions on its own, so a hand-edited backup can close a loop that
+       every single row passes. Walk each chain to the top and cut the link
+       that comes back round. */
+    const live = new Map(goals.map((g) => [g.id, g]));
+    goals = goals.map((g) => {
+      const seen = new Set([g.id]);
+      let at = g.parent;
+      while (at) {
+        if (seen.has(at)) return { ...g, parent: null };
+        seen.add(at);
+        at = live.get(at)?.parent || null;
+      }
+      return g;
+    });
   }
 
   /* Top up with the routines added in schema 6, matching on label so a
@@ -3563,6 +4247,21 @@ function migrate(saved) {
     readGoal: Number.isFinite(saved.readGoal)
       ? saved.readGoal
       : READ_GOAL_DEFAULT,
+    /* Schema 19 adds the word, the vision, the place the prayer times are
+       computed for and the water goal. None needs a branch: each is a new
+       field with a defined empty value, and its shape runs over the whole
+       payload on the way in — so a schema-18 profile simply arrives with an
+       unwritten vision and the default city, which is what it means.
+       `water` is the one exception and is clamped rather than shaped: it is
+       per-day, and a count above the goal would draw cups that are not
+       there. */
+    northStar: northStarShape(saved.northStar),
+    place: placeShape(saved.place),
+    waterGoal: clampGoal(saved.waterGoal),
+    water:
+      Number.isFinite(+saved.water) && +saved.water > 0
+        ? Math.min(clampGoal(saved.waterGoal), Math.round(+saved.water))
+        : 0,
     cueImage: typeof saved.cueImage === "string" ? saved.cueImage : null,
   };
 }
@@ -3590,6 +4289,9 @@ const carryOf = (s) => ({
   reads: s.reads,
   reading: s.reading,
   readGoal: s.readGoal,
+  northStar: s.northStar,
+  place: s.place,
+  waterGoal: s.waterGoal,
   cueImage: s.cueImage,
   history: s.history,
   bestStreak: s.bestStreak,
@@ -4389,6 +5091,7 @@ function ReadLogModal({ open, book, onClose, onLog }) {
 function HabitRow({
   habit,
   linkedBook,
+  streak = 0,
   onToggle,
   onEdit,
   onDelete,
@@ -4468,6 +5171,24 @@ function HabitRow({
         label={habit.label}
         tint={T.primary}
       />
+      {/* The run you are protecting, where you are protecting it. Two days is
+          not a streak yet, so it stays quiet until there is something to
+          lose — a badge that reads «١» next to every habit is noise. */}
+      {streak >= 2 && (
+        <span
+          title={`${streak} ${dayWord(streak)} متتالية`}
+          className="inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold"
+          style={{
+            background: streak >= 7 ? `${T.ember}24` : "rgba(255,255,255,0.05)",
+            color: streak >= 7 ? T.ember : T.muted,
+          }}
+        >
+          <Flame size={10} />
+          <span dir="ltr" className="tabular-nums">
+            {streak}
+          </span>
+        </span>
+      )}
       {linkedBook && (
         <span
           title={`مربوطة بـ«${linkedBook.title}»`}
@@ -4738,6 +5459,402 @@ function QuotesModal({ open, onClose, quotes, setState }) {
   );
 }
 
+/* --- prayer times ----------------------------------------------------- *
+ *  The six blocks of this routine are anchored to the prayers, so the times
+ *  they are anchored to are shown beside them. Computed locally and never
+ *  fetched — see `prayerTimes` for why that is not an optimisation but a
+ *  requirement. Re-read once a minute, so the "next" marker and the counter
+ *  move while the app sits open rather than waiting for a reload.
+ * ---------------------------------------------------------------------- */
+function PrayerCard({ place, onOpenSettings }) {
+  useMinuteClock(); // the whole card is a function of the clock
+  const now = new Date();
+  const p = placeShape(place);
+  /* Recomputed on every minute tick rather than memoised: it is a dozen trig
+     calls, and a cache keyed on "the place and the day" would need the day
+     in its own dependency list — which is the clock again, by a longer road. */
+  const times = prayerTimes(p, now);
+  const next = nextPrayer(p, now);
+  const mins = now.getHours() * 60 + now.getMinutes();
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3
+            className="flex items-center gap-2 text-[15px] font-extrabold"
+            style={{ color: T.violet }}
+          >
+            <MoonStar size={16} /> أوقات الصلاة
+          </h3>
+          <button
+            onClick={onOpenSettings}
+            className="mt-1 inline-flex items-center gap-1 text-[10.5px] transition-colors hover:text-white/70"
+            style={{ color: T.faint }}
+            title="تغيير المدينة"
+          >
+            <MapPin size={10} /> {p.label}
+            {p.asr === 2 && " · حنفي"}
+          </button>
+        </div>
+        {next && (
+          <div className="shrink-0 text-left">
+            <p className="text-[10px]" style={{ color: T.faint }}>
+              {next.tomorrow ? "فجر غدٍ بعد" : `${next.label} بعد`}
+            </p>
+            <p
+              dir="ltr"
+              className="text-[15px] font-extrabold tabular-nums"
+              style={{ color: T.cta }}
+            >
+              {next.left >= 60
+                ? `${Math.floor(next.left / 60)}:${String(next.left % 60).padStart(2, "0")}`
+                : `${next.left} د`}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {PRAYERS.map((row) => {
+          const t = times[row.id];
+          const at = t === null || !Number.isFinite(t) ? null : fixHour(t) * 60;
+          const on = !row.mark && next && next.id === row.id && !next.tomorrow;
+          /* Passed, so it is behind you — dimmed rather than hidden, because
+             «هل صليت العصر؟» is answered by seeing that it has gone by. */
+          const past = at !== null && at <= mins;
+          const Icon = row.icon;
+          return (
+            <div
+              key={row.id}
+              className="rounded-xl border px-2 py-2.5 text-center transition-all duration-300"
+              style={{
+                borderColor: on ? `${T.cta}80` : `${row.tint}2E`,
+                background: on ? `${T.cta}1F` : `${row.tint}0D`,
+                boxShadow: on ? `0 0 20px -8px ${T.cta}` : "none",
+                opacity: past && !on ? 0.45 : 1,
+              }}
+            >
+              <Icon
+                size={13}
+                className="mx-auto"
+                style={{ color: on ? T.cta : row.tint }}
+              />
+              <p
+                dir="ltr"
+                className="mt-1 text-[13.5px] font-extrabold tabular-nums"
+                style={{ color: on ? T.ctaLift : row.tint }}
+              >
+                {clockAt(t)}
+              </p>
+              <p className="truncate text-[9.5px]" style={{ color: on ? T.ctaLift : T.faint }}>
+                {row.label}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[10px] leading-relaxed" style={{ color: T.faint }}>
+        محسوبة على طريقة أم القرى محليًّا — تعمل بلا إنترنت، ولا تُحمّل من أي
+        خدمة.
+      </p>
+    </Card>
+  );
+}
+
+/* --- water ------------------------------------------------------------ *
+ *  A cup per glass, tapped to fill up to that point. Tapping the glass that
+ *  is already the last full one takes it back off instead of doing nothing —
+ *  a tracker you cannot correct is one you stop trusting after the first
+ *  mis-tap. The count is per-day and resets with the rollover.
+ * ---------------------------------------------------------------------- */
+function WaterCard({ count, goal, onSet }) {
+  const [burst, fireBurst] = useBurst(700);
+  const n = Math.min(goal, Math.max(0, count || 0));
+  const pct = goal ? Math.round((n / goal) * 100) : 0;
+  const full = n >= goal;
+
+  const tap = (i) => {
+    const to = n === i ? i - 1 : i;
+    if (to > n && to >= goal) fireBurst();
+    onSet(to);
+  };
+
+  return (
+    <Card className={`p-5 sm:p-6${burst ? " los-reward" : ""}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3
+          className="flex items-center gap-2 text-[15px] font-extrabold"
+          style={{ color: full ? T.primary : T.sky }}
+        >
+          <Droplets size={16} /> شرب الماء
+        </h3>
+        <span
+          dir="ltr"
+          className="shrink-0 rounded-lg px-2 py-0.5 text-[11.5px] font-extrabold tabular-nums"
+          style={{
+            background: full ? `${T.primary}1A` : "rgba(255,255,255,0.05)",
+            color: full ? T.primary : T.muted,
+          }}
+        >
+          {n} / {goal}
+        </span>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {Array.from({ length: goal }, (_, i) => {
+          const on = i < n;
+          return (
+            <button
+              key={i}
+              onClick={() => tap(i + 1)}
+              aria-label={`كوب ${i + 1}`}
+              aria-pressed={on}
+              title={`كوب ${i + 1}`}
+              className="relative h-10 w-7 overflow-hidden rounded-b-lg rounded-t-sm border transition-all duration-200 hover:scale-110 active:scale-95"
+              style={{
+                borderColor: on ? `${T.sky}99` : T.border,
+                background: "rgba(255,255,255,0.03)",
+                boxShadow: on ? `0 0 14px -6px ${T.sky}` : "none",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 bottom-0 transition-all duration-500"
+                style={{
+                  height: on ? "78%" : "0%",
+                  backgroundImage: `linear-gradient(180deg, ${T.sky}CC, ${T.indigo}E6)`,
+                }}
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="mt-4 h-1.5 w-full overflow-hidden rounded-full"
+        style={{ background: "rgba(255,255,255,0.07)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${pct}%`,
+            backgroundImage: full
+              ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
+              : `linear-gradient(90deg, ${T.sky}, ${T.indigo})`,
+            boxShadow: pct ? `0 0 12px ${full ? T.primary : T.sky}99` : "none",
+          }}
+        />
+      </div>
+      <p
+        className="mt-2.5 text-[10.5px] leading-relaxed"
+        style={{ color: full ? T.primary : T.faint }}
+      >
+        {full ? (
+          "بلغت هدفك اليوم 💧"
+        ) : (
+          <>
+            بقي{" "}
+            <span dir="ltr" className="tabular-nums">
+              {goal - n}
+            </span>{" "}
+            {cupWord(goal - n)}
+            {/* Only once there is something to undo. Offering the way back
+                before the first cup is filled is an instruction with nothing
+                to act on. */}
+            {n > 0 && " — اضغط الكوب الممتلئ الأخير للتراجع."}
+          </>
+        )}
+      </p>
+    </Card>
+  );
+}
+
+/* --- the habit ledger ------------------------------------------------- *
+ *  The routine screen answers «ماذا عليّ اليوم؟». This answers the question
+ *  that actually changes behaviour: «على أيّ عادة أصمد، وأيّها تسقط أولًا؟»
+ *
+ *  Every figure is derived from the archive — see `habitStreak` and friends.
+ *  Nothing new is stored, so this view can never disagree with the history
+ *  the calendar and the monthly tracker read from.
+ * ---------------------------------------------------------------------- */
+const LEDGER_WINDOWS = [
+  { id: 30, label: "٣٠ يومًا" },
+  { id: 90, label: "٩٠ يومًا" },
+  { id: 0, label: "الكل" },
+];
+
+function HabitLedgerRow({ habit, by, win }) {
+  const group = GROUPS.find((g) => g.id === habit.group);
+  const tint = group?.tint || T.accent;
+  const run = habitStreak(by, habit.id);
+  const best = habitBest(by, habit.id);
+  const { kept, asked, pct } = habitTally(by, habit.id, win);
+  const strip = habitStrip(by, habit.id, 30);
+  const hot = run >= 3;
+
+  return (
+    <div
+      className="rounded-xl border px-3.5 py-3"
+      style={{
+        borderColor: hot ? `${T.ember}3D` : T.border,
+        background: hot ? `${T.ember}0A` : "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div className="flex items-baseline gap-2">
+        <p
+          className="min-w-0 flex-1 truncate text-[12.5px] font-bold"
+          style={{ color: T.fg }}
+          title={habit.label}
+        >
+          {habit.label}
+        </p>
+        {run > 0 && (
+          <span
+            className="flex shrink-0 items-center gap-1 text-[11px] font-extrabold"
+            style={{ color: hot ? T.ember : T.muted }}
+            title={`${run} ${dayWord(run)} متتالية`}
+          >
+            <Flame size={11} className={hot ? "los-flame" : ""} />
+            <span dir="ltr" className="tabular-nums">
+              {run}
+            </span>
+          </span>
+        )}
+        {best > 0 && (
+          <span
+            className="flex shrink-0 items-center gap-1 text-[10.5px]"
+            style={{ color: T.accent }}
+            title={`أطول سلسلة: ${best} ${dayWord(best)}`}
+          >
+            <Star size={10} />
+            <span dir="ltr" className="tabular-nums">
+              {best}
+            </span>
+          </span>
+        )}
+        <span
+          dir="ltr"
+          className="w-9 shrink-0 text-left text-[12.5px] font-extrabold tabular-nums"
+          style={{
+            color: pct >= 80 ? T.primary : pct >= 50 ? T.accent : pct > 0 ? T.ember : T.faint,
+          }}
+        >
+          {asked ? `${pct}%` : "—"}
+        </span>
+      </div>
+
+      {/* Thirty days, oldest on the right because the page reads right to
+          left: today is the dot nearest the left edge. */}
+      <div className="mt-2.5 flex flex-row-reverse flex-wrap justify-end gap-[3px]">
+        {strip.map((d) => (
+          <span
+            key={d.key}
+            title={d.key}
+            className="h-2.5 w-2.5 shrink-0 rounded-[3px] transition-colors"
+            style={{
+              background:
+                d.state === "kept"
+                  ? T.primary
+                  : d.state === "missed"
+                    ? `${T.danger}59`
+                    : "rgba(255,255,255,0.06)",
+              boxShadow: d.state === "kept" ? `0 0 6px ${T.primary}66` : "none",
+            }}
+          />
+        ))}
+      </div>
+
+      <p className="mt-2 flex items-center gap-1.5 text-[9.5px]" style={{ color: T.faint }}>
+        {group && <span style={{ color: tint }}>{group.label}</span>}
+        {group && "·"}
+        <span dir="ltr" className="tabular-nums">
+          {kept}/{asked}
+        </span>{" "}
+        {dayWord(asked)}
+      </p>
+    </div>
+  );
+}
+
+function HabitLedger({ state }) {
+  const [win, setWin] = useState(30);
+  const by = useMemo(() => historyIndex(state.history), [state.history]);
+  const habits = state.habits || [];
+
+  /* Sorted by what is standing, not alphabetically: the longest run at the
+     top is the one to protect, and the bottom of the list is where the next
+     percentage point is hiding. */
+  const sorted = useMemo(() => {
+    return habits
+      .map((h) => ({ h, run: habitStreak(by, h.id), t: habitTally(by, h.id, win) }))
+      .sort((a, b) => b.run - a.run || b.t.pct - a.t.pct)
+      .map((x) => x.h);
+  }, [habits, by, win]);
+
+  const any = by.size > 0;
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            className="flex items-center gap-2 text-[17px] font-extrabold"
+            style={{ color: T.ctaLift }}
+          >
+            <Flame size={17} /> سجل العادات
+          </h3>
+          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            لكل عادة سلسلتها وأطول ما بلغته وثلاثون يومًا من سجلّها. المربّع
+            الممتلئ يومٌ التزمت فيه، والباهت يومٌ لم تكن العادة فيه مطلوبة.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          {LEDGER_WINDOWS.map((w) => {
+            const on = w.id === win;
+            return (
+              <button
+                key={w.id}
+                onClick={() => setWin(w.id)}
+                aria-pressed={on}
+                className="rounded-lg border px-2.5 py-1 text-[10.5px] font-bold transition-all duration-200"
+                style={{
+                  borderColor: on ? `${T.cta}80` : T.border,
+                  background: on ? `${T.cta}1F` : "transparent",
+                  color: on ? T.ctaLift : T.faint,
+                }}
+              >
+                {w.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {!any ? (
+        <p
+          className="mt-5 rounded-xl border border-dashed py-10 text-center text-[11.5px] leading-relaxed"
+          style={{ borderColor: T.border, color: T.faint }}
+        >
+          لا سجلّ بعد — يبدأ العدّ من اليوم.
+          <br />
+          كل يوم تؤشّر فيه عادةً يضيف عمودًا هنا.
+        </p>
+      ) : sorted.length === 0 ? (
+        <p className="mt-5 py-8 text-center text-[11.5px]" style={{ color: T.faint }}>
+          لا عادات في روتينك بعد.
+        </p>
+      ) : (
+        <div className="mt-5 grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {sorted.map((h) => (
+            <HabitLedgerRow key={h.id} habit={h} by={by} win={win} />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function RoutineModule({
   state,
   setState,
@@ -4749,6 +5866,7 @@ function RoutineModule({
   savedAt,
   onOpenMirror,
   onOpenReflect,
+  onOpenSettings,
   reflected,
 }) {
   const [editing, setEditing] = useState(null); // {id?, label, group}
@@ -4872,6 +5990,9 @@ function RoutineModule({
     setState((s) => ({ ...s, habits: nudgeHabit(s.habits, id, dir) }));
 
   const done = state.habits.filter((h) => h.done).length;
+  /* Indexed once for the whole screen: every row asks for its own run, and
+     rebuilding the map per row would walk the archive once per habit. */
+  const archive = useMemo(() => historyIndex(state.history), [state.history]);
   const flame =
     discipline >= STREAK_TARGET
       ? { color: T.ember, glow: `drop-shadow(0 0 14px ${T.ember})`, animate: true }
@@ -5027,6 +6148,23 @@ function RoutineModule({
 
       <TopThree state={state} setState={setState} />
 
+      {/* The prayers the six blocks below are anchored to, and the one meter
+          that is not a habit. Side by side because they answer the same
+          question — «أين أنا من يومي الآن؟» — from two directions. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <PrayerCard place={state.place} onOpenSettings={onOpenSettings} />
+        <WaterCard
+          count={state.water}
+          goal={clampGoal(state.waterGoal)}
+          onSet={(n) =>
+            setState((s) => ({
+              ...s,
+              water: Math.max(0, Math.min(clampGoal(s.waterGoal), n)),
+            }))
+          }
+        />
+      </div>
+
       {/* habit groups */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {GROUPS.map((g) => {
@@ -5108,6 +6246,7 @@ function RoutineModule({
                       key={h.id}
                       habit={h}
                       linkedBook={bookForHabit(h, state.books)}
+                      streak={habitStreak(archive, h.id)}
                       first={idx === 0}
                       last={idx === list.length - 1}
                       dragging={dragging}
@@ -5120,7 +6259,16 @@ function RoutineModule({
                       onNudge={(dir) => nudge(h.id, dir)}
                       onToggle={() => toggle(h.id)}
                       onEdit={() =>
-                        setEditing({ id: h.id, label: h.label, group: h.group })
+                        /* `book` has to be seeded here: the form writes
+                           `book: editing.book || null` on save, so opening it
+                           without the current link silently unlinks a reading
+                           habit the moment its name is corrected. */
+                        setEditing({
+                          id: h.id,
+                          label: h.label,
+                          group: h.group,
+                          book: h.book || null,
+                        })
                       }
                       onDelete={() => remove(h.id)}
                     />
@@ -5131,6 +6279,8 @@ function RoutineModule({
           );
         })}
       </div>
+
+      <HabitLedger state={state} />
 
       <ReadLogModal
         open={!!logging}
@@ -6413,10 +7563,254 @@ function DeepWorkModule({ state, setState }) {
 }
 
 /* ==================================================================== *
- *  MODULE — 2027 goals, by pillar
+ *  MODULE — goals across three horizons
+ *
+ *  A 90-day goal that serves nothing is a chore with a deadline. The screen
+ *  is built around the chain rather than around a flat list: three years, the
+ *  year, and the ninety days you are in — each row knowing the one above it
+ *  that it serves and the ones below it that carry it.
+ *
+ *  The card is a glance and the desk is where the work happens, the same
+ *  split the library and the university desk already use. A goal's reason,
+ *  its meter, its milestones and its deadline all live on the desk; the card
+ *  shows only what you scan for.
  * ==================================================================== */
-function GoalRow({ goal, onToggle, onEdit, onDelete }) {
+
+/* The word and the vision. Above every goal on the screen, because it is
+   what the goals are for — eighteen targets with no sentence saying who they
+   are building is a list abandoned in March. */
+function NorthStarCard({ value, onSave }) {
+  const [draft, setDraft] = useState(null); // null = reading, object = editing
+  const star = value || { word: "", vision: "" };
+  const empty = !star.word.trim() && !star.vision.trim();
+
+  const commit = () => {
+    onSave({
+      word: draft.word.trim().slice(0, WORD_MAX),
+      vision: draft.vision.trim().slice(0, VISION_MAX),
+    });
+    setDraft(null);
+  };
+
+  return (
+    <Card className="relative overflow-hidden p-6 sm:p-7">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 left-1/4 h-56 w-56 rounded-full opacity-25 blur-3xl"
+        style={{ background: T.violet }}
+      />
+      <div className="relative flex flex-wrap items-start justify-between gap-3">
+        <h3
+          className="flex items-center gap-2 text-[16px] font-extrabold"
+          style={{ color: T.accent }}
+        >
+          <Compass size={17} /> كلمة سنتي ورؤيتي
+        </h3>
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            setDraft(draft ? null : { word: star.word, vision: star.vision })
+          }
+          style={{ borderColor: T.border }}
+        >
+          {draft ? <X size={13} /> : <SquarePen size={13} />}
+          {draft ? "إلغاء" : empty ? "اكتبها" : "تعديل"}
+        </Btn>
+      </div>
+
+      {draft ? (
+        <div className="los-in relative mt-4 space-y-3.5">
+          <div>
+            <label
+              htmlFor="los-ns-word"
+              className="mb-1.5 block text-xs"
+              style={{ color: T.muted }}
+            >
+              كلمة واحدة تحكم السنة
+            </label>
+            <Field
+              id="los-ns-word"
+              autoFocus
+              maxLength={WORD_MAX}
+              value={draft.word}
+              onChange={(e) => setDraft((d) => ({ ...d, word: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && commit()}
+              placeholder="مثال: إتقان"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="los-ns-vision"
+              className="mb-1.5 block text-xs"
+              style={{ color: T.muted }}
+            >
+              الرؤية — من تريد أن تكون في نهاية {ARC_LABEL}؟
+            </label>
+            <Field
+              as="textarea"
+              id="los-ns-vision"
+              rows={4}
+              maxLength={VISION_MAX}
+              value={draft.vision}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, vision: e.target.value }))
+              }
+              placeholder="اكتبها بصيغة الحاضر، كأنها قد تحقّقت: «أنا رجل يقوم لصلاته، يقرأ كل يوم، ويعمل فيما يحبّ…»"
+              className="resize-none leading-relaxed"
+            />
+            <p className="mt-1 text-left text-[10px] tabular-nums" dir="ltr" style={{ color: T.faint }}>
+              {draft.vision.length}/{VISION_MAX}
+            </p>
+          </div>
+          <Btn variant="default" size="sm" onClick={commit}>
+            <Check size={13} strokeWidth={3} /> احفظ
+          </Btn>
+        </div>
+      ) : empty ? (
+        <p
+          className="relative mt-4 text-[12.5px] leading-relaxed"
+          style={{ color: T.faint }}
+        >
+          لم تكتب كلمتك بعد. كلمة واحدة وسطرٌ عن الرجل الذي تبنيه — هي ما
+          يُبقيك على الأهداف حين يفتر الحافز.
+        </p>
+      ) : (
+        <div className="relative mt-4">
+          {star.word.trim() && (
+            <p
+              className="los-title text-3xl font-extrabold leading-tight sm:text-4xl"
+              style={{ wordBreak: "break-word" }}
+            >
+              {star.word}
+            </p>
+          )}
+          {star.vision.trim() && (
+            <p
+              className="mt-3 max-w-2xl whitespace-pre-line text-[13px] leading-relaxed"
+              style={{ color: T.muted }}
+            >
+              {star.vision}
+            </p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* A compact meter row. Used on the card and again on the desk, so the two
+   can never show a different number for the same goal. */
+function GoalMeter({ goal, pct, tint, onStep }) {
+  const has = goal.target > 0;
+  const full = pct >= 100;
+  const bar = full ? T.primary : tint;
+  return (
+    <div>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full"
+        style={{ background: "rgba(255,255,255,0.07)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${Math.min(100, pct)}%`,
+            backgroundImage: `linear-gradient(90deg, ${bar}, ${bar}AA)`,
+            boxShadow: pct ? `0 0 12px ${bar}99` : "none",
+          }}
+        />
+      </div>
+      {has && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span dir="ltr" className="text-[11px] tabular-nums" style={{ color: T.faint }}>
+            {goal.current} / {goal.target}
+            {goal.unit ? ` ${goal.unit}` : ""}
+          </span>
+          {onStep && (
+            <span className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onStep(-goal.step)}
+                disabled={goal.current <= 0}
+                aria-label={`أنقص ${goal.text}`}
+                className="flex h-6 w-6 items-center justify-center rounded-md border transition-all active:scale-90 disabled:opacity-25"
+                style={{ borderColor: T.border, color: T.muted }}
+              >
+                <Minus size={11} strokeWidth={3} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onStep(goal.step)}
+                disabled={goal.current >= goal.target}
+                aria-label={`زد ${goal.text}`}
+                className="flex h-6 w-6 items-center justify-center rounded-md border transition-all active:scale-90 disabled:opacity-25"
+                style={{ borderColor: `${tint}4D`, color: tint }}
+              >
+                <Plus size={11} strokeWidth={3} />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* «بقي ١٢ يومًا», «اليوم آخر يوم», «فات موعده قبل ٣ أيام». A window that has
+   closed has to say so — a goal silently sitting past its deadline is the
+   one state a planner must never render as normal. */
+function DeadlineChip({ day, done }) {
+  const left = daysTo(day);
+  if (left === null) return null;
+  const over = left < 0;
+  const tint = done
+    ? T.primary
+    : over
+      ? T.danger
+      : left <= 7
+        ? T.cta
+        : left <= 30
+          ? T.accent
+          : T.faint;
+  const n = Math.abs(over ? left : left);
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+      style={{ background: `${tint}1A`, color: tint }}
+      title={day}
+    >
+      <Hourglass size={9} />
+      {left === 0 ? (
+        "اليوم آخر يوم"
+      ) : over ? (
+        <>
+          فات قبل{" "}
+          <span dir="ltr" className="tabular-nums">
+            {n}
+          </span>{" "}
+          {dayWord(n)}
+        </>
+      ) : (
+        <>
+          بقي{" "}
+          <span dir="ltr" className="tabular-nums">
+            {n}
+          </span>{" "}
+          {dayWord(n)}
+        </>
+      )}
+    </span>
+  );
+}
+
+function GoalCard({ goal, all, parent, kids, onToggle, onStep, onOpen }) {
   const [burst, fireBurst] = useBurst(700);
+  const p = pillarOf(goal.pillar);
+  const pct = goalPct(goal, all);
+  const ripe = pct >= 100 && !goal.done;
+  const Icon = p.icon;
+  const childLabel = horizonOf(goal.horizon).child;
+  const kidsDone = kids.filter((k) => k.done).length;
 
   const handle = () => {
     if (!goal.done) fireBurst();
@@ -6425,131 +7819,778 @@ function GoalRow({ goal, onToggle, onEdit, onDelete }) {
 
   return (
     <div
-      className={`group flex items-center gap-1 rounded-lg border transition-all duration-200${
+      className={`rounded-2xl border p-3.5 transition-all duration-200${
         burst ? " los-reward" : ""
       }`}
       style={{
-        borderColor: burst ? T.primary : "transparent",
-        background: burst
-          ? `${T.primary}26`
+        borderColor: burst
+          ? T.primary
           : goal.done
+            ? `${T.primary}4D`
+            : ripe
+              ? `${T.accent}4D`
+              : T.border,
+        backgroundColor: goal.done
           ? `${T.primary}0F`
-          : "transparent",
+          : "rgba(255,255,255,0.03)",
       }}
     >
-      {/* Emerald, never the pillar's pastel — done is done, and it has to
-          read that way at a glance. The pillar colours its own chrome. */}
-      <Checkbox
-        checked={goal.done}
-        onToggle={handle}
-        label={goal.text}
-        tint={T.primary}
-        size="sm"
-      />
-      <button
-        onClick={onEdit}
-        aria-label={`تعديل ${goal.text}`}
-        className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-white/70 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      >
-        <Pencil size={13} />
-      </button>
-      <button
-        onClick={onDelete}
-        aria-label={`حذف ${goal.text}`}
-        className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      >
-        <Trash2 size={13} />
-      </button>
+      <div className="flex items-start gap-1">
+        <Checkbox
+          checked={goal.done}
+          onToggle={handle}
+          label={goal.text}
+          tint={T.primary}
+          size="sm"
+        />
+        <button
+          onClick={onOpen}
+          aria-label={`مكتب ${goal.text}`}
+          title="افتح المكتب"
+          className="shrink-0 rounded p-1.5 transition-all hover:scale-110"
+          style={{ color: p.tint }}
+        >
+          <SquarePen size={13} />
+        </button>
+      </div>
+
+      <div className="mt-2.5">
+        <GoalMeter goal={goal} pct={pct} tint={p.tint} onStep={onStep} />
+      </div>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+          style={{ background: `${p.tint}1A`, color: p.tint }}
+        >
+          <Icon size={9} />
+          {p.label}
+        </span>
+        <span
+          dir="ltr"
+          className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold tabular-nums"
+          style={{
+            background: pct >= 100 ? `${T.primary}1A` : "rgba(255,255,255,0.05)",
+            color: pct >= 100 ? T.primary : T.muted,
+          }}
+        >
+          {pct}%
+        </span>
+        <DeadlineChip day={goalEnd(goal)} done={goal.done} />
+        {goal.steps.length > 0 && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px]"
+            style={{ background: "rgba(255,255,255,0.05)", color: T.faint }}
+          >
+            <ListChecks size={9} />
+            <span dir="ltr" className="tabular-nums">
+              {goal.steps.filter((s) => s.done).length}/{goal.steps.length}
+            </span>
+          </span>
+        )}
+        {kids.length > 0 && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px]"
+            style={{ background: `${T.sky}14`, color: T.sky }}
+            title={`${childLabel || "هدف"} يخدم هذا الهدف`}
+          >
+            <Layers size={9} />
+            <span dir="ltr" className="tabular-nums">
+              {kidsDone}/{kids.length}
+            </span>
+          </span>
+        )}
+        {goal.why.trim() && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px]"
+            style={{ background: `${T.violet}14`, color: T.violet }}
+            title={goal.why}
+          >
+            <Lightbulb size={9} /> لماذا
+          </span>
+        )}
+      </div>
+
+      {/* The one line the chain is for: what this goal is in service of. */}
+      {parent ? (
+        <p
+          className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed"
+          style={{ color: T.faint }}
+        >
+          <Link2 size={10} className="mt-0.5 shrink-0" style={{ color: T.sky }} />
+          <span>
+            يخدم:{" "}
+            <span style={{ color: T.muted }}>{parent.text}</span>
+          </span>
+        </p>
+      ) : (
+        goal.horizon !== "h3" && (
+          <p
+            className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed"
+            style={{ color: `${T.accent}B3` }}
+          >
+            <AlertTriangle size={10} className="mt-0.5 shrink-0" />
+            <span>لا يخدم هدفًا أعلى — اربطه من المكتب.</span>
+          </p>
+        )
+      )}
+
+      {ripe && (
+        <p
+          className="los-in mt-2 flex items-center gap-1.5 text-[10px] font-bold"
+          style={{ color: T.accent }}
+        >
+          <Check size={11} strokeWidth={3} /> اكتمل القياس — علّمه مُحقَّقًا
+        </p>
+      )}
     </div>
   );
 }
 
+/* --- the desk --------------------------------------------------------- *
+ *  Everything a goal is, in one place: the horizon, the window, the reason,
+ *  the meter, the milestones, the deadline and the goal it serves. Edits are
+ *  applied live through `onPatch` rather than held in a draft and saved at
+ *  the end — the same way the book and course desks work, so closing the
+ *  sheet can never be the thing that loses a milestone.
+ * ---------------------------------------------------------------------- */
+function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
+  const [step, setStep] = useState("");
+  /* Every hook runs before the early return, without exception. This sheet is
+     rendered with `goal === null` whenever it is shut, so a `useMemo` placed
+     after the guard would run on open and not on close — which is React
+     error #310 and a blank screen, not a warning. */
+  const below = useMemo(() => {
+    const out = new Set();
+    if (!goal) return out;
+    const walk = (id, depth) => {
+      if (depth > HORIZONS.length) return;
+      for (const g of all)
+        if (g.parent === id && !out.has(g.id)) {
+          out.add(g.id);
+          walk(g.id, depth + 1);
+        }
+    };
+    walk(goal.id, 0);
+    return out;
+  }, [all, goal]);
+
+  if (!goal) return null;
+
+  const h = horizonOf(goal.horizon);
+  const p = pillarOf(goal.pillar);
+  const pct = goalPct(goal, all);
+  const want = parentHorizon(goal.horizon);
+  const kids = all.filter((g) => g.parent === goal.id);
+  /* Only goals one horizon up may be a parent, and never one already below
+     this goal in the chain — that is the loop `migrate` has to repair, and it
+     is cheaper to make it unreachable in the picker than to repair it later. */
+  const options = want
+    ? all.filter((g) => g.horizon === want && g.id !== goal.id && !below.has(g.id))
+    : [];
+
+  const addStep = () => {
+    const text = step.trim();
+    if (!text) return;
+    onPatch({ steps: [...goal.steps, { id: uid(), text, done: false }] });
+    setStep("");
+  };
+
+  const label = "mb-1.5 block text-xs";
+
+  return (
+    <Modal open={!!goal} onClose={onClose} title="مكتب الهدف" wide>
+      <div className="space-y-5">
+        <div>
+          <label htmlFor="los-gd-text" className={label} style={{ color: T.muted }}>
+            الهدف
+          </label>
+          <Field
+            id="los-gd-text"
+            value={goal.text}
+            onChange={(e) => onPatch({ text: e.target.value })}
+            placeholder="مثال: ختم القرآن تدبّرًا مرّتين"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-bold"
+            style={{ background: `${h.tint}1A`, color: h.tint }}
+          >
+            <h.icon size={12} /> {h.label}
+          </span>
+          <span
+            dir="ltr"
+            className="rounded-lg px-2 py-1 text-[12px] font-extrabold tabular-nums"
+            style={{
+              background: pct >= 100 ? `${T.primary}1A` : "rgba(255,255,255,0.05)",
+              color: pct >= 100 ? T.primary : T.muted,
+            }}
+          >
+            {pct}%
+          </span>
+          <DeadlineChip day={goalEnd(goal)} done={goal.done} />
+          <Btn
+            variant={goal.done ? "default" : "outline"}
+            size="sm"
+            className="mr-auto"
+            onClick={() => onPatch({ done: !goal.done })}
+          >
+            <Check size={13} strokeWidth={3} />
+            {goal.done ? "مُحقَّق" : "علّمه مُحقَّقًا"}
+          </Btn>
+        </div>
+
+        {/* why */}
+        <div>
+          <label htmlFor="los-gd-why" className={label} style={{ color: T.muted }}>
+            لماذا هذا الهدف؟
+          </label>
+          <Field
+            as="textarea"
+            id="los-gd-why"
+            rows={2}
+            value={goal.why}
+            onChange={(e) => onPatch({ why: e.target.value.slice(0, 400) })}
+            placeholder="السبب الذي يحملك عليه في الشهر السابع، لا في الأول."
+            className="resize-none leading-relaxed"
+          />
+        </div>
+
+        {/* the window */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <span className={label} style={{ color: T.muted }}>
+              الأفق
+            </span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {HORIZONS.map((x) => {
+                const on = x.id === goal.horizon;
+                return (
+                  <button
+                    key={x.id}
+                    type="button"
+                    onClick={() =>
+                      /* Changing horizon invalidates the parent: a 90-day goal
+                         promoted to a yearly one cannot still serve the yearly
+                         goal it used to. Cutting it here is what keeps the
+                         chain legal without a repair pass. */
+                      on
+                        ? undefined
+                        : onPatch({ horizon: x.id, parent: null })
+                    }
+                    aria-pressed={on}
+                    className="rounded-xl border px-2 py-2 text-[10.5px] font-bold transition-all"
+                    style={{
+                      borderColor: on ? `${x.tint}80` : T.border,
+                      background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)",
+                      color: on ? x.tint : T.muted,
+                    }}
+                  >
+                    {x.short}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <span className={label} style={{ color: T.muted }}>
+              {goal.horizon === "quarter" ? "الربع والسنة" : "السنة"}
+            </span>
+            <div className="flex gap-1.5">
+              {goal.horizon === "quarter" &&
+                QUARTERS.map((q) => {
+                  const on = q.id === goal.quarter;
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => onPatch({ quarter: q.id })}
+                      aria-pressed={on}
+                      className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold transition-all"
+                      style={{
+                        borderColor: on ? `${q.tint}80` : T.border,
+                        background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)",
+                        color: on ? q.tint : T.muted,
+                      }}
+                      title={q.months}
+                    >
+                      {q.id.toUpperCase()}
+                    </button>
+                  );
+                })}
+              {goal.horizon !== "h3" &&
+                GOAL_YEARS.map((y) => {
+                  const on = y === goal.year;
+                  return (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => onPatch({ year: y })}
+                      aria-pressed={on}
+                      dir="ltr"
+                      className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold tabular-nums transition-all"
+                      style={{
+                        borderColor: on ? `${T.accent}80` : T.border,
+                        background: on ? `${T.accent}1F` : "rgba(255,255,255,0.03)",
+                        color: on ? T.accent : T.muted,
+                      }}
+                    >
+                      {y}
+                    </button>
+                  );
+                })}
+              {goal.horizon === "h3" && (
+                <p
+                  className="flex-1 rounded-xl border px-3 py-2 text-center text-[10.5px] font-bold"
+                  style={{ borderColor: T.border, color: T.faint }}
+                >
+                  {ARC_LABEL}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* pillar */}
+        <div>
+          <span className={label} style={{ color: T.muted }}>
+            الركيزة
+          </span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {PILLARS.map((x) => {
+              const on = x.id === goal.pillar;
+              const XIcon = x.icon;
+              return (
+                <button
+                  key={x.id}
+                  type="button"
+                  onClick={() => onPatch({ pillar: x.id })}
+                  aria-pressed={on}
+                  className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all"
+                  style={{
+                    borderColor: on ? `${x.tint}80` : T.border,
+                    background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? x.tint : T.muted,
+                  }}
+                >
+                  <XIcon size={14} strokeWidth={2} />
+                  {x.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* the chain */}
+        {want && (
+          <div>
+            <label htmlFor="los-gd-parent" className={label} style={{ color: T.muted }}>
+              يخدم هدف «{horizonOf(want).label}»
+            </label>
+            <select
+              id="los-gd-parent"
+              value={goal.parent || ""}
+              onChange={(e) => onPatch({ parent: e.target.value || null })}
+              className="w-full rounded-xl border bg-transparent px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-white/30"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              <option value="" style={{ background: T.cardSolid }}>
+                — لا يخدم شيئًا بعد —
+              </option>
+              {options.map((g) => (
+                <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>
+                  {g.text}
+                </option>
+              ))}
+            </select>
+            {options.length === 0 && (
+              <p className="mt-1.5 text-[10.5px]" style={{ color: T.accent }}>
+                لا أهداف في أفق «{horizonOf(want).label}» بعد — أضف واحدًا أولًا
+                ليصبح لهذا الهدف ما يخدمه.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* the meter */}
+        <div
+          className="rounded-2xl border p-4"
+          style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+        >
+          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
+            <Gauge size={14} /> القياس
+          </p>
+          <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            هدف بلا رقم لا يُقاس. اتركه صفرًا إن كان هدفًا بنعم أو لا — حينها
+            تقيسه خطواته أو الأهداف التي تخدمه.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <label htmlFor="los-gd-target" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                الهدف الرقمي
+              </label>
+              <Field
+                id="los-gd-target"
+                type="number"
+                min="0"
+                dir="ltr"
+                value={goal.target || ""}
+                onChange={(e) => {
+                  const target = Math.max(0, Math.round(+e.target.value) || 0);
+                  onPatch({
+                    target,
+                    current: target > 0 ? Math.min(target, goal.current) : goal.current,
+                  });
+                }}
+                placeholder="0"
+                className="tabular-nums"
+              />
+            </div>
+            <div>
+              <label htmlFor="los-gd-current" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                المُحقَّق
+              </label>
+              <Field
+                id="los-gd-current"
+                type="number"
+                min="0"
+                dir="ltr"
+                value={goal.current || ""}
+                onChange={(e) => {
+                  const n = Math.max(0, Math.round(+e.target.value) || 0);
+                  onPatch({ current: goal.target > 0 ? Math.min(goal.target, n) : n });
+                }}
+                placeholder="0"
+                className="tabular-nums"
+              />
+            </div>
+            <div>
+              <label htmlFor="los-gd-unit" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                الوحدة
+              </label>
+              <Field
+                id="los-gd-unit"
+                maxLength={16}
+                value={goal.unit}
+                onChange={(e) => onPatch({ unit: e.target.value })}
+                placeholder="كتاب"
+              />
+            </div>
+            <div>
+              <label htmlFor="los-gd-step" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                مقدار الخطوة
+              </label>
+              <Field
+                id="los-gd-step"
+                type="number"
+                min="1"
+                dir="ltr"
+                value={goal.step}
+                onChange={(e) =>
+                  onPatch({ step: Math.max(1, Math.round(+e.target.value) || 1) })
+                }
+                className="tabular-nums"
+              />
+            </div>
+          </div>
+          {goal.target > 0 && (
+            <div className="mt-3.5">
+              <GoalMeter
+                goal={goal}
+                pct={pct}
+                tint={p.tint}
+                onStep={(n) =>
+                  onPatch({
+                    current: Math.max(0, Math.min(goal.target, goal.current + n)),
+                  })
+                }
+              />
+            </div>
+          )}
+        </div>
+
+        {/* deadline */}
+        <div>
+          <label htmlFor="los-gd-deadline" className={label} style={{ color: T.muted }}>
+            موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <DateField
+              id="los-gd-deadline"
+              value={goal.deadline}
+              onChange={(v) => onPatch({ deadline: v })}
+            />
+            {goal.deadline && (
+              <Btn variant="ghost" size="sm" onClick={() => onPatch({ deadline: "" })} style={{ borderColor: T.border }}>
+                <X size={13} /> امسح
+              </Btn>
+            )}
+          </div>
+          <p className="mt-1.5 text-[10.5px]" style={{ color: T.faint }}>
+            بلا موعد، ينتهي الهدف مع نهاية نافذته:{" "}
+            <span dir="ltr">{goalEnd(goal)}</span>.
+          </p>
+        </div>
+
+        {/* milestones */}
+        <div>
+          <span className={label} style={{ color: T.muted }}>
+            الخطوات — ما الذي يجعله يتحرّك؟
+          </span>
+          <div className="space-y-1">
+            {goal.steps.length === 0 ? (
+              <p className="py-2 text-[11px]" style={{ color: T.faint }}>
+                لا خطوات بعد. أول خطوة صغيرة تكفي لبدء الحركة.
+              </p>
+            ) : (
+              goal.steps.map((s, i) => (
+                <div
+                  key={s.id}
+                  className="group flex items-center gap-1 rounded-lg border transition-all"
+                  style={{
+                    borderColor: "transparent",
+                    background: s.done ? `${T.primary}0F` : "transparent",
+                  }}
+                >
+                  <Checkbox
+                    checked={s.done}
+                    onToggle={() =>
+                      onPatch({
+                        steps: goal.steps.map((x) =>
+                          x.id === s.id ? { ...x, done: !x.done } : x,
+                        ),
+                      })
+                    }
+                    label={s.text}
+                    tint={T.primary}
+                    size="sm"
+                  />
+                  <button
+                    onClick={() =>
+                      onPatch({
+                        steps: goal.steps.filter((x) => x.id !== s.id),
+                      })
+                    }
+                    aria-label={`حذف ${s.text}`}
+                    className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                  <span className="sr-only">خطوة {i + 1}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Field
+              value={step}
+              onChange={(e) => setStep(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addStep()}
+              placeholder="خطوة جديدة"
+              className="flex-1"
+            />
+            <Btn variant="default" size="sm" onClick={addStep} className="shrink-0">
+              <Plus size={13} strokeWidth={3} /> أضف
+            </Btn>
+          </div>
+        </div>
+
+        {/* what it carries */}
+        {kids.length > 0 && (
+          <div
+            className="rounded-2xl border p-4"
+            style={{ borderColor: `${T.sky}3D`, background: `${T.sky}0F` }}
+          >
+            <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
+              <Layers size={14} /> ما يخدم هذا الهدف
+            </p>
+            <div className="mt-2.5 space-y-1.5">
+              {kids.map((k) => {
+                const kp = goalPct(k, all);
+                return (
+                  <div key={k.id} className="flex items-center gap-2">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: k.done ? T.primary : pillarOf(k.pillar).tint }}
+                    />
+                    <span
+                      className="min-w-0 flex-1 truncate text-[11.5px]"
+                      style={{
+                        color: k.done ? T.muted : T.fg,
+                        textDecorationLine: k.done ? "line-through" : "none",
+                      }}
+                    >
+                      {k.text}
+                    </span>
+                    <span
+                      dir="ltr"
+                      className="shrink-0 text-[10.5px] font-bold tabular-nums"
+                      style={{ color: kp >= 100 ? T.primary : T.faint }}
+                    >
+                      {kp}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <Btn
+          variant="danger"
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            if (
+              window.confirm(
+                kids.length
+                  ? `حذف «${goal.text}»؟ ${kids.length} هدفًا يخدمه ستبقى لكن بلا ارتباط.`
+                  : `حذف «${goal.text}»؟`,
+              )
+            )
+              onDelete();
+          }}
+        >
+          <Trash2 size={13} /> احذف الهدف
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
 function GoalsModule({ state, setState }) {
-  const [editing, setEditing] = useState(null); // {id?, text, pillar, quarter}
-  /* Opens on the 90 days you are actually in — the whole point of chunking. */
-  const [quarter, setQuarter] = useState(currentQuarter);
+  /* Opens on the ninety days you are actually in — the whole point of
+     chunking. The horizons above it are one tap away but never the default.
+     Before the arc starts there is no «now» to open on, so it falls to the
+     first ninety days of the first year instead: opening on Q4 of a year
+     that has not begun, because the wall clock happens to say October, is
+     the one window nobody is planning in. */
+  const here = new Date().getFullYear();
+  const inArc = GOAL_YEARS.includes(here);
+  const [horizon, setHorizon] = useState("quarter");
+  const [quarter, setQuarter] = useState(() =>
+    inArc ? currentQuarter() : QUARTERS[0].id,
+  );
+  const [year, setYear] = useState(inArc ? here : GOAL_YEARS[0]);
+  const [deskId, setDeskId] = useState(null);
+  const [orphansOnly, setOrphansOnly] = useState(false);
 
-  const all = state.goals || [];
-  const goals = all.filter((g) => g.quarter === quarter);
-  const done = goals.filter((g) => g.done).length;
-  const pct = goals.length ? Math.round((done / goals.length) * 100) : 0;
-  const meta = QUARTERS.find((q) => q.id === quarter) || QUARTERS[0];
-  const live = quarter === currentQuarter();
-  /* Counted from date boundaries, not the current clock time — on the last
-     day of a quarter you still have that whole day, so the floor is 1. */
-  const daysLeft = useMemo(() => {
-    if (!live) return null;
-    const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(
-      now.getFullYear(),
-      Math.floor(now.getMonth() / 3) * 3 + 3,
-      0,
-    );
-    return Math.max(1, Math.round((end - midnight) / 86400000) + 1);
-  }, [live]);
+  const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
+  const byId = useMemo(() => new Map(all.map((g) => [g.id, g])), [all]);
+  const kidsOf = useMemo(() => {
+    const m = new Map();
+    for (const g of all) {
+      if (!g.parent) continue;
+      if (!m.has(g.parent)) m.set(g.parent, []);
+      m.get(g.parent).push(g);
+    }
+    return m;
+  }, [all]);
 
-  const toggle = (id) =>
+  const meta = horizonOf(horizon);
+  /* Which window the chosen horizon means. The three-year arc has only one. */
+  const inWindow = useCallback(
+    (g) =>
+      g.horizon !== horizon
+        ? false
+        : horizon === "quarter"
+          ? g.quarter === quarter && g.year === year
+          : horizon === "year"
+            ? g.year === year
+            : true,
+    [horizon, quarter, year],
+  );
+
+  const scoped = useMemo(() => all.filter(inWindow), [all, inWindow]);
+  /* Only below the top horizon: a three-year goal has nothing above it to
+     serve, so calling it an orphan would be nonsense. */
+  const orphans = useMemo(
+    () => scoped.filter((g) => g.horizon !== "h3" && !g.parent),
+    [scoped],
+  );
+  const shown = orphansOnly ? orphans : scoped;
+
+  const done = scoped.filter((g) => g.done).length;
+  const pct = scoped.length
+    ? Math.round(scoped.reduce((n, g) => n + goalPct(g, all), 0) / scoped.length)
+    : 0;
+
+  const live =
+    horizon === "quarter"
+      ? quarter === currentQuarter() && year === here
+      : horizon === "year"
+        ? year === here
+        : true;
+
+  const windowEnd =
+    horizon === "quarter"
+      ? goalEnd({ horizon: "quarter", quarter, year, deadline: "" })
+      : horizon === "year"
+        ? `${year}-12-31`
+        : `${GOAL_YEARS[GOAL_YEARS.length - 1]}-12-31`;
+  const daysLeft = daysTo(windowEnd);
+
+  const patch = (id, fields) =>
     setState((s) => ({
       ...s,
-      goals: s.goals.map((g) => (g.id === id ? { ...g, done: !g.done } : g)),
+      goals: (s.goals || []).map((g) =>
+        g.id === id ? goalShape({ ...goalShape(g), ...fields }) : g,
+      ),
     }));
 
   const remove = (id) =>
-    setState((s) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) }));
-
-  const save = () => {
-    const text = editing.text.trim();
-    if (!text) return;
     setState((s) => ({
       ...s,
-      goals: editing.id
-        ? s.goals.map((g) =>
-            g.id === editing.id
-              ? { ...g, text, pillar: editing.pillar, quarter: editing.quarter }
-              : g,
-          )
-        : [
-            ...s.goals,
-            {
-              id: uid(),
-              text,
-              pillar: editing.pillar,
-              quarter: editing.quarter,
-              done: false,
-            },
-          ],
+      /* The children stay — they are the user's own rows, not this goal's
+         property. Their link is cut rather than followed, which is also what
+         `migrate` would do on the next load; doing it here keeps the screen
+         honest without waiting for a reload. */
+      goals: (s.goals || [])
+        .filter((g) => g.id !== id)
+        .map((g) => (g.parent === id ? { ...g, parent: null } : g)),
     }));
-    setQuarter(editing.quarter);
-    setEditing(null);
+
+  /* A new goal lands in the window on screen and opens straight onto its own
+     desk: a goal with no reason, no measure and nothing it serves is the kind
+     this screen exists to prevent, so the form that asks for all three is the
+     next thing the user sees rather than something to go hunting for. */
+  const add = () => {
+    const row = goalShape({
+      horizon,
+      quarter,
+      year,
+      pillar: shown[0]?.pillar || "faith",
+    });
+    setState((s) => ({ ...s, goals: [...(s.goals || []), row] }));
+    setDeskId(row.id);
   };
+
+  const desk = deskId ? byId.get(deskId) : null;
 
   return (
     <div className="space-y-7">
       <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
         <div className="min-w-0">
-          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">أهداف ٢٠٢٧</h2>
+          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+            أهدافي
+          </h2>
           <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
-            تسعون يومًا في كل مرّة. ركّز على الربع الذي تعيشه، ودع البقيّة تنتظر
-            دورها.
+            {meta.hint}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Btn
-              variant="default"
-              size="sm"
-              onClick={() =>
-                setEditing({ text: "", pillar: "faith", quarter })
-              }
-            >
+            <Btn variant="default" size="sm" onClick={add}>
               <Plus size={14} strokeWidth={3} /> هدف جديد
             </Btn>
-            <Badge tint={pct === 100 && goals.length ? T.primary : meta.tint}>
+            <Badge tint={pct === 100 && scoped.length ? T.primary : meta.tint}>
               <span dir="ltr" className="tabular-nums">
-                {done}/{goals.length}
+                {done}/{scoped.length}
               </span>
               {" مُحقَّق"}
             </Badge>
-            {daysLeft !== null && (
+            {daysLeft !== null && daysLeft > 0 && live && (
               <Badge tint={T.cta}>
                 {daysLeft === 1 ? (
                   "بقي يوم واحد"
@@ -6557,60 +8598,59 @@ function GoalsModule({ state, setState }) {
                   "بقي يومان"
                 ) : (
                   <>
-                    {daysLeft <= 10 ? "بقيت " : "بقي "}
+                    بقي{" "}
                     <span dir="ltr" className="tabular-nums">
                       {daysLeft}
-                    </span>
-                    {daysLeft <= 10 ? " أيام" : " يومًا"}
+                    </span>{" "}
+                    {dayWord(daysLeft)}
                   </>
                 )}
               </Badge>
             )}
           </div>
         </div>
-        <ProgressRing value={pct} size={150} stroke={11} />
+        <ProgressRing value={pct} size={150} stroke={11} label="تقدّم الأفق" />
       </Card>
 
-      {/* quarter tabs */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {QUARTERS.map((q) => {
-          const on = q.id === quarter;
-          const now = q.id === currentQuarter();
-          const list = all.filter((g) => g.quarter === q.id);
+      <NorthStarCard
+        value={state.northStar}
+        onSave={(northStar) => setState((s) => ({ ...s, northStar }))}
+      />
+
+      {/* horizon tabs — the chain, top to bottom */}
+      <div className="grid grid-cols-3 gap-2">
+        {HORIZONS.map((x) => {
+          const on = x.id === horizon;
+          const list = all.filter((g) => g.horizon === x.id);
           const hit = list.filter((g) => g.done).length;
+          const XIcon = x.icon;
           return (
             <button
-              key={q.id}
-              onClick={() => setQuarter(q.id)}
+              key={x.id}
+              onClick={() => {
+                setHorizon(x.id);
+                setOrphansOnly(false);
+              }}
               aria-pressed={on}
               className="rounded-2xl border px-3 py-3 text-right transition-all duration-200"
               style={{
-                borderColor: on ? `${q.tint}80` : T.border,
+                borderColor: on ? `${x.tint}80` : T.border,
                 backgroundImage: on
-                  ? `linear-gradient(160deg, ${q.tint}2E, ${q.tint}0A)`
+                  ? `linear-gradient(160deg, ${x.tint}2E, ${x.tint}0A)`
                   : "none",
                 backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
-                color: on ? q.tint : T.muted,
-                boxShadow: on ? `0 10px 26px -16px ${q.tint}` : "none",
+                color: on ? x.tint : T.muted,
+                boxShadow: on ? `0 10px 26px -16px ${x.tint}` : "none",
               }}
             >
-              <span className="flex items-center gap-1.5 text-[13px] font-extrabold">
-                {q.label}
-                {now && (
-                  <span
-                    aria-label="الربع الحالي"
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: T.cta, boxShadow: `0 0 8px ${T.cta}` }}
-                  />
-                )}
-              </span>
-              <span className="mt-0.5 block text-[10px]" style={{ color: T.faint }}>
-                {q.months}
+              <span className="flex items-center gap-1.5 text-[12.5px] font-extrabold">
+                <XIcon size={13} strokeWidth={2.2} />
+                <span className="truncate">{x.short}</span>
               </span>
               <span
                 className="mt-1 block text-[10.5px] font-bold tabular-nums"
                 dir="ltr"
-                style={{ color: on ? q.tint : T.faint }}
+                style={{ color: on ? x.tint : T.faint }}
               >
                 {hit}/{list.length}
               </span>
@@ -6619,14 +8659,124 @@ function GoalsModule({ state, setState }) {
         })}
       </div>
 
+      {/* the window inside the horizon */}
+      {horizon !== "h3" && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            {GOAL_YEARS.map((y) => {
+              const on = y === year;
+              const list = all.filter((g) => g.horizon === horizon && g.year === y);
+              return (
+                <button
+                  key={y}
+                  onClick={() => setYear(y)}
+                  aria-pressed={on}
+                  dir="ltr"
+                  className="flex-1 rounded-xl border px-2 py-2 text-[11.5px] font-extrabold tabular-nums transition-all duration-200"
+                  style={{
+                    borderColor: on ? `${T.accent}80` : T.border,
+                    background: on ? `${T.accent}1F` : "rgba(255,255,255,0.03)",
+                    color: on ? T.accent : T.faint,
+                  }}
+                >
+                  {y}
+                  <span className="mr-1.5 opacity-60">({list.length})</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {horizon === "quarter" && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {QUARTERS.map((q) => {
+                const on = q.id === quarter;
+                const now = q.id === currentQuarter() && year === here;
+                const list = all.filter(
+                  (g) => g.horizon === "quarter" && g.quarter === q.id && g.year === year,
+                );
+                const hit = list.filter((g) => g.done).length;
+                return (
+                  <button
+                    key={q.id}
+                    onClick={() => setQuarter(q.id)}
+                    aria-pressed={on}
+                    className="rounded-2xl border px-3 py-3 text-right transition-all duration-200"
+                    style={{
+                      borderColor: on ? `${q.tint}80` : T.border,
+                      backgroundImage: on
+                        ? `linear-gradient(160deg, ${q.tint}2E, ${q.tint}0A)`
+                        : "none",
+                      backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
+                      color: on ? q.tint : T.muted,
+                      boxShadow: on ? `0 10px 26px -16px ${q.tint}` : "none",
+                    }}
+                  >
+                    <span className="flex items-center gap-1.5 text-[13px] font-extrabold">
+                      {q.label}
+                      {now && (
+                        <span
+                          aria-label="الربع الحالي"
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ background: T.cta, boxShadow: `0 0 8px ${T.cta}` }}
+                        />
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-[10px]" style={{ color: T.faint }}>
+                      {q.months}
+                    </span>
+                    <span
+                      className="mt-1 block text-[10.5px] font-bold tabular-nums"
+                      dir="ltr"
+                      style={{ color: on ? q.tint : T.faint }}
+                    >
+                      {hit}/{list.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Every goal below the top horizon should answer to one above it.
+          Saying so once, with a way to see exactly which ones do not, is the
+          whole discipline this screen adds over a flat list. */}
+      {orphans.length > 0 && (
+        <button
+          onClick={() => setOrphansOnly((v) => !v)}
+          aria-pressed={orphansOnly}
+          className="flex w-full items-center gap-2.5 rounded-2xl border px-4 py-3 text-right transition-all duration-200"
+          style={{
+            borderColor: orphansOnly ? `${T.cta}80` : `${T.accent}4D`,
+            background: orphansOnly ? `${T.cta}1A` : `${T.accent}12`,
+          }}
+        >
+          <AlertTriangle size={15} className="shrink-0" style={{ color: orphansOnly ? T.cta : T.accent }} />
+          <span className="min-w-0 flex-1 text-[12px] font-bold leading-relaxed" style={{ color: orphansOnly ? T.ctaLift : T.accent }}>
+            <span dir="ltr" className="tabular-nums">
+              {orphans.length}
+            </span>{" "}
+            من أهداف هذه النافذة لا تخدم هدفًا أعلى.
+            <span className="block text-[10.5px] font-normal" style={{ color: T.muted }}>
+              {orphansOnly ? "اضغط لعرض الكل" : "اضغط لعرضها وحدها"}
+            </span>
+          </span>
+        </button>
+      )}
+
+      {/* by pillar */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {PILLARS.map((p) => {
-          const list = goals.filter((g) => g.pillar === p.id);
+          const list = shown.filter((g) => g.pillar === p.id);
           const hit = list.filter((g) => g.done).length;
           const complete = list.length > 0 && hit === list.length;
           const Icon = p.icon;
+          const avg = list.length
+            ? Math.round(list.reduce((n, g) => n + goalPct(g, all), 0) / list.length)
+            : 0;
           return (
-            <Card key={p.id} className="p-6 sm:p-7">
+            <Card key={p.id} className="p-5 sm:p-6">
               <div className="flex items-center gap-3">
                 <span
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
@@ -6653,30 +8803,43 @@ function GoalsModule({ state, setState }) {
                 <div
                   className="h-full rounded-full transition-all duration-700"
                   style={{
-                    width: list.length ? `${(hit / list.length) * 100}%` : "0%",
+                    width: `${avg}%`,
                     backgroundImage: complete
                       ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
                       : `linear-gradient(90deg, ${p.tint}, ${p.tint}AA)`,
-                    boxShadow: `0 0 12px ${complete ? T.primary : p.tint}99`,
+                    boxShadow: avg ? `0 0 12px ${complete ? T.primary : p.tint}99` : "none",
                   }}
                 />
               </div>
 
-              <div className="mt-2 space-y-0.5">
+              <div className="mt-3 space-y-2">
                 {list.length === 0 ? (
                   <p className="py-3 text-center text-[11px] text-white/25">
-                    لا أهداف في هذه الركيزة بعد
+                    {orphansOnly
+                      ? "لا أهداف معلّقة في هذه الركيزة"
+                      : "لا أهداف في هذه الركيزة بعد"}
                   </p>
                 ) : (
                   list.map((g) => (
-                    <GoalRow
+                    <GoalCard
                       key={g.id}
                       goal={g}
-                      onToggle={() => toggle(g.id)}
-                      onEdit={() =>
-                        setEditing({ id: g.id, text: g.text, pillar: g.pillar })
+                      all={all}
+                      parent={g.parent ? byId.get(g.parent) : null}
+                      kids={kidsOf.get(g.id) || []}
+                      onToggle={() => patch(g.id, { done: !g.done })}
+                      onStep={
+                        g.target > 0
+                          ? (n) =>
+                              patch(g.id, {
+                                current: Math.max(
+                                  0,
+                                  Math.min(g.target, g.current + n),
+                                ),
+                              })
+                          : null
                       }
-                      onDelete={() => remove(g.id)}
+                      onOpen={() => setDeskId(g.id)}
                     />
                   ))
                 )}
@@ -6686,87 +8849,16 @@ function GoalsModule({ state, setState }) {
         })}
       </div>
 
-      <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title={editing?.id ? "تعديل الهدف" : "هدف جديد"}
-        footer={
-          <>
-            <Btn variant="default" className="flex-1" onClick={save}>
-              حفظ
-            </Btn>
-            <Btn variant="outline" className="flex-1" onClick={() => setEditing(null)}>
-              إلغاء
-            </Btn>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="los-g-text" className="mb-1.5 block text-xs text-white/45">
-              الهدف
-            </label>
-            <Field
-              id="los-g-text"
-              autoFocus
-              value={editing?.text || ""}
-              onChange={(e) => setEditing((s) => ({ ...s, text: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="مثال: ختم القرآن تدبّرًا مرّتين"
-            />
-          </div>
-          <div>
-            <span className="mb-2 block text-xs text-white/45">الربع</span>
-            <div className="grid grid-cols-2 gap-2">
-              {QUARTERS.map((q) => {
-                const on = editing?.quarter === q.id;
-                return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => setEditing((s) => ({ ...s, quarter: q.id }))}
-                    aria-pressed={on}
-                    className="rounded-xl border px-3 py-2.5 text-xs font-bold transition-all"
-                    style={{
-                      borderColor: on ? `${q.tint}80` : T.border,
-                      background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)",
-                      color: on ? q.tint : T.muted,
-                    }}
-                  >
-                    {q.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <span className="mb-2 block text-xs text-white/45">الركيزة</span>
-            <div className="grid grid-cols-2 gap-2">
-              {PILLARS.map((p) => {
-                const on = editing?.pillar === p.id;
-                const Icon = p.icon;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setEditing((s) => ({ ...s, pillar: p.id }))}
-                    aria-pressed={on}
-                    className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all"
-                    style={{
-                      borderColor: on ? `${p.tint}80` : T.border,
-                      background: on ? `${p.tint}1F` : "rgba(255,255,255,0.03)",
-                      color: on ? p.tint : T.muted,
-                    }}
-                  >
-                    <Icon size={14} strokeWidth={2} />
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </Modal>
+      <GoalDesk
+        goal={desk}
+        all={all}
+        onClose={() => setDeskId(null)}
+        onPatch={(fields) => patch(deskId, fields)}
+        onDelete={() => {
+          remove(deskId);
+          setDeskId(null);
+        }}
+      />
     </div>
   );
 }
@@ -17440,6 +19532,8 @@ function SettingsModal({ open, onClose, state, setState }) {
     }
   };
 
+  const place = placeShape(state.place);
+
   const counts = [
     { k: "عادة", n: state.habits?.length || 0 },
     { k: "مهمة", n: state.tasks?.length || 0 },
@@ -17470,6 +19564,105 @@ function SettingsModal({ open, onClose, state, setState }) {
               </p>
             </div>
           ))}
+        </div>
+
+        {/* Prayer times and the water goal. Both belong to the routine
+            screen, but neither is something you set more than once — so they
+            live here rather than taking permanent room on a daily driver. */}
+        <div
+          className="space-y-3.5 rounded-2xl border p-3.5"
+          style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+        >
+          <div>
+            <label
+              htmlFor="los-place"
+              className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold"
+              style={{ color: T.violet }}
+            >
+              <MapPin size={13} /> مدينة أوقات الصلاة
+            </label>
+            <select
+              id="los-place"
+              value={place.id}
+              onChange={(e) => {
+                const seed = PLACE_BY_ID.get(e.target.value);
+                if (!seed) return;
+                /* The school is the user's, not the city's — carried across
+                   so changing town does not quietly switch his Asr. */
+                setState((s) => ({
+                  ...s,
+                  place: placeShape({ ...seed, asr: placeShape(s.place).asr }),
+                }));
+              }}
+              className="w-full rounded-xl border bg-transparent px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-white/30"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              {PLACES.map((c) => (
+                <option key={c.id} value={c.id} style={{ background: T.cardSolid }}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <span className="mb-1.5 block text-[11px]" style={{ color: T.faint }}>
+              مذهب العصر
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { n: 1, label: "الشافعي والجمهور" },
+                { n: 2, label: "الحنفي" },
+              ].map((o) => {
+                const on = place.asr === o.n;
+                return (
+                  <button
+                    key={o.n}
+                    onClick={() =>
+                      setState((s) => ({
+                        ...s,
+                        place: placeShape({ ...placeShape(s.place), asr: o.n }),
+                      }))
+                    }
+                    aria-pressed={on}
+                    className="rounded-xl border px-3 py-2 text-[11.5px] font-bold transition-all"
+                    style={{
+                      borderColor: on ? `${T.violet}80` : T.border,
+                      background: on ? `${T.violet}1F` : "transparent",
+                      color: on ? T.violet : T.muted,
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <span
+              className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold"
+              style={{ color: T.sky }}
+            >
+              <Droplets size={13} /> هدف الماء اليومي
+            </span>
+            <NumStep
+              value={clampGoal(state.waterGoal)}
+              onChange={(n) =>
+                /* Lowering the goal below today's count would render fewer
+                   cups than are filled, so the count comes down with it. */
+                setState((s) => ({
+                  ...s,
+                  waterGoal: n,
+                  water: Math.min(n, s.water || 0),
+                }))
+              }
+              min={1}
+              max={WATER_GOAL_MAX}
+              unit={cupWord(clampGoal(state.waterGoal))}
+              tint={T.sky}
+            />
+          </div>
         </div>
 
         {/* The sidebar's own reorder toggle is desktop-only, so this is the
@@ -17760,11 +19953,22 @@ export default function LifeOS() {
           all: roster,
           holds: breakerDay.holds,
           falls: breakerDay.falls,
+          /* Per-day like everything else on this row, so the calendar and
+             the monthly tracker can read it back without a second ledger. */
+          water: state.water || 0,
         },
       ].slice(-HISTORY_CAP);
       return { ...s, history: next };
     });
-  }, [rollCall, discipline, doneIds, roster, breakerDay.holds, breakerDay.falls]);
+  }, [
+    rollCall,
+    discipline,
+    doneIds,
+    roster,
+    breakerDay.holds,
+    breakerDay.falls,
+    state.water,
+  ]);
 
   useEffect(() => {
     if (discipline >= STREAK_TARGET && !state.dayBanked) {
@@ -18187,6 +20391,7 @@ export default function LifeOS() {
                   savedAt={savedAt}
                   onOpenMirror={() => setMirror(true)}
                   onOpenReflect={() => setReflect(true)}
+                  onOpenSettings={() => setSettings(true)}
                   reflected={alreadyReflected}
                 />
               )}
