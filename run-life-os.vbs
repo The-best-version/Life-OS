@@ -13,10 +13,15 @@
 
 Option Explicit
 
-Const URL  = "http://127.0.0.1:47615/"
 Const PROBE = "http://127.0.0.1:47615/state?project=lifeos"
 Const NODE = "C:\Program Files\nodejs\node.exe"
 Const CHROME = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+' The installed app, not --app=<url>. Both open the same origin in the same
+' chrome-less window, but only the installed one is what persuaded Chrome to
+' mark this origin's storage persistent — and opening it as the app is what
+' keeps that true. Chrome's own shortcut for it skips the server check above,
+' which is the whole reason this file still exists.
+Const APPID = "hbagjjmjdegoabokdhefbamhpknhehmb"
 
 Dim sh, fso, root, i
 Set sh = CreateObject("WScript.Shell")
@@ -40,7 +45,7 @@ If Not Up() Then
   WScript.Quit 1
 End If
 
-sh.Run """" & CHROME & """ --app=" & URL, 1, False
+sh.Run """" & CHROME & """ --profile-directory=Default --app-id=" & APPID, 1, False
 
 ' A request, not a port scan: VBScript has no socket, and an HTTP round trip
 ' answers the question that actually matters — is it serving?
