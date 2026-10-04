@@ -966,6 +966,87 @@ function syncOut(payload) {
   }, 2500);
 }
 const UI_KEY = "life-os-2027:ui";
+
+/* --- one window at a time --------------------------------------------- *
+ *  Every change writes the whole payload, so two open copies clobber each
+ *  other: the second window loaded a snapshot, holds it in memory, and the
+ *  next thing it saves puts that stale snapshot back over everything the
+ *  first one did. Nothing errors and nothing looks wrong — a morning's ticks
+ *  simply stop existing. Merging two divergent copies of this state is not
+ *  something that can be done correctly after the fact, so the second window
+ *  is stopped before it can write instead.
+ *
+ *  A lease, not a flag. A flag left behind by a crash or a force-quit locks
+ *  the app out for good; a lease has to be renewed, so an abandoned one
+ *  expires on its own and the next window simply takes over.
+ * ---------------------------------------------------------------------- */
+const LOCK_KEY = "life-os-2027:lock";
+const TAB_KEY = "life-os-2027:tab";
+/* Set just before «تابع هنا» reloads, and honoured once on the way back.
+   Without it, a browser that refuses sessionStorage strands the user: the
+   reloaded window comes back with a brand-new id, finds the lease it just
+   wrote under its *old* id still fresh, and shows the same lock screen again
+   — a button that cannot ever work. */
+const HANDOVER_KEY = "life-os-2027:handover";
+const HANDOVER_GRACE = 15000;
+const LEASE_BEAT = 2000; // the holder renews this often
+const LEASE_STALE = 6000; // unrenewed for this long and it is up for grabs
+
+/* Per-tab and survives a reload, which is what makes "take over here" work:
+   the window that claims the lease reloads to re-read the payload, and has to
+   still be recognised as the holder when it comes back. sessionStorage is
+   scoped to the tab, so a second window never sees this one's id. */
+function tabId() {
+  try {
+    let v = window.sessionStorage.getItem(TAB_KEY);
+    if (!v) {
+      v = `${uid()}${Date.now().toString(36)}`;
+      window.sessionStorage.setItem(TAB_KEY, v);
+    }
+    return v;
+  } catch {
+    /* Storage blocked: a per-load id still prevents two windows writing over
+       each other, it just cannot survive a reload. */
+    return `${uid()}${Date.now().toString(36)}`;
+  }
+}
+
+const readLock = () => {
+  try {
+    return JSON.parse(window.localStorage.getItem(LOCK_KEY) || "null");
+  } catch {
+    return null;
+  }
+};
+const writeLock = (id) => {
+  try {
+    window.localStorage.setItem(LOCK_KEY, JSON.stringify({ id, at: Date.now() }));
+  } catch {
+    /* Storage blocked — nothing can be written anyway, so nothing to guard. */
+  }
+};
+const dropLock = (id) => {
+  try {
+    const lock = readLock();
+    if (lock && lock.id === id) window.localStorage.removeItem(LOCK_KEY);
+  } catch {
+    /* nothing to release */
+  }
+};
+
+/* True once, for the window coming back from «تابع هنا». Reading it also
+   spends it, so only the reload it was set for is let through. */
+const claimHandover = () => {
+  try {
+    const at = Number(window.localStorage.getItem(HANDOVER_KEY));
+    if (!Number.isFinite(at) || Date.now() - at > HANDOVER_GRACE) return false;
+    window.localStorage.removeItem(HANDOVER_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const SCHEMA = 19;
 const HISTORY_CAP = 500;
 const STREAK_TARGET = 80;
@@ -4457,6 +4538,124 @@ const readUI = () => {
     return {};
   }
 };
+
+/* Holds the write lease for this window, or reports that another one has it.
+   Returns the role and a way to take the lease off the other window.
+
+   Three things keep it honest. The lease is re-read on a timer rather than
+   trusted once, so a window that loses it stops writing on its own. The claim
+   is read back immediately after writing, which settles the race when two
+   windows open in the same instant — both write, one wins, and the loser sees
+   a foreign id staring back. And a BroadcastChannel carries the handover at
+   once, so the old holder stops in the same tick rather than at the end of
+   its next interval. */
+function useWriteLease() {
+  const meRef = useRef(null);
+  if (meRef.current === null) meRef.current = tabId();
+  const me = meRef.current;
+
+  /* Resolved before the first paint so the app never renders a writable
+     screen it is about to take away. */
+  /* Spent here, before the first lease read, so the window returning from a
+     takeover is let straight through whatever the stored lease says. */
+  const handedOverRef = useRef(null);
+  if (handedOverRef.current === null)
+    handedOverRef.current = typeof window === "undefined" ? false : claimHandover();
+
+  const [role, setRole] = useState(() => {
+    if (typeof window === "undefined") return "leader";
+    if (handedOverRef.current) return "leader";
+    const lock = readLock();
+    const held =
+      lock &&
+      typeof lock.at === "number" &&
+      lock.id !== me &&
+      Date.now() - lock.at < LEASE_STALE;
+    return held ? "follower" : "leader";
+  });
+  const roleRef = useRef(role);
+  const set = useCallback((next) => {
+    if (roleRef.current === next) return;
+    roleRef.current = next;
+    setRole(next);
+  }, []);
+
+  const chanRef = useRef(null);
+
+  useEffect(() => {
+    let chan = null;
+    try {
+      chan = new BroadcastChannel("life-os-2027:lease");
+      chan.onmessage = (e) => {
+        /* Someone else announced a claim: step down now, not in two seconds. */
+        if (e?.data?.claim && e.data.claim !== me) set("follower");
+      };
+      chanRef.current = chan;
+    } catch {
+      /* No BroadcastChannel — the poll below still covers it, just slower. */
+    }
+
+    /* The handover is honoured for the first tick only: this window takes the
+       lease outright, the window it took it from sees a foreign id on its own
+       next tick and steps down. After that the ordinary rules apply again. */
+    let forced = handedOverRef.current;
+
+    const tick = () => {
+      const lock = readLock();
+      const held =
+        lock && typeof lock.at === "number" && Date.now() - lock.at < LEASE_STALE;
+      if (held && lock.id !== me && !forced) {
+        set("follower");
+        return;
+      }
+      forced = false;
+      writeLock(me);
+      /* Read back: two windows claiming in the same instant both get here,
+         and only the one whose write landed last sees its own id. */
+      const back = readLock();
+      set(back && back.id !== me ? "follower" : "leader");
+    };
+
+    tick();
+    const timer = setInterval(tick, LEASE_BEAT);
+    /* `pagehide` rather than `beforeunload`: it fires on mobile Safari's
+       back-forward cache path too, where `beforeunload` does not. */
+    const release = () => dropLock(me);
+    window.addEventListener("pagehide", release);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pagehide", release);
+      try {
+        chan?.close();
+      } catch {
+        /* already gone */
+      }
+      release();
+    };
+  }, [me, set]);
+
+  /* Claim, announce, then reload. The reload is the point: this window has
+     been sitting on a snapshot taken before the other one made its changes,
+     and writing that back is exactly the clobbering this whole mechanism
+     exists to prevent. Coming back from disk is the only safe way in. */
+  const takeOver = useCallback(() => {
+    try {
+      window.localStorage.setItem(HANDOVER_KEY, String(Date.now()));
+    } catch {
+      /* Storage blocked entirely — then nothing can be saved from any window
+         and there is no lease to contend for in the first place. */
+    }
+    writeLock(me);
+    try {
+      chanRef.current?.postMessage({ claim: me });
+    } catch {
+      /* the other window's poll will catch it within LEASE_BEAT */
+    }
+    window.location.reload();
+  }, [me]);
+
+  return [role, takeOver];
+}
 
 /* ==================================================================== *
  *  Primitives (shadcn-shaped, dependency-free)
@@ -20320,10 +20519,200 @@ function ReflectionModal({ open, onClose, onSave, pct, value, fixValue }) {
   );
 }
 
+/* The shared stylesheet. Lifted out of the root's JSX because the second
+   window returns before it and was rendering without the gradient heading,
+   the ease curves and every los-* animation — close enough to a different
+   app to be alarming on the one screen whose job is to reassure. Both
+   branches mount this. */
+function AppStyles() {
+  return (
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap');
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    
+        /* Cairo carries more weight at display sizes than Tajawal; headings
+           take it, body copy stays on Tajawal for readability. */
+        h1, h2, h3 {
+          font-family: 'Cairo', 'Tajawal', ui-sans-serif, system-ui, sans-serif;
+          letter-spacing: -0.015em;
+        }
+        h2 { line-height: 1.25; }
+    
+        /* Coral-to-gold on the headings that carry a screen. The clip is
+           paired with a transparent fill, and nothing on this element is
+           ever animated with a transform — Chrome collapses the clip and
+           paints the text as a solid block if it is. Animate a wrapper. */
+        /* Cloud drift: slow enough to read as weather, not motion. */
+        @keyframes los-drift {
+          from { transform: translateX(-20vw); }
+          to   { transform: translateX(120vw); }
+        }
+        .los-drift {
+          animation-name: los-drift;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+        }
+    
+        .los-title {
+          background-image: linear-gradient(100deg, #FFCF7A 0%, #FF8A50 46%, #FF5722 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          color: transparent;
+        }
+    
+        /* Everything Tailwind marks as transitioning eases OUT instead of
+           in-and-out, so hover arrives fast and settles slowly. Attribute
+           selectors tie with Tailwind's own class, and this block ships
+           after it in the document, so it wins without !important. */
+        [class~="transition"],
+        [class~="transition-all"],
+        [class~="transition-colors"],
+        [class~="transition-transform"],
+        [class~="transition-opacity"] {
+          transition-timing-function: cubic-bezier(.22, 1, .36, 1);
+        }
+    
+        @keyframes losFlame { 0%,100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.15) rotate(3deg); } }
+        .los-flame { animation: losFlame 1.6s ease-in-out infinite; }
+    
+        @keyframes losIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .los-in { animation: losIn .3s cubic-bezier(.22,1,.36,1) both; }
+    
+        @keyframes losCoverIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+        .los-cover-in { animation: losCoverIn .35s cubic-bezier(.22,1,.36,1) both; }
+    
+        /* --- reward loop: the payoff for finishing something ------------ */
+        @keyframes losReward {
+          0%   { transform: scale(1);     box-shadow: 0 0 0 0 ${T.primary}B3; }
+          30%  { transform: scale(1.045); box-shadow: 0 0 22px 6px ${T.primary}66; }
+          60%  { transform: scale(0.982); box-shadow: 0 0 30px 10px ${T.primary}26; }
+          100% { transform: scale(1);     box-shadow: 0 0 0 0 ${T.primary}00; }
+        }
+        .los-reward { animation: losReward .7s cubic-bezier(.34,1.56,.64,1) forwards; }
+    
+        @keyframes losPop {
+          0%   { transform: scale(1)    rotate(0deg); }
+          35%  { transform: scale(1.35) rotate(-8deg); }
+          62%  { transform: scale(0.9)  rotate(3deg); }
+          100% { transform: scale(1.06) rotate(0deg); }
+        }
+        .los-pop { animation: losPop .52s cubic-bezier(.34,1.56,.64,1) forwards; }
+    
+        @keyframes losRipple {
+          0%   { opacity: .95; transform: scale(1); }
+          100% { opacity: 0;   transform: scale(2.9); }
+        }
+        .los-ripple { animation: losRipple .64s cubic-bezier(.22,1,.36,1) forwards; }
+    
+        @keyframes losHalo { 0%,100% { opacity: .38; transform: scale(1); } 50% { opacity: .62; transform: scale(1.06); } }
+        .los-halo { animation: losHalo 2.4s ease-in-out infinite; }
+    
+        @keyframes losThrob { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .los-throb { animation: losThrob 2.4s ease-in-out infinite; }
+    
+        /* Hover lives in CSS so React never fights an imperatively-set style. */
+        .los-nav:not(.los-nav-on):hover {
+          background: rgba(255,255,255,0.07) !important;
+          color: ${T.fg} !important;
+        }
+        .los-nav-on:hover { filter: brightness(1.12); }
+        .los-btn:active { filter: brightness(.95); }
+        .los-tab:active { transform: scale(.93); }
+    
+        @media (prefers-reduced-motion: reduce) {
+          .los-flame, .los-in, .los-cover-in, .los-reward,
+          .los-pop, .los-ripple, .los-halo, .los-throb, .los-drift {
+            animation: none !important;
+          }
+          .los-btn:hover { transform: none !important; }
+        }
+      `}</style>
+  );
+}
+
+/* ==================================================================== *
+ *  The second window — stopped before it can write
+ *
+ *  Deliberately the whole screen rather than a banner. A banner over a
+ *  working-looking app invites exactly the ticking and typing that will be
+ *  thrown away, and this window cannot save a word of it.
+ * ==================================================================== */
+function SecondWindow({ onTakeOver, phase }) {
+  return (
+    <div
+      dir="rtl"
+      className="relative flex min-h-screen w-full items-center justify-center px-5 text-white antialiased"
+      style={{
+        "--los-veil": phase.veil,
+        "--los-veil-strong": phase.veilStrong,
+        fontFamily:
+          "'Tajawal', 'Cairo', ui-sans-serif, system-ui, -apple-system, sans-serif",
+      }}
+    >
+      <AppStyles />
+      <SkyBackdrop phase={phase} />
+      <Card className="los-in w-full max-w-lg p-7 text-center sm:p-9">
+        <span
+          className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border"
+          style={{
+            borderColor: `${T.accent}4D`,
+            background: `${T.accent}14`,
+            color: T.accent,
+          }}
+        >
+          <Lock size={28} strokeWidth={1.8} />
+        </span>
+
+        <h1
+          className="los-title mt-5 text-2xl font-extrabold leading-tight sm:text-[27px]"
+        >
+          التطبيق مفتوح في نافذة أخرى
+        </h1>
+
+        <p
+          className="mx-auto mt-3.5 max-w-md text-[13px] leading-relaxed"
+          style={{ color: T.muted }}
+        >
+          فتحه مرّتين يجعل النافذتين تكتبان فوق بعضهما، وآخر من يحفظ يمحو عمل
+          الأخرى دون أن يظهر أي خطأ. لذلك أُوقف الحفظ في هذه النافذة حمايةً
+          لبياناتك.
+        </p>
+
+        <div className="mt-6 space-y-2.5">
+          <Btn variant="default" size="lg" className="w-full" onClick={onTakeOver}>
+            <ArrowLeft size={16} /> تابع هنا وأوقف النافذة الأخرى
+          </Btn>
+          <p className="text-[11px] leading-relaxed" style={{ color: T.faint }}>
+            أو أغلق هذه النافذة وارجع للأولى. ما كتبتَه محفوظ هناك.
+          </p>
+        </div>
+
+        <p
+          className="mt-6 rounded-xl border px-3.5 py-2.5 text-[11px] leading-relaxed"
+          style={{
+            borderColor: `${T.accent}3D`,
+            background: `${T.accent}12`,
+            color: T.accent,
+          }}
+        >
+          «تابع هنا» يعيد تحميل الصفحة ليقرأ آخر نسخة محفوظة — فلا تضيع تعديلات
+          النافذة الأخرى.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
 /* ==================================================================== *
  *  ROOT
  * ==================================================================== */
 export default function LifeOS() {
+  /* Resolved before anything else: a window without the lease must not reach
+     a single write, and that includes the ones the archive effect fires on
+     its own without the user touching anything. */
+  const [role, takeOver] = useWriteLease();
+  const leading = role === "leader";
   const [state, setState] = useState(loadState);
   /* Validated, not just defaulted. A saved id this build no longer has —
      a tab renamed or dropped, or a hand-edited preferences key — renders
@@ -20353,6 +20742,10 @@ export default function LifeOS() {
   const [mirror, setMirror] = useState(false);
 
   useEffect(() => {
+    /* The one gate that matters. A window that lost the lease is holding a
+       snapshot from before the other one started working; writing it back is
+       precisely the clobbering the lease exists to stop. */
+    if (!leading) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       setSaveFailed(false);
@@ -20363,7 +20756,7 @@ export default function LifeOS() {
       setSaveFailed(true);
     }
     syncOut(state);
-  }, [state]);
+  }, [state, leading]);
 
   /* The app is left open for days, so the day boundary cannot live only in
      the load path. Polled once a minute and re-checked whenever the tab is
@@ -20381,6 +20774,10 @@ export default function LifeOS() {
   }, []);
 
   useEffect(() => {
+    /* Gated too. These are only preferences, but the evening prompt's snooze
+       rides along with them, and a blocked window re-arming it would make the
+       prompt reappear in the window that is actually being used. */
+    if (!leading) return;
     try {
       window.localStorage.setItem(
         UI_KEY,
@@ -20389,7 +20786,7 @@ export default function LifeOS() {
     } catch {
       /* per-viewer convenience only */
     }
-  }, [tab, collapsed, nag]);
+  }, [tab, collapsed, nag, leading]);
 
   const habitsDone = state.habits.filter((h) => h.done).length;
   const discipline = state.habits.length
@@ -20575,6 +20972,11 @@ export default function LifeOS() {
 
   const active = NAV.find((n) => n.id === tab) || NAV[0];
 
+  /* Below every hook, without exception — a return placed among them is
+     React error #310 and a blank screen, which this file has already paid
+     for once. */
+  if (!leading) return <SecondWindow onTakeOver={takeOver} phase={phase} />;
+
   return (
     <div
       dir="rtl"
@@ -20590,108 +20992,7 @@ export default function LifeOS() {
       }}
     >
       <SkyBackdrop phase={phase} />
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap');
-        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-        /* Cairo carries more weight at display sizes than Tajawal; headings
-           take it, body copy stays on Tajawal for readability. */
-        h1, h2, h3 {
-          font-family: 'Cairo', 'Tajawal', ui-sans-serif, system-ui, sans-serif;
-          letter-spacing: -0.015em;
-        }
-        h2 { line-height: 1.25; }
-
-        /* Coral-to-gold on the headings that carry a screen. The clip is
-           paired with a transparent fill, and nothing on this element is
-           ever animated with a transform — Chrome collapses the clip and
-           paints the text as a solid block if it is. Animate a wrapper. */
-        /* Cloud drift: slow enough to read as weather, not motion. */
-        @keyframes los-drift {
-          from { transform: translateX(-20vw); }
-          to   { transform: translateX(120vw); }
-        }
-        .los-drift {
-          animation-name: los-drift;
-          animation-timing-function: linear;
-          animation-iteration-count: infinite;
-        }
-
-        .los-title {
-          background-image: linear-gradient(100deg, #FFCF7A 0%, #FF8A50 46%, #FF5722 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          -webkit-text-fill-color: transparent;
-          color: transparent;
-        }
-
-        /* Everything Tailwind marks as transitioning eases OUT instead of
-           in-and-out, so hover arrives fast and settles slowly. Attribute
-           selectors tie with Tailwind's own class, and this block ships
-           after it in the document, so it wins without !important. */
-        [class~="transition"],
-        [class~="transition-all"],
-        [class~="transition-colors"],
-        [class~="transition-transform"],
-        [class~="transition-opacity"] {
-          transition-timing-function: cubic-bezier(.22, 1, .36, 1);
-        }
-
-        @keyframes losFlame { 0%,100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.15) rotate(3deg); } }
-        .los-flame { animation: losFlame 1.6s ease-in-out infinite; }
-
-        @keyframes losIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-        .los-in { animation: losIn .3s cubic-bezier(.22,1,.36,1) both; }
-
-        @keyframes losCoverIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
-        .los-cover-in { animation: losCoverIn .35s cubic-bezier(.22,1,.36,1) both; }
-
-        /* --- reward loop: the payoff for finishing something ------------ */
-        @keyframes losReward {
-          0%   { transform: scale(1);     box-shadow: 0 0 0 0 ${T.primary}B3; }
-          30%  { transform: scale(1.045); box-shadow: 0 0 22px 6px ${T.primary}66; }
-          60%  { transform: scale(0.982); box-shadow: 0 0 30px 10px ${T.primary}26; }
-          100% { transform: scale(1);     box-shadow: 0 0 0 0 ${T.primary}00; }
-        }
-        .los-reward { animation: losReward .7s cubic-bezier(.34,1.56,.64,1) forwards; }
-
-        @keyframes losPop {
-          0%   { transform: scale(1)    rotate(0deg); }
-          35%  { transform: scale(1.35) rotate(-8deg); }
-          62%  { transform: scale(0.9)  rotate(3deg); }
-          100% { transform: scale(1.06) rotate(0deg); }
-        }
-        .los-pop { animation: losPop .52s cubic-bezier(.34,1.56,.64,1) forwards; }
-
-        @keyframes losRipple {
-          0%   { opacity: .95; transform: scale(1); }
-          100% { opacity: 0;   transform: scale(2.9); }
-        }
-        .los-ripple { animation: losRipple .64s cubic-bezier(.22,1,.36,1) forwards; }
-
-        @keyframes losHalo { 0%,100% { opacity: .38; transform: scale(1); } 50% { opacity: .62; transform: scale(1.06); } }
-        .los-halo { animation: losHalo 2.4s ease-in-out infinite; }
-
-        @keyframes losThrob { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-        .los-throb { animation: losThrob 2.4s ease-in-out infinite; }
-
-        /* Hover lives in CSS so React never fights an imperatively-set style. */
-        .los-nav:not(.los-nav-on):hover {
-          background: rgba(255,255,255,0.07) !important;
-          color: ${T.fg} !important;
-        }
-        .los-nav-on:hover { filter: brightness(1.12); }
-        .los-btn:active { filter: brightness(.95); }
-        .los-tab:active { transform: scale(.93); }
-
-        @media (prefers-reduced-motion: reduce) {
-          .los-flame, .los-in, .los-cover-in, .los-reward,
-          .los-pop, .los-ripple, .los-halo, .los-throb, .los-drift {
-            animation: none !important;
-          }
-          .los-btn:hover { transform: none !important; }
-        }
-      `}</style>
+      <AppStyles />
 
       <div className="flex min-h-screen">
         {/* ---------- sidebar (desktop) ---------- */}
