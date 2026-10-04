@@ -9,6 +9,7 @@ out/
 
 # personal data snapshots — localStorage exports, never committed
 graphify-out/data/
+backups/
 
 # graphify working files
 graphify-out/cache/

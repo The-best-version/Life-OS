@@ -128,6 +128,7 @@ import {
   CalendarRange,
   Link2,
   Layers,
+  TrendingDown,
 } from "lucide-react";
 
 /* ==================================================================== *
@@ -695,9 +696,30 @@ const parentHorizon = (id) =>
   id === "quarter" ? "year" : id === "year" ? "h3" : null;
 
 /* The three-year arc. 2027 is the year this whole app is named for, so it
-   anchors the window and the two after it complete the horizon. */
-const GOAL_YEARS = [2027, 2028, 2029];
+   anchors the horizon and the two after it complete it. */
+const ARC = [2027, 2028, 2029];
 const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
+
+/* The years a goal may be filed under: the arc, plus the year you are
+   actually standing in when that is earlier than it. Planning 2027 from 2026
+   is the normal case right now, and the months before the arc opens are
+   exactly when the planning happens — a year with no tab is a year you cannot
+   write a goal in, and the three-month run-up would have nowhere to live.
+   From 2027 onward this is the arc and nothing else, so no goal's year ever
+   stops being selectable underneath it. */
+const GOAL_YEARS = (() => {
+  const y = new Date().getFullYear();
+  return y < ARC[0] ? [y, ...ARC] : ARC;
+})();
+
+/* A stored year is validated against this range, not against GOAL_YEARS —
+   GOAL_YEARS shrinks on the first of January once the run-up year is behind
+   us, and validating against it would silently move every goal filed in that
+   year into the next one. The range is fixed, so a 2026 goal stays a 2026
+   goal forever; the screen keeps offering its tab for as long as anything
+   lives there. */
+const YEAR_MIN = ARC[0] - 1;
+const YEAR_MAX = ARC[ARC.length - 1];
 
 /* --- routine groups -------------------------------------------------- */
 const GROUPS = [
@@ -1194,8 +1216,20 @@ const PLACE_BY_ID = new Map(PLACES.map((p) => [p.id, p]));
 const placeShape = (p) => {
   const o = obj(p);
   const seed = PLACE_BY_ID.get(o.id) || PLACES[0];
-  const num = (v, fb, lim) =>
-    Number.isFinite(+v) && Math.abs(+v) <= lim ? +v : fb;
+  /* Unary `+` turns null, [], "" and false into 0, and 0 is a perfectly
+     plausible-looking longitude — so a payload that lost a field came back
+     sitting on the prime meridian at UTC+0 and the prayer times were three
+     hours out without anything looking broken. Only a real number, or a
+     string that is entirely one, is allowed to pass. */
+  const num = (v, fb, lim) => {
+    const n =
+      typeof v === "number"
+        ? v
+        : typeof v === "string" && v.trim() !== ""
+          ? Number(v)
+          : NaN;
+    return Number.isFinite(n) && Math.abs(n) <= lim ? n : fb;
+  };
   return {
     id: PLACE_BY_ID.has(o.id) ? o.id : o.id === "custom" ? "custom" : seed.id,
     label: typeof o.label === "string" && o.label.trim() ? o.label.trim() : seed.label,
@@ -1977,7 +2011,10 @@ const goalShape = (g) => {
        meaningless below it, but both are stored regardless: changing a
        goal's horizon and changing it back must not lose where it sat. */
     quarter: QUARTER_IDS.has(o.quarter) ? o.quarter : currentQuarter(),
-    year: GOAL_YEARS.includes(+o.year) ? +o.year : GOAL_YEARS[0],
+    year:
+      Number.isInteger(+o.year) && +o.year >= YEAR_MIN && +o.year <= YEAR_MAX
+        ? +o.year
+        : GOAL_YEARS[0],
     parent: typeof o.parent === "string" && o.parent ? o.parent : null,
     why: typeof o.why === "string" ? o.why : "",
     /* A target of zero is not a broken meter, it is a goal that has none —
@@ -2048,6 +2085,80 @@ function daysTo(key) {
   const now = new Date();
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((end - midnight) / 86400000) + 1;
+}
+
+/* --- the countdown ---------------------------------------------------- *
+ *  A horizon with no clock on it is a wish. These two functions are the only
+ *  place a window's span is computed, so the goals screen and the routine
+ *  strip can never disagree about how much of it is left.
+ * ---------------------------------------------------------------------- */
+
+/* The first and last day of a horizon's window, as date keys. */
+function windowOf(horizon, year = GOAL_YEARS[0], quarter = "q1") {
+  /* The arc, not GOAL_YEARS: the run-up year is a place to file goals, not a
+     fourth year of a three-year horizon. */
+  if (horizon === "h3") return [`${ARC[0]}-01-01`, `${ARC[ARC.length - 1]}-12-31`];
+  if (horizon === "year") return [`${year}-01-01`, `${year}-12-31`];
+  const qi = Math.max(0, QUARTERS.findIndex((q) => q.id === quarter));
+  return [fmtDay(new Date(year, qi * 3, 1)), fmtDay(new Date(year, qi * 3 + 3, 0))];
+}
+
+/* Where today stands inside that window. `left` counts the day you are
+   standing in — on the last day of a quarter you still have that whole day,
+   which is why a live window never reads zero. A window that has not opened
+   yet reports its full length rather than a negative one: «لم يبدأ» is a
+   different answer from «بقي يوم», and collapsing them is how a planner ends
+   up telling you to hurry in a quarter that starts in March. */
+function windowStand(from, to) {
+  const total = Math.max(1, daysBetween(from, to) + 1);
+  /* `daysTo` counts the day you are standing in, which is what «بقي» wants
+     and what «يبدأ بعد» does not: a window opening tomorrow starts in one
+     day, not two. The inclusive day comes back off for the start only. */
+  const untilStart = daysTo(from) === null ? null : daysTo(from) - 1;
+  const left = daysTo(to);
+  /* A window that has not opened still reports the days to its *end*, because
+     that is what «كم بقي» asks. Reporting its full span instead answered a
+     question nobody had and printed «يبدأ بعد ٩٠ يومًا» three times over,
+     which is a countdown that counts nothing. The start is said underneath,
+     as a note, and the elapsed bar stays empty until the day arrives. */
+  if (untilStart !== null && untilStart > 0)
+    return {
+      state: "soon",
+      total,
+      left: left === null ? total : Math.max(0, left),
+      gone: 0,
+      pct: 0,
+      until: untilStart,
+    };
+  if (left === null || left <= 0)
+    return { state: "done", total, left: 0, gone: total, pct: 100 };
+  return {
+    state: "live",
+    total,
+    left,
+    gone: total - left,
+    pct: Math.round(((total - left) / total) * 100),
+  };
+}
+
+/* Which 90-day window the goals screen should open on: the one you are
+   standing in, unless nothing is filed there yet — in which case the earliest
+   window that does have goals. A planner that greets you with an empty
+   quarter while your whole year is written one tab over has made you do its
+   job, and the run-up months before the arc opens are exactly when that
+   happens. */
+function openingWindow(goals) {
+  const here = new Date().getFullYear();
+  const live = GOAL_YEARS.includes(here)
+    ? { year: here, quarter: currentQuarter() }
+    : { year: GOAL_YEARS[0], quarter: QUARTERS[0].id };
+  const list = rows(goals).map(goalShape).filter((g) => g.horizon === "quarter");
+  if (!list.length) return live;
+  if (list.some((g) => g.year === live.year && g.quarter === live.quarter))
+    return live;
+  const rank = (g) => g.year * 10 + QUARTERS.findIndex((q) => q.id === g.quarter);
+  const first = list.reduce((a, b) => (rank(b) < rank(a) ? b : a));
+  return { year: first.year, quarter: first.quarter };
 }
 
 /* The seed, written as the tree it actually is so the links between the three
@@ -5867,6 +5978,7 @@ function RoutineModule({
   onOpenMirror,
   onOpenReflect,
   onOpenSettings,
+  onGoGoals,
   reflected,
 }) {
   const [editing, setEditing] = useState(null); // {id?, label, group}
@@ -6164,6 +6276,11 @@ function RoutineModule({
           }
         />
       </div>
+
+      {/* The habits below are what spend the days this counts, so the two sit
+          together — a countdown on a screen of its own is a number you visit,
+          not one you feel. */}
+      <CountdownStrip state={state} onGo={onGoGoals} />
 
       {/* habit groups */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -7576,6 +7693,327 @@ function DeepWorkModule({ state, setState }) {
  *  shows only what you scan for.
  * ==================================================================== */
 
+/* --- the horizon clock ------------------------------------------------ *
+ *  How much of a window has gone, beside how much of its goals have. The
+ *  first number alone is a countdown and decoration; the two together are
+ *  the only thing that can tell you that you are behind, which is the one
+ *  fact a planner exists to surface while there is still time to act on it.
+ * ---------------------------------------------------------------------- */
+const DRIFT_BAND = 10; // inside ten points of the clock still counts as on pace
+
+function horizonClock(id, all, year, quarter) {
+  const [from, to] = windowOf(id, year, quarter);
+  const stand = windowStand(from, to);
+  const list = all.filter((g) =>
+    g.horizon !== id
+      ? false
+      : id === "quarter"
+        ? g.quarter === quarter && g.year === year
+        : id === "year"
+          ? g.year === year
+          : true,
+  );
+  const hit = list.length
+    ? Math.round(list.reduce((n, g) => n + goalPct(g, all), 0) / list.length)
+    : 0;
+  const done = list.filter((g) => g.done).length;
+  /* Pace is only a question once the window is open and has goals in it.
+     Calling an empty quarter «متأخّر» would be scolding someone for not yet
+     having written anything down. */
+  const judged = stand.state === "live" && list.length > 0;
+  const drift = hit - stand.pct;
+  return {
+    ...stand,
+    from,
+    to,
+    goals: list.length,
+    done,
+    hit,
+    drift,
+    pace: !judged
+      ? null
+      : drift >= DRIFT_BAND
+        ? { label: "متقدّم على الوقت", tint: T.primary }
+        : drift <= -DRIFT_BAND
+          ? { label: "متأخّر عن الوقت", tint: T.danger }
+          : { label: "على المسار", tint: T.accent },
+  };
+}
+
+/* The two bars every clock draws: the window's own progress underneath, the
+   goals' progress on top of it. Deliberately the same geometry in both the
+   card and the strip, so the gap between them reads identically everywhere. */
+function ClockBars({ clock, tint, thin = false }) {
+  const h = thin ? "h-1" : "h-1.5";
+  const track = `${h} block w-full overflow-hidden rounded-full`;
+  return (
+    <span className={`block ${thin ? "space-y-1" : "space-y-1.5"}`}>
+      <span
+        className={track}
+        style={{ background: "rgba(255,255,255,0.07)" }}
+        title={`مضى ${clock.pct}% من المدّة`}
+      >
+        <span
+          className="block h-full rounded-full transition-all duration-700"
+          style={{ width: `${clock.pct}%`, background: "rgba(255,255,255,0.3)" }}
+        />
+      </span>
+      <span
+        className={track}
+        style={{ background: "rgba(255,255,255,0.07)" }}
+        title={`أُنجز ${clock.hit}% من الأهداف`}
+      >
+        <span
+          className="block h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${clock.hit}%`,
+            backgroundImage: `linear-gradient(90deg, ${tint}, ${tint}AA)`,
+            boxShadow: clock.hit ? `0 0 10px ${tint}99` : "none",
+          }}
+        />
+      </span>
+    </span>
+  );
+}
+
+/* The big number, written so the plural agrees with it: ٣ أيام but ٢٥ يومًا.
+   A fixed noun beside a live counter is wrong most of the time. */
+function DaysLeft({ clock, tint, size = "text-[30px]" }) {
+  /* Spans throughout, never <p>: both callers render this inside a <button>,
+     and a block element in there is invalid markup the browser is free to
+     reflow out of the button entirely. */
+  if (clock.state === "done")
+    return (
+      <span className="block text-[15px] font-extrabold" style={{ color: T.faint }}>
+        انتهت المدّة
+      </span>
+    );
+  return (
+    <>
+      <span className="flex items-baseline gap-1.5 leading-none">
+        <span
+          dir="ltr"
+          className={`${size} font-extrabold tabular-nums`}
+          style={{ color: tint }}
+        >
+          {clock.left}
+        </span>
+        <span className="text-[11px] font-bold" style={{ color: T.muted }}>
+          {dayWord(clock.left)}
+        </span>
+      </span>
+      {clock.state === "soon" && (
+        <span className="mt-1 block text-[9.5px] font-bold" style={{ color: T.faint }}>
+          يبدأ بعد{" "}
+          <span dir="ltr" className="tabular-nums">
+            {clock.until}
+          </span>{" "}
+          {dayWord(clock.until)}
+        </span>
+      )}
+    </>
+  );
+}
+
+/* The full card, for the goals screen. Three windows side by side, each
+   saying how long is left, how much of it has gone, and how far its goals
+   have got — and naming the gap between the last two out loud. */
+function CountdownCard({ all, year, quarter, horizon, onPick }) {
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="min-w-0">
+        <h3
+          className="flex items-center gap-2 text-[16px] font-extrabold"
+          style={{ color: T.ctaLift }}
+        >
+          <Hourglass size={16} /> العدّ التنازلي
+        </h3>
+        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+          الشريط الباهت هو ما مضى من المدّة، والملوّن ما أُنجز من أهدافها. حين
+          يسبق الباهتُ الملوّنَ فأنت متأخّر — وهذا هو الرقم الذي يستحقّ النظر.
+        </p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {HORIZONS.map((h) => {
+          const clock = horizonClock(h.id, all, year, quarter);
+          const on = h.id === horizon;
+          const label =
+            h.id === "h3"
+              ? ARC_LABEL
+              : h.id === "year"
+                ? String(year)
+                : `${quarterOf(quarter).label} · ${year}`;
+          return (
+            <button
+              key={h.id}
+              onClick={() => onPick(h.id)}
+              aria-pressed={on}
+              className="rounded-2xl border p-4 text-right transition-all duration-200"
+              style={{
+                borderColor: on ? `${h.tint}80` : T.border,
+                backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
+                backgroundImage: on
+                  ? `linear-gradient(160deg, ${h.tint}24, ${h.tint}08)`
+                  : "none",
+                boxShadow: on ? `0 10px 26px -18px ${h.tint}` : "none",
+              }}
+            >
+              <span
+                className="flex items-center gap-1.5 text-[12px] font-extrabold"
+                style={{ color: h.tint }}
+              >
+                <h.icon size={13} strokeWidth={2.2} />
+                {h.short}
+              </span>
+              <span className="mt-0.5 block text-[10px]" dir="auto" style={{ color: T.faint }}>
+                {label}
+              </span>
+
+              <span className="mt-3 block">
+                <DaysLeft clock={clock} tint={h.tint} />
+              </span>
+
+              <span className="mt-3 block">
+                <ClockBars clock={clock} tint={h.tint} />
+              </span>
+
+              {/* Only the figure is LTR. Wrapping the Arabic word in it too
+                  flips the pair and prints «مضى ٪٠». */}
+              <span
+                className="mt-2.5 flex items-center justify-between gap-2 text-[9.5px]"
+                style={{ color: T.faint }}
+              >
+                {/* Latin «%», like every other figure in this file. The
+                    Arabic sign U+066A is a terminator the bidi algorithm
+                    reorders around the digits, and it printed «٪٧٦». */}
+                <span>
+                  مضى{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {clock.pct}%
+                  </span>
+                </span>
+                <span>
+                  أُنجز{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {clock.hit}%
+                  </span>
+                </span>
+              </span>
+
+              <span className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <span
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+                  style={{
+                    background:
+                      clock.goals && clock.done === clock.goals
+                        ? `${T.primary}1A`
+                        : "rgba(255,255,255,0.05)",
+                    color:
+                      clock.goals && clock.done === clock.goals ? T.primary : T.muted,
+                  }}
+                >
+                  <Flag size={9} />
+                  <span dir="ltr" className="tabular-nums">
+                    {clock.done}/{clock.goals}
+                  </span>
+                </span>
+                {clock.pace && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+                    style={{ background: `${clock.pace.tint}1A`, color: clock.pace.tint }}
+                  >
+                    {clock.drift >= DRIFT_BAND ? (
+                      <TrendingUp size={9} />
+                    ) : clock.drift <= -DRIFT_BAND ? (
+                      <TrendingDown size={9} />
+                    ) : (
+                      <Check size={9} strokeWidth={3} />
+                    )}
+                    {clock.pace.label}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/* The same three clocks, slimmed to a strip for the routine screen. It sits
+   above the habit blocks on purpose: the habits are what spend the days the
+   strip is counting, and seeing the two together is the whole point. */
+function CountdownStrip({ state, onGo }) {
+  const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
+  /* The calendar being lived in, not the arc's first year. On this screen
+     «كم بقي من السنة» can only mean the year outside the window. */
+  const here = new Date().getFullYear();
+  const year = GOAL_YEARS.includes(here) ? here : GOAL_YEARS[0];
+  const quarter = GOAL_YEARS.includes(here) ? currentQuarter() : QUARTERS[0].id;
+  const label = { h3: ARC_LABEL, year: String(year), quarter: quarterOf(quarter).label };
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3
+          className="flex items-center gap-2 text-[14px] font-extrabold"
+          style={{ color: T.ctaLift }}
+        >
+          <Hourglass size={15} /> كم بقي؟
+        </h3>
+        <button
+          onClick={onGo}
+          className="inline-flex items-center gap-1 text-[10.5px] font-bold transition-colors hover:brightness-125"
+          style={{ color: T.cta }}
+        >
+          أهدافي <ArrowLeft size={11} />
+        </button>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2.5">
+        {HORIZONS.map((h) => {
+          const clock = horizonClock(h.id, all, year, quarter);
+          return (
+            <div
+              key={h.id}
+              className="rounded-xl border px-3 py-3"
+              style={{ borderColor: `${h.tint}33`, background: `${h.tint}0D` }}
+            >
+              <p
+                className="flex items-center gap-1 text-[10px] font-extrabold"
+                style={{ color: h.tint }}
+              >
+                <h.icon size={11} strokeWidth={2.2} />
+                <span className="truncate">{h.short}</span>
+              </p>
+              <p className="mt-0.5 truncate text-[9px]" dir="auto" style={{ color: T.faint }}>
+                {label[h.id]}
+              </p>
+              <div className="mt-2">
+                <DaysLeft clock={clock} tint={h.tint} size="text-[22px]" />
+              </div>
+              <div className="mt-2.5">
+                <ClockBars clock={clock} tint={h.tint} thin />
+              </div>
+              {clock.pace && (
+                <p
+                  className="mt-2 truncate text-[9px] font-bold"
+                  style={{ color: clock.pace.tint }}
+                  title={clock.pace.label}
+                >
+                  {clock.pace.label}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 /* The word and the vision. Above every goal on the screen, because it is
    what the goals are for — eighteen targets with no sentence saying who they
    are building is a list abandoned in March. */
@@ -7982,6 +8420,10 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
   const pct = goalPct(goal, all);
   const want = parentHorizon(goal.horizon);
   const kids = all.filter((g) => g.parent === goal.id);
+  /* The goal's own year is always offered, even once the arc has moved past
+     it — otherwise the desk would show no year selected at all and the first
+     tap would move the goal somewhere the user never asked for. */
+  const deskYears = [...new Set([...GOAL_YEARS, goal.year])].sort((a, b) => a - b);
   /* Only goals one horizon up may be a parent, and never one already below
      this goal in the chain — that is the loop `migrate` has to repair, and it
      is cheaper to make it unreachable in the picker than to repair it later. */
@@ -8122,7 +8564,7 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
                   );
                 })}
               {goal.horizon !== "h3" &&
-                GOAL_YEARS.map((y) => {
+                deskYears.map((y) => {
                   const on = y === goal.year;
                   return (
                     <button
@@ -8469,12 +8911,9 @@ function GoalsModule({ state, setState }) {
      that has not begun, because the wall clock happens to say October, is
      the one window nobody is planning in. */
   const here = new Date().getFullYear();
-  const inArc = GOAL_YEARS.includes(here);
   const [horizon, setHorizon] = useState("quarter");
-  const [quarter, setQuarter] = useState(() =>
-    inArc ? currentQuarter() : QUARTERS[0].id,
-  );
-  const [year, setYear] = useState(inArc ? here : GOAL_YEARS[0]);
+  const [quarter, setQuarter] = useState(() => openingWindow(state.goals).quarter);
+  const [year, setYear] = useState(() => openingWindow(state.goals).year);
   const [deskId, setDeskId] = useState(null);
   const [orphansOnly, setOrphansOnly] = useState(false);
 
@@ -8488,6 +8927,16 @@ function GoalsModule({ state, setState }) {
       m.get(g.parent).push(g);
     }
     return m;
+  }, [all]);
+
+  /* The years on offer: the arc, plus any year that still has goals filed in
+     it. Without the second half, a year the arc has moved past would keep its
+     goals but lose its tab — and a goal you cannot navigate to is gone as far
+     as the user is concerned. */
+  const years = useMemo(() => {
+    const set = new Set(GOAL_YEARS);
+    for (const g of all) if (g.horizon !== "h3") set.add(g.year);
+    return [...set].sort((a, b) => a - b);
   }, [all]);
 
   const meta = horizonOf(horizon);
@@ -8617,53 +9066,24 @@ function GoalsModule({ state, setState }) {
         onSave={(northStar) => setState((s) => ({ ...s, northStar }))}
       />
 
-      {/* horizon tabs — the chain, top to bottom */}
-      <div className="grid grid-cols-3 gap-2">
-        {HORIZONS.map((x) => {
-          const on = x.id === horizon;
-          const list = all.filter((g) => g.horizon === x.id);
-          const hit = list.filter((g) => g.done).length;
-          const XIcon = x.icon;
-          return (
-            <button
-              key={x.id}
-              onClick={() => {
-                setHorizon(x.id);
-                setOrphansOnly(false);
-              }}
-              aria-pressed={on}
-              className="rounded-2xl border px-3 py-3 text-right transition-all duration-200"
-              style={{
-                borderColor: on ? `${x.tint}80` : T.border,
-                backgroundImage: on
-                  ? `linear-gradient(160deg, ${x.tint}2E, ${x.tint}0A)`
-                  : "none",
-                backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
-                color: on ? x.tint : T.muted,
-                boxShadow: on ? `0 10px 26px -16px ${x.tint}` : "none",
-              }}
-            >
-              <span className="flex items-center gap-1.5 text-[12.5px] font-extrabold">
-                <XIcon size={13} strokeWidth={2.2} />
-                <span className="truncate">{x.short}</span>
-              </span>
-              <span
-                className="mt-1 block text-[10.5px] font-bold tabular-nums"
-                dir="ltr"
-                style={{ color: on ? x.tint : T.faint }}
-              >
-                {hit}/{list.length}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* The clock on all three windows at once. Doubles as the horizon
+          switcher, so the countdown is not a second control to learn. */}
+      <CountdownCard
+        all={all}
+        year={year}
+        quarter={quarter}
+        horizon={horizon}
+        onPick={(id) => {
+          setHorizon(id);
+          setOrphansOnly(false);
+        }}
+      />
 
       {/* the window inside the horizon */}
       {horizon !== "h3" && (
         <div className="space-y-2">
           <div className="flex gap-2">
-            {GOAL_YEARS.map((y) => {
+            {years.map((y) => {
               const on = y === year;
               const list = all.filter((g) => g.horizon === horizon && g.year === y);
               return (
@@ -20392,6 +20812,7 @@ export default function LifeOS() {
                   onOpenMirror={() => setMirror(true)}
                   onOpenReflect={() => setReflect(true)}
                   onOpenSettings={() => setSettings(true)}
+                  onGoGoals={() => go("goals")}
                   reflected={alreadyReflected}
                 />
               )}
