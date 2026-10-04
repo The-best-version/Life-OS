@@ -7740,84 +7740,264 @@ function horizonClock(id, all, year, quarter) {
   };
 }
 
-/* The two bars every clock draws: the window's own progress underneath, the
-   goals' progress on top of it. Deliberately the same geometry in both the
-   card and the strip, so the gap between them reads identically everywhere. */
-function ClockBars({ clock, tint, thin = false }) {
-  const h = thin ? "h-1" : "h-1.5";
-  const track = `${h} block w-full overflow-hidden rounded-full`;
+/* --- the pace track --------------------------------------------------- *
+ *  One track, not two. The fill is how far the goals have got; the marker
+ *  standing on it is where the calendar currently is. Marker ahead of fill
+ *  means you are behind, and that reads in a glance without a legend —
+ *  which two stacked bars never did, because at the start of a window they
+ *  are both empty and look like a component that failed to load.
+ *
+ *  Everything is positioned from `right`: the page is RTL, so a window fills
+ *  from the right edge the way the text runs.
+ * ---------------------------------------------------------------------- */
+function PaceTrack({ clock, tint, compact = false }) {
+  const h = compact ? 7 : 9;
+  const behind = clock.pace && clock.drift <= -DRIFT_BAND;
   return (
-    <span className={`block ${thin ? "space-y-1" : "space-y-1.5"}`}>
+    <span className="relative block" style={{ height: h + 10, marginTop: 2 }}>
+      {/* the window */}
       <span
-        className={track}
-        style={{ background: "rgba(255,255,255,0.07)" }}
-        title={`مضى ${clock.pct}% من المدّة`}
+        className="absolute inset-x-0 block overflow-hidden rounded-full"
+        style={{ top: 5, height: h, background: "rgba(255,255,255,0.09)" }}
       >
+        {/* time already spent, kept very quiet — it is the backdrop the fill
+            is judged against, not a second thing to read */}
         <span
-          className="block h-full rounded-full transition-all duration-700"
-          style={{ width: `${clock.pct}%`, background: "rgba(255,255,255,0.3)" }}
-        />
-      </span>
-      <span
-        className={track}
-        style={{ background: "rgba(255,255,255,0.07)" }}
-        title={`أُنجز ${clock.hit}% من الأهداف`}
-      >
-        <span
-          className="block h-full rounded-full transition-all duration-700"
+          className="absolute inset-y-0 block transition-all duration-700"
           style={{
+            right: 0,
+            width: `${clock.pct}%`,
+            background: "rgba(255,255,255,0.10)",
+          }}
+        />
+        {/* what the goals have actually done */}
+        <span
+          className="absolute inset-y-0 block rounded-full transition-all duration-700"
+          style={{
+            right: 0,
             width: `${clock.hit}%`,
-            backgroundImage: `linear-gradient(90deg, ${tint}, ${tint}AA)`,
-            boxShadow: clock.hit ? `0 0 10px ${tint}99` : "none",
+            backgroundImage: `linear-gradient(270deg, ${tint}, ${tint}99)`,
+            boxShadow: clock.hit ? `0 0 12px ${tint}AA` : "none",
           }}
         />
       </span>
+
+      {/* «أنت هنا» — the calendar's own position on the window */}
+      {clock.state === "live" && (
+        <span
+          className="absolute block transition-all duration-700"
+          style={{ right: `${clock.pct}%`, top: 0, height: h + 10 }}
+          title={`مضى ${clock.pct}% من المدّة`}
+        >
+          <span
+            className="absolute block rounded-full"
+            style={{
+              top: 0,
+              right: -1.5,
+              width: 3,
+              height: h + 10,
+              background: behind ? T.danger : "rgba(255,255,255,0.85)",
+              boxShadow: behind
+                ? `0 0 10px ${T.danger}`
+                : "0 0 8px rgba(255,255,255,0.55)",
+            }}
+          />
+        </span>
+      )}
     </span>
   );
 }
 
-/* The big number, written so the plural agrees with it: ٣ أيام but ٢٥ يومًا.
-   A fixed noun beside a live counter is wrong most of the time. */
-function DaysLeft({ clock, tint, size = "text-[30px]" }) {
-  /* Spans throughout, never <p>: both callers render this inside a <button>,
-     and a block element in there is invalid markup the browser is free to
-     reflow out of the button entirely. */
-  if (clock.state === "done")
-    return (
-      <span className="block text-[15px] font-extrabold" style={{ color: T.faint }}>
-        انتهت المدّة
-      </span>
-    );
+/* One horizon, as a row. The row is what fixed the design: three tall tiles
+   left most of their height empty and the numbers floating in it, which is
+   what reads as unfinished no matter how the type is set. */
+function HorizonRow({ clock, h, compact = false, on = false, as = "div", ...rest }) {
+  const Tag = as;
+  const label = clock.label;
+  const dead = clock.state === "done";
   return (
-    <>
-      <span className="flex items-baseline gap-1.5 leading-none">
+    <Tag
+      className={`relative block w-full overflow-hidden rounded-xl border text-right transition-all duration-200${
+        as === "button" ? " hover:brightness-110" : ""
+      }`}
+      style={{
+        borderColor: on ? `${h.tint}80` : `${h.tint}2E`,
+        backgroundColor: on ? "transparent" : "rgba(255,255,255,0.025)",
+        backgroundImage: on
+          ? `linear-gradient(160deg, ${h.tint}24, ${h.tint}08)`
+          : "none",
+        boxShadow: on ? `0 10px 26px -18px ${h.tint}` : "none",
+        opacity: dead ? 0.55 : 1,
+        padding: compact ? "11px 13px 11px 13px" : "14px 16px",
+      }}
+      {...rest}
+    >
+      {/* the accent edge, on the reading-start side — the same rule the
+          project's own report charts are drawn with */}
+      <span
+        aria-hidden="true"
+        className="absolute block rounded-full"
+        style={{
+          right: 0,
+          top: compact ? 11 : 14,
+          bottom: compact ? 11 : 14,
+          width: 3,
+          background: h.tint,
+          boxShadow: `0 0 10px ${h.tint}99`,
+        }}
+      />
+
+      {/* Three columns — name, track, count — rather than two blocks pinned
+          to the edges. Pinned, the middle of a wide row is simply empty, and
+          an empty middle is what reads as unfinished however the type is set.
+          The order flips on a phone: name and count share the first line and
+          the track takes the second, which is the only way the track stays
+          wide enough to read at 375px. */}
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-2.5 pr-3">
         <span
-          dir="ltr"
-          className={`${size} font-extrabold tabular-nums`}
-          style={{ color: tint }}
+          className={`order-1 block min-w-0 flex-1 sm:flex-none ${
+            compact ? "sm:w-[108px]" : "sm:w-[132px]"
+          }`}
         >
-          {clock.left}
+          <span
+            className={`flex items-center gap-1.5 font-extrabold ${
+              compact ? "text-[11.5px]" : "text-[13px]"
+            }`}
+            style={{ color: h.tint }}
+          >
+            <h.icon size={compact ? 12 : 14} strokeWidth={2.2} />
+            <span className="truncate">{h.short}</span>
+          </span>
+          <span
+            className={`mt-0.5 block truncate ${compact ? "text-[9.5px]" : "text-[10.5px]"}`}
+            dir="auto"
+            style={{ color: T.faint }}
+          >
+            {label}
+          </span>
         </span>
-        <span className="text-[11px] font-bold" style={{ color: T.muted }}>
-          {dayWord(clock.left)}
+
+        <span className="order-3 block w-full min-w-0 sm:order-2 sm:w-auto sm:flex-1">
+          <PaceTrack clock={clock} tint={h.tint} compact={compact} />
+          <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <span
+              className={`flex items-center gap-2 ${compact ? "text-[9px]" : "text-[10px]"}`}
+              style={{ color: T.faint }}
+            >
+              <span>
+                مضى{" "}
+                <span dir="ltr" className="tabular-nums" style={{ color: T.muted }}>
+                  {clock.pct}%
+                </span>
+              </span>
+              <span aria-hidden="true" style={{ opacity: 0.35 }}>
+                ·
+              </span>
+              <span>
+                أُنجز{" "}
+                <span dir="ltr" className="tabular-nums" style={{ color: h.tint }}>
+                  {clock.hit}%
+                </span>
+              </span>
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${
+                compact ? "text-[9px]" : "text-[9.5px]"
+              }`}
+              style={{
+                background:
+                  clock.goals && clock.done === clock.goals
+                    ? `${T.primary}1A`
+                    : "rgba(255,255,255,0.05)",
+                color: clock.goals && clock.done === clock.goals ? T.primary : T.muted,
+              }}
+            >
+              <Flag size={9} />
+              <span dir="ltr" className="tabular-nums">
+                {clock.done}/{clock.goals}
+              </span>
+            </span>
+            {clock.pace && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${
+                  compact ? "text-[9px]" : "text-[9.5px]"
+                }`}
+                style={{ background: `${clock.pace.tint}1A`, color: clock.pace.tint }}
+              >
+                {clock.drift >= DRIFT_BAND ? (
+                  <TrendingUp size={9} />
+                ) : clock.drift <= -DRIFT_BAND ? (
+                  <TrendingDown size={9} />
+                ) : (
+                  <Check size={9} strokeWidth={3} />
+                )}
+                {clock.pace.label}
+              </span>
+            )}
+          </span>
+        </span>
+
+        <span
+          className={`order-2 block shrink-0 text-left sm:order-3 ${
+            compact ? "sm:w-[72px]" : "sm:w-[88px]"
+          }`}
+        >
+          {dead ? (
+            <span
+              className={`block font-extrabold ${compact ? "text-[12px]" : "text-[14px]"}`}
+              style={{ color: T.faint }}
+            >
+              انتهت
+            </span>
+          ) : (
+            <>
+              <span className="flex items-baseline justify-start gap-1 leading-none">
+                <span
+                  dir="ltr"
+                  className={`font-extrabold tabular-nums ${
+                    compact ? "text-[23px]" : "text-[28px]"
+                  }`}
+                  style={{ color: h.tint, letterSpacing: "-0.02em" }}
+                >
+                  {clock.left}
+                </span>
+                <span
+                  className={`font-bold ${compact ? "text-[10px]" : "text-[11px]"}`}
+                  style={{ color: T.muted }}
+                >
+                  {dayWord(clock.left)}
+                </span>
+              </span>
+              {clock.state === "soon" && (
+                <span
+                  className="mt-0.5 block text-[9px] font-bold"
+                  style={{ color: T.faint }}
+                >
+                  يبدأ بعد{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {clock.until}
+                  </span>{" "}
+                  {dayWord(clock.until)}
+                </span>
+              )}
+            </>
+          )}
         </span>
       </span>
-      {clock.state === "soon" && (
-        <span className="mt-1 block text-[9.5px] font-bold" style={{ color: T.faint }}>
-          يبدأ بعد{" "}
-          <span dir="ltr" className="tabular-nums">
-            {clock.until}
-          </span>{" "}
-          {dayWord(clock.until)}
-        </span>
-      )}
-    </>
+    </Tag>
   );
 }
 
-/* The full card, for the goals screen. Three windows side by side, each
-   saying how long is left, how much of it has gone, and how far its goals
-   have got — and naming the gap between the last two out loud. */
+/* The window each horizon is counting, named the way it is spoken. */
+const clockLabel = (id, year, quarter) =>
+  id === "h3"
+    ? ARC_LABEL
+    : id === "year"
+      ? String(year)
+      : `${quarterOf(quarter).label} · ${year}`;
+
+/* The full card, for the goals screen. Each row also switches the horizon,
+   so the countdown is not a second control to learn beside the tabs. */
 function CountdownCard({ all, year, quarter, horizon, onPick }) {
   return (
     <Card className="p-6 sm:p-7">
@@ -7829,112 +8009,25 @@ function CountdownCard({ all, year, quarter, horizon, onPick }) {
           <Hourglass size={16} /> العدّ التنازلي
         </h3>
         <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-          الشريط الباهت هو ما مضى من المدّة، والملوّن ما أُنجز من أهدافها. حين
-          يسبق الباهتُ الملوّنَ فأنت متأخّر — وهذا هو الرقم الذي يستحقّ النظر.
+          الشريط الملوّن ما أُنجز من أهداف النافذة، والعلامة البيضاء واقفة عند
+          اليوم الذي أنت فيه. إن سبقتِ العلامةُ الشريطَ فأنت متأخّر — وهذا هو
+          الرقم الذي يستحقّ النظر.
         </p>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-5 space-y-2.5">
         {HORIZONS.map((h) => {
           const clock = horizonClock(h.id, all, year, quarter);
-          const on = h.id === horizon;
-          const label =
-            h.id === "h3"
-              ? ARC_LABEL
-              : h.id === "year"
-                ? String(year)
-                : `${quarterOf(quarter).label} · ${year}`;
           return (
-            <button
+            <HorizonRow
               key={h.id}
+              as="button"
+              h={h}
+              clock={{ ...clock, label: clockLabel(h.id, year, quarter) }}
+              on={h.id === horizon}
               onClick={() => onPick(h.id)}
-              aria-pressed={on}
-              className="rounded-2xl border p-4 text-right transition-all duration-200"
-              style={{
-                borderColor: on ? `${h.tint}80` : T.border,
-                backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
-                backgroundImage: on
-                  ? `linear-gradient(160deg, ${h.tint}24, ${h.tint}08)`
-                  : "none",
-                boxShadow: on ? `0 10px 26px -18px ${h.tint}` : "none",
-              }}
-            >
-              <span
-                className="flex items-center gap-1.5 text-[12px] font-extrabold"
-                style={{ color: h.tint }}
-              >
-                <h.icon size={13} strokeWidth={2.2} />
-                {h.short}
-              </span>
-              <span className="mt-0.5 block text-[10px]" dir="auto" style={{ color: T.faint }}>
-                {label}
-              </span>
-
-              <span className="mt-3 block">
-                <DaysLeft clock={clock} tint={h.tint} />
-              </span>
-
-              <span className="mt-3 block">
-                <ClockBars clock={clock} tint={h.tint} />
-              </span>
-
-              {/* Only the figure is LTR. Wrapping the Arabic word in it too
-                  flips the pair and prints «مضى ٪٠». */}
-              <span
-                className="mt-2.5 flex items-center justify-between gap-2 text-[9.5px]"
-                style={{ color: T.faint }}
-              >
-                {/* Latin «%», like every other figure in this file. The
-                    Arabic sign U+066A is a terminator the bidi algorithm
-                    reorders around the digits, and it printed «٪٧٦». */}
-                <span>
-                  مضى{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {clock.pct}%
-                  </span>
-                </span>
-                <span>
-                  أُنجز{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {clock.hit}%
-                  </span>
-                </span>
-              </span>
-
-              <span className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <span
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
-                  style={{
-                    background:
-                      clock.goals && clock.done === clock.goals
-                        ? `${T.primary}1A`
-                        : "rgba(255,255,255,0.05)",
-                    color:
-                      clock.goals && clock.done === clock.goals ? T.primary : T.muted,
-                  }}
-                >
-                  <Flag size={9} />
-                  <span dir="ltr" className="tabular-nums">
-                    {clock.done}/{clock.goals}
-                  </span>
-                </span>
-                {clock.pace && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
-                    style={{ background: `${clock.pace.tint}1A`, color: clock.pace.tint }}
-                  >
-                    {clock.drift >= DRIFT_BAND ? (
-                      <TrendingUp size={9} />
-                    ) : clock.drift <= -DRIFT_BAND ? (
-                      <TrendingDown size={9} />
-                    ) : (
-                      <Check size={9} strokeWidth={3} />
-                    )}
-                    {clock.pace.label}
-                  </span>
-                )}
-              </span>
-            </button>
+              aria-pressed={h.id === horizon}
+            />
           );
         })}
       </div>
@@ -7942,9 +8035,8 @@ function CountdownCard({ all, year, quarter, horizon, onPick }) {
   );
 }
 
-/* The same three clocks, slimmed to a strip for the routine screen. It sits
-   above the habit blocks on purpose: the habits are what spend the days the
-   strip is counting, and seeing the two together is the whole point. */
+/* The same three clocks, slimmed for the routine screen. It sits above the
+   habit blocks on purpose: the habits are what spend the days it counts. */
 function CountdownStrip({ state, onGo }) {
   const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
   /* The calendar being lived in, not the arc's first year. On this screen
@@ -7952,13 +8044,12 @@ function CountdownStrip({ state, onGo }) {
   const here = new Date().getFullYear();
   const year = GOAL_YEARS.includes(here) ? here : GOAL_YEARS[0];
   const quarter = GOAL_YEARS.includes(here) ? currentQuarter() : QUARTERS[0].id;
-  const label = { h3: ARC_LABEL, year: String(year), quarter: quarterOf(quarter).label };
 
   return (
     <Card className="p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3
-          className="flex items-center gap-2 text-[14px] font-extrabold"
+          className="flex items-center gap-2 text-[14.5px] font-extrabold"
           style={{ color: T.ctaLift }}
         >
           <Hourglass size={15} /> كم بقي؟
@@ -7972,41 +8063,16 @@ function CountdownStrip({ state, onGo }) {
         </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2.5">
+      <div className="mt-3.5 space-y-2">
         {HORIZONS.map((h) => {
           const clock = horizonClock(h.id, all, year, quarter);
           return (
-            <div
+            <HorizonRow
               key={h.id}
-              className="rounded-xl border px-3 py-3"
-              style={{ borderColor: `${h.tint}33`, background: `${h.tint}0D` }}
-            >
-              <p
-                className="flex items-center gap-1 text-[10px] font-extrabold"
-                style={{ color: h.tint }}
-              >
-                <h.icon size={11} strokeWidth={2.2} />
-                <span className="truncate">{h.short}</span>
-              </p>
-              <p className="mt-0.5 truncate text-[9px]" dir="auto" style={{ color: T.faint }}>
-                {label[h.id]}
-              </p>
-              <div className="mt-2">
-                <DaysLeft clock={clock} tint={h.tint} size="text-[22px]" />
-              </div>
-              <div className="mt-2.5">
-                <ClockBars clock={clock} tint={h.tint} thin />
-              </div>
-              {clock.pace && (
-                <p
-                  className="mt-2 truncate text-[9px] font-bold"
-                  style={{ color: clock.pace.tint }}
-                  title={clock.pace.label}
-                >
-                  {clock.pace.label}
-                </p>
-              )}
-            </div>
+              h={h}
+              compact
+              clock={{ ...clock, label: clockLabel(h.id, year, quarter) }}
+            />
           );
         })}
       </div>
