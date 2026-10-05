@@ -1,11 +1,20 @@
 # dependencies & build output
+# The bare patterns match at any depth, so iron-log/node_modules/ and
+# iron-log/.next/ are already covered. .next-verify is not — it is a second
+# build directory and the name does not match .next/.
 node_modules/
 .next/
+.next-verify/
 dist/
 build/
 out/
 *.tsbuildinfo
 .netlify/
+
+# Half-written files. local-sync-server.js writes every payload to
+# <file>.<pid>.tmp and renames it, so one of these on disk means a write was
+# interrupted mid-flight — it is never something to commit.
+*.tmp
 
 # personal data snapshots — localStorage exports, never committed
 graphify-out/data/
