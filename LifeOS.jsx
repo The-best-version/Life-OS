@@ -178,6 +178,7 @@ import {
   markShape,
   migrate,
   moodOf,
+  MORE_IDS,
   NAV_IDS,
   obj,
   orderNavIds,
@@ -775,6 +776,11 @@ const NAV_BY_ID = new Map(NAV.map((n) => [n.id, n]));
    has never seen, taking a duplicate once — and this only puts the label and
    the icon back on. */
 const orderedNav = (order) => orderNavIds(order).map((id) => NAV_BY_ID.get(id));
+
+/* The tabs that live behind «المزيد»: still built out of the same table, so
+   they keep their label, their short label and their icon — they are simply
+   not part of the order the user arranges. Fixed, so it is computed once. */
+const MORE_NAV = MORE_IDS.map((id) => NAV_BY_ID.get(id)).filter(Boolean);
 
 /* Reordering by id, shared by the drag path and the arrows. Kept generic
    because the habit list already has its own group-aware versions — these
@@ -18987,6 +18993,55 @@ function NavList({ items, tab, onGo, showLabels }) {
   );
 }
 
+/* The sidebar's own «المزيد». The phone bar has had one since there were
+   more tabs than fit a row; the desktop list had nowhere to put a tab that
+   belongs to the app without belonging to the day, so it gets the same
+   disclosure. Closed by default and lit when the tab inside it is the one on
+   screen, because a collapsed group that hides the current screen with no
+   mark on it reads as the nav having lost it. Collapsed to icons the label
+   goes and the row keeps its tooltip, like every other row up there. */
+function NavMore({ items, tab, onGo, showLabels }) {
+  const inside = items.some((n) => n.id === tab);
+  const [open, setOpen] = useState(inside);
+
+  if (!items.length) return null;
+
+  return (
+    <div className="mt-1.5 flex flex-col gap-1.5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={showLabels ? undefined : "المزيد"}
+        className="los-nav flex items-center gap-3 rounded-xl border px-3 py-2.5 text-right transition-all duration-200"
+        style={{
+          borderColor: inside && !open ? `${T.cta}66` : "transparent",
+          background:
+            inside && !open
+              ? `linear-gradient(135deg, ${T.cta}2E, ${T.cta}0F)`
+              : "transparent",
+          color: inside && !open ? T.ctaLift : T.muted,
+        }}
+      >
+        <Menu size={18} strokeWidth={1.9} className="shrink-0" />
+        {showLabels && (
+          <>
+            <span className="truncate text-[13.5px] font-bold">المزيد</span>
+            <span className="mr-auto shrink-0 text-white/30">
+              {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </span>
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div className={showLabels ? "pr-3" : ""}>
+          <NavList items={items} tab={tab} onGo={onGo} showLabels={showLabels} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* Reordering the nav itself. Drag for the mouse and ↑/↓ for a finger, the
    same pairing the habit list uses and for the same reason: HTML5 drag never
    fires on touch, so the arrows are the only path that works on a phone.
@@ -19116,10 +19171,14 @@ function Pip() {
 
 const TAB_BAR = 4; // four fit a phone legibly; the rest live behind "المزيد"
 
-function BottomTabs({ items, tab, onGo, onSettings }) {
+function BottomTabs({ items, more: behind, tab, onGo, onSettings }) {
   const [more, setMore] = useState(false);
   const front = items.slice(0, TAB_BAR);
-  const rest = items.slice(TAB_BAR);
+  /* The tabs past the fourth, then the ones that live here whatever the
+     order says — the sheet is the only place either kind is reachable, so
+     they share it. Appended last: an ordered tab the user pushed down is
+     still a tab he put there, and a secondary one was never in his list. */
+  const rest = [...items.slice(TAB_BAR), ...(behind || [])];
   const restActive = rest.some((n) => n.id === tab);
 
   const glass = {
@@ -20374,7 +20433,15 @@ export default function LifeOS() {
               onReset={() => setNavOrder(NAV_IDS)}
             />
           ) : (
-            <NavList items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
+            <>
+              <NavList items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
+              <NavMore
+                items={MORE_NAV}
+                tab={tab}
+                onGo={go}
+                showLabels={!collapsed}
+              />
+            </>
           )}
 
           <div className="mt-auto space-y-3">
@@ -20546,6 +20613,7 @@ export default function LifeOS() {
 
       <BottomTabs
         items={navItems}
+        more={MORE_NAV}
         tab={tab}
         onGo={go}
         onSettings={() => setSettings(true)}

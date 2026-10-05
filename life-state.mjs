@@ -41,14 +41,31 @@ export const NAV_IDS = [
   "graph",
 ];
 
+/* --- the tabs that live behind «المزيد» -------------------------------- *
+ *  A tab here still exists, still has a screen and is still reachable — it
+ *  simply does not take a row in the main navigation. The knowledge map is
+ *  the first of them: it is read occasionally and never on the way through a
+ *  day, and a permanent row for it pushed the fifteenth tab onto a list of
+ *  daily drivers. Secondary, not deleted: the sidebar grows a «المزيد»
+ *  disclosure of its own and the phone bar already had one.
+ *
+ *  It is a constant and not a user preference on purpose — which tabs are
+ *  daily is the shape of the app, and `navOrder` is the user's say over the
+ *  ones that are. `orderNavIds` keeps these out of that order, so no saved
+ *  payload can put one back in the main list, and nothing drops off the end
+ *  of the phone bar to make room for it.
+ * ---------------------------------------------------------------------- */
+export const MORE_IDS = ["graph"];
+
 /* The saved order, resolved to ids. An id this build no longer has is
-   dropped, a tab the saved order has never seen joins the end, and a
-   duplicate is taken once — without that last part a hand-edited backup
-   could hide a tab outright. Ids rather than tab objects: the definition of
-   a tab is not this module's business, only which ones there are and in what
-   order the user put them. */
+   dropped, a tab that moved behind «المزيد» is dropped too, a tab the saved
+   order has never seen joins the end, and a duplicate is taken once —
+   without that last part a hand-edited backup could hide a tab outright. Ids
+   rather than tab objects: the definition of a tab is not this module's
+   business, only which ones there are and in what order the user put them. */
 export function orderNavIds(order) {
-  const known = new Set(NAV_IDS);
+  const behind = new Set(MORE_IDS);
+  const known = new Set(NAV_IDS.filter((id) => !behind.has(id)));
   const seen = new Set();
   const out = [];
   for (const id of Array.isArray(order) ? order : []) {
@@ -57,7 +74,7 @@ export function orderNavIds(order) {
       out.push(id);
     }
   }
-  for (const id of NAV_IDS) if (!seen.has(id)) out.push(id);
+  for (const id of NAV_IDS) if (known.has(id) && !seen.has(id)) out.push(id);
   return out;
 }
 
@@ -261,7 +278,7 @@ export const READING_QUOTES = [
 
 export const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 20;
+export const SCHEMA = 21;
 /* How many archive rows are kept, and the discipline a day has to reach to
    bank the streak. */
 export const HISTORY_CAP = 500;
@@ -1313,7 +1330,7 @@ export const freshState = (carry = {}) => ({
   /* Entirely date-derived inside, so it carries across a rollover whole —
      the two daily checklists empty themselves by reading today's log row. */
   career: careerShape(carry.career),
-  navOrder: carry.navOrder || NAV_IDS,
+  navOrder: orderNavIds(carry.navOrder),
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -1551,7 +1568,15 @@ export function migrate(saved) {
 
   /* Schema 13 lets the user order the tabs. Stored as ids and normalised on
      the way in, so a payload from a build with different tabs still resolves
-     to a complete, duplicate-free order. */
+     to a complete, duplicate-free order.
+
+     Schema 21 moves the knowledge map behind «المزيد», and that is why this
+     line is the whole of the branch: `orderNavIds` drops every `MORE_IDS`
+     tab from the order, so a schema-20 payload that has «graph» sitting in
+     the sidebar — or in the first four, on the phone bar — comes back
+     without it and without losing the position of anything else. The screen
+     is untouched and the tab is still reachable; only its row in the main
+     list is gone. */
   let navOrder = orderNavIds(saved.navOrder);
 
   /* Schema 14 adds the employability masterplan. orderNavIds appends a tab

@@ -22,6 +22,7 @@ import {
   CORE_CAP,
   TOP_TASK_CAP,
   DAY_START_HOUR,
+  MORE_IDS,
   NAV_IDS,
   orderNavIds,
   dayKey,
@@ -336,20 +337,53 @@ test("yesterdayKey is the day before dayKey", () => {
  *  the tabs
  * ===================================================================== */
 
+const MAIN_IDS = NAV_IDS.filter((id) => !MORE_IDS.includes(id));
+
 test("orderNavIds keeps the saved order, drops the unknown, appends the new", () => {
-  const saved = ["graph", "routine", "not-a-tab", "graph"];
+  const saved = ["vault", "routine", "not-a-tab", "vault"];
   const out = orderNavIds(saved);
-  assert.equal(out[0], "graph");
+  assert.equal(out[0], "vault");
   assert.equal(out[1], "routine");
-  assert.equal(out.length, NAV_IDS.length, "a tab was hidden or doubled");
+  assert.equal(out.length, MAIN_IDS.length, "a tab was hidden or doubled");
   assert.equal(new Set(out).size, out.length, "a tab appears twice");
-  for (const id of NAV_IDS) assert.ok(out.includes(id), id + " is unreachable");
+  for (const id of MAIN_IDS) assert.ok(out.includes(id), id + " is unreachable");
 });
 
 test("orderNavIds survives junk", () => {
   for (const junk of [null, undefined, 7, "routine", [null, 3]]) {
-    assert.deepEqual(orderNavIds(junk), NAV_IDS);
+    assert.deepEqual(orderNavIds(junk), MAIN_IDS);
   }
+});
+
+/* The knowledge map moved behind «المزيد» in schema 21. It still exists and
+   still has a screen — what it no longer has is a row in the list the user
+   orders, and no saved payload may put one back. */
+test("a MORE_IDS tab is a tab, and is kept out of the ordered list", () => {
+  assert.ok(MORE_IDS.length, "the overflow list is empty");
+  for (const id of MORE_IDS) {
+    assert.ok(NAV_IDS.includes(id), id + " is not a tab at all");
+    assert.ok(!orderNavIds(null).includes(id), id + " is still in the order");
+    assert.ok(
+      !orderNavIds([id, "routine"]).includes(id),
+      id + " came back from a saved order",
+    );
+  }
+});
+
+test("migrate takes an overflow tab out of a schema-20 order without moving the rest", () => {
+  const saved = {
+    schema: 20,
+    navOrder: ["routine", "graph", "agenda", "uni", "career"],
+  };
+  const out = migrate(saved);
+  assert.ok(!out.navOrder.includes("graph"), "graph is still in the sidebar");
+  assert.deepEqual(
+    out.navOrder.slice(0, 4),
+    ["routine", "agenda", "uni", "career"],
+    "the tabs around it were reshuffled",
+  );
+  assert.equal(out.navOrder.length, MAIN_IDS.length);
+  assert.equal(new Set(out.navOrder).size, out.navOrder.length);
 });
 
 /* ===================================================================== *
