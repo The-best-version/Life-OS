@@ -21,3 +21,6 @@ Thumbs.db
 
 # Obsidian per-machine UI state
 graphify-out/.obsidian/
+
+# The throwaway data directory the test server writes to.
+life-os-test-data/

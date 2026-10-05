@@ -8,10 +8,16 @@
       "port": 3000
     },
     {
-      "name": "life-os",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "serve", "life-os", "-l", "4310", "--no-clipboard"],
-      "port": 4310
+      "name": "life-os-test",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "local-sync-server.js",
+        "--port",
+        "47699",
+        "--data-dir",
+        "life-os-test-data"
+      ],
+      "port": 47699
     }
   ]
 }

@@ -37,6 +37,26 @@ const site = join(root, "life-os");
 const modules = join(root, "iron-log", "node_modules");
 const work = mkdtempSync(join(tmpdir(), "life-os-build-"));
 
+/* The tests first, and the build stops if they fail. There is no CI here and
+   no second pair of eyes: this script is the only thing that runs between a
+   change and the page he opens, so it is the only place a failing test can
+   actually stop something. Skippable with --no-test for the rare case of
+   debugging the build itself. */
+if (!process.argv.includes("--no-test")) {
+  try {
+    execFileSync(process.execPath, ["--test", "tests/*.test.mjs"], {
+      cwd: root,
+      stdio: "inherit",
+    });
+  } catch {
+    console.error(
+      "\nBuild stopped: the tests failed. Fix them, or run with --no-test if you\n" +
+        "are debugging the build itself — but then nothing is checking the state.",
+    );
+    process.exit(1);
+  }
+}
+
 const esbuild = await import(pathToFileURL(join(modules, "esbuild", "lib", "main.js")).href);
 
 /* The named exports the bundle reaches for, read off the global rather than
@@ -169,9 +189,10 @@ try {
   writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
   copyFileSync(src, join(site, "LifeOS.source.jsx"));
   /* The source beside the build has to actually build. LifeOS.jsx imports the
-     prayer maths, so shipping the one without the other leaves a copy that
-     looks complete and is not. */
+     prayer maths and the state module, so shipping it without either leaves a
+     copy that looks complete and is not. */
   copyFileSync(join(root, "prayer-times.mjs"), join(site, "prayer-times.mjs"));
+  copyFileSync(join(root, "life-state.mjs"), join(site, "life-state.mjs"));
 
   const kb = (n) => (n / 1024).toFixed(0) + " KB";
   console.log(`\nlife-os/index.html          css ${kb(css.length)}   js ${kb(js.length)}`);

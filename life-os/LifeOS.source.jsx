@@ -134,6 +134,151 @@ import {
 
 import { fixHour, prayerTimes } from "./prayer-times.mjs";
 
+/* The state itself — the day boundary, the seeds, the shapes, the migration
+   and the discipline score — lives in ./life-state.mjs so that `node --test`
+   can load it without a browser and without React. esbuild folds it back in,
+   so the page the build ships is still one file. Everything that module holds
+   is exported and everything the screens use is imported here by name; a
+   helper left behind is a ReferenceError at first render, which is a blank
+   white page. */
+import {
+  addDays,
+  APP_STAGES,
+  appShape,
+  ARC,
+  badHabitShape,
+  bookShape,
+  carryOf,
+  clampGoal,
+  clampNum,
+  coreOf,
+  CORE_CAP,
+  COST_TYPES,
+  costType,
+  COURSE_TINTS,
+  courseShape,
+  currentQuarter,
+  DAY_START_HOUR,
+  dayKey,
+  disciplineOf,
+  EVENT_KINDS,
+  eventShape,
+  fmtDay,
+  freshState,
+  GOAL_YEARS,
+  goalShape,
+  gradeOf,
+  GRADES,
+  hhmm,
+  HISTORY_CAP,
+  HORIZONS,
+  isKey,
+  keyToDate,
+  logicalNow,
+  markShape,
+  migrate,
+  moodOf,
+  NAV_IDS,
+  obj,
+  orderNavIds,
+  parentHorizon,
+  PILLARS,
+  PLACE_BY_ID,
+  PLACES,
+  placeShape,
+  QUARTERS,
+  READ_ACTIVE,
+  REPEATS,
+  rollDay,
+  rows,
+  SCHEMA,
+  slotShape,
+  sprintShape,
+  storyShape,
+  tagOf,
+  TERM_WEEKS_DEFAULT,
+  TOP_TASK_CAP,
+  STREAK_TARGET,
+  termShape,
+  uid,
+  UNI_DAYS,
+  UNI_TASK_KINDS,
+  uniDayOf,
+  uniShape,
+  uniTaskShape,
+  URGE_MOODS,
+  URGE_TAGS,
+  urgeShape,
+  VISION_MAX,
+  WARN_CHOICES,
+  WATER_GOAL_MAX,
+  WORD_MAX,
+} from "./life-state.mjs";
+
+/* --- the icons, fastened on ------------------------------------------- *
+ *  Every table of ids, labels and tints lives in life-state.mjs; a lucide
+ *  component cannot, because importing one would stop `node --test` loading
+ *  that module at all — which is the entire point of the split.
+ *
+ *  So the icons are set here, onto the very row objects the module exports
+ *  rather than onto copies of them. The lookups that read those tables —
+ *  `tagOf`, `costType`, `kindOf` and the rest — live on both sides of the
+ *  split, and the screens read `.icon` off whatever they hand back. A copy
+ *  would give every lookup on the module's side an iconless row and quietly
+ *  blank half the screens. Done once, at module load, long before a render.
+ * --------------------------------------------------------------------- */
+const fastenIcons = (list, icons) => {
+  for (const row of list) row.icon = icons[row.id];
+  return list;
+};
+fastenIcons(PILLARS, {
+  faith: MoonStar,
+  health: HeartPulse,
+  career: Briefcase,
+  money: Wallet,
+  social: Users,
+  self: Sparkles,
+});
+fastenIcons(HORIZONS, {
+  h3: Telescope,
+  year: CalendarRange,
+  quarter: Target,
+});
+fastenIcons(COST_TYPES, {
+  money: Coins,
+  time: Hourglass,
+});
+fastenIcons(URGE_TAGS, {
+  big: Mountain,
+  unclear: HelpCircle,
+  fear: Frown,
+  phone: Smartphone,
+  bored: Snail,
+  tired: BatteryLow,
+  stress: CloudRain,
+  lonely: Eye,
+  people: Users,
+  free: Wind,
+});
+fastenIcons(EVENT_KINDS, {
+  exam: GraduationCap,
+  deadline: ClipboardList,
+  class: Presentation,
+  meet: Handshake,
+  money: HandCoins,
+  social: Sparkles,
+  travel: Rocket,
+  note: NotebookPen,
+});
+fastenIcons(UNI_TASK_KINDS, {
+  assign: ClipboardList,
+  quiz: ClipboardCheck,
+  mid: FileText,
+  final: GraduationCap,
+  project: Rocket,
+  present: Presentation,
+});
+
 /* ==================================================================== *
  *  2027 LIFE OS — modular discipline system
  *  React + Tailwind CSS + lucide-react. Single file, no other deps.
@@ -494,34 +639,72 @@ function SkyBackdrop({ phase }) {
   );
 }
 
-/* Date and time, small, beside the wordmark. Its own component so the
-   second-by-second tick re-renders this line and nothing else. */
 /* The failure banner shouts; nothing ever said the quiet half. A tick that
    lands and is never confirmed looks exactly like one that was dropped, and
    this app is the kind a person leaves open for days and trusts blindly.
-   The timestamp is the save effect's own — it is set after the write
-   returned, never guessed from a render. */
-function SaveStamp({ at }) {
+
+   Two destinations, said separately, because they fail separately. The
+   browser is the working copy; the disk is the copy that survives the
+   browser. For a while this said «محفوظ» off the browser write alone, so a
+   sync server that had been off for two days read exactly like one keeping
+   up. Both timestamps are the writes' own — set when each one returned,
+   never guessed from a render. */
+function SaveStamp({ at, diskAt, diskStuck }) {
   if (!at) return null;
-  const t = new Date(at).toLocaleTimeString("ar-EG", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-  return (
+  const clock = (ms) =>
+    new Date(ms).toLocaleTimeString("ar-EG", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  const pill = (tone, key, children) => (
     <span
-      className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold"
+      key={key}
+      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold"
       style={{
-        borderColor: `${T.primary}44`,
-        color: T.primary,
-        background: `${T.primary}14`,
+        borderColor: `${tone}44`,
+        color: tone,
+        backgroundColor: `${tone}14`,
       }}
     >
-      <Check size={10} strokeWidth={3.2} />
-      {"محفوظ "}
-      <span dir="ltr" className="tabular-nums">
-        {t}
-      </span>
+      {children}
+    </span>
+  );
+  return (
+    <span className="mt-2.5 inline-flex flex-wrap items-center gap-1.5">
+      {pill(
+        T.primary,
+        "browser",
+        <>
+          <Check size={10} strokeWidth={3.2} />
+          {"المتصفح "}
+          <span dir="ltr" className="tabular-nums">
+            {clock(at)}
+          </span>
+        </>,
+      )}
+      {diskStuck
+        ? pill(
+            T.accent,
+            "disk",
+            <>
+              <AlertTriangle size={10} strokeWidth={3} />
+              {"القرص متوقف"}
+            </>,
+          )
+        : diskAt
+          ? pill(
+              T.sky,
+              "disk",
+              <>
+                <Database size={10} strokeWidth={3} />
+                {"القرص "}
+                <span dir="ltr" className="tabular-nums">
+                  {clock(diskAt)}
+                </span>
+              </>,
+            )
+          : null}
     </span>
   );
 }
@@ -559,44 +742,39 @@ function NowStamp({ compact = false }) {
   );
 }
 
-/* --- navigation ------------------------------------------------------ */
-const NAV = [
-  { id: "routine", label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
-  { id: "agenda", label: "التقويم", short: "التقويم", icon: CalendarDays },
-  { id: "uni", label: "الجامعة", short: "الجامعة", icon: GraduationCap },
-  { id: "career", label: "مسار التوظيف", short: "التوظيف", icon: Briefcase },
-  { id: "matrix", label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
-  { id: "deep", label: "العمل العميق", short: "التركيز", icon: Timer },
-  { id: "goals", label: "أهدافي على ثلاث سنوات", short: "الأهداف", icon: Flag },
-  { id: "pipeline", label: "خط سير المشاريع", short: "المسار", icon: Kanban },
-  { id: "tactical", label: "المراجعة التكتيكية", short: "التكتيك", icon: Swords },
-  { id: "finance", label: "الدخل والمشاريع", short: "الدخل", icon: Wallet },
-  { id: "prompts", label: "خزنة الأوامر", short: "الأوامر", icon: Bot },
-  { id: "vault", label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
-  { id: "analytics", label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
-  { id: "breaker", label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
-  { id: "graph", label: "خريطة المعرفة", short: "الخريطة", icon: Network },
-];
-const NAV_IDS = NAV.map((n) => n.id);
+/* --- navigation ------------------------------------------------------ *
+ *  Which tabs exist, and in what order, is `NAV_IDS` in life-state.mjs —
+ *  the migration needs that list and cannot import a lucide component. The
+ *  label and the icon are here, keyed by the same ids, and the array is built
+ *  from the canonical order: a tab added there with no entry here renders
+ *  nameless, which is a bug you see on the first open rather than one that
+ *  hides in a saved payload.
+ * --------------------------------------------------------------------- */
+const NAV_META = {
+  routine: { label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
+  agenda: { label: "التقويم", short: "التقويم", icon: CalendarDays },
+  uni: { label: "الجامعة", short: "الجامعة", icon: GraduationCap },
+  career: { label: "مسار التوظيف", short: "التوظيف", icon: Briefcase },
+  matrix: { label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
+  deep: { label: "العمل العميق", short: "التركيز", icon: Timer },
+  goals: { label: "أهدافي على ثلاث سنوات", short: "الأهداف", icon: Flag },
+  pipeline: { label: "خط سير المشاريع", short: "المسار", icon: Kanban },
+  tactical: { label: "المراجعة التكتيكية", short: "التكتيك", icon: Swords },
+  finance: { label: "الدخل والمشاريع", short: "الدخل", icon: Wallet },
+  prompts: { label: "خزنة الأوامر", short: "الأوامر", icon: Bot },
+  vault: { label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
+  analytics: { label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
+  breaker: { label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
+  graph: { label: "خريطة المعرفة", short: "الخريطة", icon: Network },
+};
+const NAV = NAV_IDS.map((id) => ({ id, ...NAV_META[id] }));
+const NAV_BY_ID = new Map(NAV.map((n) => [n.id, n]));
 
-/* The saved order is a list of ids, not of tabs — a tab's definition lives in
-   NAV and nowhere else. Resolving through here is what makes the stored order
-   safe to trust: an id this build no longer has is dropped, a tab the saved
-   order has never seen joins the end, and a duplicate is taken once. Without
-   that last part a hand-edited backup could hide a tab outright. */
-function orderedNav(order) {
-  const byId = new Map(NAV.map((n) => [n.id, n]));
-  const seen = new Set();
-  const out = [];
-  for (const id of Array.isArray(order) ? order : []) {
-    if (byId.has(id) && !seen.has(id)) {
-      seen.add(id);
-      out.push(byId.get(id));
-    }
-  }
-  for (const n of NAV) if (!seen.has(n.id)) out.push(n);
-  return out;
-}
+/* The saved order, resolved to tabs. `orderNavIds` does the hard part —
+   dropping an id this build no longer has, appending a tab the saved order
+   has never seen, taking a duplicate once — and this only puts the label and
+   the icon back on. */
+const orderedNav = (order) => orderNavIds(order).map((id) => NAV_BY_ID.get(id));
 
 /* Reordering by id, shared by the drag path and the arrows. Kept generic
    because the habit list already has its own group-aware versions — these
@@ -630,78 +808,13 @@ const SESSIONS = [
   { min: 90, label: "عمل عميق", hint: "دورة التركيز الكاملة" },
 ];
 
-/* --- 90-day chunks ---------------------------------------------------- *
- *  A year is too big to act on. Four 90-day blocks are not, and the vault
- *  opens on the one you are living in.
- * ---------------------------------------------------------------------- */
-const QUARTERS = [
-  { id: "q1", label: "الربع الأول", months: "يناير — مارس", tint: "#00C2FF" },
-  { id: "q2", label: "الربع الثاني", months: "أبريل — يونيو", tint: "#9D5CFF" },
-  { id: "q3", label: "الربع الثالث", months: "يوليو — سبتمبر", tint: "#FFB020" },
-  { id: "q4", label: "الربع الرابع", months: "أكتوبر — ديسمبر", tint: "#FF4D8D" },
-];
-const currentQuarter = (d = new Date()) => QUARTERS[Math.floor(d.getMonth() / 3)].id;
-const QUARTER_IDS = new Set(QUARTERS.map((q) => q.id));
 const quarterOf = (id) => QUARTERS.find((q) => q.id === id) || QUARTERS[0];
 
-/* --- the six pillars of 2027 ----------------------------------------- */
-const PILLARS = [
-  { id: "faith", label: "الإيماني", icon: MoonStar, tint: "#9D5CFF" },
-  { id: "health", label: "الصحي", icon: HeartPulse, tint: "#FF7A45" },
-  { id: "career", label: "المهني", icon: Briefcase, tint: "#00C2FF" },
-  { id: "money", label: "المالي", icon: Wallet, tint: "#FFB020" },
-  { id: "social", label: "الاجتماعي", icon: Users, tint: "#FF4D8D" },
-  { id: "self", label: "الشخصي", icon: Sparkles, tint: "#5B8CFF" },
-];
-const PILLAR_IDS = new Set(PILLARS.map((p) => p.id));
 const pillarOf = (id) => PILLARS.find((p) => p.id === id) || PILLARS[5];
 
-/* --- the three horizons ---------------------------------------------- *
- *  A 90-day goal that serves nothing is a chore with a deadline. Three
- *  horizons, each answering the one above it: who you intend to be in three
- *  years, what this year has to deliver for that, and what the next ninety
- *  days actually execute. The order matters — `HORIZONS` is read top-down
- *  everywhere, and `parentHorizon` is the only place the chain is written.
- * ---------------------------------------------------------------------- */
-const HORIZONS = [
-  {
-    id: "h3",
-    label: "ثلاث سنوات",
-    short: "٣ سنوات",
-    hint: "من تريد أن تكون في نهاية ٢٠٢٩ — لا قائمة مهام، بل صورة رجل.",
-    icon: Telescope,
-    tint: "#9D5CFF",
-    child: "هدف سنوي",
-  },
-  {
-    id: "year",
-    label: "هذه السنة",
-    short: "السنة",
-    hint: "ما يجب أن يتحقّق هذه السنة كي تصل الثلاث سنوات.",
-    icon: CalendarRange,
-    tint: "#FFB020",
-    child: "هدف ربعي",
-  },
-  {
-    id: "quarter",
-    label: "تسعون يومًا",
-    short: "٩٠ يومًا",
-    hint: "ما تنفّذه الآن. هنا فقط يتحوّل الطموح إلى عمل.",
-    icon: Target,
-    tint: "#FF5722",
-    child: null,
-  },
-];
-const HORIZON_IDS = new Set(HORIZONS.map((h) => h.id));
 const horizonOf = (id) => HORIZONS.find((h) => h.id === id) || HORIZONS[2];
 /* The horizon a goal's parent must belong to. The top of the chain has none,
    which is also how the editor knows to hide the parent picker. */
-const parentHorizon = (id) =>
-  id === "quarter" ? "year" : id === "year" ? "h3" : null;
-
-/* The three-year arc. 2027 is the year this whole app is named for, so it
-   anchors the horizon and the two after it complete it. */
-const ARC = [2027, 2028, 2029];
 const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
 
 /* The years a goal may be filed under: the arc, plus the year you are
@@ -711,20 +824,6 @@ const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
    write a goal in, and the three-month run-up would have nowhere to live.
    From 2027 onward this is the arc and nothing else, so no goal's year ever
    stops being selectable underneath it. */
-const GOAL_YEARS = (() => {
-  const y = new Date().getFullYear();
-  return y < ARC[0] ? [y, ...ARC] : ARC;
-})();
-
-/* A stored year is validated against this range, not against GOAL_YEARS —
-   GOAL_YEARS shrinks on the first of January once the run-up year is behind
-   us, and validating against it would silently move every goal filed in that
-   year into the next one. The range is fixed, so a 2026 goal stays a 2026
-   goal forever; the screen keeps offering its tab for as long as anything
-   lives there. */
-const YEAR_MIN = ARC[0] - 1;
-const YEAR_MAX = ARC[ARC.length - 1];
-
 /* --- routine groups -------------------------------------------------- */
 const GROUPS = [
   { id: "morning", label: "الصباح", icon: Sunrise, tint: "#FFB020" },
@@ -767,98 +866,6 @@ const QUADRANTS = [
   },
 ];
 
-/* --- daily cue -------------------------------------------------------- */
-const QUOTES = [
-  {
-    text: "أنت لا ترتقي إلى مستوى أهدافك، بل تهبط إلى مستوى أنظمتك.",
-    author: "جيمس كلير",
-  },
-  {
-    text: "إضاعة الوقت أشدّ من الموت؛ لأنها تقطعك عن الله والدار الآخرة.",
-    author: "ابن القيّم",
-  },
-  { text: "اقرأ ما تحبّ حتى تُحبّ القراءة.", author: "نافال رافيكانت" },
-  {
-    text: "التركيز العميق مهارة نادرة وثمينة في اقتصاد اليوم.",
-    author: "كال نيوبورت",
-  },
-  { text: "حاسبوا أنفسكم قبل أن تُحاسَبوا.", author: "عمر بن الخطاب" },
-  {
-    text: "ابن آدم، إنما أنت أيام؛ فإذا ذهب يوم ذهب بعضك.",
-    author: "الحسن البصري",
-  },
-  {
-    text: "ومن لم يذق مرّ التعلّم ساعة، تجرّع ذلّ الجهل طول حياته.",
-    author: "الإمام الشافعي",
-  },
-  { text: "ليست حياتنا قصيرة، بل نحن نُضيّع كثيرًا منها.", author: "سينيكا" },
-  {
-    text: "أنت تملك سلطانًا على عقلك، لا على الأحداث. أدرك هذا تجد القوة.",
-    author: "ماركوس أوريليوس",
-  },
-  {
-    text: "وقتك محدود، فلا تُضيّعه عيشًا في حياة شخص آخر.",
-    author: "ستيف جوبز",
-  },
-  { text: "الناجحون جدًّا يقولون «لا» لكل شيء تقريبًا.", author: "وارن بافيت" },
-  { text: "ما يُقاس، يتحسّن.", author: "بيتر دراكر" },
-  { text: "ما يصنع أعدائي بي؟ أنا جنّتي وبستاني في صدري.", author: "ابن تيمية" },
-  { text: "العادة هي الفائدة المركّبة لتطوير الذات.", author: "جيمس كلير" },
-  {
-    text: "من عرف طول الطريق استعدّ له، ومن أيقن بالمنزل هان عليه السفر.",
-    author: "ابن القيّم",
-  },
-  { text: "لا تُصلح عملك لأجل الناس، ولا تُفسده لأجلهم.", author: "الفضيل بن عياض" },
-  {
-    text: "الانضباط هو اختيار ما تريده أكثر على ما تريده الآن.",
-    author: "أبراهام لينكون",
-  },
-  { text: "أصعب خطوة هي الأولى؛ وما بعدها عادة.", author: "أرسطو" },
-  {
-    text: "إذا لم تكن لك خطة، فستكون جزءًا من خطة غيرك.",
-    author: "تيري ماكميلان",
-  },
-  { text: "عش يومك كأنه آخر أيامك، واعمل كأنك تعيش أبدًا.", author: "مثل عربي" },
-  {
-    text: "النجاح مجموع جهود صغيرة تتكرّر يومًا بعد يوم.",
-    author: "روبرت كوليير",
-  },
-  { text: "أفضل وقت لغرس شجرة كان قبل عشرين عامًا، وثانيه اليوم.", author: "مثل صيني" },
-  {
-    text: "لن تتغيّر حياتك حتى تتغيّر عاداتك اليومية؛ السرّ في جدولك.",
-    author: "جون مكسويل",
-  },
-  {
-    text: "من استوى يوماه فهو مغبون، ومن كان غده شرًّا من يومه فهو ملعون.",
-    author: "الحسن البصري",
-  },
-  { text: "التركيز يعني قول «لا» لمئة فكرة جيّدة.", author: "ستيف جوبز" },
-  {
-    text: "لا يُدرَك العلم براحة الجسم، ولا تُنال المعالي بالتمنّي.",
-    author: "الإمام مسلم",
-  },
-  {
-    text: "أنت ما تفعله بتكرار؛ فالتميّز ليس حدثًا بل عادة.",
-    author: "ويل ديورانت",
-  },
-  {
-    text: "أعظم ما يملكه المرء وقتٌ فارغ يملؤه بما ينفع.",
-    author: "ابن الجوزي",
-  },
-  { text: "لا تنتظر الإلهام؛ اذهب إليه بعصا غليظة.", author: "جاك لندن" },
-  { text: "ما بدأتَه اليوم يصنع من تكون بعد سنة.", author: "سينيكا" },
-];
-
-/* The cue list is seed data the user owns from the first load: it is copied
-   into state so a quote can be edited, added to or deleted. QUOTES itself
-   stays the immutable seed the migration reads from. */
-const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
-
-/* A phone photo is several megabytes and the whole app state shares one
-   localStorage quota, so an oversized image would make every later write
-   throw and silently stop persisting *everything*. The photo is therefore
-   redrawn through a canvas and stepped down until it fits a hard budget —
-   the image gives way, never the user's habits and history. */
 const IMAGE_BUDGET = 900 * 1024; // characters of data URL
 const IMAGE_STEPS = [
   [1400, 0.78],
@@ -904,93 +911,223 @@ function shrinkImage(file) {
 
 /* The library has its own cue, about reading rather than about the day.
    Same walk-on-open behaviour as the daily one, its own cursor. */
-const READING_QUOTES = [
-  { text: "الكتاب بلا درس مكتوب لم يُقرأ، بل مُرّ عليه.", author: "قاعدة المكتبة" },
-  { text: "من قرأ كتابًا واحدًا وطبّقه، أنفع ممن قرأ مئة ونسيها.", author: "مثل مأثور" },
-  { text: "اقرأ ما تحبّ حتى تُحبّ القراءة.", author: "نافال رافيكانت" },
-  {
-    text: "لو لم يكن في الكتب إلا أنها تقطع عنك وساوس الفراغ لكفى.",
-    author: "ابن الجوزي",
-  },
-  { text: "الكتب هي المرآة التي نرى فيها أنفسنا قبل أن نرى غيرنا.", author: "عباس العقاد" },
-  {
-    text: "قراءة عشر صفحات كل يوم تصنع ١٥ كتابًا في السنة. البطء ليس العدوّ، الانقطاع هو.",
-    author: "قاعدة التراكم",
-  },
-  { text: "خير جليس في الزمان كتاب.", author: "المتنبّي" },
-  {
-    text: "لا تقرأ لتردّ، ولا لتصدّق؛ اقرأ لتزن وتفكّر.",
-    author: "فرانسيس بيكون",
-  },
-  { text: "الفصل الذي لم تلخّصه، ستنساه قبل نهاية الشهر.", author: "قاعدة التلخيص" },
-  {
-    text: "قيمة الكتاب في ما غيّره فيك، لا في عدد صفحاته.",
-    author: "قاعدة المكتبة",
-  },
-  { text: "من لم يذق مرّ التعلّم ساعة، تجرّع ذلّ الجهل طول حياته.", author: "الإمام الشافعي" },
-  {
-    text: "كتاب تقرؤه مرّتين خير من كتابين تقرأ كلًّا منهما مرّة.",
-    author: "قاعدة العمق",
-  },
-];
-
-const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
-
 /* --- persistence ------------------------------------------------------ */
 const STORAGE_KEY = "life-os-2027:v3";
+
+/* --- which copy is the real one --------------------------------------- *
+ *  One origin, and only one. `localhost:47615` and `127.0.0.1:47615` are two
+ *  origins to a browser: separate localStorage, separate idea of the day,
+ *  separate window lease — and both of them writing to the same file on disk
+ *  with no way to see each other. A port number is the same story. So the
+ *  primary copy is named exactly, and anything else is readable, recoverable
+ *  and never written from.
+ *
+ *  `LIFE_OS_PRIMARY` is the one seam, and it exists for testing: a copy of
+ *  the built page served on a throwaway port can declare itself primary so
+ *  the write path can actually be exercised without going anywhere near the
+ *  live origin. Nothing in the shipped build sets it.
+ * ---------------------------------------------------------------------- */
+const LOCAL_HOST = "http://127.0.0.1:47615";
+function primaryOrigin() {
+  try {
+    const override = window.LIFE_OS_PRIMARY;
+    return typeof override === "string" && override ? override : LOCAL_HOST;
+  } catch {
+    return LOCAL_HOST;
+  }
+}
+function served() {
+  try {
+    return location.origin === primaryOrigin();
+  } catch {
+    return false;
+  }
+}
+/* True for a page that is local but is not the primary copy — the place the
+   «هذي ليست النسخة الأساسية» bar comes from. A file:// copy counts: it reads
+   and it recovers, it simply never writes. */
+const isLocalHost = (h) =>
+  h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
+function strayCopy() {
+  try {
+    if (location.protocol === "file:") return true;
+    return (
+      location.protocol.startsWith("http") && !served() && isLocalHost(location.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+/* Same-origin when the server is also the one serving the page, absolute
+   when it is not — a file:// page has no origin to be relative to. */
+const api = (p) => (served() ? p : primaryOrigin() + p);
+/* Reading the disk copy is safe from anywhere local — a page opened as a
+   file still deserves to find the data. */
+function syncLocal() {
+  try {
+    return location.protocol === "file:" || served() || strayCopy();
+  } catch {
+    return false;
+  }
+}
+
+/* --- the revision counter --------------------------------------------- *
+ *  The lease stops two windows writing at the same time. It does not stop a
+ *  window that has been asleep from writing at all — and nothing on either
+ *  side used to compare versions, so the last writer won by default and the
+ *  older payload landed on top of the newer one without a word.
+ *
+ *  So every write carries a number that only goes up. It lives in its own
+ *  localStorage key rather than inside the state: it changes on every single
+ *  save, and a counter inside React state would re-render the whole app to
+ *  announce that the app had just been saved. The window remembers the
+ *  revision it loaded; before each write it re-reads the stored one, and a
+ *  stored revision ahead of its own means another window has been working.
+ *  That window stops writing and says so, rather than guessing which of two
+ *  divergent copies was meant to win.
+ * ---------------------------------------------------------------------- */
+const REV_KEY = "life-os-2027:rev";
+function readRev() {
+  try {
+    const n = Number(window.localStorage.getItem(REV_KEY));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+function writeRev(n) {
+  try {
+    window.localStorage.setItem(REV_KEY, String(n));
+  } catch {
+    /* Storage blocked: nothing persists anyway, so there is no race to lose. */
+  }
+}
 
 /* --- local sync -------------------------------------------------------
    Mirrors the state to the local sync server, which keeps it on disk and
    feeds the charts without a manual export. localStorage stays the source
    of truth while the app is running; the disk copy is what survives the
    browser, and `pullDisk` below reads it back when the browser turns up
-   empty. If the server is down the rejection is swallowed and nothing else
-   changes. */
-const LOCAL_HOST = "http://127.0.0.1:47615";
-/* Same-origin when the server is also the one serving the page, absolute
-   when it is not — a file:// page has no origin to be relative to. */
-function served() {
-  try {
-    return (
-      location.protocol.startsWith("http") &&
-      (location.hostname === "127.0.0.1" || location.hostname === "localhost")
-    );
-  } catch {
-    return false;
-  }
-}
-const api = (p) => (served() ? p : LOCAL_HOST + p);
+   empty.
+
+   Writing it is for the primary copy alone. A copy opened as a file, or on
+   another port, has its own separate localStorage — which means its own
+   separate idea of the day, and a window lease that cannot see across the
+   two. Letting it write would put a snapshot from whenever it was last used
+   on top of the real one: the same clobbering the lease exists to prevent,
+   one layer down. It stays readable, and it keeps its own working copy. It
+   just is not the one that gets saved. */
+const SYNC_DEBOUNCE = 800;
+/* A minute of unbroken failure before the banner. The server restarting, the
+   laptop waking, a request cut off as the page navigates — none of those is
+   worth saying anything about. A server that has been off for two days is. */
+const DISK_STUCK_MS = 60 * 1000;
+/* 800ms rather than 2.5s. The debounce exists so that a run of ticks is one
+   write and not eight, and that is still true at this length — but two and a
+   half seconds is long enough to tick a habit and close the window inside,
+   which left the disk a change behind the browser. The flush below closes
+   the rest of that gap; this shortens the window it has to cover. */
 let syncTimer = null;
-/* Reading the disk copy is safe from anywhere local — a page opened as a
-   file still deserves to find the data. */
-function syncLocal() {
-  try {
-    return location.protocol === "file:" || served();
-  } catch {
-    return false;
-  }
+let syncPending = null; // the payload waiting on the debounce, if any
+/* How the rest of the app hears about a write landing or failing: the save
+   stamp needs to say «القرص ✓» only when the disk actually confirmed, and
+   the conflict bar needs the 409. Set once by the app shell. */
+let syncReport = () => {};
+const onSyncResult = (fn) => {
+  syncReport = typeof fn === "function" ? fn : () => {};
+};
+
+/* keepalive lets a request outlive the page that started it, which is the
+   whole point at `pagehide` — but it is capped at 64KB of body by the fetch
+   standard, and this payload runs to several hundred KB once a cue image is
+   set. Over the cap it goes out as an ordinary request, which usually still
+   completes because hiding a tab is not closing it. */
+const KEEPALIVE_MAX = 60 * 1024;
+
+function postSync(payload, rev, { force = false, keepalive = false } = {}) {
+  const body = JSON.stringify({ project: "lifeos", payload: { ...payload, rev } });
+  const headers = { "Content-Type": "text/plain", "X-Local-Sync": "1" };
+  if (force) headers["X-Force"] = "1";
+  const opts = { method: "POST", headers, body };
+  if (keepalive && body.length < KEEPALIVE_MAX) opts.keepalive = true;
+  return fetch(api("/sync"), opts).then(
+    async (res) => {
+      if (res.status === 409) {
+        let disk = null;
+        try {
+          disk = await res.json();
+        } catch {
+          /* the body is a courtesy; the status is the message */
+        }
+        syncReport({ ok: false, conflict: true, disk });
+        return { ok: false, conflict: true };
+      }
+      if (!res.ok) {
+        syncReport({ ok: false, conflict: false });
+        return { ok: false };
+      }
+      let at = Date.now();
+      try {
+        const info = await res.json();
+        if (info && Number.isFinite(info.savedAt)) at = info.savedAt;
+      } catch {
+        /* an older server answers 204 with no body — the write still landed */
+      }
+      syncReport({ ok: true, at });
+      return { ok: true, at };
+    },
+    () => {
+      /* Server down, or the page went away mid-flight. Not fatal, but not
+         silent either: the stamp has to stop claiming the disk is current. */
+      syncReport({ ok: false, conflict: false });
+      return { ok: false };
+    },
+  );
 }
-function syncOut(payload) {
-  /* Writing it is not. The served origin is the one the shortcut opens and
-     the only one anybody works in; a copy opened as a file has its own
-     separate localStorage, which means its own separate idea of the day,
-     and the window lease cannot see across the two. Letting it write would
-     put a snapshot from whenever it was last used on top of the real one —
-     the same clobbering the lease exists to prevent, one layer down. It
-     stays readable, and it keeps its own working copy. It just is not the
-     one that gets saved. */
+
+function syncOut(payload, rev) {
   if (!served()) return;
+  syncPending = { payload, rev };
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
+    const due = syncPending;
+    syncPending = null;
+    syncTimer = null;
+    if (!due) return;
     try {
-      fetch(api("/sync"), {
-        method: "POST",
-        headers: { "Content-Type": "text/plain", "X-Local-Sync": "1" },
-        body: JSON.stringify({ project: "lifeos", payload }),
-      }).catch(() => {});
+      postSync(due.payload, due.rev);
     } catch {}
-  }, 2500);
+  }, SYNC_DEBOUNCE);
 }
+
+/* The pending write, sent now. Called when the page is being hidden or torn
+   down: a tick followed straight away by closing the window used to leave
+   the disk a change behind the browser, which is exactly the copy the
+   reminders read and the copy a cleared profile recovers from. */
+function flushSync() {
+  if (!syncPending) return;
+  const due = syncPending;
+  syncPending = null;
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  try {
+    postSync(due.payload, due.rev, { keepalive: true });
+  } catch {}
+}
+
+/* The disk copy, taken as the truth. The two ways out of a conflict both end
+   here or at a reload: this one throws away what this window holds. */
+async function adoptDisk() {
+  const res = await fetch(api("/state?project=lifeos"), { cache: "no-store" });
+  if (!res.ok) throw new Error("state " + res.status);
+  const saved = await res.json();
+  if (!saved || typeof saved !== "object" || !Array.isArray(saved.habits))
+    throw new Error("not this app's state");
+  const { rev, ...rest } = saved;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+  writeRev(Number.isFinite(rev) ? rev : 0);
+}
+
 const UI_KEY = "life-os-2027:ui";
 
 /* --- one window at a time --------------------------------------------- *
@@ -1073,53 +1210,6 @@ const claimHandover = () => {
   }
 };
 
-const SCHEMA = 20;
-const HISTORY_CAP = 500;
-const STREAK_TARGET = 80;
-/* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
-const TOP_TASK_CAP = 3;
-
-/* --- the core --------------------------------------------------------- *
- *  The tasks were capped at three because a list of twenty is a list nobody
- *  finishes. The habits had no such cap, and the arithmetic made the case on
- *  its own: three real wins on a Sunday — water, Fajr, the gym — rendered as
- *  17%. A screen that tells someone who did three hard things that he failed
- *  is not measuring discipline, it is manufacturing the feeling of lacking
- *  it, and that is the feeling people close the app to get away from.
- *
- *  So a habit can be core, and the score counts only those. The rest still
- *  tick, still streak, still archive, still show their own run — they are
- *  simply additional rather than the measure. Five, for the same reason the
- *  tasks are three: a core of twelve is the old list wearing a new word.
- *
- *  With nothing marked the score falls back to every habit, which is exactly
- *  what it did before. That fallback is a floor, not the resting state — the
- *  routine screen asks for a core while there is none, because a feature
- *  that waits to be discovered in a settings pane never is.
- * ---------------------------------------------------------------------- */
-const CORE_CAP = 5;
-const coreOf = (habits) => habits.filter((h) => h.core);
-/* The one roster the score is read from. Every caller goes through it — the
-   ring, the archive row, the streak, the toast the server sends — so they
-   cannot end up dividing by three different denominators and disagreeing
-   about the same day. */
-const scoredOf = (habits) => {
-  const core = coreOf(habits);
-  return core.length ? core : habits;
-};
-const disciplineOf = (habits) => {
-  const list = scoredOf(habits);
-  if (!list.length) return 0;
-  return Math.round((list.filter((h) => h.done).length / list.length) * 100);
-};
-
-/* The day ends when you sleep, not at midnight. Ticking «أذكار النوم» at
-   01:00 is finishing yesterday, not starting today — and a sheet that wiped
-   itself at 00:00 is why a night of work kept landing on the wrong row and
-   then being zeroed by the next morning's reload. Anything written between
-   midnight and this hour belongs to the previous day. */
-const DAY_START_HOUR = 4;
-
 /* --- the evening prompt's window -------------------------------------- *
  *  The day here does not end at midnight, it ends at DAY_START_HOUR — so
  *  its evening runs from 20:00 round past midnight to that hour. Testing
@@ -1140,94 +1230,6 @@ const inReflectWindow = (d = new Date()) => {
 const REFLECT_SNOOZE_MS = 60 * 60 * 1000;
 const REFLECT_MAX_SHOWS = 3;
 
-/* "Now", shifted onto the logical day it belongs to. */
-const logicalNow = (d = new Date()) => {
-  const x = new Date(d.getTime());
-  x.setHours(x.getHours() - DAY_START_HOUR);
-  return x;
-};
-
-/* A calendar date, formatted as a key. The no-argument call means *now* and
-   gets the logical day; a call that passes a date means that exact calendar
-   square — the month grid and the streak walkers depend on the difference,
-   so the shift must not hide inside a default parameter. */
-const fmtDay = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-const dayKey = (d) => fmtDay(d === undefined ? logicalNow() : d);
-
-const yesterdayKey = () => {
-  const d = logicalNow();
-  d.setDate(d.getDate() - 1);
-  return fmtDay(d);
-};
-const uid = () => Math.random().toString(36).slice(2, 9);
-
-/* --- the two guards every stored shape is built on -------------------- *
- *  A default parameter fires for `undefined` and for nothing else, so
- *  `shape(null)` sailed straight past `(x = {})` and threw on the first
- *  property read. That is not a theoretical payload: a hand-edited backup,
- *  a half-written download and another app's JSON all produce exactly it,
- *  and `[null]` passes the import check because it is still an array.
- *
- *  `obj` makes a shape total — anything that is not an object becomes an
- *  empty one and every field falls back to its default. `rows` does the
- *  same for a list: the holes are dropped rather than carried forward to
- *  throw later, somewhere with no try/catch around it.
- * ---------------------------------------------------------------------- */
-const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
-const rows = (v) =>
-  Array.isArray(v) ? v.filter((x) => x && typeof x === "object" && !Array.isArray(x)) : [];
-
-/* The "بعد العشاء" block was split out of "المساء" in schema 4. These labels
-   drive both the seed and the migration, so an existing user's صلاة العشاء
-   moves into the new block instead of being duplicated beside it. */
-const POSTISHA_LABELS = [
-  "صلاة العشاء",
-  "تقييم اليوم: التزمت؟",
-  "تحضير مهام الغد الثلاث",
-];
-const LEGACY_POSTISHA = new Set(["صلاة العشاء", "تقييم يومي", ...POSTISHA_LABELS]);
-
-/* Added in schema 6. Kept in their own list so the migration can top up an
-   existing profile with exactly the ones it is missing. */
-const ADDED_HABITS = [
-  { label: "تمارين مقاومة (صدر/بطن) أو T-Bar + ١٥ ألف خطوة", group: "morning" },
-  { label: "محادثة إنجليزية مع متحدث أصلي", group: "afternoon" },
-  { label: "تحضير وجبة الغد: دجاج صيني وأرز", group: "maghrib" },
-];
-
-/* Schema 8 split the old "المساء" block into "بعد العصر" and "بعد المغرب". */
-const ASR_HABITS = [
-  { label: "صلاة العصر", group: "asr" },
-  { label: "مراجعة سريعة لمهام اليوم", group: "asr" },
-  { label: "مشي أو حركة خفيفة", group: "asr" },
-];
-const MAGHRIB_HABITS = [{ label: "صلاة المغرب وأذكار", group: "maghrib" }];
-
-const ADDED_TASKS = [
-  { text: "جلسة مذاكرة PMP — ٩٠ دقيقة", quadrant: "q2" },
-  { text: "تحديث LinkedIn: إبراز إدارة المرافق والتدريب التعاوني", quadrant: "q2" },
-  { text: "ساعتان عمل توصيل مرن", quadrant: "q3" },
-];
-
-const READ_ACTIVE = "active";
-const READ_GOAL_DEFAULT = 20;
-
-/* --- water ------------------------------------------------------------ *
- *  Eight cups is the figure everyone already knows, so it is the default.
- *  The count is per-day and deliberately absent from `carryOf`: yesterday's
- *  water is not today's. The cap exists because the cups are rendered one
- *  per glass, and a hand-edited backup asking for four hundred of them
- *  would lock the routine screen up drawing them.
- * ---------------------------------------------------------------------- */
-const WATER_GOAL_DEFAULT = 8;
-const WATER_GOAL_MAX = 20;
-const clampGoal = (n) =>
-  Number.isFinite(+n) && +n >= 1
-    ? Math.min(WATER_GOAL_MAX, Math.round(+n))
-    : WATER_GOAL_DEFAULT;
 const CUP_FORMS = ["كوب", "كوبان", "أكواب", "كوبًا"];
 const cupWord = (n) => arCount(n, CUP_FORMS);
 
@@ -1252,51 +1254,6 @@ const PRAYERS = [
 /* Saudi first, because that is where this is lived. Coordinates are the city
    centre and the offset is standard time — the Kingdom has no DST, so a
    stored number is safe here in a way it would not be in Europe. */
-const PLACES = [
-  { id: "riyadh", label: "الرياض", lat: 24.7136, lng: 46.6753, tz: 3 },
-  { id: "makkah", label: "مكة المكرمة", lat: 21.3891, lng: 39.8579, tz: 3 },
-  { id: "madinah", label: "المدينة المنورة", lat: 24.5247, lng: 39.5692, tz: 3 },
-  { id: "jeddah", label: "جدة", lat: 21.4858, lng: 39.1925, tz: 3 },
-  { id: "dammam", label: "الدمام", lat: 26.4207, lng: 50.0888, tz: 3 },
-  { id: "abha", label: "أبها", lat: 18.2164, lng: 42.5053, tz: 3 },
-  { id: "buraydah", label: "بريدة", lat: 26.326, lng: 43.975, tz: 3 },
-  { id: "tabuk", label: "تبوك", lat: 28.3835, lng: 36.5662, tz: 3 },
-  { id: "hail", label: "حائل", lat: 27.5114, lng: 41.7208, tz: 3 },
-  { id: "jizan", label: "جازان", lat: 16.8892, lng: 42.5611, tz: 3 },
-];
-const PLACE_BY_ID = new Map(PLACES.map((p) => [p.id, p]));
-
-const placeShape = (p) => {
-  const o = obj(p);
-  const seed = PLACE_BY_ID.get(o.id) || PLACES[0];
-  /* Unary `+` turns null, [], "" and false into 0, and 0 is a perfectly
-     plausible-looking longitude — so a payload that lost a field came back
-     sitting on the prime meridian at UTC+0 and the prayer times were three
-     hours out without anything looking broken. Only a real number, or a
-     string that is entirely one, is allowed to pass. */
-  const num = (v, fb, lim) => {
-    const n =
-      typeof v === "number"
-        ? v
-        : typeof v === "string" && v.trim() !== ""
-          ? Number(v)
-          : NaN;
-    return Number.isFinite(n) && Math.abs(n) <= lim ? n : fb;
-  };
-  return {
-    id: PLACE_BY_ID.has(o.id) ? o.id : o.id === "custom" ? "custom" : seed.id,
-    label: typeof o.label === "string" && o.label.trim() ? o.label.trim() : seed.label,
-    lat: num(o.lat, seed.lat, 90),
-    lng: num(o.lng, seed.lng, 180),
-    tz: num(o.tz, seed.tz, 14),
-    /* 1 = Shafii, 2 = Hanafi. Anything else is not a school. */
-    asr: +o.asr === 2 ? 2 : 1,
-  };
-};
-
-/* Decimal hours → "07:18". Named apart from `hhmm`, which validates a time
-   the user typed; this one formats one the solar maths produced. Rendered
-   LTR by the caller — this only builds the string. */
 const clockAt = (h) => {
   if (h === null || !Number.isFinite(h)) return "—";
   const total = Math.round(fixHour(h) * 60);
@@ -1340,135 +1297,6 @@ const MILESTONES = [
 ];
 const MILESTONE_CAP = MILESTONES[MILESTONES.length - 1].d;
 
-const COST_TYPES = [
-  {
-    id: "money",
-    label: "مال",
-    unit: "ريال",
-    forms: ["ريال", "ريالان", "ريالات", "ريالًا"],
-    icon: Coins,
-    tint: "#FFB020",
-  },
-  {
-    id: "time",
-    label: "وقت",
-    unit: "ساعة",
-    forms: ["ساعة", "ساعتان", "ساعات", "ساعة"],
-    icon: Hourglass,
-    tint: "#00C2FF",
-  },
-];
-const costType = (id) => COST_TYPES.find((c) => c.id === id) || COST_TYPES[0];
-
-/* --- the weakness mirror ---------------------------------------------- *
- *  A relapse written as prose is a diary: it reads well once and can never
- *  be counted. So every confrontation with the urge — the ones that won and
- *  the ones that lost — carries a cause, a mood and the clock hour beside
- *  the free text. That is the whole point of the screen: to say back to the
- *  user the one sentence he cannot say about himself — *this* is what takes
- *  you down, and *this* is when it comes for you.
- *
- *  Every tag ships with its own counter-move. A diagnosis with no
- *  prescription is just a nicer way of telling someone he is weak.
- * ---------------------------------------------------------------------- */
-const URGE_TAGS = [
-  {
-    id: "big",
-    label: "المهمة كبيرة",
-    icon: Mountain,
-    tint: "#FF7A45",
-    counter:
-      "قصّها إلى خطوة واحدة مدّتها خمس دقائق، واكتبها كفعل لا كهدف: «افتح الملف»، لا «أنجز التقرير».",
-  },
-  {
-    id: "unclear",
-    label: "لا أعرف من أين أبدأ",
-    icon: HelpCircle,
-    tint: "#FFB020",
-    counter:
-      "لا تبدأ — خطّط فقط. اكتب أول ثلاث خطوات على ورقة ثم نفّذ الأولى وحدها. الغموض هو ما يشلّك، لا الكسل.",
-  },
-  {
-    id: "fear",
-    label: "خوف من الفشل",
-    icon: Frown,
-    tint: "#FF4D8D",
-    counter:
-      "اصنع نسخة سيئة عمدًا. المسوّدة الرديئة تكسر الرهبة، والجودة تأتي من التعديل لا من البداية.",
-  },
-  {
-    id: "phone",
-    label: "الهاتف بيدي",
-    icon: Smartphone,
-    tint: "#00C2FF",
-    counter:
-      "الهاتف في غرفة أخرى قبل أن تجلس، لا في جيبك. إرادتك لا تنافس إشعارًا صُمّم ليخطفها.",
-  },
-  {
-    id: "bored",
-    label: "ملل",
-    icon: Snail,
-    tint: "#9D5CFF",
-    counter:
-      "املأ الفراغ قبل أن يملأك هو. ضع البديل جاهزًا في متناول يدك قبل أن يأتي الملل بساعة.",
-  },
-  {
-    id: "tired",
-    label: "إرهاق",
-    icon: BatteryLow,
-    tint: "#5B8CFF",
-    counter:
-      "النوم ليس مكافأة بعد الإنجاز، هو شرطه. نَم بدل أن تقاوم بنصف دماغ — المقاومة المرهقة تخسر دائمًا.",
-  },
-  {
-    id: "stress",
-    label: "ضغط أو قلق",
-    icon: CloudRain,
-    tint: "#FF3B5C",
-    counter:
-      "أفرغ ما يضغطك على ورقة دقيقتين، ثم اختر أصغر بند فيها ونفّذه. القلق يتغذّى على القائمة المخفيّة.",
-  },
-  {
-    id: "lonely",
-    label: "وحدة",
-    icon: Eye,
-    tint: "#FF5722",
-    counter:
-      "اتصل بأحدهم أو انتقل إلى مكان فيه ناس. الوحدة هي الساحة المفضّلة لكل عادة تريد كسرها.",
-  },
-  {
-    id: "people",
-    label: "رفقة تجرّني",
-    icon: Users,
-    tint: "#10B981",
-    counter:
-      "جهّز جملة رفض قصيرة تقولها بلا شرح ولا اعتذار. التردّد نصف ثانية هو ما يُستغل.",
-  },
-  {
-    id: "free",
-    label: "فراغ مفاجئ",
-    icon: Wind,
-    tint: "#FFB020",
-    counter:
-      "الفراغ غير المخطّط يسلّم نفسه للعادة. احجز له بديلًا داخل الروتين بدل أن تتركه مفتوحًا.",
-  },
-];
-const tagOf = (id) => URGE_TAGS.find((t) => t.id === id) || null;
-
-const URGE_MOODS = [
-  { id: "empty", label: "فارغ" },
-  { id: "anxious", label: "قلِق" },
-  { id: "angry", label: "غاضب" },
-  { id: "low", label: "محبط" },
-  { id: "spent", label: "منهك" },
-  { id: "restless", label: "مشتّت" },
-];
-const moodOf = (id) => URGE_MOODS.find((m) => m.id === id) || null;
-
-/* Bands, not hours. "أكثر ما تسقط الساعة ١١" is a trivia fact; "بعد العشاء
-   إلى منتصف الليل" is a window a person can actually defend. The last band
-   starts at midnight and ends at four, so nothing wraps and every hour of
-   the clock lands in exactly one band. */
 const HOUR_BANDS = [
   { id: "dawn", label: "من الفجر إلى الضحى", from: 4, to: 10 },
   { id: "forenoon", label: "من الضحى إلى الظهر", from: 10, to: 14 },
@@ -1550,27 +1378,6 @@ const daysBetween = (fromKey, toKey = dayKey()) => {
    on one scale — a screen that only records the losses makes the user look
    weaker than he is, and he stops opening it. A log written before the tags
    existed keeps `tag: ""` and is simply skipped by the breakdowns. */
-const urgeShape = (u, kind = "hold") => (
-  (u = obj(u)),
-  {
-  id: u.id || uid(),
-  at: typeof u.at === "string" ? u.at : dayKey(),
-  kind: u.kind === "fall" || kind === "fall" ? "fall" : "hold",
-  days: Number.isFinite(Number(u.days)) ? Math.max(0, Number(u.days)) : 0,
-  tag: tagOf(u.tag) ? u.tag : "",
-  mood: moodOf(u.mood) ? u.mood : "",
-  hour: Number.isFinite(Number(u.hour))
-    ? Math.min(23, Math.max(0, Math.round(Number(u.hour))))
-    : null,
-  dow: Number.isFinite(Number(u.dow)) ? Math.min(6, Math.max(0, Number(u.dow))) : null,
-  trigger: typeof u.trigger === "string" ? u.trigger : "",
-  feeling: typeof u.feeling === "string" ? u.feeling : "",
-});
-
-/* Stamped at the moment of logging, not derived later. The hour comes from
-   the wall clock and the weekday from the logical day: a craving at one in
-   the morning belongs to «بعد منتصف الليل» but to *yesterday's* row, which
-   is exactly how the person lived it. */
 const stamp = () => ({
   at: dayKey(),
   hour: new Date().getHours(),
@@ -1579,26 +1386,6 @@ const stamp = () => ({
 
 /* The one place a bad habit's fields are written — add form, migration and
    import all pass through here, so the shape cannot drift between them. */
-const badHabitShape = (b) => (
-  (b = obj(b)),
-  {
-  id: b.id || uid(),
-  title: typeof b.title === "string" ? b.title : "",
-  startDate: typeof b.startDate === "string" ? b.startDate : dayKey(),
-  costType: b.costType === "time" ? "time" : "money",
-  costPerDay: Number.isFinite(Number(b.costPerDay))
-    ? Math.max(0, Number(b.costPerDay))
-    : 0,
-  replacement: typeof b.replacement === "string" ? b.replacement : "",
-  /* Falls and holds live in two arrays because they are read separately —
-     the card counts the falls, the mirror counts both. */
-  logs: Array.isArray(b.logs) ? b.logs.map((l) => urgeShape(l, "fall")) : [],
-  urges: Array.isArray(b.urges) ? b.urges.map((u) => urgeShape(u, "hold")) : [],
-});
-
-/* Arabic counts the noun, not just the number: ٣ أيام but ٢٥ يومًا. Printing
-   one fixed form next to a live counter is wrong most of the time. The four
-   forms are [one, two, 3–10, 11+]. */
 const arCount = (n, forms) => {
   const h = Math.abs(n) % 100;
   if (Math.abs(n) === 1) return forms[0];
@@ -1795,77 +1582,6 @@ const breakerToday = (list, day = dayKey()) => {
 };
 
 
-
-const SEED_HABITS = [
-  { id: uid(), label: "شرب ماء", group: "morning", done: false },
-  { id: uid(), label: "صلاة الفجر وأذكار", group: "morning", done: false },
-  ...ADDED_HABITS.filter((h) => h.group === "morning").map((h) => ({
-    id: uid(),
-    done: false,
-    ...h,
-  })),
-  { id: uid(), label: "جلسة STEP — ٩٠ دقيقة", group: "morning", done: false },
-  { id: uid(), label: "صلاة الظهر", group: "afternoon", done: false },
-  { id: uid(), label: "قراءة", group: "afternoon", done: false, book: READ_ACTIVE },
-  ...ADDED_HABITS.filter((h) => h.group === "afternoon").map((h) => ({
-    id: uid(),
-    done: false,
-    ...h,
-  })),
-  ...ASR_HABITS.map((h) => ({ id: uid(), done: false, ...h })),
-  ...MAGHRIB_HABITS.map((h) => ({ id: uid(), done: false, ...h })),
-  ...ADDED_HABITS.filter((h) => h.group === "maghrib").map((h) => ({
-    id: uid(),
-    done: false,
-    ...h,
-  })),
-  ...POSTISHA_LABELS.map((label) => ({
-    id: uid(),
-    label,
-    group: "postisha",
-    done: false,
-  })),
-  { id: uid(), label: "الابتعاد عن الشاشات", group: "night", done: false },
-  { id: uid(), label: "تدوين", group: "night", done: false },
-  { id: uid(), label: "أذكار النوم", group: "night", done: false },
-];
-
-const SEED_TASKS = [
-  { id: uid(), text: "تسليم تقرير الجامعة", quadrant: "q1", today: true, done: false },
-  { id: uid(), text: "مراجعة مكثفة لاختبار STEP", quadrant: "q2", today: true, done: false },
-  ...ADDED_TASKS.map((t) => ({ id: uid(), today: false, done: false, ...t })),
-  { id: uid(), text: "بناء صندوق الطوارئ", quadrant: "q2", today: false, done: false },
-  { id: uid(), text: "الرد على الرسائل المتراكمة", quadrant: "q3", today: false, done: false },
-  { id: uid(), text: "تصفّح مواقع التواصل بلا هدف", quadrant: "q4", today: false, done: false },
-];
-
-/* Every book gained a workspace in schema 10: a summary, a list of points
-   with the page they came from, and a page counter. `bookShape` is the one
-   place that shape is written, so the seed, the add form and the migration
-   cannot drift apart. */
-const bookShape = (b) => (
-  (b = obj(b)),
-  {
-  title: "",
-  author: "",
-  status: "planned",
-  rating: 0,
-  lesson: "",
-  cover: "",
-  summary: "",
-  notes: [],
-  pages: "",
-  page: "",
-  finishedAt: null,
-  ...b,
-});
-
-/* A habit can feed the library. `habit.book` is the link:
-     null        — an ordinary habit, nothing to do with reading
-     "active"    — follows whichever book is marked «أقرأه الآن»
-     "<book id>" — pinned to one book, for a second reading habit
-   Ticking such a habit logs a session; unticking removes today's and rolls
-   the page counter back, so the log can never claim pages that were undone. */
 /* The book a reading habit points at right now, or null. */
 function bookForHabit(habit, books) {
   if (!habit?.book) return null;
@@ -1994,108 +1710,6 @@ function habitStrip(by, id, n = 30) {
   return out;
 }
 
-const SEED_BOOKS = [
-  {
-    id: uid(),
-    title: "العادات الذرية",
-    author: "جيمس كلير",
-    status: "finished",
-    rating: 5,
-    lesson: "لا ترتقي إلى أهدافك، بل تهبط إلى مستوى أنظمتك. ابنِ النظام قبل الحلم.",
-  },
-  {
-    id: uid(),
-    title: "العمل العميق",
-    author: "كال نيوبورت",
-    status: "finished",
-    rating: 4,
-    lesson: "ساعتان بلا تشتت تهزم يومًا كاملًا مشتتًا. احمِ تركيزك كما تحمي مالك.",
-  },
-  {
-    id: uid(),
-    title: "الفوائد",
-    author: "ابن القيّم",
-    status: "reading",
-    rating: 5,
-    lesson: "القلب يصدأ كما يصدأ الحديد، وجلاؤه الذكر وتلاوة القرآن.",
-  },
-];
-
-/* --- the goal, in one place ------------------------------------------- *
- *  Every goal row is written through here — seed, the add form, and the
- *  migration all go through `goalShape`, so the three can never drift apart.
- *  A goal carries more than a label now: the horizon it belongs to, the
- *  goal one horizon up that it serves, the reason it exists, an optional
- *  meter, its own milestones and a deadline.
- *
- *  Nothing here is permissive by accident. `parent` is validated for shape
- *  only; whether it points at a goal that exists, in the right horizon, is
- *  checked in `migrate` where the whole list is in hand — a shape function
- *  that can only see one row has no way to answer it.
- * ---------------------------------------------------------------------- */
-/* --- the word and the vision ------------------------------------------ *
- *  One word for the arc and a paragraph under it. It sits above every goal
- *  on the screen because it is the thing the goals are for: a list of
- *  eighteen targets with no sentence explaining who they are building is a
- *  list you abandon in March. Capped because it is a motto and a paragraph,
- *  not a journal — and because every byte here shares one storage quota
- *  with the habits and the history, which never give way.
- * ---------------------------------------------------------------------- */
-const WORD_MAX = 24;
-const VISION_MAX = 600;
-const northStarShape = (n) => {
-  const o = obj(n);
-  const str = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
-  return { word: str(o.word, WORD_MAX), vision: str(o.vision, VISION_MAX) };
-};
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const goalShape = (g) => {
-  const o = obj(g);
-  const horizon = HORIZON_IDS.has(o.horizon) ? o.horizon : "quarter";
-  const num = (v, fb = 0) => (Number.isFinite(+v) && +v >= 0 ? +v : fb);
-  const target = num(o.target);
-  return {
-    id: typeof o.id === "string" && o.id ? o.id : uid(),
-    text: typeof o.text === "string" ? o.text : "",
-    pillar: PILLAR_IDS.has(o.pillar) ? o.pillar : "self",
-    horizon,
-    /* A quarter is meaningless above the 90-day horizon and a year is
-       meaningless below it, but both are stored regardless: changing a
-       goal's horizon and changing it back must not lose where it sat. */
-    quarter: QUARTER_IDS.has(o.quarter) ? o.quarter : currentQuarter(),
-    year:
-      Number.isInteger(+o.year) && +o.year >= YEAR_MIN && +o.year <= YEAR_MAX
-        ? +o.year
-        : GOAL_YEARS[0],
-    parent: typeof o.parent === "string" && o.parent ? o.parent : null,
-    why: typeof o.why === "string" ? o.why : "",
-    /* A target of zero is not a broken meter, it is a goal that has none —
-       a yes/no goal, scored by its milestones or its children instead. */
-    target,
-    current: target > 0 ? Math.min(target, num(o.current)) : num(o.current),
-    unit: typeof o.unit === "string" ? o.unit.slice(0, 16) : "",
-    step: num(o.step, 1) > 0 ? num(o.step, 1) : 1,
-    deadline: DATE_RE.test(o.deadline) ? o.deadline : "",
-    steps: rows(o.steps).map((s) => ({
-      id: typeof s.id === "string" && s.id ? s.id : uid(),
-      text: typeof s.text === "string" ? s.text : "",
-      done: !!s.done,
-    })),
-    done: !!o.done,
-  };
-};
-
-/* How far along a goal is, read from whatever evidence it actually has: a
-   meter first, then its own milestones, then the goals one horizon down
-   that serve it. An explicit «مُحقَّق» wins over all three — declaring a goal
-   done is a judgement the owner is allowed to make, and a meter that reads
-   94% must not argue with it.
- *
- *  The depth guard is not theoretical. The chain is three deep by design, but
- *  a hand-edited backup can point a goal at its own descendant, and without
- *  a floor the recursion would never return — a white screen that reloading
- *  cannot clear, because the payload on disk is already the bad one. */
 function goalPct(goal, all, depth = 0) {
   if (goal.done) return 100;
   if (goal.target > 0)
@@ -2219,191 +1833,6 @@ function openingWindow(goals) {
    nothing downstream of here knows about nesting; a goal only ever knows the
    one id above it, which is what keeps a reparent from having to rewrite a
    subtree. */
-const GOAL_TREE = [
-  {
-    text: "أكون من أهل القرآن: حفظًا وتدبّرًا وعملًا",
-    pillar: "faith",
-    why: "لأن كل ما بعده يُسأل عنه، وهذا وحده يبقى.",
-    kids: [
-      {
-        text: "ختم القرآن تدبّرًا ثلاث مرّات",
-        year: 2027,
-        target: 3,
-        unit: "ختمة",
-        kids: [
-          { text: "ختم القرآن تدبّرًا مرّة", quarter: "q1" },
-          { text: "المحافظة على الصلوات في وقتها", quarter: "q4" },
-        ],
-      },
-      {
-        text: "حفظ جزأين إتقانًا لا كمًّا",
-        year: 2027,
-        target: 2,
-        unit: "جزء",
-        kids: [
-          { text: "حفظ جزء عمّ إتقانًا", quarter: "q3" },
-          { text: "قيام الليل ٣ مرّات أسبوعيًّا", quarter: "q2" },
-        ],
-      },
-    ],
-  },
-  {
-    text: "جسد قويّ لا يعتذر: وزن صحّي ثابت وقوّة تُرى",
-    pillar: "health",
-    why: "الانضباط يبدأ من الجسد — ما لا تقدر عليه بدنك لن تقدر عليه بعزمك.",
-    kids: [
-      {
-        text: "الوصول إلى الوزن الصحّي وثباته ثلاثة أشهر",
-        year: 2027,
-        kids: [
-          { text: "الوصول إلى وزن صحّي وثباته", quarter: "q3" },
-          { text: "نوم ٧ ساعات ثابتة كل ليلة", quarter: "q2" },
-        ],
-      },
-      {
-        text: "مئتا حصّة نادي هذه السنة",
-        year: 2027,
-        target: 200,
-        unit: "حصّة",
-        step: 1,
-        kids: [{ text: "نادي ٤ مرّات أسبوعيًّا بلا انقطاع", quarter: "q1" }],
-      },
-    ],
-  },
-  {
-    text: "وظيفة أحبّها بدخل يكفيني ويزيد",
-    pillar: "career",
-    why: "الشهادة لا تُوظّف، النظام يُوظّف — وثلاث سنوات تكفي لبناء سيرة لا تُرَدّ.",
-    kids: [
-      {
-        text: "التخرّج ثم التوظيف في وظيفة إدارية",
-        year: 2027,
-        kids: [
-          { text: "إنهاء مشروع تخرّج يُفتخر به", quarter: "q4" },
-          { text: "إرسال ٦٠ طلب توظيف مدروس", quarter: "q2", target: 60, unit: "طلب", step: 5 },
-        ],
-      },
-      {
-        text: "اجتياز STEP بتسعين أو أكثر",
-        year: 2027,
-        kids: [
-          { text: "اجتياز اختبار STEP بدرجة عالية", quarter: "q1" },
-          { text: "إتقان الإنجليزية محادثةً", quarter: "q3" },
-        ],
-      },
-    ],
-  },
-  {
-    text: "استقلال مالي: لا دَين، وصندوق يكفي سنة",
-    pillar: "money",
-    why: "المال لا يشترى به الوقت إلا إذا كان فائضًا — والفائض يُبنى، لا يُنتظر.",
-    kids: [
-      {
-        text: "صندوق طوارئ يغطّي ستة أشهر",
-        year: 2027,
-        kids: [
-          { text: "بناء صندوق طوارئ يغطّي ٦ أشهر", quarter: "q2" },
-          { text: "ادّخار ٢٠٪ من كل دخل", quarter: "q3" },
-        ],
-      },
-      {
-        text: "مصدر دخل ثانٍ يغطّي مصاريفي الشهرية",
-        year: 2027,
-        kids: [{ text: "مصدر دخل ثانٍ", quarter: "q4" }],
-      },
-    ],
-  },
-  {
-    text: "صحبة وأهل يُعينونني على الآخرة",
-    pillar: "social",
-    why: "المرء على دين خليله — وهذه الدائرة تُختار مرّة وتُحمل عمرًا.",
-    kids: [
-      {
-        text: "صلة الرحم أسبوعيًّا بلا انقطاع",
-        year: 2027,
-        kids: [
-          { text: "صلة الرحم أسبوعيًّا", quarter: "q1" },
-          { text: "بناء دائرة صحبة صالحة", quarter: "q3" },
-        ],
-      },
-    ],
-  },
-  {
-    text: "عقل مقروء: مئة كتاب ولغة ثانية أتكلّمها بثقة",
-    pillar: "self",
-    why: "ما تقرؤه في ثلاث سنوات هو من ستكون عليه في الرابعة.",
-    kids: [
-      {
-        text: "قراءة أربعة وعشرين كتابًا",
-        year: 2027,
-        target: 24,
-        unit: "كتاب",
-        kids: [{ text: "قراءة ٦ كتب", quarter: "q3", target: 6, unit: "كتاب" }],
-      },
-      {
-        text: "مهارة واحدة تُتقنها إتقانًا يُدفع فيه",
-        year: 2027,
-        kids: [
-          { text: "تعلّم مهارة جديدة كليًّا", quarter: "q4" },
-          { text: "تقليل وقت الشاشات إلى ساعة يوميًّا", quarter: "q2" },
-        ],
-      },
-    ],
-  },
-];
-
-/* Walks the tree into the flat list the app stores, stamping each level with
-   its horizon and each row with the id of the one above it. */
-function buildGoals(tree) {
-  const out = [];
-  const walk = (node, depth, parent, pillar) => {
-    const horizon = HORIZONS[Math.min(depth, HORIZONS.length - 1)].id;
-    const row = goalShape({ ...node, horizon, parent, pillar });
-    out.push(row);
-    for (const kid of node.kids || []) walk(kid, depth + 1, row.id, pillar);
-  };
-  for (const root of tree) walk(root, 0, null, root.pillar);
-  return out;
-}
-
-const SEED_GOALS = () => buildGoals(GOAL_TREE);
-
-/* The rows a profile written before the horizons existed is topped up with:
-   everything above the 90-day line, which it has none of. Matched on text so
-   a user who already typed one of these never gets a second copy beside it. */
-const ADDED_GOALS = () =>
-  SEED_GOALS().filter((g) => g.horizon !== "quarter");
-
-/* Which yearly goal each seeded 90-day goal was written to serve, by text.
-   An existing profile's eighteen goals came from this same seed list before
-   the horizons existed, so matching on text is what lets the migration wire
-   the user's own rows into the tree instead of leaving them orphans beside a
-   duplicate set that does have parents. */
-const SEED_LINKS = (() => {
-  const map = new Map();
-  for (const root of GOAL_TREE)
-    for (const year of root.kids || [])
-      for (const q of year.kids || []) map.set(q.text, year.text);
-  return map;
-})();
-
-const SEED_PROMPTS = [
-  {
-    title: "محاكي اختبار PMP",
-    body: "تصرّف كمحاكي صارم لاختبار PMP. اطرح عليّ سؤالًا موقفيًّا صعبًا من نمط الاختبار الحقيقي، بأربعة خيارات متقاربة. لا تكشف الإجابة حتى أجيب، ثم اشرح لماذا الخيار الصحيح صحيح ولماذا كل خيار آخر خاطئ، مع ربطه بمجال المعرفة ومجموعة العمليات.",
-  },
-  {
-    title: "بريد إدارة المرافق",
-    body: "اكتب بريدًا مهنيًّا موجزًا لمدير المرافق بخصوص [الموضوع]. النبرة: محترمة وحازمة وواضحة. ابدأ بالسياق في سطر، ثم المشكلة بالأرقام، ثم الإجراء المطلوب بتاريخ محدّد. لا تزيد على ١٥٠ كلمة، ولا تستخدم عبارات إنشائية.",
-  },
-].map((p) => ({ id: uid(), ...p }));
-
-const SEED_PIPELINE = [
-  { title: "إنهاء اختبار PMP التجريبي الأول", lane: "todo" },
-  { title: "دراسة جدوى عربة الآيس كريم", lane: "todo" },
-  { title: "تحديث LinkedIn بخبرة التدريب التعاوني", lane: "doing" },
-].map((c) => ({ id: uid(), ...c }));
-
 /* ==================================================================== *
  *  CAREER — the 90-day employability masterplan
  *
@@ -3123,70 +2552,11 @@ const INTERVIEW_QS = [
   },
 ];
 
-const APP_STAGES = [
-  { id: "sent", label: "مُرسَل", tint: T.indigo },
-  { id: "touch", label: "تمت المتابعة", tint: T.sky },
-  { id: "screen", label: "فرز هاتفي", tint: T.violet },
-  { id: "intv", label: "مقابلة", tint: T.accent },
-  { id: "offer", label: "عرض", tint: T.primary },
-  { id: "closed", label: "مُغلَق", tint: T.rose },
-];
 const OPEN_STAGES = new Set(["sent", "touch", "screen", "intv"]);
 const stageOf = (id) => APP_STAGES.find((s) => s.id === id) || APP_STAGES[0];
 
 /* One place each career row's fields are written — add form, migration and
    import all pass through here, so the shape cannot drift between them. */
-const sprintShape = (s) => (
-  (s = obj(s)),
-  {
-  id: s.id || uid(),
-  company: typeof s.company === "string" ? s.company : "",
-  role: typeof s.role === "string" ? s.role : "",
-  startedAt: typeof s.startedAt === "string" ? s.startedAt : dayKey(),
-  pain: typeof s.pain === "string" ? s.pain : "",
-  solution: typeof s.solution === "string" ? s.solution : "",
-  contact: typeof s.contact === "string" ? s.contact : "",
-  days: s.days && typeof s.days === "object" ? s.days : {},
-  notes: s.notes && typeof s.notes === "object" ? s.notes : {},
-});
-
-const appShape = (a) => (
-  (a = obj(a)),
-  {
-  id: a.id || uid(),
-  company: typeof a.company === "string" ? a.company : "",
-  role: typeof a.role === "string" ? a.role : "",
-  stage: APP_STAGES.some((s) => s.id === a.stage) ? a.stage : "sent",
-  sentAt: typeof a.sentAt === "string" ? a.sentAt : dayKey(),
-  touchedAt: typeof a.touchedAt === "string" ? a.touchedAt : null,
-  note: typeof a.note === "string" ? a.note : "",
-});
-
-const storyShape = (s) => (
-  (s = obj(s)),
-  {
-  id: s.id || uid(),
-  title: typeof s.title === "string" ? s.title : "",
-  situation: typeof s.situation === "string" ? s.situation : "",
-  task: typeof s.task === "string" ? s.task : "",
-  action: typeof s.action === "string" ? s.action : "",
-  result: typeof s.result === "string" ? s.result : "",
-});
-
-const careerShape = (c) => (
-  (c = obj(c)),
-  {
-  startedAt: typeof c.startedAt === "string" ? c.startedAt : null,
-  /* The one-time Saudi registrations. An object keyed by id rather than an
-     array of done ids, so adding a row later cannot shift anyone's ticks. */
-  setup: c.setup && typeof c.setup === "object" ? c.setup : {},
-  missions: c.missions && typeof c.missions === "object" ? c.missions : {},
-  sprints: Array.isArray(c.sprints) ? c.sprints.map(sprintShape) : [],
-  apps: Array.isArray(c.apps) ? c.apps.map(appShape) : [],
-  stories: Array.isArray(c.stories) ? c.stories.map(storyShape) : [],
-  log: Array.isArray(c.log) ? c.log : [],
-});
-
 const careerDayNo = (c) =>
   c.startedAt ? Math.min(CAREER_DAYS, daysBetween(c.startedAt) + 1) : 0;
 const careerWeekNo = (c) =>
@@ -3322,28 +2692,6 @@ const sprintPitch = (sp) =>
    them at LOCAL midnight. `new Date("2027-01-05")` is read as UTC and lands
    on the 4th for anyone east of Greenwich — which is all of the Gulf, every
    day of the year. */
-const keyToDate = (ds) => {
-  const [y, m, d] = String(ds || "").split("-").map(Number);
-  if (!y || !m || !d || m < 1 || m > 12 || d < 1 || d > 31) return null;
-  const x = new Date(y, m - 1, d);
-  /* Rejects 31 February outright instead of quietly accepting it as the
-     3rd of March, which is how an invalid date becomes a wrong one. */
-  if (x.getFullYear() !== y || x.getMonth() !== m - 1 || x.getDate() !== d)
-    return null;
-  return x;
-};
-
-const isKey = (ds) => !!keyToDate(ds);
-
-const addDays = (ds, n) => {
-  const d = keyToDate(ds);
-  if (!d) return ds;
-  return fmtDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
-};
-
-/* Signed, unlike `daysBetween`, which floors at zero for the streak
-   counters. A calendar needs the sign: «متأخر ٣ أيام» and «بعد ٣ أيام» are
-   opposite facts, and clamping collapses them into the same number. */
 const daysUntil = (ds, fromKey = dayKey()) => {
   const a = keyToDate(fromKey);
   const b = keyToDate(ds);
@@ -3354,15 +2702,6 @@ const daysUntil = (ds, fromKey = dayKey()) => {
 /* "HH:MM" or nothing at all. A half-typed time is worse than no time: it
    sorts wrongly and then renders as a lie, so anything that is not a real
    clock reading is dropped on the way into state. */
-const hhmm = (v, fallback = "") => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
-  if (!m) return fallback;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return fallback;
-  return `${String(h).padStart(2, "0")}:${m[2]}`;
-};
-
 const minsOf = (t) => {
   const v = hhmm(t);
   if (!v) return null;
@@ -3381,12 +2720,6 @@ const prettyTime = (t) => {
   const suffix = h < 12 ? "ص" : "م";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
-};
-
-const clampNum = (v, min, max, fallback) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
 };
 
 /* A link the app is willing to put in an `href`, or nothing.
@@ -3408,64 +2741,13 @@ const safeUrl = (v) => {
   }
 };
 
-const EVENT_KINDS = [
-  { id: "exam", label: "اختبار", icon: GraduationCap, tint: "#FF3B5C" },
-  { id: "deadline", label: "موعد تسليم", icon: ClipboardList, tint: "#FF7A45" },
-  { id: "class", label: "محاضرة أو دورة", icon: Presentation, tint: "#00C2FF" },
-  { id: "meet", label: "مقابلة أو اجتماع", icon: Handshake, tint: "#5B8CFF" },
-  { id: "money", label: "استحقاق مالي", icon: HandCoins, tint: "#FFB020" },
-  { id: "social", label: "مناسبة", icon: Sparkles, tint: "#FF4D8D" },
-  { id: "travel", label: "سفر", icon: Rocket, tint: "#9D5CFF" },
-  { id: "note", label: "تذكير", icon: NotebookPen, tint: "#10B981" },
-];
 const kindOf = (id) =>
   EVENT_KINDS.find((k) => k.id === id) || EVENT_KINDS[EVENT_KINDS.length - 1];
 
-const REPEATS = [
-  { id: "none", label: "مرّة واحدة", short: "" },
-  { id: "weekly", label: "كل أسبوع", short: "أسبوعي" },
-  { id: "monthly", label: "كل شهر", short: "شهري" },
-  { id: "yearly", label: "كل سنة", short: "سنوي" },
-];
 const repeatOf = (id) => REPEATS.find((r) => r.id === id) || REPEATS[0];
 
 /* How many days before the square itself the entry starts warning. Zero
    means it only speaks on the day — which for an exam is far too late. */
-const WARN_CHOICES = [0, 1, 3, 7, 14, 30];
-
-const eventShape = (e) => (
-  (e = obj(e)),
-  {
-  id: e.id || uid(),
-  title: typeof e.title === "string" ? e.title : "",
-  date: isKey(e.date) ? e.date : dayKey(),
-  time: hhmm(e.time),
-  kind: EVENT_KINDS.some((k) => k.id === e.kind) ? e.kind : "note",
-  repeat: REPEATS.some((r) => r.id === e.repeat) ? e.repeat : "none",
-  /* An open-ended weekly entry is a legitimate thing to want, so `null`
-     here is a real value and not a missing one. */
-  until: isKey(e.until) ? e.until : null,
-  place: typeof e.place === "string" ? e.place : "",
-  note: typeof e.note === "string" ? e.note : "",
-  warn: WARN_CHOICES.includes(Number(e.warn)) ? Number(e.warn) : 0,
-  /* Per occurrence, not one flag: a weekly entry ticked this Sunday must
-     still be waiting next Sunday, and a boolean cannot say that. */
-  doneOn: Array.isArray(e.doneOn)
-    ? e.doneOn.filter((d) => typeof d === "string" && isKey(d))
-    : [],
-});
-
-/* Every square an entry lands on inside a window — the only real
-   arithmetic on this screen, so it is written once and read everywhere.
- *
- *  Bounded by the window at BOTH ends on purpose: walking forward from the
- *  start date would cost a weekly entry from 2019 three hundred iterations
- *  to draw one month, and the year view asks for twelve months at a time.
- *
- *  A monthly entry on the 31st is SKIPPED in a thirty-day month rather than
- *  pulled back onto the 30th, and 29 February exists only in a leap year.
- *  Moving a due date silently is the one thing a calendar must never do.
- */
 function occurrences(ev, fromKey, toKey) {
   const start = keyToDate(ev.date);
   const from = keyToDate(fromKey);
@@ -3650,18 +2932,6 @@ const whenWord = (on) => {
    sheet name the grade a course is currently earning instead of leaving
    him to look it up. Ordered high to low — `gradeFromPct` depends on that,
    and F sits at zero so the search can never miss. */
-const GRADES = [
-  { id: "A+", ar: "ممتاز مرتفع", p5: 5, p4: 4, min: 95 },
-  { id: "A", ar: "ممتاز", p5: 4.75, p4: 3.75, min: 90 },
-  { id: "B+", ar: "جيد جدًا مرتفع", p5: 4.5, p4: 3.5, min: 85 },
-  { id: "B", ar: "جيد جدًا", p5: 4, p4: 3, min: 80 },
-  { id: "C+", ar: "جيد مرتفع", p5: 3.5, p4: 2.5, min: 75 },
-  { id: "C", ar: "جيد", p5: 3, p4: 2, min: 70 },
-  { id: "D+", ar: "مقبول مرتفع", p5: 2.5, p4: 1.5, min: 65 },
-  { id: "D", ar: "مقبول", p5: 2, p4: 1, min: 60 },
-  { id: "F", ar: "راسب", p5: 1, p4: 0, min: 0 },
-];
-const gradeOf = (id) => GRADES.find((g) => g.id === id) || null;
 const gradePoints = (g, scale) => (Number(scale) === 4 ? g.p4 : g.p5);
 const gradeFromPct = (pct) =>
   GRADES.find((g) => pct >= g.min) || GRADES[GRADES.length - 1];
@@ -3699,174 +2969,11 @@ const gpaBand = (gpa, scale) => {
 /* The university week, Sunday first. Friday is not on it; Saturday is, at
    the end, because some sections really are scheduled there and a timetable
    that cannot hold a real section is not a timetable. */
-const UNI_DAYS = [
-  { d: 0, label: "الأحد", short: "ح" },
-  { d: 1, label: "الإثنين", short: "ن" },
-  { d: 2, label: "الثلاثاء", short: "ث" },
-  { d: 3, label: "الأربعاء", short: "ر" },
-  { d: 4, label: "الخميس", short: "خ" },
-  { d: 6, label: "السبت", short: "س" },
-];
-const uniDayOf = (d) => UNI_DAYS.find((x) => x.d === Number(d)) || null;
-
-/* Vivid, never pastel — the tint is how a block is found on the timetable
-   at a glance, and a washed-out one finds nothing. */
-const COURSE_TINTS = [
-  "#00C2FF",
-  "#FFB020",
-  "#FF4D8D",
-  "#9D5CFF",
-  "#5B8CFF",
-  "#FF7A45",
-  "#10B981",
-  "#FF5722",
-];
-
-/* A quarter of the meetings is the usual bar for being barred from the
-   final. Derived from how often the course actually meets rather than
-   asked for — but still editable, because it is a regulation and
-   regulations differ between universities. */
 const ABSENCE_LIMIT = 0.25;
-const TERM_WEEKS_DEFAULT = 15;
-
-const UNI_TASK_KINDS = [
-  { id: "assign", label: "واجب", icon: ClipboardList, tint: "#FF7A45" },
-  { id: "quiz", label: "كويز", icon: ClipboardCheck, tint: "#FFB020" },
-  { id: "mid", label: "اختبار فصلي", icon: FileText, tint: "#FF4D8D" },
-  { id: "final", label: "اختبار نهائي", icon: GraduationCap, tint: "#FF3B5C" },
-  { id: "project", label: "مشروع", icon: Rocket, tint: "#9D5CFF" },
-  { id: "present", label: "عرض تقديمي", icon: Presentation, tint: "#00C2FF" },
-];
 const uniKindOf = (id) =>
   UNI_TASK_KINDS.find((k) => k.id === id) || UNI_TASK_KINDS[0];
 /* The ones that cannot be rescheduled by asking nicely. */
 const UNI_EXAM_KINDS = new Set(["quiz", "mid", "final"]);
-
-const slotShape = (s) => (
-  (s = obj(s)),
-  {
-  id: s.id || uid(),
-  day: uniDayOf(s.day) ? Number(s.day) : 0,
-  from: hhmm(s.from, "08:00"),
-  to: hhmm(s.to, "09:50"),
-  room: typeof s.room === "string" ? s.room : "",
-});
-
-const markShape = (m) => (
-  (m = obj(m)),
-  {
-  id: m.id || uid(),
-  label: typeof m.label === "string" ? m.label : "",
-  /* `null` is "not returned yet" and has to survive as null. A zero is a
-     zero he actually scored, and folding the two together is exactly how a
-     mark sheet starts lying about where he stands. */
-  score:
-    m.score === null || m.score === undefined || m.score === ""
-      ? null
-      : Number.isFinite(Number(m.score))
-        ? Math.max(0, Number(m.score))
-        : null,
-  max: clampNum(m.max, 0.01, 1000, 100),
-  weight: clampNum(m.weight, 0, 100, 0),
-});
-
-const courseShape = (c) => (
-  (c = obj(c)),
-  {
-  id: c.id || uid(),
-  code: typeof c.code === "string" ? c.code : "",
-  name: typeof c.name === "string" ? c.name : "",
-  credits: clampNum(c.credits, 1, 12, 3),
-  instructor: typeof c.instructor === "string" ? c.instructor : "",
-  term: typeof c.term === "string" ? c.term : "",
-  tint: COURSE_TINTS.includes(c.tint) ? c.tint : COURSE_TINTS[0],
-  slots: Array.isArray(c.slots) ? c.slots.map(slotShape) : [],
-  marks: Array.isArray(c.marks) ? c.marks.map(markShape) : [],
-  /* Set by hand once the final grade is published. Until then the mark
-     sheet projects one and the GPA leaves the course out entirely. */
-  grade: gradeOf(c.grade) ? c.grade : null,
-  absences: clampNum(c.absences, 0, 200, 0),
-  /* The days the quick button recorded. `absences` stays the authoritative
-     count — it has to, because a term usually starts with absences taken
-     before the app did — and this is what lets the button refuse a second
-     tap on a day it already recorded. Tapping «غياب» twice after one
-     lecture is the easiest mistake on this screen and the hardest to
-     notice: the number is simply wrong from then on. */
-  absentOn: Array.isArray(c.absentOn)
-    ? c.absentOn.filter((d) => typeof d === "string" && isKey(d))
-    : [],
-  absenceCap: clampNum(c.absenceCap, 0, 200, 0), // 0 → derive from the slots
-  target: clampNum(c.target, 0, 100, 90),
-  /* Blackboard, Teams, a shared drive — whatever the course actually lives
-     in. Stored exactly as typed: running it through `safeUrl` here would
-     rewrite the field between keystrokes, so «b» became «https://b/» before
-     the second letter arrived. It is sanitised where it is used as an
-     `href` instead, which is the only place it can do harm. */
-  link: typeof c.link === "string" ? c.link : "",
-  notes: typeof c.notes === "string" ? c.notes : "",
-});
-
-const termShape = (t) => (
-  (t = obj(t)),
-  {
-  id: t.id || uid(),
-  label: typeof t.label === "string" ? t.label : "",
-  start: isKey(t.start) ? t.start : dayKey(),
-  end: isKey(t.end) ? t.end : addDays(dayKey(), 7 * TERM_WEEKS_DEFAULT),
-  weeks: clampNum(t.weeks, 1, 40, TERM_WEEKS_DEFAULT),
-});
-
-const uniTaskShape = (t) => (
-  (t = obj(t)),
-  {
-  id: t.id || uid(),
-  title: typeof t.title === "string" ? t.title : "",
-  kind: UNI_TASK_KINDS.some((k) => k.id === t.kind) ? t.kind : "assign",
-  course: typeof t.course === "string" ? t.course : "",
-  due: isKey(t.due) ? t.due : dayKey(),
-  time: hhmm(t.time),
-  place: typeof t.place === "string" ? t.place : "",
-  weight: clampNum(t.weight, 0, 100, 0),
-  done: !!t.done,
-  notes: typeof t.notes === "string" ? t.notes : "",
-});
-
-/* The whole desk, reshaped. The active-term pointer is normalised here and
-   nowhere else: a dangling id — a term deleted, or a hand-edited backup —
-   would otherwise render an empty screen that looks exactly like lost data. */
-const uniShape = (u) => {
-  u = obj(u);
-  const terms = Array.isArray(u.terms) ? u.terms.map(termShape) : [];
-  const ids = new Set(terms.map((t) => t.id));
-  let term = typeof u.term === "string" && ids.has(u.term) ? u.term : "";
-  if (!term && terms.length) {
-    const today = dayKey();
-    term = (terms.find((t) => t.start <= today && today <= t.end) || terms[0]).id;
-  }
-  return {
-    scale: Number(u.scale) === 4 ? 4 : 5,
-    /* Everything before the terms listed here, as one pair. Asking for
-       every past term just to show a cumulative figure is a wall nobody
-       climbs; two numbers off a transcript is thirty seconds. */
-    priorGpa: clampNum(u.priorGpa, 0, 5, 0),
-    priorCredits: clampNum(u.priorCredits, 0, 500, 0),
-    /* Which scale that figure was typed on. Without it, flipping the scale
-       folds a four-point average into a five-point cumulative — a wrong
-       number stated confidently, which is worse than no number at all. */
-    priorScale: Number(u.priorScale) === 4 ? 4 : 5,
-    /* The degree's total credit hours, for the graduation bar. Zero means
-       «not set» and the bar stays hidden — a progress bar against a number
-       the user never gave is a progress bar against a guess. */
-    gradCredits: clampNum(u.gradCredits, 0, 400, 0),
-    /* The cumulative he is aiming at, for the «كم أحتاج هذا الفصل»
-       calculator. Zero means «not set», same reasoning. */
-    targetGpa: clampNum(u.targetGpa, 0, 5, 0),
-    term,
-    terms,
-    courses: Array.isArray(u.courses) ? u.courses.map(courseShape) : [],
-    tasks: Array.isArray(u.tasks) ? u.tasks.map(uniTaskShape) : [],
-  };
-};
 
 /* What this term has to average for the cumulative to land on the target.
  *
@@ -3884,17 +2991,6 @@ const gpaNeeded = (target, banked, hours) => {
    form asking what a term is. The dates are editable and the label is
    generic on purpose — inventing a term number would be inventing his
    transcript. */
-const SEED_UNI = () => {
-  const start = dayKey();
-  const t = termShape({
-    label: "الفصل الحالي",
-    start,
-    end: addDays(start, 7 * TERM_WEEKS_DEFAULT),
-    weeks: TERM_WEEKS_DEFAULT,
-  });
-  return uniShape({ terms: [t], term: t.id });
-};
-
 /* --- the mark sheet --------------------------------------------------- *
  *  Two different questions, and conflating them is the usual bug: how much
  *  of the full hundred is already banked, versus how the marks that came
@@ -4067,421 +3163,6 @@ function useMinuteClock() {
   return mins;
 }
 
-const freshState = (carry = {}) => ({
-  schema: SCHEMA,
-  date: dayKey(),
-  habits: (carry.habits || SEED_HABITS).map((h) => ({ ...h, done: false })),
-  tasks: (carry.tasks || SEED_TASKS).map((t) => ({ ...t, done: false })),
-  books: carry.books || SEED_BOOKS,
-  goals: carry.goals || SEED_GOALS(),
-  sessions: carry.sessions || [],
-  income: carry.income || [],
-  ventures: carry.ventures || [],
-  prompts: carry.prompts || SEED_PROMPTS,
-  reviews: carry.reviews || [],
-  pipeline: carry.pipeline || SEED_PIPELINE,
-  badHabits: carry.badHabits || [],
-  /* The calendar and the university desk. Every row in both is keyed to a
-     calendar date of its own, so they cross a day rollover untouched —
-     nothing in either of them belongs to "today" in the first place. */
-  events: carry.events || [],
-  uni: carry.uni || SEED_UNI(),
-  /* Entirely date-derived inside, so it carries across a rollover whole —
-     the two daily checklists empty themselves by reading today's log row. */
-  career: careerShape(carry.career),
-  navOrder: carry.navOrder || NAV_IDS,
-  quotes: carry.quotes || SEED_QUOTES(),
-  reads: carry.reads || SEED_READS(),
-  reading: carry.reading || [],
-  readGoal: carry.readGoal ?? READ_GOAL_DEFAULT,
-  /* The word and the vision outlive every goal underneath them, so they
-     carry; the glasses of water do not, and are deliberately absent from
-     `carryOf` below — yesterday's water is not today's. */
-  northStar: northStarShape(carry.northStar),
-  place: placeShape(carry.place),
-  waterGoal: clampGoal(carry.waterGoal),
-  water: 0,
-  cueImage: carry.cueImage ?? null,
-  history: carry.history || [],
-  streakBase: carry.streakBase || 0,
-  bestStreak: carry.bestStreak || 0,
-  dayBanked: false,
-});
-
-/* Reshapes a saved payload without discarding anything the user typed. */
-function migrate(saved) {
-  saved = obj(saved);
-  const from = saved.schema || 0;
-
-  /* Every list is cleaned of holes before a single branch below touches it.
-     A row that is `null`, a number or a string is not data this app can
-     repair — it is damage — and carrying it forward only moves the throw
-     somewhere further from a try/catch. The one that mattered was
-     `history`: it survived migration untouched and then took the render
-     down on `.find(h => h.date === today)`, which is a white screen that
-     reloading cannot clear because the payload is already saved. */
-  let habits = rows(saved.habits);
-  /* Schema 20 gives a habit a `core` flag. Nobody's is set on the way in, and
-     that is the point: the fallback keeps the score exactly where it was,
-     and the routine screen asks him which five rather than this function
-     guessing at them. Which habits carry someone's day is not a question a
-     migration is in any position to answer. */
-  habits = habits.map((h) => ({ ...h, core: !!h.core }));
-
-  if (from < 4) {
-    habits = habits.map((h) =>
-      h.group === "evening" && LEGACY_POSTISHA.has(h.label)
-        ? { ...h, group: "postisha", label: h.label === "تقييم يومي" ? "تقييم اليوم: التزمت؟" : h.label }
-        : h,
-    );
-    const present = new Set(
-      habits.filter((h) => h.group === "postisha").map((h) => h.label),
-    );
-    const missing = POSTISHA_LABELS.filter((l) => !present.has(l)).map((label) => ({
-      id: uid(),
-      label,
-      group: "postisha",
-      done: false,
-    }));
-    if (missing.length) habits = [...habits, ...missing];
-  }
-
-  /* Goals predate quarters. Park every existing one in the quarter the user
-     is living in, so nothing they wrote disappears behind a tab. */
-  let goals = rows(saved.goals);
-  if (from < 5) {
-    const here = currentQuarter();
-    goals = goals.map((g) => (g.quarter ? g : { ...g, quarter: here }));
-  }
-
-  /* Schema 19 stacks the goals into three horizons. Everything a schema-18
-     profile holds was a 90-day goal, so that is the horizon it lands in —
-     `goalShape` defaults to it, which is why there is no mapping step here. */
-  goals = goals.map(goalShape);
-
-  if (from < 19) {
-    /* Top up with the two horizons above the 90-day line, which this payload
-       has none of. Matched on text so a user who already wrote one of these
-       himself never ends up with a second copy beside it, and the seed's own
-       ids are kept — the parent links between the added rows are what makes
-       them a tree rather than two flat lists.
-       The match is per horizon, not across all of them: «قراءة ٢٤ كتابًا» as a
-       90-day goal and the same words as a yearly one are two different
-       commitments, and treating the first as proof of the second would leave
-       the yearly row missing and its children with nothing to serve. */
-    const have = new Set(goals.map((g) => `${g.horizon} ${g.text.trim()}`));
-    const added = ADDED_GOALS().filter(
-      (g) => !have.has(`${g.horizon} ${g.text.trim()}`),
-    );
-    goals = [...goals, ...added];
-
-    /* Wire the user's own 90-day goals into the tree. They came from this
-       same seed list before the horizons existed, so the text is the join —
-       and the yearly row matched here may be one just added above or one he
-       had already written, which is exactly why the lookup runs over the
-       merged list rather than over `added`. */
-    const yearByText = new Map(
-      goals
-        .filter((g) => g.horizon === "year")
-        .map((g) => [g.text.trim(), g.id]),
-    );
-    goals = goals.map((g) => {
-      if (g.horizon !== "quarter" || g.parent) return g;
-      const wanted = SEED_LINKS.get(g.text.trim());
-      const parent = wanted ? yearByText.get(wanted.trim()) : null;
-      return parent ? { ...g, parent } : g;
-    });
-  }
-
-  /* A parent is only a shape to `goalShape`; whether it points anywhere real
-     can only be answered with the whole list in hand. Three ways it can be
-     wrong — a goal that no longer exists, one in the wrong horizon, and a
-     goal pointed at itself — and all three are cut to null rather than
-     carried, because `goalPct` would otherwise walk a chain that has no end
-     and take the render down with it. */
-  {
-    const byId = new Map(goals.map((g) => [g.id, g]));
-    goals = goals.map((g) => {
-      if (!g.parent) return g;
-      const up = byId.get(g.parent);
-      const want = parentHorizon(g.horizon);
-      if (!up || up.id === g.id || !want || up.horizon !== want)
-        return { ...g, parent: null };
-      return g;
-    });
-    /* A cycle needs no bad horizon to exist: year→h3 is legal in both
-       directions on its own, so a hand-edited backup can close a loop that
-       every single row passes. Walk each chain to the top and cut the link
-       that comes back round. */
-    const live = new Map(goals.map((g) => [g.id, g]));
-    goals = goals.map((g) => {
-      const seen = new Set([g.id]);
-      let at = g.parent;
-      while (at) {
-        if (seen.has(at)) return { ...g, parent: null };
-        seen.add(at);
-        at = live.get(at)?.parent || null;
-      }
-      return g;
-    });
-  }
-
-  /* Top up with the routines added in schema 6, matching on label so a
-     profile that already has one (or renamed it) never gets a duplicate. */
-  let tasks = rows(saved.tasks);
-  if (from < 6) {
-    {
-      const have = new Set(habits.map((h) => h.label));
-      habits = [
-        ...habits,
-        ...ADDED_HABITS.filter((h) => !have.has(h.label)).map((h) => ({
-          id: uid(),
-          done: false,
-          ...h,
-        })),
-      ];
-    }
-    {
-      const have = new Set(tasks.map((t) => t.text));
-      tasks = [
-        ...tasks,
-        ...ADDED_TASKS.filter((t) => !have.has(t.text)).map((t) => ({
-          id: uid(),
-          today: false,
-          done: false,
-          ...t,
-        })),
-      ];
-    }
-  }
-
-  /* "المساء" became "بعد المغرب", and "بعد العصر" is new. The old block's
-     habits move rather than being recreated, so nothing the user wrote in
-     it is lost or duplicated. */
-  if (from < 8) {
-    habits = habits.map((h) => {
-      if (h.group === "evening") return { ...h, group: "maghrib" };
-      if (h.group === "afternoon" && h.label === "صلاة العصر")
-        return { ...h, group: "asr" };
-      return h;
-    });
-    const have = new Set(habits.map((h) => h.label));
-    habits = [
-      ...habits,
-      ...[...ASR_HABITS, ...MAGHRIB_HABITS]
-        .filter((h) => !have.has(h.label))
-        .map((h) => ({ id: uid(), done: false, ...h })),
-    ];
-  }
-
-  /* Schema 9 hands the cue list to the user. An older payload has no
-     quotes of its own, so it inherits the seed rather than opening on an
-     empty card; one that already has them is left exactly as written. */
-  let quotes = rows(saved.quotes);
-  if (quotes.length === 0) quotes = SEED_QUOTES();
-  else quotes = quotes.map((q) => (q.id ? q : { ...q, id: uid() }));
-
-  let reads = rows(saved.reads);
-  if (reads.length === 0) reads = SEED_READS();
-  else reads = reads.map((q) => (q.id ? q : { ...q, id: uid() }));
-
-  /* Schema 10 gave every book a workspace. Run the existing rows through
-     bookShape so the new fields appear with sane defaults — spread last is
-     wrong here, the saved values must win over the defaults. */
-  let books = rows(saved.books).map((b) => ({
-    ...bookShape(b),
-    notes: rows(b.notes),
-  }));
-
-  /* Schema 11 links habits to books. Existing habits are ordinary unless
-     they are the reading one, which is pointed at the active book so the
-     feature works on the first open instead of after a settings hunt. */
-  if (from < 11) {
-    habits = habits.map((h) =>
-      h.book === undefined
-        ? { ...h, book: h.label === "قراءة" ? READ_ACTIVE : null }
-        : h,
-    );
-  }
-
-  /* Schema 12 adds the habit breaker. An older payload has no list at all;
-     one written by a newer build is run through badHabitShape so a row that
-     lost a field to a hand-edited backup comes back whole.
-
-     Schema 16 adds the tagged confrontation — a cause, a mood and the clock
-     hour on every entry, plus the `urges` list of cravings that were
-     resisted. It needs no branch of its own: badHabitShape runs every row
-     and every log through urgeShape on the way in, so an older relapse
-     simply arrives with an empty tag and is skipped by the breakdowns
-     instead of counted as an unknown cause. */
-  const badHabits = rows(saved.badHabits).map(badHabitShape);
-
-  /* Schema 13 lets the user order the tabs. Stored as ids and normalised on
-     the way in, so a payload from a build with different tabs still resolves
-     to a complete, duplicate-free order. */
-  let navOrder = orderedNav(saved.navOrder).map((n) => n.id);
-
-  /* Schema 14 adds the employability masterplan. orderedNav appends a tab
-     the saved order has never seen to the *end*, which on a phone buries it
-     behind «المزيد» — so this one is placed by hand, once, right after the
-     routine. A daily driver that takes two taps to reach is not daily. */
-  if (from < 14 && !(saved.navOrder || []).includes("career")) {
-    const rest = navOrder.filter((id) => id !== "career");
-    const at = rest.indexOf("routine");
-    navOrder =
-      at < 0
-        ? ["career", ...rest]
-        : [...rest.slice(0, at + 1), "career", ...rest.slice(at + 1)];
-  }
-
-  /* Run through the shape whether or not it is new: a hand-edited backup
-     that lost a field comes back whole instead of crashing a render. */
-  let career = careerShape(saved.career);
-
-  /* Schema 15 rewrote the morning routine as instructions, and one step's
-     id went with it ("keyword" became "polish" when it stopped being about
-     keywords alone). Rename it inside the log rather than dropping it: an
-     orphan id still counts toward the day's total but can never render as
-     ticked, which reads as a checkbox that lies. */
-  if (from < 15) {
-    career = {
-      ...career,
-      log: (career.log || []).map((e) =>
-        (e.am || []).includes("keyword")
-          ? { ...e, am: e.am.map((id) => (id === "keyword" ? "polish" : id)) }
-          : e,
-      ),
-    };
-  }
-
-  /* Schema 17 adds the calendar and the university desk. An older payload
-     has neither and starts them empty; one written by a newer build is run
-     back through the shapes, so a row that lost a field to a hand-edited
-     backup comes back whole instead of crashing a render.
-
-     Schema 18 adds the recorded absence days, the course link, the
-     graduation total and the target cumulative. None of them needs a
-     branch of its own: every one is a new field with a defined empty
-     value, and `uniShape` already runs over the whole payload on the way
-     in — so a schema-17 profile simply arrives with an empty absence log
-     and the two totals switched off, which is what it means. */
-  const events = rows(saved.events).map(eventShape);
-  const uni = saved.uni ? uniShape(saved.uni) : SEED_UNI();
-
-  /* Both are daily screens for a student, so — like `career` before them —
-     they are placed by hand right after the routine instead of being
-     appended to the end, where a phone buries a tab behind «المزيد». A tab
-     the user has already positioned himself is left exactly where he put
-     it, and becomes the anchor for the next one. */
-  if (from < 17) {
-    let anchor = "routine";
-    for (const id of ["agenda", "uni"]) {
-      if ((saved.navOrder || []).includes(id)) {
-        anchor = id;
-        continue;
-      }
-      const rest = navOrder.filter((x) => x !== id);
-      const at = rest.indexOf(anchor);
-      navOrder =
-        at < 0
-          ? [id, ...rest]
-          : [...rest.slice(0, at + 1), id, ...rest.slice(at + 1)];
-      anchor = id;
-    }
-  }
-
-  return {
-    ...saved,
-    schema: SCHEMA,
-    habits,
-    goals,
-    tasks,
-    quotes,
-    reads,
-    books,
-    badHabits,
-    career,
-    events,
-    uni,
-    navOrder,
-    /* The archive row the whole app writes to. A hole here is the one that
-       reaches the render rather than a shape, so it is cleaned here too. */
-    history: rows(saved.history).filter((h) => typeof h.date === "string"),
-    sessions: rows(saved.sessions),
-    income: rows(saved.income),
-    ventures: rows(saved.ventures),
-    prompts: rows(saved.prompts),
-    reviews: rows(saved.reviews),
-    pipeline: rows(saved.pipeline),
-    reading: rows(saved.reading),
-    readGoal: Number.isFinite(saved.readGoal)
-      ? saved.readGoal
-      : READ_GOAL_DEFAULT,
-    /* Schema 19 adds the word, the vision, the place the prayer times are
-       computed for and the water goal. None needs a branch: each is a new
-       field with a defined empty value, and its shape runs over the whole
-       payload on the way in — so a schema-18 profile simply arrives with an
-       unwritten vision and the default city, which is what it means.
-       `water` is the one exception and is clamped rather than shaped: it is
-       per-day, and a count above the goal would draw cups that are not
-       there. */
-    northStar: northStarShape(saved.northStar),
-    place: placeShape(saved.place),
-    waterGoal: clampGoal(saved.waterGoal),
-    water:
-      Number.isFinite(+saved.water) && +saved.water > 0
-        ? Math.min(clampGoal(saved.waterGoal), Math.round(+saved.water))
-        : 0,
-    cueImage: typeof saved.cueImage === "string" ? saved.cueImage : null,
-  };
-}
-
-/* Everything that outlives a day, in one place. Both the reload path and the
-   live rollover read this list — a key missing from it is data that quietly
-   vanishes at the next day boundary, so it must never be written twice. */
-const carryOf = (s) => ({
-  habits: s.habits,
-  tasks: s.tasks,
-  books: s.books,
-  goals: s.goals,
-  sessions: s.sessions,
-  income: s.income,
-  ventures: s.ventures,
-  prompts: s.prompts,
-  reviews: s.reviews,
-  pipeline: s.pipeline,
-  badHabits: s.badHabits,
-  events: s.events,
-  uni: s.uni,
-  career: s.career,
-  navOrder: s.navOrder,
-  quotes: s.quotes,
-  reads: s.reads,
-  reading: s.reading,
-  readGoal: s.readGoal,
-  northStar: s.northStar,
-  place: s.place,
-  waterGoal: s.waterGoal,
-  cueImage: s.cueImage,
-  history: s.history,
-  bestStreak: s.bestStreak,
-});
-
-/* The day turning over, applied to a state already in memory. The reload
-   path and the live clock must agree on what a new day means, or a window
-   left open overnight ends up on a different footing from one reopened in
-   the morning — which is exactly how a night's work got written onto the
-   next day's row and then wiped. Returns the same object when nothing has
-   changed, so React can bail out of the render. */
-function rollDay(s) {
-  if (s.date === dayKey()) return s;
-  const continued = s.date === yesterdayKey() && s.dayBanked;
-  return freshState({
-    ...carryOf(s),
-    streakBase: continued ? (s.streakBase || 0) + 1 : 0,
-  });
-}
-
 function loadState() {
   if (typeof window === "undefined") return freshState();
   let raw = null;
@@ -4552,7 +3233,14 @@ function useWriteLease() {
     return held ? "follower" : "leader";
   });
   const roleRef = useRef(role);
+  /* Whether this window has ever been the one locked out. A follower holds a
+     snapshot taken before the other window started working, so the moment it
+     is allowed to write is the moment that snapshot would land on top of an
+     hour it never saw. See the reload below. */
+  const wasFollowerRef = useRef(role === "follower");
+  const reloadingRef = useRef(false);
   const set = useCallback((next) => {
+    if (next === "follower") wasFollowerRef.current = true;
     if (roleRef.current === next) return;
     roleRef.current = next;
     setRole(next);
@@ -4579,11 +3267,29 @@ function useWriteLease() {
     let forced = handedOverRef.current;
 
     const tick = () => {
+      if (reloadingRef.current) return;
       const lock = readLock();
       const held =
         lock && typeof lock.at === "number" && Date.now() - lock.at < LEASE_STALE;
       if (held && lock.id !== me && !forced) {
         set("follower");
+        return;
+      }
+      /* The lease is free and this window was the locked-out one. It is now
+         entitled to write, and that is precisely the danger: its `state` was
+         loaded when it opened, before the other window did an hour of work,
+         and the save effect fires on the very next render. Two clicks on the
+         shortcut, an hour in the first window, then closing it, and the
+         second window would quietly put the morning back the way it was.
+
+         So it does not become the leader by promotion. It reloads, reads the
+         payload the other window actually left behind, and comes up as the
+         leader on that. `takeOver` already works this way for the same
+         reason; this is the path nobody chose. Nothing is written before the
+         reload — not the lease, not the state. */
+      if (wasFollowerRef.current && !forced) {
+        reloadingRef.current = true;
+        window.location.reload();
         return;
       }
       forced = false;
@@ -4596,12 +3302,26 @@ function useWriteLease() {
 
     tick();
     const timer = setInterval(tick, LEASE_BEAT);
+    /* Chrome throttles a hidden window's timers to once a minute after five
+       minutes out of sight, and the lease goes stale in six seconds. So a
+       minimised window has effectively lost its lease long before its own
+       next tick tells it so — and the thing a person does next is bring it
+       back and click something. Re-reading the lease the instant the window
+       is looked at again is what closes that: by the time anything can be
+       clicked, this window already knows whether it is still the holder. */
+    const wake = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    window.addEventListener("focus", wake);
+    document.addEventListener("visibilitychange", wake);
     /* `pagehide` rather than `beforeunload`: it fires on mobile Safari's
        back-forward cache path too, where `beforeunload` does not. */
     const release = () => dropLock(me);
     window.addEventListener("pagehide", release);
     return () => {
       clearInterval(timer);
+      window.removeEventListener("focus", wake);
+      document.removeEventListener("visibilitychange", wake);
       window.removeEventListener("pagehide", release);
       try {
         chan?.close();
@@ -6290,6 +5010,8 @@ function RoutineModule({
   onShuffleQuote,
   mirror,
   savedAt,
+  diskAt,
+  diskStuck,
   onOpenMirror,
   onOpenReflect,
   onOpenSettings,
@@ -6538,7 +5260,7 @@ function RoutineModule({
           <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
             <CalendarDays size={13} /> {dateLabel}
           </p>
-          <SaveStamp at={savedAt} />
+          <SaveStamp at={savedAt} diskAt={diskAt} diskStuck={diskStuck} />
           {core.length ? (
             <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
               <span className="font-extrabold" style={{ color: T.accent }}>
@@ -21182,7 +19904,22 @@ export default function LifeOS() {
   const [collapsed, setCollapsed] = useState(() => !!readUI().collapsed);
   const [streakToast, setStreakToast] = useState(null); // streak count when banked
   const [saveFailed, setSaveFailed] = useState(false);
-  const [savedAt, setSavedAt] = useState(null); // when the last write landed
+  const [savedAt, setSavedAt] = useState(null); // when the browser write landed
+  /* The disk is a second destination with its own failure mode, and the save
+     stamp used to speak only for the browser — a server that had been down
+     for two days looked exactly like one that was keeping up. `diskAt` is
+     set from the server's own answer, never guessed from a render. */
+  const [diskAt, setDiskAt] = useState(null);
+  const [diskStuck, setDiskStuck] = useState(false);
+  /* Another window's revision is ahead of this one's. Nothing is written
+     while this is set — the two ways out are the only ways out. */
+  const [conflict, setConflict] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  /* The revision this window loaded, and the one the storage had when it
+     did. Refs, not state: it changes on every save and a re-render to
+     announce a save is a re-render for nothing. */
+  const myRevRef = useRef(0);
+  if (myRevRef.current === 0) myRevRef.current = readRev();
   const [settings, setSettings] = useState(false);
   const [editNav, setEditNav] = useState(false);
   const [reflect, setReflect] = useState(false);
@@ -21203,17 +19940,135 @@ export default function LifeOS() {
        snapshot from before the other one started working; writing it back is
        precisely the clobbering the lease exists to stop. */
     if (!leading) return;
+    /* And the second gate, for the case the lease cannot see: a window whose
+       revision has been overtaken. The lease covers two windows open at the
+       same time; this covers one that was asleep, or on another origin, or
+       came back from a tab that had been sitting since yesterday. Read the
+       stored number fresh every time — the point is that something else may
+       have moved it since the last render. */
+    const stored = readRev();
+    if (stored > myRevRef.current) {
+      setConflict({ mine: myRevRef.current, theirs: stored, where: "window" });
+      return;
+    }
+    if (conflict) return; // already stopped; nothing is written until it is answered
+    const next = stored + 1;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      /* The counter moves only after the payload it counts has landed.
+         Bumping first and failing second would leave every other window
+         locked out behind a revision that describes nothing. */
+      writeRev(next);
+      myRevRef.current = next;
       setSaveFailed(false);
       setSavedAt(Date.now());
     } catch {
       /* Swallowing this silently is how a week of work disappears without
          anyone noticing. The app keeps running — but it has to say so. */
       setSaveFailed(true);
+      return;
     }
-    syncOut(state);
-  }, [state, leading]);
+    syncOut(state, next);
+  }, [state, leading, conflict]);
+
+  /* What the server said about the last write. The stamp and the two bars
+     all hang off this one report. */
+  useEffect(() => {
+    const stuckSince = { at: null };
+    onSyncResult((r) => {
+      if (r.ok) {
+        stuckSince.at = null;
+        setDiskStuck(false);
+        setDiskAt(r.at || Date.now());
+        return;
+      }
+      if (r.conflict) {
+        setConflict({
+          mine: myRevRef.current,
+          theirs: r.disk && Number.isFinite(r.disk.rev) ? r.disk.rev : null,
+          where: "disk",
+        });
+        return;
+      }
+      /* A minute of failures, not one. The server restarts, the laptop
+         sleeps, a request is cut off mid-flight — none of that is worth a
+         banner. Two days of silence is. */
+      if (stuckSince.at === null) stuckSince.at = Date.now();
+      if (Date.now() - stuckSince.at >= DISK_STUCK_MS) setDiskStuck(true);
+    });
+    return () => onSyncResult(null);
+  }, []);
+
+  /* The last change before the window goes away. The debounce is 800ms and
+     closing a window takes less, so without this the disk stayed a tick
+     behind the browser — and the disk is what the reminders read and what a
+     cleared profile recovers from. */
+  useEffect(() => {
+    const leave = () => flushSync();
+    const hide = () => {
+      if (document.visibilityState === "hidden") flushSync();
+    };
+    window.addEventListener("pagehide", leave);
+    document.addEventListener("visibilitychange", hide);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      document.removeEventListener("visibilitychange", hide);
+    };
+  }, []);
+
+  /* Whether this copy is the primary one, decided once. The origin does not
+     change under a running page, so this is a constant for the session —
+     it is only in state so the bar renders on the first paint. */
+  const [stray] = useState(() => strayCopy());
+
+  /* The two ways out of a conflict, and nothing in between.
+
+     Taking the disk throws away what this window holds, which is the honest
+     thing when the disk is ahead: this window's copy is the older one by
+     definition. Keeping this window's copy is the other answer, and it is
+     destructive in the other direction — so the server stows the file it is
+     about to overwrite in backups/guard/ before it does. */
+  const takeDisk = useCallback(async () => {
+    setResolving(true);
+    try {
+      await adoptDisk();
+      window.location.reload();
+    } catch {
+      /* The server is unreachable, or handed back something that is not this
+         app's state. Nothing was written; the bar stays up and the other
+         button still works. */
+      setResolving(false);
+    }
+  }, []);
+
+  const keepMine = useCallback(async () => {
+    setResolving(true);
+    const next = readRev() + 1;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      writeRev(next);
+      myRevRef.current = next;
+      setSavedAt(Date.now());
+    } catch {
+      setSaveFailed(true);
+    }
+    try {
+      await postSync(state, next, { force: true });
+    } catch {
+      /* The browser copy is current either way; the disk bar covers the rest. */
+    }
+    setConflict(null);
+    setResolving(false);
+  }, [state]);
+
+  /* The disk, asked again. The payload is whatever is on screen now, at the
+     revision this window already holds — a retry is not a new change. */
+  const retryDisk = useCallback(() => {
+    setDiskStuck(false);
+    try {
+      postSync(state, myRevRef.current);
+    } catch {}
+  }, [state]);
 
   /* The app is left open for days, so the day boundary cannot live only in
      the load path. Polled once a minute and re-checked whenever the tab is
@@ -21633,6 +20488,8 @@ export default function LifeOS() {
                   onShuffleQuote={shuffleQuote}
                   mirror={todayEntry?.mirror || ""}
                   savedAt={savedAt}
+                  diskAt={diskAt}
+                  diskStuck={diskStuck}
                   onOpenMirror={() => setMirror(true)}
                   onOpenReflect={() => setReflect(true)}
                   onOpenSettings={() => setSettings(true)}
@@ -21694,12 +20551,117 @@ export default function LifeOS() {
         onSettings={() => setSettings(true)}
       />
 
+      {/* Another window has been working, and this one is holding a payload
+          from before it started. Nothing is written while this is up: not to
+          localStorage, not to disk. Merging two divergent copies of a year
+          cannot be done correctly after the fact, so the question goes to the
+          one person who knows which copy he meant. */}
+      {conflict && (
+        <div
+          className="los-in fixed inset-x-3 z-[95] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(620px,92vw)]"
+          style={{
+            top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            backgroundColor: T.cardSolid,
+            backgroundImage: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
+            borderColor: `${T.accent}80`,
+            boxShadow: `0 0 60px -12px ${T.accent}`,
+          }}
+          role="alert"
+        >
+          <AlertTriangle size={18} className="shrink-0" style={{ color: T.accent }} />
+          <p className="text-[12.5px] font-bold leading-relaxed" style={{ color: T.fg }}>
+            تغيّرت بياناتك من نافذة أخرى — التعديلات هنا متوقفة الآن.
+            <span className="block text-[11px] font-normal" style={{ color: T.muted }}>
+              {conflict.where === "disk"
+                ? "النسخة المحفوظة على الجهاز أحدث من نسخة هذه النافذة. اختر أيّهما تعتمد."
+                : "نافذة أخرى حفظت بعد أن فتحت هذه. اختر أيّهما تعتمد."}
+            </span>
+          </p>
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
+            <Btn size="sm" disabled={resolving} onClick={takeDisk}>
+              <Download size={13} /> حمّل الأحدث
+            </Btn>
+            <Btn variant="ghost" size="sm" disabled={resolving} onClick={keepMine}>
+              <Upload size={13} /> اعتمد هذه النافذة
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* A copy on the wrong origin. It reads, and it can still recover — it
+          simply never writes to disk, because its localStorage is its own and
+          the window lease cannot see across the two. Saying so beats letting
+          an afternoon's work pile up in a copy nothing else can see. */}
+      {stray && (
+        <div
+          className="los-in fixed inset-x-3 z-[85] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-2.5 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(560px,92vw)]"
+          style={{
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
+            backgroundColor: T.cardSolid,
+            backgroundImage: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
+            borderColor: `${T.violet}80`,
+            boxShadow: `0 0 50px -14px ${T.violet}`,
+          }}
+          role="status"
+        >
+          <Lock size={16} className="shrink-0" style={{ color: T.violet }} />
+          <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.fg }}>
+            هذي ليست النسخة الأساسية — ما تكتبه هنا لا يُحفظ على الجهاز.
+            <span className="block text-[11px] font-normal" style={{ color: T.muted }}>
+              افتح النسخة الأساسية لتكمل على بياناتك الحقيقية.
+            </span>
+          </p>
+          <Btn
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              try {
+                window.location.href = LOCAL_HOST + "/";
+              } catch {
+                /* nothing further to try */
+              }
+            }}
+          >
+            <ExternalLink size={13} /> افتح الأساسية
+          </Btn>
+        </div>
+      )}
+
+      {/* The disk has been refusing for a minute or more. The browser copy is
+          fine and the screen is correct — but the copy that outlives the
+          browser is not being written, which is the whole reason the sync
+          server exists. */}
+      {diskStuck && !conflict && (
+        <div
+          className="los-in fixed inset-x-3 z-[84] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-2.5 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(560px,92vw)]"
+          style={{
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 168px)",
+            backgroundColor: T.cardSolid,
+            backgroundImage: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
+            borderColor: `${T.ember}80`,
+            boxShadow: `0 0 50px -14px ${T.ember}`,
+          }}
+          role="status"
+        >
+          <Database size={16} className="shrink-0" style={{ color: T.ember }} />
+          <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.fg }}>
+            الحفظ على الجهاز متوقف — بياناتك في المتصفح فقط.
+            <span className="block text-[11px] font-normal" style={{ color: T.muted }}>
+              تأكّد أن خادم المزامنة يعمل، ثم أعد المحاولة.
+            </span>
+          </p>
+          <Btn size="sm" className="shrink-0" onClick={retryDisk}>
+            <RotateCcw size={13} /> إعادة المحاولة
+          </Btn>
+        </div>
+      )}
+
       {/* A write that fails has to be loud. Everything on screen is still
           correct — it just is not on disk, and only the user can decide what
           to do about that. */}
       {saveFailed && (
         <div
-          className="los-in fixed inset-x-3 z-[80] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-center shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-[min(560px,92vw)] sm:-translate-x-1/2"
+          className="los-in fixed inset-x-3 z-[80] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(560px,92vw)]"
           style={{
             top: "calc(env(safe-area-inset-top, 0px) + 12px)",
             background: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
@@ -21828,7 +20790,14 @@ async function pullDisk() {
     /* Shaped like this app's state, or it does not get written. Same bar the
        import in settings holds a file to. */
     if (!saved || typeof saved !== "object" || !Array.isArray(saved.habits)) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    /* The revision comes back with it and is lifted out rather than stored as
+       part of the state: it belongs to the write, not to the day. Seeding the
+       counter from the disk matters more than it looks — start the recovered
+       profile at zero and its first save arrives behind every revision the
+       file already carries, which the server is now right to refuse. */
+    const { rev, ...rest } = saved;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+    writeRev(Number.isFinite(rev) ? rev : 0);
   } catch {
     /* Server down, blocked, or serving something unreadable. The app opens
        on seed data, which is the same as it did before any of this existed. */

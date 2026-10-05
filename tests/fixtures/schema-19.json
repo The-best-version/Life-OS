@@ -1,0 +1,1153 @@
+{
+  "schema": 19,
+  "date": "2026-10-05",
+  "habits": [
+    {
+      "id": "edoxyrq",
+      "label": "شرب ماء",
+      "group": "morning",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "t4ytf3h",
+      "label": "صلاة الفجر وأذكار",
+      "group": "morning",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "cfsvgq7",
+      "label": "نادي",
+      "group": "morning",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "36enzbw",
+      "label": "جلسة STEP — ٩٠ دقيقة",
+      "group": "morning",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "8ohw7jt",
+      "label": "جلسة إنجليزي — ٤٥ دقيقة",
+      "group": "morning",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "wpzt4mv",
+      "label": "صلاة الظهر",
+      "group": "afternoon",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "jcncqd4",
+      "label": "قراءة",
+      "group": "afternoon",
+      "done": false,
+      "book": "active"
+    },
+    {
+      "id": "9bdzh40",
+      "label": "صلاة العصر",
+      "group": "asr",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "3bcup2b",
+      "label": "صلاة المغرب وأذكار",
+      "group": "maghrib",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "hyzr2tk",
+      "label": "صلاة العشاء",
+      "group": "postisha",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "9eztlvp",
+      "label": "تقييم اليوم: التزمت؟",
+      "group": "postisha",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "ieul3rk",
+      "label": "الابتعاد عن الشاشات",
+      "group": "night",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "sy050sk",
+      "label": "تدوين",
+      "group": "night",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "bdya87t",
+      "label": "أذكار النوم",
+      "group": "night",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "oxnk1nl",
+      "label": "تحضير مهام الغد الثلاث",
+      "group": "postisha",
+      "done": false,
+      "book": null
+    },
+    {
+      "id": "4vmr9qr",
+      "done": false,
+      "label": "تحضير وجبة الغد: دجاج صيني وأرز",
+      "group": "maghrib",
+      "book": null
+    },
+    {
+      "id": "k3v43ie",
+      "done": false,
+      "label": "مراجعة سريعة لمهام اليوم",
+      "group": "asr",
+      "book": null
+    },
+    {
+      "id": "1xy55lj",
+      "done": false,
+      "label": "مشي أو حركة خفيفة",
+      "group": "asr",
+      "book": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "wrflqv6",
+      "text": "تسليم تقرير الجامعة",
+      "quadrant": "q1",
+      "today": true,
+      "done": false
+    },
+    {
+      "id": "itau9af",
+      "text": "مراجعة مكثفة لاختبار STEP",
+      "quadrant": "q2",
+      "today": false,
+      "done": false
+    },
+    {
+      "id": "teqtcxf",
+      "text": "بناء صندوق الطوارئ",
+      "quadrant": "q2",
+      "today": false,
+      "done": false
+    },
+    {
+      "id": "d72hakh",
+      "text": "الرد على الرسائل المتراكمة",
+      "quadrant": "q3",
+      "today": false,
+      "done": false
+    },
+    {
+      "id": "84fs2hd",
+      "text": "تصفّح مواقع التواصل بلا هدف",
+      "quadrant": "q4",
+      "today": false,
+      "done": false
+    },
+    {
+      "id": "v5dce3y",
+      "today": false,
+      "done": false,
+      "text": "جلسة مذاكرة PMP — ٩٠ دقيقة",
+      "quadrant": "q2"
+    },
+    {
+      "id": "9goitrq",
+      "today": false,
+      "done": false,
+      "text": "تحديث LinkedIn: إبراز إدارة المرافق والتدريب التعاوني",
+      "quadrant": "q2"
+    },
+    {
+      "id": "nvwxemr",
+      "today": false,
+      "done": false,
+      "text": "ساعتان عمل توصيل مرن",
+      "quadrant": "q3"
+    }
+  ],
+  "books": [
+    {
+      "title": "العادات الذرية",
+      "author": "جيمس كلير",
+      "status": "finished",
+      "rating": 5,
+      "lesson": "لا ترتقي إلى أهدافك، بل تهبط إلى مستوى أنظمتك. ابنِ النظام قبل الحلم.",
+      "cover": "",
+      "summary": "",
+      "notes": [],
+      "pages": "",
+      "page": "",
+      "finishedAt": null,
+      "id": "j4472tp"
+    },
+    {
+      "title": "العمل العميق",
+      "author": "كال نيوبورت",
+      "status": "finished",
+      "rating": 4,
+      "lesson": "ساعتان بلا تشتت تهزم يومًا كاملًا مشتتًا. احمِ تركيزك كما تحمي مالك.",
+      "cover": "",
+      "summary": "",
+      "notes": [],
+      "pages": "",
+      "page": "",
+      "finishedAt": null,
+      "id": "acomgbb"
+    },
+    {
+      "title": "الفوائد",
+      "author": "ابن القيّم",
+      "status": "reading",
+      "rating": 5,
+      "lesson": "القلب يصدأ كما يصدأ الحديد، وجلاؤه الذكر وتلاوة القرآن.",
+      "cover": "",
+      "summary": "",
+      "notes": [],
+      "pages": "",
+      "page": "",
+      "finishedAt": null,
+      "id": "keeyzk8"
+    }
+  ],
+  "goals": [
+    {
+      "id": "qwpuxap",
+      "text": "ختم القرآن تدبّرًا مرّتين",
+      "pillar": "faith",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": null,
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "plpnixk",
+      "text": "المحافظة على الصلوات في وقتها",
+      "pillar": "faith",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "d5lz7yf",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "bmtfxvk",
+      "text": "الوصول إلى وزن صحّي وثبات ٦ أشهر",
+      "pillar": "health",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": null,
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "c4gb8pu",
+      "text": "نادي ٤ مرّات أسبوعيًّا بلا انقطاع",
+      "pillar": "health",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "71i9bcp",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "a7z8u6i",
+      "text": "اجتياز اختبار STEP بدرجة عالية",
+      "pillar": "career",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "c7ihena",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "25j0lgq",
+      "text": "إتقان الإنجليزية محادثةً وكتابة",
+      "pillar": "career",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": null,
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "vosv8cp",
+      "text": "بناء صندوق طوارئ يغطّي ٦ أشهر",
+      "pillar": "money",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "0tn04m2",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "ob8j832",
+      "text": "ادّخار ٢٠٪ من كل دخل",
+      "pillar": "money",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "0tn04m2",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "ypv3aa2",
+      "text": "صلة الرحم أسبوعيًّا",
+      "pillar": "social",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "s8ryyuq",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "0sjrqvp",
+      "text": "بناء دائرة صحبة صالحة",
+      "pillar": "social",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "s8ryyuq",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "f6hpbmt",
+      "text": "قراءة ٢٤ كتابًا",
+      "pillar": "self",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": null,
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "lps0ef9",
+      "text": "تقليل وقت الشاشات إلى ساعة يوميًّا",
+      "pillar": "self",
+      "horizon": "quarter",
+      "quarter": "q3",
+      "year": 2027,
+      "parent": "34got21",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "hrw96dn",
+      "text": "أكون من أهل القرآن: حفظًا وتدبّرًا وعملًا",
+      "pillar": "faith",
+      "horizon": "h3",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": null,
+      "why": "لأن كل ما بعده يُسأل عنه، وهذا وحده يبقى.",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "d5lz7yf",
+      "text": "ختم القرآن تدبّرًا ثلاث مرّات",
+      "pillar": "faith",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "hrw96dn",
+      "why": "",
+      "target": 3,
+      "current": 0,
+      "unit": "ختمة",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "qxlbfrl",
+      "text": "حفظ جزأين إتقانًا لا كمًّا",
+      "pillar": "faith",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "hrw96dn",
+      "why": "",
+      "target": 2,
+      "current": 0,
+      "unit": "جزء",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "puxclqd",
+      "text": "جسد قويّ لا يعتذر: وزن صحّي ثابت وقوّة تُرى",
+      "pillar": "health",
+      "horizon": "h3",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": null,
+      "why": "الانضباط يبدأ من الجسد — ما لا تقدر عليه بدنك لن تقدر عليه بعزمك.",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "57uff3m",
+      "text": "الوصول إلى الوزن الصحّي وثباته ثلاثة أشهر",
+      "pillar": "health",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "puxclqd",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "71i9bcp",
+      "text": "مئتا حصّة نادي هذه السنة",
+      "pillar": "health",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "puxclqd",
+      "why": "",
+      "target": 200,
+      "current": 0,
+      "unit": "حصّة",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "m07mpwg",
+      "text": "وظيفة أحبّها بدخل يكفيني ويزيد",
+      "pillar": "career",
+      "horizon": "h3",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": null,
+      "why": "الشهادة لا تُوظّف، النظام يُوظّف — وثلاث سنوات تكفي لبناء سيرة لا تُرَدّ.",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "qt78s5v",
+      "text": "التخرّج ثم التوظيف في وظيفة إدارية",
+      "pillar": "career",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "m07mpwg",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "c7ihena",
+      "text": "اجتياز STEP بتسعين أو أكثر",
+      "pillar": "career",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "m07mpwg",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "q35xzoy",
+      "text": "استقلال مالي: لا دَين، وصندوق يكفي سنة",
+      "pillar": "money",
+      "horizon": "h3",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": null,
+      "why": "المال لا يشترى به الوقت إلا إذا كان فائضًا — والفائض يُبنى، لا يُنتظر.",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "0tn04m2",
+      "text": "صندوق طوارئ يغطّي ستة أشهر",
+      "pillar": "money",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "q35xzoy",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "m7yx9ix",
+      "text": "مصدر دخل ثانٍ يغطّي مصاريفي الشهرية",
+      "pillar": "money",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "q35xzoy",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "g6kwjj4",
+      "text": "صحبة وأهل يُعينونني على الآخرة",
+      "pillar": "social",
+      "horizon": "h3",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": null,
+      "why": "المرء على دين خليله — وهذه الدائرة تُختار مرّة وتُحمل عمرًا.",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "s8ryyuq",
+      "text": "صلة الرحم أسبوعيًّا بلا انقطاع",
+      "pillar": "social",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "g6kwjj4",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "k5w4xg7",
+      "text": "عقل مقروء: مئة كتاب ولغة ثانية أتكلّمها بثقة",
+      "pillar": "self",
+      "horizon": "h3",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": null,
+      "why": "ما تقرؤه في ثلاث سنوات هو من ستكون عليه في الرابعة.",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "cyobrou",
+      "text": "قراءة أربعة وعشرين كتابًا",
+      "pillar": "self",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "k5w4xg7",
+      "why": "",
+      "target": 24,
+      "current": 0,
+      "unit": "كتاب",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    },
+    {
+      "id": "34got21",
+      "text": "مهارة واحدة تُتقنها إتقانًا يُدفع فيه",
+      "pillar": "self",
+      "horizon": "year",
+      "quarter": "q4",
+      "year": 2027,
+      "parent": "k5w4xg7",
+      "why": "",
+      "target": 0,
+      "current": 0,
+      "unit": "",
+      "step": 1,
+      "deadline": "",
+      "steps": [],
+      "done": false
+    }
+  ],
+  "sessions": [],
+  "income": [],
+  "ventures": [],
+  "prompts": [
+    {
+      "id": "aijkzb2",
+      "title": "محاكي اختبار PMP",
+      "body": "تصرّف كمحاكي صارم لاختبار PMP. اطرح عليّ سؤالًا موقفيًّا صعبًا من نمط الاختبار الحقيقي، بأربعة خيارات متقاربة. لا تكشف الإجابة حتى أجيب، ثم اشرح لماذا الخيار الصحيح صحيح ولماذا كل خيار آخر خاطئ، مع ربطه بمجال المعرفة ومجموعة العمليات."
+    },
+    {
+      "id": "bfbdpl7",
+      "title": "بريد إدارة المرافق",
+      "body": "اكتب بريدًا مهنيًّا موجزًا لمدير المرافق بخصوص [الموضوع]. النبرة: محترمة وحازمة وواضحة. ابدأ بالسياق في سطر، ثم المشكلة بالأرقام، ثم الإجراء المطلوب بتاريخ محدّد. لا تزيد على ١٥٠ كلمة، ولا تستخدم عبارات إنشائية."
+    }
+  ],
+  "reviews": [],
+  "pipeline": [
+    {
+      "id": "smbavwk",
+      "title": "إنهاء اختبار PMP التجريبي الأول",
+      "lane": "todo"
+    },
+    {
+      "id": "m7yh312",
+      "title": "دراسة جدوى عربة الآيس كريم",
+      "lane": "todo"
+    },
+    {
+      "id": "k07w9hr",
+      "title": "تحديث LinkedIn بخبرة التدريب التعاوني",
+      "lane": "doing"
+    }
+  ],
+  "badHabits": [
+    {
+      "id": "c6ah9h9",
+      "title": "التسويف",
+      "startDate": "2026-10-02",
+      "costType": "time",
+      "costPerDay": 2.4,
+      "replacement": "أضبط مؤقتًا على خمس دقائق وأفتح الملف فقط. إن أردت التوقف بعدها فلي ذلك.",
+      "logs": [],
+      "urges": []
+    }
+  ],
+  "events": [],
+  "uni": {
+    "scale": 5,
+    "priorGpa": 0,
+    "priorCredits": 0,
+    "priorScale": 5,
+    "gradCredits": 0,
+    "targetGpa": 0,
+    "term": "w9n7ksp",
+    "terms": [
+      {
+        "id": "w9n7ksp",
+        "label": "الفصل الحالي",
+        "start": "2026-10-04",
+        "end": "2027-01-17",
+        "weeks": 15
+      }
+    ],
+    "courses": [],
+    "tasks": []
+  },
+  "career": {
+    "startedAt": null,
+    "setup": {},
+    "missions": {},
+    "sprints": [],
+    "apps": [],
+    "stories": [],
+    "log": []
+  },
+  "navOrder": [
+    "routine",
+    "agenda",
+    "uni",
+    "matrix",
+    "breaker",
+    "goals",
+    "vault",
+    "deep",
+    "career",
+    "pipeline",
+    "tactical",
+    "finance",
+    "prompts",
+    "analytics"
+  ],
+  "quotes": [
+    {
+      "id": "imqh6mw",
+      "text": "أنت لا ترتقي إلى مستوى أهدافك، بل تهبط إلى مستوى أنظمتك.",
+      "author": "جيمس كلير"
+    },
+    {
+      "id": "wj9phve",
+      "text": "إضاعة الوقت أشدّ من الموت؛ لأنها تقطعك عن الله والدار الآخرة.",
+      "author": "ابن القيّم"
+    },
+    {
+      "id": "2bd64ju",
+      "text": "اقرأ ما تحبّ حتى تُحبّ القراءة.",
+      "author": "نافال رافيكانت"
+    },
+    {
+      "id": "bbqzah1",
+      "text": "التركيز العميق مهارة نادرة وثمينة في اقتصاد اليوم.",
+      "author": "كال نيوبورت"
+    },
+    {
+      "id": "ngy2yfo",
+      "text": "حاسبوا أنفسكم قبل أن تُحاسَبوا.",
+      "author": "عمر بن الخطاب"
+    },
+    {
+      "id": "880630w",
+      "text": "ابن آدم، إنما أنت أيام؛ فإذا ذهب يوم ذهب بعضك.",
+      "author": "الحسن البصري"
+    },
+    {
+      "id": "fqqw0l4",
+      "text": "ومن لم يذق مرّ التعلّم ساعة، تجرّع ذلّ الجهل طول حياته.",
+      "author": "الإمام الشافعي"
+    },
+    {
+      "id": "b0oglxc",
+      "text": "ليست حياتنا قصيرة، بل نحن نُضيّع كثيرًا منها.",
+      "author": "سينيكا"
+    },
+    {
+      "id": "2fi6siu",
+      "text": "أنت تملك سلطانًا على عقلك، لا على الأحداث. أدرك هذا تجد القوة.",
+      "author": "ماركوس أوريليوس"
+    },
+    {
+      "id": "v3d63cu",
+      "text": "وقتك محدود، فلا تُضيّعه عيشًا في حياة شخص آخر.",
+      "author": "ستيف جوبز"
+    },
+    {
+      "id": "ddicnpx",
+      "text": "الناجحون جدًّا يقولون «لا» لكل شيء تقريبًا.",
+      "author": "وارن بافيت"
+    },
+    {
+      "id": "33xvld7",
+      "text": "ما يُقاس، يتحسّن.",
+      "author": "بيتر دراكر"
+    },
+    {
+      "id": "kl8we5k",
+      "text": "ما يصنع أعدائي بي؟ أنا جنّتي وبستاني في صدري.",
+      "author": "ابن تيمية"
+    },
+    {
+      "id": "s99ufm6",
+      "text": "العادة هي الفائدة المركّبة لتطوير الذات.",
+      "author": "جيمس كلير"
+    },
+    {
+      "id": "g0roear",
+      "text": "من عرف طول الطريق استعدّ له، ومن أيقن بالمنزل هان عليه السفر.",
+      "author": "ابن القيّم"
+    },
+    {
+      "id": "dmyce7q",
+      "text": "لا تُصلح عملك لأجل الناس، ولا تُفسده لأجلهم.",
+      "author": "الفضيل بن عياض"
+    },
+    {
+      "id": "34i01jz",
+      "text": "الانضباط هو اختيار ما تريده أكثر على ما تريده الآن.",
+      "author": "أبراهام لينكون"
+    },
+    {
+      "id": "i6qqwqr",
+      "text": "أصعب خطوة هي الأولى؛ وما بعدها عادة.",
+      "author": "أرسطو"
+    },
+    {
+      "id": "fbhnqgk",
+      "text": "إذا لم تكن لك خطة، فستكون جزءًا من خطة غيرك.",
+      "author": "تيري ماكميلان"
+    },
+    {
+      "id": "b6vzd4k",
+      "text": "عش يومك كأنه آخر أيامك، واعمل كأنك تعيش أبدًا.",
+      "author": "مثل عربي"
+    },
+    {
+      "id": "8gviu2p",
+      "text": "النجاح مجموع جهود صغيرة تتكرّر يومًا بعد يوم.",
+      "author": "روبرت كوليير"
+    },
+    {
+      "id": "61zrl3h",
+      "text": "أفضل وقت لغرس شجرة كان قبل عشرين عامًا، وثانيه اليوم.",
+      "author": "مثل صيني"
+    },
+    {
+      "id": "kjjptbw",
+      "text": "لن تتغيّر حياتك حتى تتغيّر عاداتك اليومية؛ السرّ في جدولك.",
+      "author": "جون مكسويل"
+    },
+    {
+      "id": "z3jedxe",
+      "text": "من استوى يوماه فهو مغبون، ومن كان غده شرًّا من يومه فهو ملعون.",
+      "author": "الحسن البصري"
+    },
+    {
+      "id": "dzihent",
+      "text": "التركيز يعني قول «لا» لمئة فكرة جيّدة.",
+      "author": "ستيف جوبز"
+    },
+    {
+      "id": "pdnyw94",
+      "text": "لا يُدرَك العلم براحة الجسم، ولا تُنال المعالي بالتمنّي.",
+      "author": "الإمام مسلم"
+    },
+    {
+      "id": "cfxeioi",
+      "text": "أنت ما تفعله بتكرار؛ فالتميّز ليس حدثًا بل عادة.",
+      "author": "ويل ديورانت"
+    },
+    {
+      "id": "g2haelb",
+      "text": "أعظم ما يملكه المرء وقتٌ فارغ يملؤه بما ينفع.",
+      "author": "ابن الجوزي"
+    },
+    {
+      "id": "hlw7suj",
+      "text": "لا تنتظر الإلهام؛ اذهب إليه بعصا غليظة.",
+      "author": "جاك لندن"
+    },
+    {
+      "id": "wx3yk0c",
+      "text": "ما بدأتَه اليوم يصنع من تكون بعد سنة.",
+      "author": "سينيكا"
+    }
+  ],
+  "reads": [
+    {
+      "id": "8dnthyp",
+      "text": "الكتاب بلا درس مكتوب لم يُقرأ، بل مُرّ عليه.",
+      "author": "قاعدة المكتبة"
+    },
+    {
+      "id": "v1s5774",
+      "text": "من قرأ كتابًا واحدًا وطبّقه، أنفع ممن قرأ مئة ونسيها.",
+      "author": "مثل مأثور"
+    },
+    {
+      "id": "dxu12nl",
+      "text": "اقرأ ما تحبّ حتى تُحبّ القراءة.",
+      "author": "نافال رافيكانت"
+    },
+    {
+      "id": "xfafz2w",
+      "text": "لو لم يكن في الكتب إلا أنها تقطع عنك وساوس الفراغ لكفى.",
+      "author": "ابن الجوزي"
+    },
+    {
+      "id": "zq6fbvm",
+      "text": "الكتب هي المرآة التي نرى فيها أنفسنا قبل أن نرى غيرنا.",
+      "author": "عباس العقاد"
+    },
+    {
+      "id": "ky3f434",
+      "text": "قراءة عشر صفحات كل يوم تصنع ١٥ كتابًا في السنة. البطء ليس العدوّ، الانقطاع هو.",
+      "author": "قاعدة التراكم"
+    },
+    {
+      "id": "172wmbf",
+      "text": "خير جليس في الزمان كتاب.",
+      "author": "المتنبّي"
+    },
+    {
+      "id": "cu8nxkz",
+      "text": "لا تقرأ لتردّ، ولا لتصدّق؛ اقرأ لتزن وتفكّر.",
+      "author": "فرانسيس بيكون"
+    },
+    {
+      "id": "k8andu3",
+      "text": "الفصل الذي لم تلخّصه، ستنساه قبل نهاية الشهر.",
+      "author": "قاعدة التلخيص"
+    },
+    {
+      "id": "0n7r3ae",
+      "text": "قيمة الكتاب في ما غيّره فيك، لا في عدد صفحاته.",
+      "author": "قاعدة المكتبة"
+    },
+    {
+      "id": "ichoiif",
+      "text": "من لم يذق مرّ التعلّم ساعة، تجرّع ذلّ الجهل طول حياته.",
+      "author": "الإمام الشافعي"
+    },
+    {
+      "id": "s7rj05g",
+      "text": "كتاب تقرؤه مرّتين خير من كتابين تقرأ كلًّا منهما مرّة.",
+      "author": "قاعدة العمق"
+    }
+  ],
+  "reading": [],
+  "readGoal": 20,
+  "northStar": {
+    "word": "",
+    "vision": ""
+  },
+  "place": {
+    "id": "riyadh",
+    "label": "الرياض",
+    "lat": 24.7136,
+    "lng": 46.6753,
+    "tz": 3,
+    "asr": 1
+  },
+  "waterGoal": 8,
+  "water": 0,
+  "cueImage": null,
+  "history": [
+    {
+      "date": "2026-09-29",
+      "pct": 0
+    },
+    {
+      "date": "2026-09-30",
+      "pct": 0
+    },
+    {
+      "date": "2026-10-02",
+      "pct": 0,
+      "done": [],
+      "all": [
+        "edoxyrq",
+        "t4ytf3h",
+        "cfsvgq7",
+        "36enzbw",
+        "8ohw7jt",
+        "wpzt4mv",
+        "jcncqd4",
+        "9bdzh40",
+        "3bcup2b",
+        "hyzr2tk",
+        "9eztlvp",
+        "ieul3rk",
+        "sy050sk",
+        "bdya87t",
+        "oxnk1nl",
+        "50dgho9",
+        "3t3ch6v",
+        "4vmr9qr",
+        "k3v43ie",
+        "1xy55lj"
+      ],
+      "holds": 0,
+      "falls": 0
+    },
+    {
+      "date": "2026-10-04",
+      "pct": 17,
+      "done": [
+        "edoxyrq",
+        "t4ytf3h",
+        "cfsvgq7"
+      ],
+      "all": [
+        "edoxyrq",
+        "t4ytf3h",
+        "cfsvgq7",
+        "36enzbw",
+        "8ohw7jt",
+        "wpzt4mv",
+        "jcncqd4",
+        "9bdzh40",
+        "3bcup2b",
+        "hyzr2tk",
+        "9eztlvp",
+        "ieul3rk",
+        "sy050sk",
+        "bdya87t",
+        "oxnk1nl",
+        "4vmr9qr",
+        "k3v43ie",
+        "1xy55lj"
+      ],
+      "holds": 0,
+      "falls": 0,
+      "water": 1
+    },
+    {
+      "date": "2026-10-05",
+      "pct": 0,
+      "done": [],
+      "all": [
+        "edoxyrq",
+        "t4ytf3h",
+        "cfsvgq7",
+        "36enzbw",
+        "8ohw7jt",
+        "wpzt4mv",
+        "jcncqd4",
+        "9bdzh40",
+        "3bcup2b",
+        "hyzr2tk",
+        "9eztlvp",
+        "ieul3rk",
+        "sy050sk",
+        "bdya87t",
+        "oxnk1nl",
+        "4vmr9qr",
+        "k3v43ie",
+        "1xy55lj"
+      ],
+      "holds": 0,
+      "falls": 0,
+      "water": 0
+    }
+  ],
+  "streakBase": 0,
+  "bestStreak": 0,
+  "dayBanked": false
+}
