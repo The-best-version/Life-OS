@@ -261,6 +261,14 @@ const server = http.createServer((req, res) => {
       return serveFile(res, path.join(SITE, "hub.html"), 1);
     }
 
+    /* The report, as a page rather than as the file. GRAPH_REPORT.md is
+       still served raw at /graphify/report.md — that is the artifact — but
+       a browser has no renderer for text/markdown and drops it on screen as
+       one unstyled wall. This reads it and renders it. */
+    if (url.pathname === "/report" || url.pathname === "/report/") {
+      return serveFile(res, path.join(SITE, "report.html"), 1);
+    }
+
     /* The graphify artifacts, by key. See GRAPHIFY_FILES: the key is matched
        whole against that object, never joined onto a path, so nothing under
        graphify-out that is not listed there can be reached from here. */

@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>تقرير الخريطة · 2027 Life OS</title>
+<meta name="theme-color" content="#150E13" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+/* --- the report reader -------------------------------------------------- *
+ *  GRAPH_REPORT.md is markdown, and a browser has no renderer for
+ *  text/markdown — it drops the raw 19KB onto the page as one unstyled
+ *  wall. The hub's card promises «قراءة بلغة مفهومة» and used to link
+ *  straight at that file, so the promise broke on contact.
+ *
+ *  Self-contained for the same reason the hub is: it carries its own CSS
+ *  rather than riding the sheet the build generates by scanning LifeOS.jsx,
+ *  so it still opens while that bundle is the thing being rebuilt.
+ *
+ *  It never writes. It fetches one file and renders it.
+ * ----------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --fg: #FDF8F6;
+  --muted: rgba(253,248,246,0.58);
+  --faint: rgba(253,248,246,0.34);
+  --cta: #FF5722;
+  --accent: #FFB020;
+  --violet: #9D5CFF;
+  --sky: #00C2FF;
+  --los-veil: rgba(255,255,255,0.055);
+  --los-veil-strong: rgba(255,255,255,0.05);
+}
+
+html, body { margin: 0; padding: 0; }
+html { background: #0B1026; }
+body {
+  min-height: 100vh;
+  font-family: Tajawal, Cairo, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color: var(--fg);
+  /* No background of its own. The sky sits behind everything and an opaque
+     body would paint straight over it. */
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- the ground (the hub's, unchanged) ---------------------------------- */
+
+#sky {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+  transition: background 1200ms cubic-bezier(.22, 1, .36, 1);
+}
+#sky .orb, #sky .core, #sky .cloud, #sky .star { position: absolute; }
+#sky .orb { border-radius: 50%; filter: blur(2px); }
+#sky .core { border-radius: 50%; filter: blur(6px); }
+#sky .cloud { border-radius: 999px; filter: blur(26px); animation: los-drift 90s linear infinite; }
+#sky .star {
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: #FFF8E7;
+  animation: los-twinkle 4s ease-in-out infinite;
+}
+
+@keyframes los-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-18vw); }
+}
+@keyframes los-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 0.9; }
+}
+
+/* --- glass -------------------------------------------------------------- */
+
+.card {
+  position: relative;
+  border-radius: 24px;
+  /* The fill comes from the phase. Longhand, never the `background`
+     shorthand — the shorthand wipes the sheen below it along with the fill. */
+  background-color: var(--los-veil);
+  background-image: linear-gradient(135deg, rgba(255,138,80,0.10), rgba(255,255,255,0.035) 42%, rgba(157,92,255,0.09));
+  border: 1px solid rgba(255,225,210,0.18);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: inset 0 1px 0 0 rgba(255,235,220,0.14), 0 24px 48px -24px rgba(0,0,0,0.85);
+}
+
+.los-title {
+  background-image: linear-gradient(95deg, var(--cta), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* Paired with the clip, always. And nothing on this element is ever
+     animated with a transform: Chrome collapses the clip and the text
+     paints as a solid block. */
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+a { color: inherit; text-decoration: none; }
+
+/* --- layout ------------------------------------------------------------- */
+
+.wrap { max-width: 900px; margin: 0 auto; padding: 28px 20px 64px; }
+@media (min-width: 640px) { .wrap { padding: 36px 28px 72px; } }
+
+header.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+}
+.mark { font-size: 20px; font-weight: 800; letter-spacing: -0.2px; }
+.sub { font-size: 11.5px; color: var(--faint); margin-top: 3px; line-height: 1.7; }
+
+/* The way out, on the page itself. The browser's own back button is not
+   part of the product, and a 19KB document scrolled to its end puts that
+   button a long way from the thumb. */
+.back {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fg);
+  background-color: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,225,210,0.2);
+  transition: background-color 240ms cubic-bezier(.22, 1, .36, 1);
+}
+.back:hover { background-color: rgba(255,255,255,0.13); }
+.back svg { flex: none; }
+
+/* --- the document ------------------------------------------------------- *
+ *  The report is generated in English, so the article reads ltr while the
+ *  page around it stays rtl. Forcing it rtl would put the bullet on the
+ *  wrong end of every Latin line.
+ * ----------------------------------------------------------------------- */
+
+#doc { padding: 26px 24px 30px; }
+@media (min-width: 640px) { #doc { padding: 34px 36px 38px; } }
+
+#doc h1 {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,225,210,0.14);
+}
+#doc h2 {
+  font-size: 16.5px;
+  font-weight: 800;
+  margin-top: 32px;
+  margin-bottom: 10px;
+  color: var(--accent);
+}
+#doc h3 {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin-top: 22px;
+  margin-bottom: 7px;
+  color: var(--sky);
+}
+#doc p { margin: 9px 0; font-size: 13.5px; line-height: 1.85; color: rgba(253,248,246,0.82); }
+#doc ul, #doc ol { margin: 9px 0; padding-inline-start: 22px; }
+#doc li { font-size: 13.5px; line-height: 1.85; color: rgba(253,248,246,0.82); margin: 3px 0; }
+#doc li::marker { color: var(--violet); }
+#doc strong { color: var(--fg); font-weight: 700; }
+#doc code {
+  font-family: "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background-color: rgba(157,92,255,0.17);
+  color: #E3D2FF;
+}
+#doc hr { border: 0; border-top: 1px solid rgba(255,225,210,0.14); margin: 26px 0; }
+
+.state { font-size: 13px; color: var(--muted); line-height: 1.9; }
+.note { font-size: 11.5px; color: var(--faint); line-height: 1.8; margin: 14px 4px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  #sky .cloud, #sky .star { animation: none !important; }
+  #sky, .back { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div id="sky" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <header class="top card">
+    <div>
+      <div class="mark los-title">تقرير الخريطة</div>
+      <div class="sub">ما وجدته <span dir="ltr">graphify</span> في هذا المجلد — نصّه بالإنجليزية لأنه مولّد آليًا.</div>
+    </div>
+    <a class="back" href="/hub">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+      الرجوع إلى المركز
+    </a>
+  </header>
+
+  <article class="card" id="doc" dir="ltr">
+    <p class="state" dir="rtl">…يُحمَّل التقرير</p>
+  </article>
+
+  <p class="note">يُعاد توليد هذا التقرير مع كل تحديث للخريطة. مصدره <span dir="ltr">graphify-out/GRAPH_REPORT.md</span></p>
+
+</div>
+
+<script>
+/* --- the sky ------------------------------------------------------------ *
+ *  The hub's table and its painter. Kept as data here for the same reason
+ *  it is kept as data there: this page is deliberately not part of the
+ *  bundle, and the two have to move together or they read as two products.
+ * ----------------------------------------------------------------------- */
+var SKY = [
+  { id: "night",   label: "ليل",  from: 20 * 60,      sky: ["#070B1F", "#0D1330", "#181538"], stars: 1,    orb: { kind: "moon", x: 73, y: 15, r: 30, color: "#F4EBD6", glow: "#BFD4FF" }, clouds: 0.12, cloud: "#2A2F52", body: "#0B1026", veil: "rgba(255,255,255,0.055)", veilStrong: "rgba(255,255,255,0.05)" },
+  { id: "fajr",    label: "فجر",  from: 4 * 60 + 30,  sky: ["#131A3A", "#3B2A57", "#8E4462"], stars: 0.45, orb: { kind: "glow", x: 24, y: 88, r: 46, color: "#FFB48A", glow: "#FF7E6B" }, clouds: 0.32, cloud: "#6B4A6B", body: "#1A1F42", veil: "rgba(255,255,255,0.06)",  veilStrong: "rgba(255,255,255,0.05)" },
+  { id: "sunrise", label: "شروق", from: 6 * 60 + 15,  sky: ["#2C4C86", "#E2745C", "#FFC77E"], stars: 0,    orb: { kind: "sun",  x: 26, y: 74, r: 42, color: "#FFF1C9", glow: "#FF9A4C" }, clouds: 0.72, cloud: "#FFD8C4", body: "#3A4E86", veil: "rgba(34,16,24,0.54)",     veilStrong: "rgba(28,13,20,0.62)" },
+  { id: "day",     label: "نهار", from: 9 * 60,       sky: ["#1E6FB4", "#5FADDD", "#BEE4F3"], stars: 0,    orb: { kind: "sun",  x: 74, y: 18, r: 36, color: "#FFFBE8", glow: "#FFE07A" }, clouds: 1,    cloud: "#FFFFFF", body: "#2A7ABE", veil: "rgba(15,19,31,0.66)",     veilStrong: "rgba(11,15,26,0.74)" },
+  { id: "asr",     label: "عصر",  from: 15 * 60,      sky: ["#2F6796", "#E9A461", "#FFDCA6"], stars: 0,    orb: { kind: "sun",  x: 22, y: 58, r: 40, color: "#FFF4D2", glow: "#FFB347" }, clouds: 0.85, cloud: "#FFE9CF", body: "#3D7099", veil: "rgba(30,18,14,0.58)",     veilStrong: "rgba(24,14,11,0.66)" },
+  { id: "maghrib", label: "مغرب", from: 17 * 60 + 30, sky: ["#201741", "#B4406C", "#FF8B4E"], stars: 0.18, orb: { kind: "sun",  x: 20, y: 86, r: 44, color: "#FFD9A8", glow: "#FF5E3A" }, clouds: 0.55, cloud: "#9C5A72", body: "#2A1B44", veil: "rgba(26,14,30,0.46)",     veilStrong: "rgba(21,11,25,0.56)" }
+];
+var BY_TIME = SKY.slice().sort(function (a, b) { return a.from - b.from; });
+
+/* Night wraps midnight, which is why it is the fallback rather than a range. */
+function skyAt(d) {
+  var mins = d.getHours() * 60 + d.getMinutes();
+  var found = SKY[0];
+  for (var i = 0; i < BY_TIME.length; i++) if (mins >= BY_TIME[i].from) found = BY_TIME[i];
+  return found;
+}
+
+/* A seeded field, so the stars hold still across a re-check instead of
+   leaping to new positions every minute. */
+function seededStars(n) {
+  var out = [], s = 20270601;
+  function next() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }
+  for (var i = 0; i < n; i++) out.push({ x: next() * 100, y: next() * 70, d: next() * 4 });
+  return out;
+}
+var STARS = seededStars(70);
+var CLOUDS = [
+  { x: 8,  y: 18, w: 220, h: 42, o: 0.5 },
+  { x: 52, y: 10, w: 300, h: 54, o: 0.38 },
+  { x: 34, y: 32, w: 180, h: 34, o: 0.3 },
+  { x: 74, y: 40, w: 250, h: 46, o: 0.26 }
+];
+
+var skyEl = document.getElementById("sky");
+var current = null;
+
+function paintSky(phase) {
+  if (current === phase.id) return;
+  current = phase.id;
+
+  skyEl.style.background =
+    "linear-gradient(to bottom, " + phase.sky[0] + " 0%, " + phase.sky[1] + " 54%, " + phase.sky[2] + " 100%)";
+  /* On the document element too, so an overscroll bounce matches the sky
+     instead of flashing a colour from nowhere. */
+  document.documentElement.style.background = phase.body;
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", phase.body);
+
+  document.documentElement.style.setProperty("--los-veil", phase.veil);
+  document.documentElement.style.setProperty("--los-veil-strong", phase.veilStrong);
+
+  var o = phase.orb;
+  var html = "";
+
+  /* The light spreads wide and faint and only a small core is bright. One
+     hard-edged disc reads as a billiard ball. */
+  html += '<div class="orb" style="left:' + o.x + '%;top:' + o.y + '%;width:' + (o.r * 7) + 'px;height:' + (o.r * 7) + 'px;' +
+          'transform:translate(-50%,-50%);background:radial-gradient(circle, ' + o.glow + '4D 0%, ' + o.glow + '1F 38%, transparent 70%);"></div>';
+
+  if (o.kind === "moon") {
+    /* The bite is cut with a mask. A second disc in a flat colour read as
+       an eclipse, because the gradient behind it is never exactly that
+       colour at the moon's height. */
+    html += '<svg style="position:absolute;left:' + o.x + '%;top:' + o.y + '%;width:' + (o.r * 2) + 'px;height:' + (o.r * 2) + 'px;' +
+            'transform:translate(-50%,-50%);overflow:visible" aria-hidden="true">' +
+            '<defs><mask id="los-bite"><rect width="100%" height="100%" fill="black"/>' +
+            '<circle cx="' + o.r + '" cy="' + o.r + '" r="' + (o.r * 0.92) + '" fill="white"/>' +
+            '<circle cx="' + (o.r * 1.62) + '" cy="' + (o.r * 0.72) + '" r="' + (o.r * 0.82) + '" fill="black"/>' +
+            '</mask></defs>' +
+            '<circle cx="' + o.r + '" cy="' + o.r + '" r="' + (o.r * 0.92) + '" fill="' + o.color + '" mask="url(#los-bite)" opacity="0.96"/></svg>';
+  } else if (o.kind === "sun") {
+    html += '<div class="core" style="left:' + o.x + '%;top:' + o.y + '%;width:' + (o.r * 1.1) + 'px;height:' + (o.r * 1.1) + 'px;' +
+            'transform:translate(-50%,-50%);background:radial-gradient(circle, ' + o.color + ' 0%, ' + o.color + 'CC 52%, ' + o.glow + '00 100%);"></div>';
+  }
+
+  if (phase.clouds > 0) {
+    for (var c = 0; c < CLOUDS.length; c++) {
+      var cl = CLOUDS[c];
+      html += '<div class="cloud" style="left:' + cl.x + '%;top:' + cl.y + '%;width:' + cl.w + 'px;height:' + cl.h + 'px;' +
+              'background:' + phase.cloud + ';opacity:' + (cl.o * phase.clouds).toFixed(3) + ';animation-delay:-' + (c * 17) + 's;"></div>';
+    }
+  }
+
+  if (phase.stars > 0) {
+    for (var s = 0; s < STARS.length; s++) {
+      var st = STARS[s];
+      html += '<div class="star" style="left:' + st.x.toFixed(2) + '%;top:' + st.y.toFixed(2) + '%;' +
+              'opacity:' + (phase.stars * 0.8).toFixed(2) + ';animation-delay:-' + st.d.toFixed(2) + 's;"></div>';
+    }
+  }
+
+  skyEl.innerHTML = html;
+}
+
+paintSky(skyAt(new Date()));
+setInterval(function () { paintSky(skyAt(new Date())); }, 60000);
+
+/* --- the markdown ------------------------------------------------------- *
+ *  Escape first, format second, and in that order only. The report is
+ *  generated out of this folder's own files, so its headings and bullets
+ *  carry whatever a node label happens to be — and a label is free text
+ *  lifted out of source. Formatting the raw string, or escaping after
+ *  formatting, would let a label close a tag and open one of its own.
+ *  Every expression below therefore runs on already-escaped text, where
+ *  `<` is no longer a character that can begin a tag.
+ *
+ *  Links are deliberately not rendered. The report contains none, and the
+ *  one construct that carries a url is the one worth not having.
+ * ----------------------------------------------------------------------- */
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function inline(s) {
+  return s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+
+function render(md) {
+  var lines = md.replace(/\r\n/g, "\n").split("\n");
+  var out = [], list = null, m;
+
+  function closeList() {
+    if (list) { out.push("</" + list + ">"); list = null; }
+  }
+  function openList(kind) {
+    if (list !== kind) { closeList(); out.push("<" + kind + ">"); list = kind; }
+  }
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = esc(lines[i]).trim();
+
+    if (!line) { closeList(); continue; }
+
+    if (/^-{3,}$/.test(line)) { closeList(); out.push("<hr />"); continue; }
+
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+      closeList();
+      var lvl = Math.min(m[1].length, 3);
+      out.push("<h" + lvl + ">" + inline(m[2]) + "</h" + lvl + ">");
+      continue;
+    }
+
+    if ((m = line.match(/^[-*]\s+(.*)$/))) {
+      openList("ul");
+      out.push("<li>" + inline(m[1]) + "</li>");
+      continue;
+    }
+
+    if ((m = line.match(/^\d+\.\s+(.*)$/))) {
+      openList("ol");
+      out.push("<li>" + inline(m[1]) + "</li>");
+      continue;
+    }
+
+    closeList();
+    out.push("<p>" + inline(line) + "</p>");
+  }
+
+  closeList();
+  return out.join("");
+}
+
+var doc = document.getElementById("doc");
+
+fetch("/graphify/report.md", { cache: "no-store" })
+  .then(function (r) {
+    if (!r.ok) throw new Error(String(r.status));
+    return r.text();
+  })
+  .then(function (md) {
+    doc.innerHTML = render(md);
+  })
+  .catch(function () {
+    /* The report is a build artefact, not state: it exists only once the
+       graph has been built at least once. Saying so beats a blank card. */
+    var p = document.createElement("p");
+    p.className = "state";
+    p.setAttribute("dir", "rtl");
+    p.textContent = "تعذّر تحميل التقرير. تأكّد أن السيرفر يعمل وأن الخريطة بُنيت مرة واحدة على الأقل.";
+    doc.innerHTML = "";
+    doc.appendChild(p);
+  });
+</script>
+
+</body>
+</html>

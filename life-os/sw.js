@@ -13,7 +13,7 @@
  *  silent corruption this whole arrangement exists to prevent.
  * --------------------------------------------------------------------- */
 
-const CACHE = "life-os-shell-v3";
+const CACHE = "life-os-shell-v4";
 /* React is the one thing the app cannot open without, and it comes off a
    CDN — so it is precached by name rather than left to be picked up on the
    way past. Everything else here is small and local. */
@@ -24,6 +24,7 @@ const SHELL = [
      request, so precaching "hub.html" would leave a request for /hub with
      nothing to fall back to. */
   "hub",
+  "report",
   "manifest.webmanifest",
   "icon-192.png",
   "icon-512.png",
