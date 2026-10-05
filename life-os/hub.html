@@ -173,6 +173,11 @@ h2.section { font-size: 15px; font-weight: 800; margin: 34px 2px 14px; }
 @media (min-width: 560px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 900px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
+/* Four tiles, so a 2x2 that becomes one row rather than a 3 + 1 orphan.
+   Two classes beat the single-class media queries above at every width. */
+.tiles.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { .tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
 .tile {
   padding: 16px 16px 14px;
   display: block;
@@ -271,7 +276,7 @@ footer.end { margin-top: 52px; text-align: center; font-size: 11px; color: rgba(
   </header>
 
   <h2 class="section">يومك الآن</h2>
-  <div class="tiles">
+  <div class="tiles" id="tiles-today">
     <a class="tile card" href="/" data-k="discipline">
       <div class="k">الانضباط</div>
       <div class="v"><span class="n" dir="ltr">—</span><span class="u">٪</span></div>
@@ -299,6 +304,34 @@ footer.end { margin-top: 52px; text-align: center; font-size: 11px; color: rgba(
     </a>
   </div>
   <p class="note" id="state-note">تُقرأ من النسخة المحفوظة على القرص.</p>
+
+  <h2 class="section">التمرين والدراسة</h2>
+  <div class="tiles four" id="tiles-train">
+    <a class="tile card" href="/graphify/charts/gym.svg" data-k="gym-week">
+      <div class="k">النادي هذا الأسبوع</div>
+      <div class="v"><span class="n" dir="ltr">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/graphify/charts/gym.svg" data-k="gym-last">
+      <div class="k">آخر جلسة</div>
+      <!-- Arabic prose, not a fraction: this one stays RTL. Marking it ltr
+           happens to render correctly while every label is Arabic-digit-Arabic,
+           and breaks the moment one starts with the digit. -->
+      <div class="v"><span class="n" dir="rtl">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/graphify/charts/gym.svg" data-k="gym-volume">
+      <div class="k">حجم آخر جلسة</div>
+      <div class="v"><span class="n" dir="ltr">—</span><span class="u">كجم</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/graphify/charts/step.svg" data-k="step-last">
+      <div class="k">آخر نشاط <span dir="ltr">STEP</span></div>
+      <div class="v"><span class="n" dir="rtl">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+  </div>
+  <p class="note" id="train-note">تُقرأ من نسخة <span dir="ltr">Iron Log</span> و <span dir="ltr">STEP</span> على القرص.</p>
 
   <h2 class="section">الأقسام</h2>
   <div class="doors">
@@ -477,13 +510,48 @@ function tick() {
  *  is exactly how they end up disagreeing about the same day.
  * ---------------------------------------------------------------------- */
 
+function isoOf(d) {
+  return d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+}
+
 var DAY_START_HOUR = 4;
 function dayKey() {
   var x = new Date();
   x.setHours(x.getHours() - DAY_START_HOUR);
-  return x.getFullYear() + "-" +
-    String(x.getMonth() + 1).padStart(2, "0") + "-" +
-    String(x.getDate()).padStart(2, "0");
+  return isoOf(x);
+}
+
+/* Whole days between two ISO dates, through UTC so a daylight-saving
+   boundary inside the span cannot round the difference to 23 or 25 hours. */
+function daysBetween(a, b) {
+  var p = a.split("-"), q = b.split("-");
+  return Math.round((Date.UTC(q[0], q[1] - 1, q[2]) -
+                     Date.UTC(p[0], p[1] - 1, p[2])) / 864e5);
+}
+
+function agoLabel(n) {
+  if (n <= 0) return "اليوم";
+  if (n === 1) return "أمس";
+  if (n === 2) return "قبل يومين";
+  return n <= 10 ? "قبل " + n + " أيام" : "قبل " + n + " يومًا";
+}
+
+/* A week's worth of decay: today reads full, a week ago reads empty. */
+function freshness(n) {
+  return Math.max(0, ((7 - n) / 7) * 100);
+}
+
+function deadTiles(sel, note, text) {
+  var n = document.querySelectorAll(sel + " .tile .v .n");
+  for (var i = 0; i < n.length; i++) {
+    n[i].className = "n dead";
+    n[i].textContent = "—";
+  }
+  var u = document.querySelectorAll(sel + " .tile .u");
+  for (var j = 0; j < u.length; j++) u[j].style.display = "none";
+  document.getElementById(note).textContent = text;
 }
 
 function setTile(key, text, keepUnit, pct, colour) {
@@ -544,10 +612,129 @@ fetch("/state?project=lifeos", { cache: "no-store" })
       "النسبة مقروءة من صفّ اليوم في السجل كما كتبه النظام. هذه الصفحة تقرأ ولا تكتب شيئًا أبدًا.";
   })
   .catch(function () {
-    var n = document.querySelectorAll(".tile .v .n");
-    for (var i = 0; i < n.length; i++) n[i].className = "n dead";
-    document.getElementById("state-note").textContent =
-      "لم نصل إلى النسخة المحفوظة على القرص. أرقام اليوم تظهر داخل النظام نفسه.";
+    deadTiles("#tiles-today", "state-note",
+      "لم نصل إلى النسخة المحفوظة على القرص. أرقام اليوم تظهر داخل النظام نفسه.");
+  });
+
+/* --- the gym, read off Iron Log's own copy ------------------------------ *
+ *  Iron Log's conventions, not this page's. Its training week opens on
+ *  Saturday (WEEK_START_DAY = 6) and it keeps plain calendar dates, with no
+ *  04:00 rollover -- so the logical day above is deliberately not used here.
+ *  A day counts as trained if attendance marks it or a session on it logged
+ *  at least one set: the same union `trainedDates` builds. Volume counts
+ *  working sets only, matching `isWorkingSet`.
+ * ---------------------------------------------------------------------- */
+
+var IRON_WEEK_START = 6;
+
+fetch("/state?project=ironlog", { cache: "no-store" })
+  .then(function (r) {
+    if (!r.ok) throw new Error("no-state");
+    return r.json();
+  })
+  .then(function (db) {
+    var sessions = db.sessions || [];
+    var sets = db.setEntries || [];
+    var today = isoOf(new Date());
+
+    var hasSets = {};
+    for (var i = 0; i < sets.length; i++) hasSets[sets[i].sessionId] = true;
+
+    var trained = {};
+    var att = db.attendance || {};
+    for (var d in att) if (att[d]) trained[d] = true;
+    for (var j = 0; j < sessions.length; j++) {
+      if (hasSets[sessions[j].id]) trained[sessions[j].date] = true;
+    }
+
+    /* This week, Saturday-opening. */
+    var start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() - IRON_WEEK_START + 7) % 7));
+    var goal = (db.settings && db.settings.weeklyGoal) || 5;
+    var attended = 0;
+    for (var k = 0; k < 7; k++) {
+      var day = new Date(start);
+      day.setDate(day.getDate() + k);
+      if (trained[isoOf(day)]) attended++;
+    }
+    setTile("gym-week", attended + " / " + goal, false,
+      goal ? (attended / goal) * 100 : 0,
+      attended >= goal ? "var(--primary-lift)" : "var(--cta-lift)");
+
+    /* Last trained day, from that same union. */
+    var days = Object.keys(trained).sort();
+    if (days.length) {
+      var gap = daysBetween(days[days.length - 1], today);
+      setTile("gym-last", agoLabel(gap), false, freshness(gap),
+        gap <= 0 ? "var(--primary-lift)" : gap <= 3 ? "var(--accent)" : "var(--rose)");
+    } else {
+      setTile("gym-last", "—", false, 0, "var(--faint)");
+    }
+
+    /* Volume of the newest session that actually logged working sets -- an
+       attendance-only day is a trained day but has no volume to report. */
+    var vols = [];
+    for (var m = 0; m < sessions.length; m++) {
+      var id = sessions[m].id, v = 0;
+      for (var p = 0; p < sets.length; p++) {
+        var e = sets[p];
+        if (e.sessionId !== id || e.isWarmup) continue;
+        var reps = Number(e.reps) || 0;
+        if (reps > 0) v += (Number(e.weightKg) || 0) * reps;
+      }
+      if (v > 0) vols.push({ date: sessions[m].date, v: v });
+    }
+    vols.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+    if (vols.length) {
+      var last = vols[vols.length - 1].v;
+      var best = 0;
+      for (var q = 0; q < vols.length; q++) best = Math.max(best, vols[q].v);
+      /* Latin digits with a separator, as Iron Log formats every figure. */
+      setTile("gym-volume", Math.round(last).toLocaleString("en-US"), true,
+        best ? (last / best) * 100 : 0,
+        last >= best ? "var(--primary-lift)" : "var(--accent)");
+    } else {
+      setTile("gym-volume", "—", false, 0, "var(--faint)");
+    }
+  })
+  .catch(function () {
+    deadTiles("#tiles-train", "train-note",
+      "لم نصل إلى نسخة Iron Log على القرص.");
+  });
+
+/* --- STEP -------------------------------------------------------------- *
+ *  `step:lastDay` is a Date#toString, not an ISO key, so it is parsed and
+ *  the newest activity key is the fallback when it will not parse.
+ * ---------------------------------------------------------------------- */
+
+fetch("/state?project=step", { cache: "no-store" })
+  .then(function (r) {
+    if (!r.ok) throw new Error("no-state");
+    return r.json();
+  })
+  .then(function (s) {
+    var act = s["step:activity"] || {};
+    var keys = Object.keys(act).sort();
+    var lastIso = null;
+
+    if (s["step:lastDay"]) {
+      var parsed = new Date(s["step:lastDay"]);
+      if (!isNaN(parsed.getTime())) lastIso = isoOf(parsed);
+    }
+    if (!lastIso && keys.length) lastIso = keys[keys.length - 1];
+
+    if (!lastIso) {
+      setTile("step-last", "—", false, 0, "var(--faint)");
+      return;
+    }
+    var gap = daysBetween(lastIso, isoOf(new Date()));
+    setTile("step-last", agoLabel(gap), false, freshness(gap),
+      gap <= 0 ? "var(--primary-lift)" : gap <= 3 ? "var(--violet)" : "var(--accent)");
+  })
+  .catch(function () {
+    setTile("step-last", "—", false, 0, "var(--faint)");
   });
 
 paintSky(skyAt(new Date()));

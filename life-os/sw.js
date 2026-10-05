@@ -13,7 +13,7 @@
  *  silent corruption this whole arrangement exists to prevent.
  * --------------------------------------------------------------------- */
 
-const CACHE = "life-os-shell-v2";
+const CACHE = "life-os-shell-v3";
 /* React is the one thing the app cannot open without, and it comes off a
    CDN — so it is precached by name rather than left to be picked up on the
    way past. Everything else here is small and local. */
