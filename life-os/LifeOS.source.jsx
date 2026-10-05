@@ -19064,6 +19064,14 @@ function NavMore({ items, tab, onGo, showLabels }) {
 function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
+  /* Which row is allowed to start a drag right now, and it is only ever the
+     one whose grip is under the finger. A row that is `draggable` outright
+     swallows the clicks of the buttons inside it: Chrome reads the press on
+     the button as the start of a drag the moment the pointer moves a pixel,
+     the drag is then cancelled because nothing was dropped, and no click
+     event is ever fired — a button that works on a perfectly still hand and
+     does nothing on any other. The grip arms it, the drag disarms it. */
+  const [grip, setGrip] = useState(null);
   const items = orderedNav(order);
   const ids = items.map((n) => n.id);
   const behind = new Set(navSplit(order, more).behind);
@@ -19089,7 +19097,7 @@ function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
         return (
           <React.Fragment key={n.id}>
             <div
-              draggable
+              draggable={grip === n.id}
               onDragStart={(e) => {
                 e.dataTransfer.setData("text/plain", n.id);
                 e.dataTransfer.effectAllowed = "move";
@@ -19098,6 +19106,7 @@ function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
               onDragEnd={() => {
                 setDragging(null);
                 setOver(null);
+                setGrip(null);
               }}
               onDragOver={(e) => {
                 if (!dragging || dragging === n.id) return;
@@ -19106,6 +19115,12 @@ function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
                 setOver(n.id);
               }}
               onDragLeave={() => setOver((o) => (o === n.id ? null : o))}
+              /* Belt and braces on the disarm: a press on the grip that ends
+                 anywhere in the row, or wanders out of it, puts `draggable`
+                 back. A row left armed is a row whose buttons stop clicking,
+                 which is the whole fault this guards against. */
+              onMouseUp={() => setGrip(null)}
+              onMouseLeave={() => setGrip(null)}
               onDrop={(e) => {
                 e.preventDefault();
                 setOver(null);
@@ -19117,24 +19132,30 @@ function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
                 borderColor: isOver ? T.cta : T.border,
                 background: isOver ? `${T.cta}1F` : "rgba(255,255,255,0.04)",
                 opacity: dragging === n.id ? 0.4 : hidden ? 0.55 : 1,
-                cursor: "grab",
               }}
             >
-              <span aria-hidden="true" className="shrink-0 text-white/25">
+              <span
+                aria-hidden="true"
+                onMouseDown={() => setGrip(n.id)}
+                onMouseUp={() => setGrip(null)}
+                className="shrink-0 text-white/25"
+                style={{ cursor: "grab" }}
+              >
                 <GripVertical size={13} />
               </span>
               <Icon size={15} strokeWidth={1.9} className="shrink-0" style={{ color: T.muted }} />
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-white/80">
-                {n.label}
+              {/* The short label here, not the long one: the row carries a
+                  grip, a button with a word on it and two arrows inside a
+                  sidebar, and the full «أهدافي على ثلاث سنوات» truncated to
+                  three letters tells you less than «الأهداف» whole. */}
+              <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-white/80">
+                {n.short}
               </span>
-              {hidden && (
-                <span
-                  className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold"
-                  style={{ color: T.accent, backgroundColor: `${T.accent}1F` }}
-                >
-                  المزيد
-                </span>
-              )}
+              {/* A word, not a glyph. This was a bare ☰ for one build and it
+                  sat in the same row as the drag grip, which is also two
+                  short lines at 13px — so the control that moves a tab was
+                  indistinguishable from the one that does nothing when you
+                  click it. The button says which way it goes. */}
               <button
                 onClick={() =>
                   onMore(
@@ -19148,17 +19169,18 @@ function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
                 title={
                   stuck
                     ? "شريط الجوال يحتاج أربعة تبويبات — أعِد واحدًا من «المزيد» أولًا"
-                    : undefined
+                    : hidden
+                      ? `إعادة ${n.label} إلى القائمة`
+                      : `نقل ${n.label} إلى «المزيد»`
                 }
-                aria-label={
-                  hidden
-                    ? `إعادة ${n.label} إلى القائمة`
-                    : `نقل ${n.label} إلى المزيد`
-                }
-                className="shrink-0 rounded p-1 transition-all hover:text-white/80 disabled:pointer-events-none disabled:opacity-20"
-                style={{ color: hidden ? T.accent : "rgba(255,255,255,0.3)" }}
+                className="shrink-0 rounded-lg border px-2 py-1 text-[9.5px] font-bold transition-all disabled:pointer-events-none disabled:opacity-25"
+                style={{
+                  color: hidden ? T.accent : T.faint,
+                  borderColor: hidden ? `${T.accent}59` : T.border,
+                  backgroundColor: hidden ? `${T.accent}1A` : "transparent",
+                }}
               >
-                <Menu size={13} />
+                {hidden ? "للقائمة" : "للمزيد"}
               </button>
               <button
                 onClick={() => onChange(nudgeInList(ids, n.id, "up"))}
@@ -20484,7 +20506,7 @@ export default function LifeOS() {
           {!collapsed && (
             <div className="mb-2 flex items-center justify-between gap-2 px-1">
               <p className="text-[10px] font-bold" style={{ color: T.faint }}>
-                {editNav ? "اسحب أو بالأسهم · ☰ للمزيد" : "التنقّل"}
+                {editNav ? "رتّب بالأسهم · «للمزيد» يُخفي" : "التنقّل"}
               </p>
               <button
                 onClick={() => setEditNav((v) => !v)}
