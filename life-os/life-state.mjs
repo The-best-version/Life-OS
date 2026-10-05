@@ -41,31 +41,39 @@ export const NAV_IDS = [
   "graph",
 ];
 
+/* --- the phone bar -----------------------------------------------------
+ *  Four tabs fit a 375px bar and keep their labels legible; the rest live
+ *  behind «المزيد». The number sits here rather than beside the component
+ *  that draws the bar because it is also a floor on the state: the main list
+ *  may never be emptied past it. One number, so the two cannot disagree.
+ * ---------------------------------------------------------------------- */
+export const TAB_BAR = 4;
+
 /* --- the tabs that live behind «المزيد» -------------------------------- *
  *  A tab here still exists, still has a screen and is still reachable — it
- *  simply does not take a row in the main navigation. The knowledge map is
- *  the first of them: it is read occasionally and never on the way through a
- *  day, and a permanent row for it pushed the fifteenth tab onto a list of
- *  daily drivers. Secondary, not deleted: the sidebar grows a «المزيد»
- *  disclosure of its own and the phone bar already had one.
+ *  simply does not take a row in the main navigation. This is the user's
+ *  call and not the app's, exactly like the order is: he pushes a tab back
+ *  and pulls it out again from the same editor, and the list is saved with
+ *  everything else. `MORE_IDS` is only where that list *starts* — the
+ *  knowledge map, which is read occasionally and never on the way through a
+ *  day, and which as the fifteenth row was sitting among daily drivers.
  *
- *  It is a constant and not a user preference on purpose — which tabs are
- *  daily is the shape of the app, and `navOrder` is the user's say over the
- *  ones that are. `orderNavIds` keeps these out of that order, so no saved
- *  payload can put one back in the main list, and nothing drops off the end
- *  of the phone bar to make room for it.
+ *  A pushed-back tab keeps its place in `navOrder`. That is the whole reason
+ *  the two are separate lists: pull it out again and it returns where he put
+ *  it rather than at the end, which is where a single list would have left
+ *  it after a round trip.
  * ---------------------------------------------------------------------- */
 export const MORE_IDS = ["graph"];
 
 /* The saved order, resolved to ids. An id this build no longer has is
-   dropped, a tab that moved behind «المزيد» is dropped too, a tab the saved
-   order has never seen joins the end, and a duplicate is taken once —
-   without that last part a hand-edited backup could hide a tab outright. Ids
-   rather than tab objects: the definition of a tab is not this module's
-   business, only which ones there are and in what order the user put them. */
+   dropped, a tab the saved order has never seen joins the end, and a
+   duplicate is taken once — without that last part a hand-edited backup
+   could hide a tab outright. Ids rather than tab objects: the definition of
+   a tab is not this module's business, only which ones there are and in what
+   order the user put them. Every tab is here, the ones behind «المزيد»
+   included; splitting them is `navSplit`'s job and not this one's. */
 export function orderNavIds(order) {
-  const behind = new Set(MORE_IDS);
-  const known = new Set(NAV_IDS.filter((id) => !behind.has(id)));
+  const known = new Set(NAV_IDS);
   const seen = new Set();
   const out = [];
   for (const id of Array.isArray(order) ? order : []) {
@@ -74,8 +82,35 @@ export function orderNavIds(order) {
       out.push(id);
     }
   }
-  for (const id of NAV_IDS) if (known.has(id) && !seen.has(id)) out.push(id);
+  for (const id of NAV_IDS) if (!seen.has(id)) out.push(id);
   return out;
+}
+
+/* His order, cut in two: the tabs that take a row in the navigation, and the
+   tabs that only answer from «المزيد». Both come back in the order he set,
+   because `navOrder` holds every tab and this only decides which side of the
+   line each one falls.
+
+   The floor is the point of doing it here. A saved payload — hand-edited, or
+   written by a build where one more tab existed — could push every tab
+   behind the menu and leave a phone with an empty bar and a desktop with an
+   empty sidebar. So tabs are released from the top of his own order until
+   `TAB_BAR` of them are out front, whatever the saved list says. A missing
+   list means the default; an empty one means he pulled them all back out,
+   which is his to do and is not the same thing. */
+export function navSplit(order, more) {
+  const all = orderNavIds(order);
+  const hidden = new Set(
+    (Array.isArray(more) ? more : MORE_IDS).filter((id) => all.includes(id)),
+  );
+  for (const id of all) {
+    if (all.length - hidden.size >= TAB_BAR) break;
+    hidden.delete(id);
+  }
+  return {
+    main: all.filter((id) => !hidden.has(id)),
+    behind: all.filter((id) => hidden.has(id)),
+  };
 }
 
 /* --- 90-day chunks ---------------------------------------------------- *
@@ -1331,6 +1366,10 @@ export const freshState = (carry = {}) => ({
      the two daily checklists empty themselves by reading today's log row. */
   career: careerShape(carry.career),
   navOrder: orderNavIds(carry.navOrder),
+  /* Which of them answer only from «المزيد». Normalised through the same
+     split the screens read, so the floor holds here too and a carried list
+     cannot arrive with the bar emptied. */
+  navMore: navSplit(carry.navOrder, carry.navMore).behind,
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -1570,13 +1609,8 @@ export function migrate(saved) {
      the way in, so a payload from a build with different tabs still resolves
      to a complete, duplicate-free order.
 
-     Schema 21 moves the knowledge map behind «المزيد», and that is why this
-     line is the whole of the branch: `orderNavIds` drops every `MORE_IDS`
-     tab from the order, so a schema-20 payload that has «graph» sitting in
-     the sidebar — or in the first four, on the phone bar — comes back
-     without it and without losing the position of anything else. The screen
-     is untouched and the tab is still reachable; only its row in the main
-     list is gone. */
+     Schema 21 keeps every tab in this order and adds a second list beside
+     it. Nothing moves here. */
   let navOrder = orderNavIds(saved.navOrder);
 
   /* Schema 14 adds the employability masterplan. orderNavIds appends a tab
@@ -1648,6 +1682,17 @@ export function migrate(saved) {
     }
   }
 
+  /* Schema 21 lets a tab answer from «المزيد» instead of taking a row. A
+     payload from before it has no list, and `navSplit` hands back the
+     default — the knowledge map, which is where this started. A payload that
+     has one keeps it, empty included: an empty list is him having pulled
+     every tab back out, which is a choice and not a missing key.
+
+     `navOrder` is not touched by any of it. A tab behind the menu keeps its
+     place in the order, so pulling it out again puts it back where he had
+     it rather than at the end of the list. */
+  const navMore = navSplit(navOrder, saved.navMore).behind;
+
   return {
     ...saved,
     schema: SCHEMA,
@@ -1662,6 +1707,7 @@ export function migrate(saved) {
     events,
     uni,
     navOrder,
+    navMore,
     /* The archive row the whole app writes to. A hole here is the one that
        reaches the render rather than a shape, so it is cleaned here too. */
     history: rows(saved.history).filter((h) => typeof h.date === "string"),
@@ -1713,6 +1759,7 @@ export const carryOf = (s) => ({
   uni: s.uni,
   career: s.career,
   navOrder: s.navOrder,
+  navMore: s.navMore,
   quotes: s.quotes,
   reads: s.reads,
   reading: s.reading,

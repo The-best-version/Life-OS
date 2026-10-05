@@ -23,7 +23,9 @@ import {
   TOP_TASK_CAP,
   DAY_START_HOUR,
   MORE_IDS,
+  TAB_BAR,
   NAV_IDS,
+  navSplit,
   orderNavIds,
   dayKey,
   yesterdayKey,
@@ -337,53 +339,77 @@ test("yesterdayKey is the day before dayKey", () => {
  *  the tabs
  * ===================================================================== */
 
-const MAIN_IDS = NAV_IDS.filter((id) => !MORE_IDS.includes(id));
-
 test("orderNavIds keeps the saved order, drops the unknown, appends the new", () => {
-  const saved = ["vault", "routine", "not-a-tab", "vault"];
+  const saved = ["graph", "routine", "not-a-tab", "graph"];
   const out = orderNavIds(saved);
-  assert.equal(out[0], "vault");
+  assert.equal(out[0], "graph");
   assert.equal(out[1], "routine");
-  assert.equal(out.length, MAIN_IDS.length, "a tab was hidden or doubled");
+  assert.equal(out.length, NAV_IDS.length, "a tab was hidden or doubled");
   assert.equal(new Set(out).size, out.length, "a tab appears twice");
-  for (const id of MAIN_IDS) assert.ok(out.includes(id), id + " is unreachable");
+  for (const id of NAV_IDS) assert.ok(out.includes(id), id + " is unreachable");
 });
 
 test("orderNavIds survives junk", () => {
   for (const junk of [null, undefined, 7, "routine", [null, 3]]) {
-    assert.deepEqual(orderNavIds(junk), MAIN_IDS);
+    assert.deepEqual(orderNavIds(junk), NAV_IDS);
   }
 });
 
-/* The knowledge map moved behind «المزيد» in schema 21. It still exists and
-   still has a screen — what it no longer has is a row in the list the user
-   orders, and no saved payload may put one back. */
-test("a MORE_IDS tab is a tab, and is kept out of the ordered list", () => {
-  assert.ok(MORE_IDS.length, "the overflow list is empty");
-  for (const id of MORE_IDS) {
-    assert.ok(NAV_IDS.includes(id), id + " is not a tab at all");
-    assert.ok(!orderNavIds(null).includes(id), id + " is still in the order");
-    assert.ok(
-      !orderNavIds([id, "routine"]).includes(id),
-      id + " came back from a saved order",
-    );
-  }
-});
-
-test("migrate takes an overflow tab out of a schema-20 order without moving the rest", () => {
-  const saved = {
-    schema: 20,
-    navOrder: ["routine", "graph", "agenda", "uni", "career"],
-  };
-  const out = migrate(saved);
-  assert.ok(!out.navOrder.includes("graph"), "graph is still in the sidebar");
-  assert.deepEqual(
-    out.navOrder.slice(0, 4),
-    ["routine", "agenda", "uni", "career"],
-    "the tabs around it were reshuffled",
+/* Which tabs answer only from «المزيد» is his, like the order is. The two
+   are separate lists on purpose: a pushed-back tab keeps its place, so
+   pulling it out again returns it there and not to the end. */
+test("navSplit sends the named tabs behind «المزيد» and keeps the rest in order", () => {
+  const order = ["routine", "graph", "agenda", "uni", "career", "matrix"];
+  const { main, behind } = navSplit(order, ["graph", "career"]);
+  assert.deepEqual(behind, ["graph", "career"]);
+  assert.deepEqual(main.slice(0, 4), ["routine", "agenda", "uni", "matrix"]);
+  assert.equal(
+    main.length + behind.length,
+    NAV_IDS.length,
+    "a tab fell off both sides",
   );
-  assert.equal(out.navOrder.length, MAIN_IDS.length);
-  assert.equal(new Set(out.navOrder).size, out.navOrder.length);
+  for (const id of NAV_IDS)
+    assert.ok(main.includes(id) || behind.includes(id), id + " is unreachable");
+});
+
+test("navSplit defaults to MORE_IDS, and an empty list is a choice", () => {
+  for (const missing of [null, undefined, 7, "graph"]) {
+    assert.deepEqual(navSplit(null, missing).behind, MORE_IDS);
+  }
+  assert.deepEqual(navSplit(null, []).behind, [], "he pulled them all back");
+});
+
+test("navSplit never leaves the phone bar short", () => {
+  /* Everything pushed back — a hand-edited payload, or a build with one tab
+     more. The bar must still have four, taken from the top of his order. */
+  const order = orderNavIds(null);
+  const { main, behind } = navSplit(order, order.slice());
+  assert.equal(main.length, TAB_BAR, "the bar came up short or over-filled");
+  assert.deepEqual(main, order.slice(0, TAB_BAR), "it did not take his first four");
+  assert.equal(main.length + behind.length, NAV_IDS.length);
+});
+
+test("navSplit ignores a tab this build no longer has", () => {
+  const { main, behind } = navSplit(null, ["graph", "not-a-tab"]);
+  assert.deepEqual(behind, ["graph"]);
+  assert.ok(!main.includes("not-a-tab"));
+});
+
+test("migrate hands a schema-20 payload the default «المزيد» list, untouched order", () => {
+  const order = ["routine", "graph", "agenda", "uni", "career"];
+  const out = migrate({ schema: 20, navOrder: order });
+  assert.deepEqual(out.navMore, MORE_IDS, "the map did not move behind المزيد");
+  assert.deepEqual(
+    out.navOrder.slice(0, 5),
+    order,
+    "a tab lost its place in the order",
+  );
+  assert.equal(out.navOrder.length, NAV_IDS.length, "a tab left the order");
+});
+
+test("migrate keeps a list he has already set, empty included", () => {
+  assert.deepEqual(migrate({ schema: 21, navMore: ["vault"] }).navMore, ["vault"]);
+  assert.deepEqual(migrate({ schema: 21, navMore: [] }).navMore, []);
 });
 
 /* ===================================================================== *

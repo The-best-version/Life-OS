@@ -180,6 +180,7 @@ import {
   moodOf,
   MORE_IDS,
   NAV_IDS,
+  navSplit,
   obj,
   orderNavIds,
   parentHorizon,
@@ -195,6 +196,7 @@ import {
   SCHEMA,
   slotShape,
   sprintShape,
+  TAB_BAR,
   storyShape,
   tagOf,
   TERM_WEEKS_DEFAULT,
@@ -777,10 +779,15 @@ const NAV_BY_ID = new Map(NAV.map((n) => [n.id, n]));
    the icon back on. */
 const orderedNav = (order) => orderNavIds(order).map((id) => NAV_BY_ID.get(id));
 
-/* The tabs that live behind «المزيد»: still built out of the same table, so
-   they keep their label, their short label and their icon — they are simply
-   not part of the order the user arranges. Fixed, so it is computed once. */
-const MORE_NAV = MORE_IDS.map((id) => NAV_BY_ID.get(id)).filter(Boolean);
+/* His order cut in two, with the labels and the icons put back on each side:
+   the tabs that take a row, and the tabs that answer only from «المزيد». */
+const splitNav = (order, more) => {
+  const { main, behind } = navSplit(order, more);
+  return {
+    main: main.map((id) => NAV_BY_ID.get(id)),
+    behind: behind.map((id) => NAV_BY_ID.get(id)),
+  };
+};
 
 /* Reordering by id, shared by the drag path and the arrows. Kept generic
    because the habit list already has its own group-aware versions — these
@@ -19042,23 +19049,43 @@ function NavMore({ items, tab, onGo, showLabels }) {
   );
 }
 
-/* Reordering the nav itself. Drag for the mouse and ↑/↓ for a finger, the
-   same pairing the habit list uses and for the same reason: HTML5 drag never
-   fires on touch, so the arrows are the only path that works on a phone.
-   The cut line is not decoration — the order also decides which four tabs
-   reach the mobile bar, and that consequence is invisible from a desktop. */
-function NavOrderEditor({ order, onChange, onReset }) {
+/* Reordering the nav itself, and deciding which tabs take a row at all.
+   Drag for the mouse and ↑/↓ for a finger, the same pairing the habit list
+   uses and for the same reason: HTML5 drag never fires on touch, so the
+   arrows are the only path that works on a phone. The cut line is not
+   decoration — the order also decides which four tabs reach the mobile bar,
+   and that consequence is invisible from a desktop.
+
+   Every tab is listed, pushed-back ones included and in their own place,
+   because that place is what they come back to. The eye on each row is the
+   push: it sends a tab behind «المزيد» and fetches it out again. The last
+   four out front cannot be pushed — the bar needs them — and they say so on
+   the button rather than failing silently when it is pressed. */
+function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
   const items = orderedNav(order);
   const ids = items.map((n) => n.id);
-  const pristine = ids.join() === NAV_IDS.join();
+  const behind = new Set(navSplit(order, more).behind);
+  const atFloor = ids.length - behind.size <= TAB_BAR;
+  const pristine =
+    ids.join() === NAV_IDS.join() &&
+    behind.size === MORE_IDS.length &&
+    MORE_IDS.every((id) => behind.has(id));
+
+  /* The divider goes after the fourth tab that actually takes a row — the
+     pushed-back ones never reach the bar, so counting raw positions would
+     draw the line in the wrong place the moment one of them sits above it. */
+  const mainIds = ids.filter((id) => !behind.has(id));
+  const cutAfter = mainIds.length > TAB_BAR ? mainIds[TAB_BAR - 1] : null;
 
   return (
     <div className="flex flex-col gap-1.5">
       {items.map((n, i) => {
         const Icon = n.icon;
         const isOver = over === n.id && dragging && dragging !== n.id;
+        const hidden = behind.has(n.id);
+        const stuck = !hidden && atFloor; // the bar still needs this one
         return (
           <React.Fragment key={n.id}>
             <div
@@ -19089,7 +19116,7 @@ function NavOrderEditor({ order, onChange, onReset }) {
               style={{
                 borderColor: isOver ? T.cta : T.border,
                 background: isOver ? `${T.cta}1F` : "rgba(255,255,255,0.04)",
-                opacity: dragging === n.id ? 0.4 : 1,
+                opacity: dragging === n.id ? 0.4 : hidden ? 0.55 : 1,
                 cursor: "grab",
               }}
             >
@@ -19100,6 +19127,39 @@ function NavOrderEditor({ order, onChange, onReset }) {
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-white/80">
                 {n.label}
               </span>
+              {hidden && (
+                <span
+                  className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold"
+                  style={{ color: T.accent, backgroundColor: `${T.accent}1F` }}
+                >
+                  المزيد
+                </span>
+              )}
+              <button
+                onClick={() =>
+                  onMore(
+                    hidden
+                      ? [...behind].filter((id) => id !== n.id)
+                      : [...behind, n.id],
+                  )
+                }
+                disabled={stuck}
+                aria-pressed={hidden}
+                title={
+                  stuck
+                    ? "شريط الجوال يحتاج أربعة تبويبات — أعِد واحدًا من «المزيد» أولًا"
+                    : undefined
+                }
+                aria-label={
+                  hidden
+                    ? `إعادة ${n.label} إلى القائمة`
+                    : `نقل ${n.label} إلى المزيد`
+                }
+                className="shrink-0 rounded p-1 transition-all hover:text-white/80 disabled:pointer-events-none disabled:opacity-20"
+                style={{ color: hidden ? T.accent : "rgba(255,255,255,0.3)" }}
+              >
+                <Menu size={13} />
+              </button>
               <button
                 onClick={() => onChange(nudgeInList(ids, n.id, "up"))}
                 disabled={i === 0}
@@ -19118,7 +19178,7 @@ function NavOrderEditor({ order, onChange, onReset }) {
               </button>
             </div>
 
-            {i === TAB_BAR - 1 && items.length > TAB_BAR && (
+            {n.id === cutAfter && (
               <div className="flex items-center gap-2 py-0.5">
                 <span
                   className="h-px flex-1"
@@ -19168,8 +19228,6 @@ function Pip() {
     />
   );
 }
-
-const TAB_BAR = 4; // four fit a phone legibly; the rest live behind "المزيد"
 
 function BottomTabs({ items, more: behind, tab, onGo, onSettings }) {
   const [more, setMore] = useState(false);
@@ -19611,8 +19669,12 @@ function SettingsModal({ open, onClose, state, setState }) {
             <div className="los-in mt-3">
               <NavOrderEditor
                 order={state.navOrder}
+                more={state.navMore}
                 onChange={(ids) => setState((s) => ({ ...s, navOrder: ids }))}
-                onReset={() => setState((s) => ({ ...s, navOrder: NAV_IDS }))}
+                onMore={(ids) => setState((s) => ({ ...s, navMore: ids }))}
+                onReset={() =>
+                  setState((s) => ({ ...s, navOrder: NAV_IDS, navMore: MORE_IDS }))
+                }
               />
             </div>
           )}
@@ -20335,9 +20397,23 @@ export default function LifeOS() {
 
   const go = (id) => setTab(id);
 
-  const navItems = useMemo(() => orderedNav(state.navOrder), [state.navOrder]);
+  /* Two lists out of one order: what the navigation shows, and what answers
+     only from «المزيد». Both are his to set, and `navSplit` holds the floor
+     so neither can be emptied past the width of the phone bar. */
+  const { main: navItems, behind: moreItems } = useMemo(
+    () => splitNav(state.navOrder, state.navMore),
+    [state.navOrder, state.navMore],
+  );
   const setNavOrder = useCallback(
     (ids) => setState((s) => ({ ...s, navOrder: ids })),
+    [],
+  );
+  const setNavMore = useCallback(
+    (ids) => setState((s) => ({ ...s, navMore: ids })),
+    [],
+  );
+  const resetNav = useCallback(
+    () => setState((s) => ({ ...s, navOrder: NAV_IDS, navMore: MORE_IDS })),
     [],
   );
 
@@ -20408,7 +20484,7 @@ export default function LifeOS() {
           {!collapsed && (
             <div className="mb-2 flex items-center justify-between gap-2 px-1">
               <p className="text-[10px] font-bold" style={{ color: T.faint }}>
-                {editNav ? "اسحب أو استخدم الأسهم" : "التنقّل"}
+                {editNav ? "اسحب أو بالأسهم · ☰ للمزيد" : "التنقّل"}
               </p>
               <button
                 onClick={() => setEditNav((v) => !v)}
@@ -20429,14 +20505,16 @@ export default function LifeOS() {
           {editNav && !collapsed ? (
             <NavOrderEditor
               order={state.navOrder}
+              more={state.navMore}
               onChange={setNavOrder}
-              onReset={() => setNavOrder(NAV_IDS)}
+              onMore={setNavMore}
+              onReset={resetNav}
             />
           ) : (
             <>
               <NavList items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
               <NavMore
-                items={MORE_NAV}
+                items={moreItems}
                 tab={tab}
                 onGo={go}
                 showLabels={!collapsed}
@@ -20613,7 +20691,7 @@ export default function LifeOS() {
 
       <BottomTabs
         items={navItems}
-        more={MORE_NAV}
+        more={moreItems}
         tab={tab}
         onGo={go}
         onSettings={() => setSettings(true)}
