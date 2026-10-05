@@ -1,9 +1,9 @@
 {
   ".claude/launch.json": {
-    "mtime": 1789928084.88299,
-    "seen": 1790157334.4206216,
-    "ast_hash": "42f3adb705a8823a975022d6b4e15250",
-    "semantic_hash": "42f3adb705a8823a975022d6b4e15250"
+    "mtime": 1791138580.3419926,
+    "seen": 1791204932.5942388,
+    "ast_hash": "6e63815b18813e3d0065f898a39670dc",
+    "semantic_hash": "6e63815b18813e3d0065f898a39670dc"
   },
   "focus-flow/app.js": {
     "mtime": 1789928500.8037035,
@@ -52,5 +52,503 @@
     "seen": 1790162637.4395854,
     "ast_hash": "b3e40588728f5b86efdce530a4d39820",
     "semantic_hash": "b3e40588728f5b86efdce530a4d39820"
+  },
+  "LifeOS.jsx": {
+    "mtime": 1791202844.5440037,
+    "seen": 1791204932.5942388,
+    "ast_hash": "b4fab14d5a94541ec770e34ceac08399",
+    "semantic_hash": "b4fab14d5a94541ec770e34ceac08399"
+  },
+  "Scene3D.jsx": {
+    "mtime": 1790450086.8167765,
+    "seen": 1791204932.5942388,
+    "ast_hash": "714d649755d284240590db8a2d9ebdf1",
+    "semantic_hash": "714d649755d284240590db8a2d9ebdf1"
+  },
+  "build-life-os.mjs": {
+    "mtime": 1791198518.2628052,
+    "seen": 1791204932.5942388,
+    "ast_hash": "5ccced268a5ede110d517c35b6ca4756",
+    "semantic_hash": "5ccced268a5ede110d517c35b6ca4756"
+  },
+  "iron-log/.claude/launch.json": {
+    "mtime": 1790799855.5143764,
+    "seen": 1791204932.5942388,
+    "ast_hash": "221a95e5e07506fc1dead49d62b9314f",
+    "semantic_hash": "221a95e5e07506fc1dead49d62b9314f"
+  },
+  "iron-log/components.json": {
+    "mtime": 1790499441.6090603,
+    "seen": 1791204932.5942388,
+    "ast_hash": "8da3aba18d4fc49af9b99625f10c34a3",
+    "semantic_hash": "8da3aba18d4fc49af9b99625f10c34a3"
+  },
+  "iron-log/db/schema.sql": {
+    "mtime": 1790796471.512598,
+    "seen": 1791204932.5942388,
+    "ast_hash": "e288f46701c6a1ccd01a8fd1ebc482d4",
+    "semantic_hash": "e288f46701c6a1ccd01a8fd1ebc482d4"
+  },
+  "iron-log/next.config.mjs": {
+    "mtime": 1790799920.1388626,
+    "seen": 1791204932.5942388,
+    "ast_hash": "fd51d75b8f97298864ffdef27a3cee85",
+    "semantic_hash": "fd51d75b8f97298864ffdef27a3cee85"
+  },
+  "iron-log/package.json": {
+    "mtime": 1790862708.9489584,
+    "seen": 1791204932.5942388,
+    "ast_hash": "49d3fb1e8c47d28ee7e09e05500c7161",
+    "semantic_hash": "49d3fb1e8c47d28ee7e09e05500c7161"
+  },
+  "iron-log/postcss.config.mjs": {
+    "mtime": 1790499430.6024642,
+    "seen": 1791204932.5942388,
+    "ast_hash": "c56b5f3c12f777a86e2513f45daab56a",
+    "semantic_hash": "c56b5f3c12f777a86e2513f45daab56a"
+  },
+  "iron-log/scripts/build-standalone.mjs": {
+    "mtime": 1790862693.886484,
+    "seen": 1791204932.5942388,
+    "ast_hash": "bb773d8f1ce7c485b31ce5363c5ba717",
+    "semantic_hash": "bb773d8f1ce7c485b31ce5363c5ba717"
+  },
+  "iron-log/scripts/standalone/entry.tsx": {
+    "mtime": 1790864768.2184992,
+    "seen": 1791204932.5942388,
+    "ast_hash": "5613a0f1fde1facca28014c3debe23fa",
+    "semantic_hash": "5613a0f1fde1facca28014c3debe23fa"
+  },
+  "iron-log/scripts/standalone/shims/next-link.tsx": {
+    "mtime": 1790862574.4928565,
+    "seen": 1791204932.5942388,
+    "ast_hash": "e54c884b809f8142779362c3451f5f8d",
+    "semantic_hash": "e54c884b809f8142779362c3451f5f8d"
+  },
+  "iron-log/scripts/standalone/shims/next-navigation.ts": {
+    "mtime": 1790862574.516662,
+    "seen": 1791204932.5942388,
+    "ast_hash": "cdd282cba6eb3adc6b1f18ada26164f9",
+    "semantic_hash": "cdd282cba6eb3adc6b1f18ada26164f9"
+  },
+  "iron-log/scripts/test-migration.mjs": {
+    "mtime": 1790867609.1978815,
+    "seen": 1791204932.5942388,
+    "ast_hash": "98b5888c36074ea7b9a0723c25b4085b",
+    "semantic_hash": "98b5888c36074ea7b9a0723c25b4085b"
+  },
+  "iron-log/src/app/error.tsx": {
+    "mtime": 1790500281.1869533,
+    "seen": 1791204932.5942388,
+    "ast_hash": "8baa56b8c5432ce78d230272c000d123",
+    "semantic_hash": "8baa56b8c5432ce78d230272c000d123"
+  },
+  "iron-log/src/app/history/page.tsx": {
+    "mtime": 1790797294.8400404,
+    "seen": 1791204932.5942388,
+    "ast_hash": "36f20e0dc4e178b95e98501308d5f52b",
+    "semantic_hash": "36f20e0dc4e178b95e98501308d5f52b"
+  },
+  "iron-log/src/app/layout.tsx": {
+    "mtime": 1790807573.989055,
+    "seen": 1791204932.5942388,
+    "ast_hash": "06139ace149597614ade89fa96bdc5eb",
+    "semantic_hash": "06139ace149597614ade89fa96bdc5eb"
+  },
+  "iron-log/src/app/not-found.tsx": {
+    "mtime": 1790500282.9876173,
+    "seen": 1791204932.5942388,
+    "ast_hash": "8ef46669a050784b5620e2a9c3ac287b",
+    "semantic_hash": "8ef46669a050784b5620e2a9c3ac287b"
+  },
+  "iron-log/src/app/nutrition/page.tsx": {
+    "mtime": 1790867513.1892595,
+    "seen": 1791204932.5942388,
+    "ast_hash": "f9d6ecb70070946558eb048c7d27f0a7",
+    "semantic_hash": "f9d6ecb70070946558eb048c7d27f0a7"
+  },
+  "iron-log/src/app/page.tsx": {
+    "mtime": 1790807515.474748,
+    "seen": 1791204932.5942388,
+    "ast_hash": "99418494d1809c7be1f24a4995e7c717",
+    "semantic_hash": "99418494d1809c7be1f24a4995e7c717"
+  },
+  "iron-log/src/app/settings/page.tsx": {
+    "mtime": 1790867575.1946075,
+    "seen": 1791204932.5942388,
+    "ast_hash": "3e32a0e568f9357473d20528af2dfaea",
+    "semantic_hash": "3e32a0e568f9357473d20528af2dfaea"
+  },
+  "iron-log/src/app/workout/page.tsx": {
+    "mtime": 1790797272.0898027,
+    "seen": 1791204932.5942388,
+    "ast_hash": "1d7834824f411fb88efabc26a2aada5d",
+    "semantic_hash": "1d7834824f411fb88efabc26a2aada5d"
+  },
+  "iron-log/src/components/body/body-panel.tsx": {
+    "mtime": 1790795991.6662514,
+    "seen": 1791204932.5942388,
+    "ast_hash": "d1a7c0654a03d8bebc77c495f99211dc",
+    "semantic_hash": "d1a7c0654a03d8bebc77c495f99211dc"
+  },
+  "iron-log/src/components/body/health-panel.tsx": {
+    "mtime": 1790867536.9720182,
+    "seen": 1791204932.5942388,
+    "ast_hash": "6a3fe3c5b6f4bd160ba71e01f5a5ec2b",
+    "semantic_hash": "6a3fe3c5b6f4bd160ba71e01f5a5ec2b"
+  },
+  "iron-log/src/components/charts/bar-list.tsx": {
+    "mtime": 1790501312.8440576,
+    "seen": 1791204932.5942388,
+    "ast_hash": "ce404a296df8343420824daa239c1fa0",
+    "semantic_hash": "ce404a296df8343420824daa239c1fa0"
+  },
+  "iron-log/src/components/charts/chart-kit.tsx": {
+    "mtime": 1790500054.393609,
+    "seen": 1791204932.5942388,
+    "ast_hash": "0b6d8b3b281148ec8e539781571c8c22",
+    "semantic_hash": "0b6d8b3b281148ec8e539781571c8c22"
+  },
+  "iron-log/src/components/charts/column-chart.tsx": {
+    "mtime": 1790501430.9232352,
+    "seen": 1791204932.5942388,
+    "ast_hash": "a4d6bf153525d9d4790d92d3c374228f",
+    "semantic_hash": "a4d6bf153525d9d4790d92d3c374228f"
+  },
+  "iron-log/src/components/charts/line-area-chart.tsx": {
+    "mtime": 1790501428.6888137,
+    "seen": 1791204932.5942388,
+    "ast_hash": "5dbb659aab3e9d9dfb01591b12bbfdd3",
+    "semantic_hash": "5dbb659aab3e9d9dfb01591b12bbfdd3"
+  },
+  "iron-log/src/components/charts/sparkline.tsx": {
+    "mtime": 1790500889.6419418,
+    "seen": 1791204932.5942388,
+    "ast_hash": "c028d1bccf5a994370852e9e95afd798",
+    "semantic_hash": "c028d1bccf5a994370852e9e95afd798"
+  },
+  "iron-log/src/components/dashboard/consistency-card.tsx": {
+    "mtime": 1790500187.3073397,
+    "seen": 1791204932.5942388,
+    "ast_hash": "d9bbf2cf40174382dd274d51baeea63e",
+    "semantic_hash": "d9bbf2cf40174382dd274d51baeea63e"
+  },
+  "iron-log/src/components/dashboard/exercise-progress-card.tsx": {
+    "mtime": 1790501352.1165094,
+    "seen": 1791204932.5942388,
+    "ast_hash": "1848e3dc8523b42b692ac229b1ce8998",
+    "semantic_hash": "1848e3dc8523b42b692ac229b1ce8998"
+  },
+  "iron-log/src/components/dashboard/kpi-grid.tsx": {
+    "mtime": 1790801746.905156,
+    "seen": 1791204932.5942388,
+    "ast_hash": "a46684941bf38142fa5132a7dc0f6212",
+    "semantic_hash": "a46684941bf38142fa5132a7dc0f6212"
+  },
+  "iron-log/src/components/dashboard/muscle-split-card.tsx": {
+    "mtime": 1790501316.2793083,
+    "seen": 1791204932.5942388,
+    "ast_hash": "2577a40be02fd8c72ed3295473c47253",
+    "semantic_hash": "2577a40be02fd8c72ed3295473c47253"
+  },
+  "iron-log/src/components/dashboard/records-card.tsx": {
+    "mtime": 1790501534.049754,
+    "seen": 1791204932.5942388,
+    "ast_hash": "17860aa43b11a0df6695c418d3429898",
+    "semantic_hash": "17860aa43b11a0df6695c418d3429898"
+  },
+  "iron-log/src/components/dashboard/stall-card.tsx": {
+    "mtime": 1790797366.4963236,
+    "seen": 1791204932.5942388,
+    "ast_hash": "9c4d96c5da1b9b8f8d9a4ef4b6441fdf",
+    "semantic_hash": "9c4d96c5da1b9b8f8d9a4ef4b6441fdf"
+  },
+  "iron-log/src/components/dashboard/stat-tile.tsx": {
+    "mtime": 1790864724.4320836,
+    "seen": 1791204932.5942388,
+    "ast_hash": "978c65e49c6b10ea45a4e27d9bfc41a5",
+    "semantic_hash": "978c65e49c6b10ea45a4e27d9bfc41a5"
+  },
+  "iron-log/src/components/dashboard/studio-hero.tsx": {
+    "mtime": 1790864739.9221723,
+    "seen": 1791204932.5942388,
+    "ast_hash": "3cb6865956ea0ccc08de134c89fb6792",
+    "semantic_hash": "3cb6865956ea0ccc08de134c89fb6792"
+  },
+  "iron-log/src/components/dashboard/volume-landmarks-card.tsx": {
+    "mtime": 1790797366.4953368,
+    "seen": 1791204932.5942388,
+    "ast_hash": "81456e086e9597c7dc321ae52016b972",
+    "semantic_hash": "81456e086e9597c7dc321ae52016b972"
+  },
+  "iron-log/src/components/dashboard/volume-trend-card.tsx": {
+    "mtime": 1790501260.5138533,
+    "seen": 1791204932.5942388,
+    "ast_hash": "72ff21ae7bb8b425e721db38a74fc491",
+    "semantic_hash": "72ff21ae7bb8b425e721db38a74fc491"
+  },
+  "iron-log/src/components/layout/app-shell.tsx": {
+    "mtime": 1790807533.8764484,
+    "seen": 1791204932.5942388,
+    "ast_hash": "f68ac764031567d09ac95a391442388f",
+    "semantic_hash": "f68ac764031567d09ac95a391442388f"
+  },
+  "iron-log/src/components/layout/bottom-nav.tsx": {
+    "mtime": 1790797240.0646887,
+    "seen": 1791204932.5942388,
+    "ast_hash": "4864ed2ed648ba863313c169db55601a",
+    "semantic_hash": "4864ed2ed648ba863313c169db55601a"
+  },
+  "iron-log/src/components/layout/page-hero.tsx": {
+    "mtime": 1790797537.8833513,
+    "seen": 1791204932.5942388,
+    "ast_hash": "56c75156b9919b1c0f06d04d265147df",
+    "semantic_hash": "56c75156b9919b1c0f06d04d265147df"
+  },
+  "iron-log/src/components/ui/badge.tsx": {
+    "mtime": 1790499869.0267031,
+    "seen": 1791204932.5942388,
+    "ast_hash": "b29b68b35e2961c3fb7f42faba5a1664",
+    "semantic_hash": "b29b68b35e2961c3fb7f42faba5a1664"
+  },
+  "iron-log/src/components/ui/button.tsx": {
+    "mtime": 1790797366.4953368,
+    "seen": 1791204932.5942388,
+    "ast_hash": "556a46c4b1a69a125d7daa0b8375353e",
+    "semantic_hash": "556a46c4b1a69a125d7daa0b8375353e"
+  },
+  "iron-log/src/components/ui/card.tsx": {
+    "mtime": 1790795622.338533,
+    "seen": 1791204932.5942388,
+    "ast_hash": "a3cce0203b856ff37075a1a667718ad4",
+    "semantic_hash": "a3cce0203b856ff37075a1a667718ad4"
+  },
+  "iron-log/src/components/ui/empty-state.tsx": {
+    "mtime": 1790797177.4009907,
+    "seen": 1791204932.5942388,
+    "ast_hash": "c17f995428ced4051500df9d076cb622",
+    "semantic_hash": "c17f995428ced4051500df9d076cb622"
+  },
+  "iron-log/src/components/ui/input.tsx": {
+    "mtime": 1790501483.942634,
+    "seen": 1791204932.5942388,
+    "ast_hash": "1eb7b28948308f056677d9147dcf876c",
+    "semantic_hash": "1eb7b28948308f056677d9147dcf876c"
+  },
+  "iron-log/src/components/ui/label.tsx": {
+    "mtime": 1790499865.0728655,
+    "seen": 1791204932.5942388,
+    "ast_hash": "8517de751e3e9f7ea92b52ee570368be",
+    "semantic_hash": "8517de751e3e9f7ea92b52ee570368be"
+  },
+  "iron-log/src/components/ui/meter.tsx": {
+    "mtime": 1790499910.6911356,
+    "seen": 1791204932.5942388,
+    "ast_hash": "30f4961b6c4ecc4609c5184ab6b65347",
+    "semantic_hash": "30f4961b6c4ecc4609c5184ab6b65347"
+  },
+  "iron-log/src/components/ui/select.tsx": {
+    "mtime": 1790499915.801352,
+    "seen": 1791204932.5942388,
+    "ast_hash": "78c88ed31eafd9396f609e05d778447b",
+    "semantic_hash": "78c88ed31eafd9396f609e05d778447b"
+  },
+  "iron-log/src/components/ui/separator.tsx": {
+    "mtime": 1790499884.1862707,
+    "seen": 1791204932.5942388,
+    "ast_hash": "a9272ef018e95247dd62795609b1983c",
+    "semantic_hash": "a9272ef018e95247dd62795609b1983c"
+  },
+  "iron-log/src/components/ui/skeleton.tsx": {
+    "mtime": 1790499929.322901,
+    "seen": 1791204932.5942388,
+    "ast_hash": "064bc9ecc63aadbd55b16af6e12bb778",
+    "semantic_hash": "064bc9ecc63aadbd55b16af6e12bb778"
+  },
+  "iron-log/src/components/ui/switch.tsx": {
+    "mtime": 1790501155.5469315,
+    "seen": 1791204932.5942388,
+    "ast_hash": "173353ddd4904cb278f59e6c3e1402d2",
+    "semantic_hash": "173353ddd4904cb278f59e6c3e1402d2"
+  },
+  "iron-log/src/components/ui/tabs.tsx": {
+    "mtime": 1790797599.4735832,
+    "seen": 1791204932.5942388,
+    "ast_hash": "ce7c8a6a0998f53fcae8c3ba427455e4",
+    "semantic_hash": "ce7c8a6a0998f53fcae8c3ba427455e4"
+  },
+  "iron-log/src/components/ui/theme-toggle.tsx": {
+    "mtime": 1790799581.5197325,
+    "seen": 1791204932.5942388,
+    "ast_hash": "62c06ad83c83f1f44ad153130080fd42",
+    "semantic_hash": "62c06ad83c83f1f44ad153130080fd42"
+  },
+  "iron-log/src/components/ui/toast.tsx": {
+    "mtime": 1790499903.5200458,
+    "seen": 1791204932.5942388,
+    "ast_hash": "566704054b4b593e3b792a785a40c0e2",
+    "semantic_hash": "566704054b4b593e3b792a785a40c0e2"
+  },
+  "iron-log/src/components/workout/add-exercise-form.tsx": {
+    "mtime": 1790500367.7511814,
+    "seen": 1791204932.5942388,
+    "ast_hash": "8bdd57d17e494c201a556c363fc02925",
+    "semantic_hash": "8bdd57d17e494c201a556c363fc02925"
+  },
+  "iron-log/src/components/workout/exercise-logger.tsx": {
+    "mtime": 1790795881.2535791,
+    "seen": 1791204932.5942388,
+    "ast_hash": "a6c6681fa31a56a2881b3af377e3fa0c",
+    "semantic_hash": "a6c6681fa31a56a2881b3af377e3fa0c"
+  },
+  "iron-log/src/components/workout/rest-timer.tsx": {
+    "mtime": 1790795688.340339,
+    "seen": 1791204932.5942388,
+    "ast_hash": "30ae509db90456ad4d32767621c9fc34",
+    "semantic_hash": "30ae509db90456ad4d32767621c9fc34"
+  },
+  "iron-log/src/lib/legacy-import.ts": {
+    "mtime": 1790499795.4635994,
+    "seen": 1791204932.5942388,
+    "ast_hash": "f627d942da047ca4aa663d65a707a97b",
+    "semantic_hash": "f627d942da047ca4aa663d65a707a97b"
+  },
+  "iron-log/src/lib/metrics.ts": {
+    "mtime": 1790867427.2275777,
+    "seen": 1791204932.5942388,
+    "ast_hash": "d38755ace2350705d2e65354c9367c64",
+    "semantic_hash": "d38755ace2350705d2e65354c9367c64"
+  },
+  "iron-log/src/lib/motion.ts": {
+    "mtime": 1790799581.4921875,
+    "seen": 1791204932.5942388,
+    "ast_hash": "d1c47fcff8aa01f57e7e6218a452ec9a",
+    "semantic_hash": "d1c47fcff8aa01f57e7e6218a452ec9a"
+  },
+  "iron-log/src/lib/repository.ts": {
+    "mtime": 1790867404.0964348,
+    "seen": 1791204932.5942388,
+    "ast_hash": "3565a7ac176651bd04571b24c25f893d",
+    "semantic_hash": "3565a7ac176651bd04571b24c25f893d"
+  },
+  "iron-log/src/lib/seed.ts": {
+    "mtime": 1790867323.4284995,
+    "seen": 1791204932.5942388,
+    "ast_hash": "0e9590d9379af41b67322f5aac139cc2",
+    "semantic_hash": "0e9590d9379af41b67322f5aac139cc2"
+  },
+  "iron-log/src/lib/storage.ts": {
+    "mtime": 1790867375.1923337,
+    "seen": 1791204932.5942388,
+    "ast_hash": "54a86735046a3fa22a4935eb262843c5",
+    "semantic_hash": "54a86735046a3fa22a4935eb262843c5"
+  },
+  "iron-log/src/lib/store.tsx": {
+    "mtime": 1790867438.25931,
+    "seen": 1791204932.5942388,
+    "ast_hash": "e5139d14512e03552861bb3c8653938e",
+    "semantic_hash": "e5139d14512e03552861bb3c8653938e"
+  },
+  "iron-log/src/lib/theme-script.ts": {
+    "mtime": 1790801643.9702494,
+    "seen": 1791204932.5942388,
+    "ast_hash": "b557eccf881d06a59c88f7632799f277",
+    "semantic_hash": "b557eccf881d06a59c88f7632799f277"
+  },
+  "iron-log/src/lib/theme.tsx": {
+    "mtime": 1790801664.8279405,
+    "seen": 1791204932.5942388,
+    "ast_hash": "317e6bf24e387ae735d2bf2c6ce06833",
+    "semantic_hash": "317e6bf24e387ae735d2bf2c6ce06833"
+  },
+  "iron-log/src/lib/types.ts": {
+    "mtime": 1790867307.770124,
+    "seen": 1791204932.5942388,
+    "ast_hash": "b0b4036577bb0878ee9fcbe5dad11ea6",
+    "semantic_hash": "b0b4036577bb0878ee9fcbe5dad11ea6"
+  },
+  "iron-log/src/lib/utils.ts": {
+    "mtime": 1790864747.2969067,
+    "seen": 1791204932.5942388,
+    "ast_hash": "ae446471d76307cbe9465cd4195d9c64",
+    "semantic_hash": "ae446471d76307cbe9465cd4195d9c64"
+  },
+  "iron-log/tailwind.config.ts": {
+    "mtime": 1790799473.444974,
+    "seen": 1791204932.5942388,
+    "ast_hash": "dcf78bada7f21f87b3cab5a09c293300",
+    "semantic_hash": "dcf78bada7f21f87b3cab5a09c293300"
+  },
+  "iron-log/tsconfig.json": {
+    "mtime": 1790799937.5923982,
+    "seen": 1791204932.5942388,
+    "ast_hash": "5887b6582c11558bd19267b325f3ce16",
+    "semantic_hash": "5887b6582c11558bd19267b325f3ce16"
+  },
+  "iron-log/tsconfig.standalone.json": {
+    "mtime": 1790862590.5458393,
+    "seen": 1791204932.5942388,
+    "ast_hash": "a11ead35aa8ae619632b910fe74a700e",
+    "semantic_hash": "a11ead35aa8ae619632b910fe74a700e"
+  },
+  "life-os/prayer-times.mjs": {
+    "mtime": 1791198941.7487543,
+    "seen": 1791204932.5942388,
+    "ast_hash": "df373b88e6606b057755344869ab41d9",
+    "semantic_hash": "df373b88e6606b057755344869ab41d9"
+  },
+  "life-os/sw.js": {
+    "mtime": 1791202853.8588803,
+    "seen": 1791204932.5942388,
+    "ast_hash": "3b9dfea691f1e8e33b3e732012090cc2",
+    "semantic_hash": "3b9dfea691f1e8e33b3e732012090cc2"
+  },
+  "local-sync-server.js": {
+    "mtime": 1791202440.118584,
+    "seen": 1791204932.5942388,
+    "ast_hash": "12902d859865881a7fd1e9c80d4aabfa",
+    "semantic_hash": "12902d859865881a7fd1e9c80d4aabfa"
+  },
+  "prayer-times.mjs": {
+    "mtime": 1791198941.7487543,
+    "seen": 1791204932.5942388,
+    "ast_hash": "df373b88e6606b057755344869ab41d9",
+    "semantic_hash": "df373b88e6606b057755344869ab41d9"
+  },
+  "report-agent.js": {
+    "mtime": 1790772798.5766218,
+    "seen": 1791204932.5942388,
+    "ast_hash": "7ca8b33eaed2b445cdd11f8054dcfe0f",
+    "semantic_hash": "7ca8b33eaed2b445cdd11f8054dcfe0f"
+  },
+  "ATS_Resume_Ziyad_2026.html": {
+    "mtime": 1790951726.4406426,
+    "seen": 1791204932.5942388,
+    "ast_hash": "00bc60c078fa54d76849426104f99ee1",
+    "semantic_hash": "00bc60c078fa54d76849426104f99ee1"
+  },
+  "CLAUDE.md": {
+    "mtime": 1791199231.4981928,
+    "seen": 1791204932.5942388,
+    "ast_hash": "c45fe1090c2595a7cf1ec37312f4a374",
+    "semantic_hash": "c45fe1090c2595a7cf1ec37312f4a374"
+  },
+  "iron-log/README.md": {
+    "mtime": 1790796542.716388,
+    "seen": 1791204932.5942388,
+    "ast_hash": "30a4efe100aa071b2cfc15db78e39555",
+    "semantic_hash": "30a4efe100aa071b2cfc15db78e39555"
+  },
+  "iron-log/standalone/index.html": {
+    "mtime": 1790867618.9301066,
+    "seen": 1791204932.5942388,
+    "ast_hash": "f493a60df42edc0667d748c511a15535",
+    "semantic_hash": "f493a60df42edc0667d748c511a15535"
+  },
+  "step-arena.html": {
+    "mtime": 1790790441.7301254,
+    "seen": 1791204932.5942388,
+    "ast_hash": "206cd06a94224d7f5aaca2a1c7b3f627",
+    "semantic_hash": "206cd06a94224d7f5aaca2a1c7b3f627"
   }
 }
