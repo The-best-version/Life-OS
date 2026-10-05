@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>المركز · 2027 Life OS</title>
+<meta name="theme-color" content="#150E13" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+/* --- the hub ----------------------------------------------------------- *
+ *  A page of its own, not a screen of the app. The app is one bundle
+ *  behind one service worker; the hub has to still open while that bundle
+ *  is the thing being rebuilt, so it carries its own CSS rather than
+ *  riding on the Tailwind sheet the build generates by scanning
+ *  LifeOS.jsx — a Tailwind class written here would simply not exist in
+ *  that sheet.
+ *
+ *  It never writes. Every instance of the app pushes its whole snapshot
+ *  to disk seconds after it mounts, so a second surface that also wrote
+ *  could land on top of a habit ticked while it was open. The hub reads
+ *  /state and nothing else.
+ * ---------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --fg: #FDF8F6;
+  --muted: rgba(253,248,246,0.58);
+  --faint: rgba(253,248,246,0.34);
+  --primary: #10B981;
+  --primary-lift: #34D399;
+  --cta: #FF5722;
+  --cta-lift: #FF8A50;
+  --accent: #FFB020;
+  --violet: #9D5CFF;
+  --sky: #00C2FF;
+  --rose: #FF4D8D;
+  --indigo: #5B8CFF;
+  --ember: #FF7A45;
+  /* Set from the phase by script, exactly as the app sets them on its
+     root. A card's fill is the phase's, never a constant: a fixed white
+     alpha turns into a pale smear against a noon horizon. */
+  --los-veil: rgba(255,255,255,0.055);
+  --los-veil-strong: rgba(255,255,255,0.05);
+}
+
+html, body { margin: 0; padding: 0; }
+html { background: #0B1026; }
+body {
+  min-height: 100vh;
+  font-family: Tajawal, Cairo, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color: var(--fg);
+  /* No background of its own. The sky sits behind everything and an
+     opaque body would paint straight over it. */
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- the ground -------------------------------------------------------- */
+
+#sky {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+  transition: background 1200ms cubic-bezier(.22, 1, .36, 1);
+}
+#sky .orb, #sky .core, #sky .cloud, #sky .star { position: absolute; }
+#sky .orb { border-radius: 50%; filter: blur(2px); }
+#sky .core { border-radius: 50%; filter: blur(6px); }
+#sky .cloud {
+  border-radius: 999px;
+  filter: blur(26px);
+  animation: los-drift 90s linear infinite;
+}
+#sky .star {
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: #FFF8E7;
+  animation: los-twinkle 4s ease-in-out infinite;
+}
+
+@keyframes los-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-18vw); }
+}
+@keyframes los-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 0.9; }
+}
+
+/* --- glass ------------------------------------------------------------- */
+
+.card {
+  position: relative;
+  border-radius: 24px;
+  /* The fill comes from the phase. Longhand, never the `background`
+     shorthand — the shorthand wipes the sheen below it along with the
+     fill, which is how the task quadrants shipped flat once. */
+  background-color: var(--los-veil);
+  background-image: linear-gradient(135deg, rgba(255,138,80,0.10), rgba(255,255,255,0.035) 42%, rgba(157,92,255,0.09));
+  border: 1px solid rgba(255,225,210,0.18);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: inset 0 1px 0 0 rgba(255,235,220,0.14), 0 24px 48px -24px rgba(0,0,0,0.85);
+}
+
+/* --- type -------------------------------------------------------------- */
+
+.los-title {
+  background-image: linear-gradient(95deg, var(--cta), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* Paired with the clip, always. And nothing on this element is ever
+     animated with a transform: Chrome collapses the clip and the text
+     paints as a solid block. */
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+a { color: inherit; text-decoration: none; }
+
+/* --- layout ------------------------------------------------------------ */
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 64px; }
+@media (min-width: 640px) { .wrap { padding: 36px 28px 72px; } }
+
+header.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 26px;
+}
+.mark { font-size: 20px; font-weight: 800; letter-spacing: -0.2px; }
+.mark span { color: var(--accent); }
+.sub { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.stamp {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.phase-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,225,210,0.22);
+  background-color: var(--los-veil-strong);
+  color: var(--accent);
+}
+
+h2.section { font-size: 15px; font-weight: 800; margin: 34px 2px 14px; }
+
+/* --- today ------------------------------------------------------------- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (min-width: 560px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+.tile {
+  padding: 16px 16px 14px;
+  display: block;
+  transition: transform 320ms cubic-bezier(.22, 1, .36, 1), box-shadow 320ms cubic-bezier(.22, 1, .36, 1);
+}
+.tile:hover {
+  transform: translateY(-3px);
+  box-shadow: inset 0 1px 0 0 rgba(255,235,220,0.18), 0 30px 54px -22px rgba(0,0,0,0.9), 0 0 32px -18px var(--cta);
+}
+.tile .k { font-size: 11.5px; color: var(--faint); font-weight: 600; }
+.tile .v .n { display: inline-block; }
+.tile .v { font-size: 26px; font-weight: 800; margin-top: 6px; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.tile .u { font-size: 12px; color: var(--muted); font-weight: 600; margin-inline-start: 3px; }
+.bar { height: 5px; border-radius: 999px; background: rgba(255,255,255,0.11); margin-top: 11px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; border-radius: 999px; transition: width 700ms cubic-bezier(.22, 1, .36, 1); }
+.dead { color: var(--faint); font-weight: 700; font-size: 20px; }
+
+/* --- the doors --------------------------------------------------------- */
+
+.doors { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 760px) { .doors { grid-template-columns: 1.25fr 1fr; } }
+.doors.one { grid-template-columns: 1fr; }
+@media (min-width: 760px) { .doors.one { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+.door {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px;
+  transition: transform 320ms cubic-bezier(.22, 1, .36, 1), box-shadow 320ms cubic-bezier(.22, 1, .36, 1);
+}
+.door:hover { transform: translateY(-3px); }
+.door .ico {
+  width: 42px; height: 42px;
+  border-radius: 14px;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255,225,210,0.2);
+}
+.door h3 { font-size: 17px; font-weight: 800; }
+.door p { margin: 0; font-size: 12.5px; line-height: 1.75; color: var(--muted); }
+.door .go {
+  margin-top: 4px;
+  align-self: flex-start;
+  font-size: 12.5px;
+  font-weight: 800;
+  padding: 9px 16px;
+  border-radius: 14px;
+  color: #fff;
+  background-image: linear-gradient(135deg, var(--cta), var(--ember));
+  box-shadow: 0 14px 30px -14px var(--cta);
+}
+.door.primary {
+  box-shadow: inset 0 1px 0 0 rgba(255,235,220,0.16), 0 24px 48px -22px rgba(0,0,0,0.85), 0 0 44px -22px var(--cta);
+}
+
+/* --- charts ------------------------------------------------------------ */
+
+.charts { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 720px) { .charts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.chart { padding: 14px; display: block; }
+.chart .cap { font-size: 12.5px; font-weight: 800; margin-bottom: 10px; }
+.chart .frame {
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.26);
+  border: 1px solid rgba(255,225,210,0.12);
+}
+.chart img { display: block; width: 100%; height: auto; }
+
+.note { font-size: 11.5px; color: var(--faint); line-height: 1.8; margin: 12px 2px 0; }
+footer.end { margin-top: 52px; text-align: center; font-size: 11px; color: rgba(255,255,255,0.2); }
+
+@media (prefers-reduced-motion: reduce) {
+  #sky .cloud, #sky .star { animation: none !important; }
+  #sky, .tile, .door, .bar > i { transition: none !important; }
+  .tile:hover, .door:hover { transform: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="sky" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <header class="top card">
+    <div>
+      <div class="mark">2027 <span>Life OS</span></div>
+      <div class="sub">المركز الموحّد — النظام والخريطة في مكان واحد</div>
+    </div>
+    <div class="stamp">
+      <span id="stamp-date"></span>
+      <span id="stamp-time"></span>
+      <span class="phase-chip" id="phase-chip">—</span>
+    </div>
+  </header>
+
+  <h2 class="section">يومك الآن</h2>
+  <div class="tiles">
+    <a class="tile card" href="/" data-k="discipline">
+      <div class="k">الانضباط</div>
+      <div class="v"><span class="n" dir="ltr">—</span><span class="u">٪</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/" data-k="habits">
+      <div class="k">العادات المحتسبة</div>
+      <div class="v"><span class="n" dir="ltr">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/" data-k="tasks">
+      <div class="k">مهام اليوم</div>
+      <div class="v"><span class="n" dir="ltr">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/" data-k="read">
+      <div class="k">صفحات القراءة</div>
+      <div class="v"><span class="n" dir="ltr">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+    <a class="tile card" href="/" data-k="water">
+      <div class="k">الماء</div>
+      <div class="v"><span class="n" dir="ltr">—</span></div>
+      <div class="bar"><i></i></div>
+    </a>
+  </div>
+  <p class="note" id="state-note">تُقرأ من النسخة المحفوظة على القرص.</p>
+
+  <h2 class="section">الأقسام</h2>
+  <div class="doors">
+
+    <a class="door card primary" href="/">
+      <div class="ico" style="background-color: rgba(255,87,34,0.16); color: var(--cta-lift);">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </div>
+      <h3 class="los-title">2027 Life OS</h3>
+      <p>الروتين اليومي بكل بلوكاته الستة، التقويم، الجامعة، مسار التوظيف، مصفوفة المهام، الأهداف، المكتبة والتتبع الشهري. هذا هو النظام نفسه — لم يتغيّر منه شيء.</p>
+      <span class="go">افتح النظام</span>
+    </a>
+
+    <a class="door card" href="/graphify/graph.html">
+      <div class="ico" style="background-color: rgba(0,194,255,0.16); color: var(--sky);">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>
+      </div>
+      <h3 class="los-title">خريطة المعرفة</h3>
+      <p>الرسم التفاعلي لهذا المجلد: الملفات والمفاهيم والعلاقات بينها، مع تجميع المجتمعات. مبنيّ بـ <span dir="ltr">graphify</span> على المجلد نفسه الذي يحتوي النظام.</p>
+      <span class="go" style="background-image: linear-gradient(135deg, var(--sky), var(--indigo)); box-shadow: 0 14px 30px -14px var(--sky);">افتح الخريطة</span>
+    </a>
+
+  </div>
+  <p class="note">الخريطة تحتاج اتصالًا بالإنترنت أوّل مرة: محرّك الرسم <span dir="ltr">vis-network</span> يُحمَّل من شبكة توزيع لا من القرص. بقيّة ما في هذه الصفحة يكفيها السيرفر وحده.</p>
+
+  <h2 class="section">الرسوم المبنيّة من بياناتك</h2>
+  <div class="charts">
+    <a class="chart card" href="/graphify/charts/discipline.svg">
+      <div class="cap" style="color: var(--primary-lift);">الانضباط اليومي</div>
+      <div class="frame"><img src="/graphify/charts/discipline.svg" alt="رسم الانضباط اليومي" loading="lazy" /></div>
+    </a>
+    <a class="chart card" href="/graphify/charts/gym.svg">
+      <div class="cap" style="color: var(--accent);">انتظام النادي</div>
+      <div class="frame"><img src="/graphify/charts/gym.svg" alt="رسم انتظام النادي" loading="lazy" /></div>
+    </a>
+    <a class="chart card" href="/graphify/charts/step.svg">
+      <div class="cap" style="color: var(--violet);">تقدّم <span dir="ltr">STEP</span></div>
+      <div class="frame"><img src="/graphify/charts/step.svg" alt="رسم تقدّم اختبار STEP" loading="lazy" /></div>
+    </a>
+  </div>
+
+  <h2 class="section">التقرير</h2>
+  <div class="doors one">
+    <a class="door card" href="/graphify/report.md">
+      <div class="ico" style="background-color: rgba(157,92,255,0.16); color: var(--violet);">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+      </div>
+      <h3 class="los-title">تقرير الخريطة</h3>
+      <p>قراءة بلغة مفهومة لما وجدته الخريطة: المجتمعات، العقد المحوريّة، وسجلّ أمانة يفرّق بين ما استُخرج وما استُنتج.</p>
+      <span class="go" style="background-image: linear-gradient(135deg, var(--violet), var(--rose)); box-shadow: 0 14px 30px -14px var(--violet);">اقرأ التقرير</span>
+    </a>
+  </div>
+
+  <footer class="end">2027 Life OS · الانضباط حرية مؤجّلة</footer>
+</div>
+
+<script>
+/* --- the sky, the app's own six phases --------------------------------- *
+ *  Kept as data here rather than imported: this page is deliberately not
+ *  part of the bundle. The numbers are the app's, and the two move
+ *  together or the hub reads as a different product.
+ * ---------------------------------------------------------------------- */
+var SKY = [
+  { id: "night",   label: "ليل",  from: 20 * 60,      sky: ["#070B1F", "#0D1330", "#181538"], stars: 1,    orb: { kind: "moon", x: 73, y: 15, r: 30, color: "#F4EBD6", glow: "#BFD4FF" }, clouds: 0.12, cloud: "#2A2F52", body: "#0B1026", veil: "rgba(255,255,255,0.055)", veilStrong: "rgba(255,255,255,0.05)" },
+  { id: "fajr",    label: "فجر",  from: 4 * 60 + 30,  sky: ["#131A3A", "#3B2A57", "#8E4462"], stars: 0.45, orb: { kind: "glow", x: 24, y: 88, r: 46, color: "#FFB48A", glow: "#FF7E6B" }, clouds: 0.32, cloud: "#6B4A6B", body: "#1A1F42", veil: "rgba(255,255,255,0.06)",  veilStrong: "rgba(255,255,255,0.05)" },
+  { id: "sunrise", label: "شروق", from: 6 * 60 + 15,  sky: ["#2C4C86", "#E2745C", "#FFC77E"], stars: 0,    orb: { kind: "sun",  x: 26, y: 74, r: 42, color: "#FFF1C9", glow: "#FF9A4C" }, clouds: 0.72, cloud: "#FFD8C4", body: "#3A4E86", veil: "rgba(34,16,24,0.54)",     veilStrong: "rgba(28,13,20,0.62)" },
+  { id: "day",     label: "نهار", from: 9 * 60,       sky: ["#1E6FB4", "#5FADDD", "#BEE4F3"], stars: 0,    orb: { kind: "sun",  x: 74, y: 18, r: 36, color: "#FFFBE8", glow: "#FFE07A" }, clouds: 1,    cloud: "#FFFFFF", body: "#2A7ABE", veil: "rgba(15,19,31,0.66)",     veilStrong: "rgba(11,15,26,0.74)" },
+  { id: "asr",     label: "عصر",  from: 15 * 60,      sky: ["#2F6796", "#E9A461", "#FFDCA6"], stars: 0,    orb: { kind: "sun",  x: 22, y: 58, r: 40, color: "#FFF4D2", glow: "#FFB347" }, clouds: 0.85, cloud: "#FFE9CF", body: "#3D7099", veil: "rgba(30,18,14,0.58)",     veilStrong: "rgba(24,14,11,0.66)" },
+  { id: "maghrib", label: "مغرب", from: 17 * 60 + 30, sky: ["#201741", "#B4406C", "#FF8B4E"], stars: 0.18, orb: { kind: "sun",  x: 20, y: 86, r: 44, color: "#FFD9A8", glow: "#FF5E3A" }, clouds: 0.55, cloud: "#9C5A72", body: "#2A1B44", veil: "rgba(26,14,30,0.46)",     veilStrong: "rgba(21,11,25,0.56)" }
+];
+var BY_TIME = SKY.slice().sort(function (a, b) { return a.from - b.from; });
+
+/* Night wraps midnight, which is why it is the fallback rather than a
+   range. */
+function skyAt(d) {
+  var mins = d.getHours() * 60 + d.getMinutes();
+  var found = SKY[0];
+  for (var i = 0; i < BY_TIME.length; i++) if (mins >= BY_TIME[i].from) found = BY_TIME[i];
+  return found;
+}
+
+/* A seeded field, so the stars hold still across a re-check instead of
+   leaping to new positions every minute. */
+function seededStars(n) {
+  var out = [], s = 20270601;
+  function next() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }
+  for (var i = 0; i < n; i++) out.push({ x: next() * 100, y: next() * 70, d: next() * 4 });
+  return out;
+}
+var STARS = seededStars(70);
+var CLOUDS = [
+  { x: 8,  y: 18, w: 220, h: 42, o: 0.5 },
+  { x: 52, y: 10, w: 300, h: 54, o: 0.38 },
+  { x: 34, y: 32, w: 180, h: 34, o: 0.3 },
+  { x: 74, y: 40, w: 250, h: 46, o: 0.26 }
+];
+
+var skyEl = document.getElementById("sky");
+var chip = document.getElementById("phase-chip");
+var current = null;
+
+function paintSky(phase) {
+  if (current === phase.id) return;
+  current = phase.id;
+
+  skyEl.style.background =
+    "linear-gradient(to bottom, " + phase.sky[0] + " 0%, " + phase.sky[1] + " 54%, " + phase.sky[2] + " 100%)";
+  /* On the document element too, so an overscroll bounce matches the sky
+     instead of flashing a colour from nowhere. */
+  document.documentElement.style.background = phase.body;
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", phase.body);
+
+  document.documentElement.style.setProperty("--los-veil", phase.veil);
+  document.documentElement.style.setProperty("--los-veil-strong", phase.veilStrong);
+  chip.textContent = phase.label;
+
+  var o = phase.orb;
+  var html = "";
+
+  /* The light spreads wide and faint and only a small core is bright.
+     One hard-edged disc reads as a billiard ball. */
+  html += '<div class="orb" style="left:' + o.x + '%;top:' + o.y + '%;width:' + (o.r * 7) + 'px;height:' + (o.r * 7) + 'px;' +
+          'transform:translate(-50%,-50%);background:radial-gradient(circle, ' + o.glow + '4D 0%, ' + o.glow + '1F 38%, transparent 70%);"></div>';
+
+  if (o.kind === "moon") {
+    /* The bite is cut with a mask. A second disc in a flat colour read as
+       an eclipse, because the gradient behind it is never exactly that
+       colour at the moon's height. */
+    html += '<svg style="position:absolute;left:' + o.x + '%;top:' + o.y + '%;width:' + (o.r * 2) + 'px;height:' + (o.r * 2) + 'px;' +
+            'transform:translate(-50%,-50%);overflow:visible" aria-hidden="true">' +
+            '<defs><mask id="los-bite"><rect width="100%" height="100%" fill="black"/>' +
+            '<circle cx="' + o.r + '" cy="' + o.r + '" r="' + (o.r * 0.92) + '" fill="white"/>' +
+            '<circle cx="' + (o.r * 1.62) + '" cy="' + (o.r * 0.72) + '" r="' + (o.r * 0.82) + '" fill="black"/>' +
+            '</mask></defs>' +
+            '<circle cx="' + o.r + '" cy="' + o.r + '" r="' + (o.r * 0.92) + '" fill="' + o.color + '" mask="url(#los-bite)" opacity="0.96"/></svg>';
+  } else if (o.kind === "sun") {
+    html += '<div class="core" style="left:' + o.x + '%;top:' + o.y + '%;width:' + (o.r * 1.1) + 'px;height:' + (o.r * 1.1) + 'px;' +
+            'transform:translate(-50%,-50%);background:radial-gradient(circle, ' + o.color + ' 0%, ' + o.color + 'CC 52%, ' + o.glow + '00 100%);"></div>';
+  }
+
+  if (phase.clouds > 0) {
+    for (var c = 0; c < CLOUDS.length; c++) {
+      var cl = CLOUDS[c];
+      html += '<div class="cloud" style="left:' + cl.x + '%;top:' + cl.y + '%;width:' + cl.w + 'px;height:' + cl.h + 'px;' +
+              'background:' + phase.cloud + ';opacity:' + (cl.o * phase.clouds).toFixed(3) + ';animation-delay:-' + (c * 17) + 's;"></div>';
+    }
+  }
+
+  if (phase.stars > 0) {
+    for (var s = 0; s < STARS.length; s++) {
+      var st = STARS[s];
+      html += '<div class="star" style="left:' + st.x.toFixed(2) + '%;top:' + st.y.toFixed(2) + '%;' +
+              'opacity:' + (phase.stars * 0.8).toFixed(2) + ';animation-delay:-' + st.d.toFixed(2) + 's;"></div>';
+    }
+  }
+
+  skyEl.innerHTML = html;
+}
+
+/* --- the stamp --------------------------------------------------------- */
+
+var AR_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+function tick() {
+  var now = new Date();
+  document.getElementById("stamp-date").textContent =
+    AR_DAYS[now.getDay()] + " " + now.toLocaleDateString("ar-EG", { day: "numeric", month: "long" });
+  document.getElementById("stamp-time").textContent =
+    now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+}
+
+/* --- today, read off the disk ------------------------------------------ *
+ *  The percentage is never recomputed here. The app writes it onto the
+ *  day's archive row through `disciplineOf`, and that row is what this
+ *  reads — two surfaces computing one score from different denominators
+ *  is exactly how they end up disagreeing about the same day.
+ * ---------------------------------------------------------------------- */
+
+var DAY_START_HOUR = 4;
+function dayKey() {
+  var x = new Date();
+  x.setHours(x.getHours() - DAY_START_HOUR);
+  return x.getFullYear() + "-" +
+    String(x.getMonth() + 1).padStart(2, "0") + "-" +
+    String(x.getDate()).padStart(2, "0");
+}
+
+function setTile(key, text, keepUnit, pct, colour) {
+  var el = document.querySelector('.tile[data-k="' + key + '"]');
+  if (!el) return;
+  el.querySelector(".n").textContent = text;
+  var u = el.querySelector(".u");
+  if (u && !keepUnit) u.style.display = "none";
+  el.querySelector(".v").style.color = colour;
+  var fill = el.querySelector(".bar > i");
+  fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  fill.style.background = colour;
+}
+
+fetch("/state?project=lifeos", { cache: "no-store" })
+  .then(function (r) {
+    if (!r.ok) throw new Error("no-state");
+    return r.json();
+  })
+  .then(function (s) {
+    var today = dayKey();
+    var row = (s.history || []).filter(function (h) { return h && h.date === today; })[0];
+
+    /* Written by the app, not derived here. */
+    var pct = row && typeof row.pct === "number" ? row.pct : 0;
+    setTile("discipline", String(pct), true, pct, pct >= 80 ? "var(--primary-lift)" : "var(--accent)");
+
+    /* The same roster the score is read from: the core when one is set,
+       every habit when none is. */
+    var habits = s.habits || [];
+    var core = habits.filter(function (h) { return h && h.core; });
+    var scored = core.length ? core : habits;
+    var hDone = scored.filter(function (h) { return h && h.done; }).length;
+    setTile("habits", hDone + " / " + scored.length, false,
+      scored.length ? (hDone / scored.length) * 100 : 0,
+      scored.length && hDone === scored.length ? "var(--primary-lift)" : "var(--cta-lift)");
+
+    /* Three a day, hard capped — so three is the denominator even on a day
+       with fewer picked, or the bar would read full at one task of one. */
+    var top = (s.tasks || []).filter(function (t) { return t && t.top; });
+    var tDone = top.filter(function (t) { return t.done; }).length;
+    setTile("tasks", tDone + " / " + top.length, false, (tDone / 3) * 100,
+      top.length && tDone === top.length ? "var(--primary-lift)" : "var(--ember)");
+
+    var goal = s.readGoal || 20;
+    var pages = (s.reading || [])
+      .filter(function (x) { return x && x.date === today; })
+      .reduce(function (a, x) { return a + (Number(x.pages) || 0); }, 0);
+    setTile("read", pages + " / " + goal, false, goal ? (pages / goal) * 100 : 0,
+      pages >= goal ? "var(--primary-lift)" : "var(--sky)");
+
+    var wGoal = s.waterGoal || 8;
+    var water = row && typeof row.water === "number" ? row.water : (Number(s.water) || 0);
+    setTile("water", water + " / " + wGoal, false, wGoal ? (water / wGoal) * 100 : 0,
+      water >= wGoal ? "var(--primary-lift)" : "var(--indigo)");
+
+    document.getElementById("state-note").textContent =
+      "النسبة مقروءة من صفّ اليوم في السجل كما كتبه النظام. هذه الصفحة تقرأ ولا تكتب شيئًا أبدًا.";
+  })
+  .catch(function () {
+    var n = document.querySelectorAll(".tile .v .n");
+    for (var i = 0; i < n.length; i++) n[i].className = "n dead";
+    document.getElementById("state-note").textContent =
+      "لم نصل إلى النسخة المحفوظة على القرص. أرقام اليوم تظهر داخل النظام نفسه.";
+  });
+
+paintSky(skyAt(new Date()));
+tick();
+setInterval(tick, 1000);
+/* Re-checked once a minute: a phase boundary that arrives while this is
+   open should change the screen, not wait for a reload. */
+setInterval(function () { paintSky(skyAt(new Date())); }, 60000);
+</script>
+</body>
+</html>

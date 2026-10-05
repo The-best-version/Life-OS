@@ -37,6 +37,26 @@ const PROJECTS = {
   ironlog: "ironlog.json",
 };
 
+/* The graphify side of the house, read-only. The app already writes its
+   state into graphify-out/data; what was missing was a way to reach the
+   things graphify renders *out* of that data without leaving the origin.
+
+   An explicit map, not a resolver. graphify-out holds three kinds of file
+   and only one of them is publishable: the artifacts below. Beside them sit
+   data/ -- the live year, handed out by /state alone, through its own
+   PROJECTS whitelist -- and cache/ plus manifest.json, which are the
+   pipeline's bookkeeping. A path-joining resolver here would be one
+   traversal bug away from serving the lot, so there is no path joining:
+   a request either names a key in this object or it is a 404. */
+const GRAPHIFY = path.join(ROOT, "graphify-out");
+const GRAPHIFY_FILES = {
+  "graph.html": "graph.html",
+  "report.md": "GRAPH_REPORT.md",
+  "charts/discipline.svg": "lifeos-discipline.svg",
+  "charts/gym.svg": "gym-consistency.svg",
+  "charts/step.svg": "step-progress.svg",
+};
+
 /* Hourly, not per-write. The app saves on every tick of a checkbox; one file
    per save would bury the directory in minutes and make the useful snapshots
    impossible to find. One an hour, three days deep, is enough to walk back
@@ -146,6 +166,7 @@ const TYPES = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
+  ".md": "text/markdown; charset=utf-8",
 };
 
 /* Resolve inside life-os/ or refuse. A served directory is the one place a
@@ -232,6 +253,30 @@ const server = http.createServer((req, res) => {
         "Cache-Control": "no-store",
       });
     }
+    /* The hub. A page of its own rather than a route into the app: the app
+       is one bundle behind one service worker, and the hub has to stay
+       reachable when that bundle is the thing being rebuilt. It lives in
+       life-os/ so the existing sandbox still covers it. */
+    if (url.pathname === "/hub" || url.pathname === "/hub/") {
+      return serveFile(res, path.join(SITE, "hub.html"), 1);
+    }
+
+    /* The graphify artifacts, by key. See GRAPHIFY_FILES: the key is matched
+       whole against that object, never joined onto a path, so nothing under
+       graphify-out that is not listed there can be reached from here. */
+    if (url.pathname.startsWith("/graphify/")) {
+      let key;
+      try {
+        key = decodeURIComponent(url.pathname.slice(10));
+      } catch {
+        return end(res, 400);
+      }
+      if (!Object.prototype.hasOwnProperty.call(GRAPHIFY_FILES, key)) {
+        return end(res, 404, "not found");
+      }
+      return serveFile(res, path.join(GRAPHIFY, GRAPHIFY_FILES[key]), 1);
+    }
+
     const full = resolveSite(url.pathname);
     if (!full) return end(res, 403);
     return serveFile(res, full, 0);

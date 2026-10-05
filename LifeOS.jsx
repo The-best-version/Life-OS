@@ -9,6 +9,7 @@ import { createRoot, createPortal } from "react-dom";
 import {
   Menu,
   X,
+  Network,
   ListChecks,
   LayoutGrid,
   Library,
@@ -574,6 +575,7 @@ const NAV = [
   { id: "vault", label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
   { id: "analytics", label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
   { id: "breaker", label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
+  { id: "graph", label: "خريطة المعرفة", short: "الخريطة", icon: Network },
 ];
 const NAV_IDS = NAV.map((n) => n.id);
 
@@ -13168,6 +13170,149 @@ function BreakerModule({ state, setState }) {
 }
 
 /* ==================================================================== *
+ *  MODULE — the knowledge map
+ *
+ *  The one screen that is not about the day. graphify builds a graph of
+ *  this whole folder -- the app's own source included -- and renders its
+ *  charts out of the same state file the app writes to, so the two have
+ *  always shared a disk and never shared a door. This is the door.
+ *
+ *  Everything here is a link, not an embed. The graph pulls its engine
+ *  from a CDN and the charts are regenerated behind the app's back, so an
+ *  iframe would hand the day's screen a blank rectangle on the first
+ *  offline open and a stale one after every rebuild. A link that opens the
+ *  live artefact cannot go stale, and the charts below are plain <img>
+ *  with a cache-busting stamp -- a picture that fails to load degrades to
+ *  its alt text instead of taking the screen with it.
+ * ==================================================================== */
+function GraphModule() {
+  /* Stamped once per mount, not per render: the charts are rewritten by
+     the report agent, and without this the browser keeps serving the copy
+     it cached the first time the tab was opened -- indistinguishable from
+     a chart that stopped updating. */
+  const stamp = useMemo(() => Date.now(), []);
+
+  const charts = [
+    { key: "discipline", label: "الانضباط اليومي", tint: T.primary },
+    { key: "gym", label: "انتظام النادي", tint: T.accent },
+    { key: "step", label: "تقدّم STEP", ltr: "STEP", tint: T.violet },
+  ];
+
+  const doors = [
+    {
+      href: "/hub",
+      icon: LayoutGrid,
+      tint: T.cta,
+      title: "المركز الموحّد",
+      body: "صفحة واحدة تجمع أرقام يومك مع الخريطة والرسوم والتقرير. تقرأ من القرص ولا تكتب شيئًا.",
+      cta: "افتح المركز",
+    },
+    {
+      href: "/graphify/graph.html",
+      icon: Network,
+      tint: T.sky,
+      title: "الرسم التفاعلي",
+      body: "الملفات والمفاهيم والعلاقات بينها، مع تجميع المجتمعات. يحتاج اتصالًا أوّل مرة: محرّك الرسم يُحمَّل من شبكة توزيع.",
+      cta: "افتح الخريطة",
+    },
+    {
+      href: "/graphify/report.md",
+      icon: FileText,
+      tint: T.violet,
+      title: "تقرير الخريطة",
+      body: "قراءة بلغة مفهومة لما وجدته الخريطة، مع سجلّ أمانة يفرّق بين ما استُخرج وما استُنتج.",
+      cta: "اقرأ التقرير",
+    },
+  ];
+
+  return (
+    <div className="space-y-7">
+      <Card className="p-6 sm:p-7">
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+          خريطة المعرفة
+        </h2>
+        <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-white/40">
+          هذا المجلد كلّه مرسوم: المصدر، الملاحظات، المشاريع، وملف الحالة الذي
+          يحفظ سنتك. الخريطة والرسوم مبنيّة من البيانات نفسها التي يكتبها هذا
+          النظام — لا نسخة ثانية ولا تصدير يدوي.
+        </p>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {doors.map((d) => {
+          const Icon = d.icon;
+          return (
+            <Card
+              key={d.href}
+              as="a"
+              href={d.href}
+              className="group flex flex-col gap-3 p-5 transition-all duration-300 hover:-translate-y-1"
+              style={{ boxShadow: `inset 0 1px 0 0 rgba(255,235,220,0.14), 0 24px 48px -24px rgba(0,0,0,0.85), 0 0 40px -24px ${d.tint}` }}
+            >
+              <span
+                className="grid h-10 w-10 place-items-center rounded-xl border"
+                style={{
+                  backgroundColor: `${d.tint}29`,
+                  borderColor: `${d.tint}4D`,
+                  color: d.tint,
+                }}
+              >
+                <Icon size={19} strokeWidth={1.9} />
+              </span>
+              <h3 className="text-[15.5px] font-extrabold">{d.title}</h3>
+              <p className="text-[12px] leading-relaxed text-white/45">{d.body}</p>
+              <span
+                className="mt-auto inline-flex items-center gap-1.5 self-start rounded-xl px-3.5 py-2 text-[12.5px] font-extrabold"
+                style={{
+                  background: `linear-gradient(135deg, ${d.tint}, ${d.tint}B3)`,
+                  color: "#140600",
+                  boxShadow: `0 12px 26px -14px ${d.tint}`,
+                }}
+              >
+                {d.cta}
+                <ExternalLink size={13} strokeWidth={2.2} />
+              </span>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div>
+        <h3 className="mb-3 px-1 text-[13.5px] font-extrabold text-white/70">
+          الرسوم المبنيّة من بياناتك
+        </h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {charts.map((c) => (
+            <Card key={c.key} as="a" href={`/graphify/charts/${c.key}.svg`} className="block p-4">
+              <p className="mb-2.5 text-[12.5px] font-extrabold" style={{ color: c.tint }}>
+                {c.ltr ? (
+                  <>
+                    تقدّم <span dir="ltr">{c.ltr}</span>
+                  </>
+                ) : (
+                  c.label
+                )}
+              </p>
+              <span
+                className="block overflow-hidden rounded-xl border"
+                style={{ borderColor: "rgba(255,225,210,0.12)", backgroundColor: "rgba(0,0,0,0.26)" }}
+              >
+                <img
+                  src={`/graphify/charts/${c.key}.svg?v=${stamp}`}
+                  alt={`رسم ${c.label}`}
+                  loading="lazy"
+                  className="block h-auto w-full"
+                />
+              </span>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================== *
  *  MODULE 4 — Analytics
  * ==================================================================== */
 /* ==================================================================== *
@@ -21532,6 +21677,7 @@ export default function LifeOS() {
               {tab === "breaker" && (
                 <BreakerModule state={state} setState={setState} />
               )}
+              {tab === "graph" && <GraphModule />}
             </div>
 
             <footer className="mt-14 text-center text-[11px] text-white/20">
