@@ -168,6 +168,10 @@ try {
   mkdirSync(site, { recursive: true });
   writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
   copyFileSync(src, join(site, "LifeOS.source.jsx"));
+  /* The source beside the build has to actually build. LifeOS.jsx imports the
+     prayer maths, so shipping the one without the other leaves a copy that
+     looks complete and is not. */
+  copyFileSync(join(root, "prayer-times.mjs"), join(site, "prayer-times.mjs"));
 
   const kb = (n) => (n / 1024).toFixed(0) + " KB";
   console.log(`\nlife-os/index.html          css ${kb(css.length)}   js ${kb(js.length)}`);

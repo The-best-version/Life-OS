@@ -131,6 +131,8 @@ import {
   TrendingDown,
 } from "lucide-react";
 
+import { fixHour, prayerTimes } from "./prayer-times.mjs";
+
 /* ==================================================================== *
  *  2027 LIFE OS — modular discipline system
  *  React + Tailwind CSS + lucide-react. Single file, no other deps.
@@ -1069,11 +1071,45 @@ const claimHandover = () => {
   }
 };
 
-const SCHEMA = 19;
+const SCHEMA = 20;
 const HISTORY_CAP = 500;
 const STREAK_TARGET = 80;
 /* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
 const TOP_TASK_CAP = 3;
+
+/* --- the core --------------------------------------------------------- *
+ *  The tasks were capped at three because a list of twenty is a list nobody
+ *  finishes. The habits had no such cap, and the arithmetic made the case on
+ *  its own: three real wins on a Sunday — water, Fajr, the gym — rendered as
+ *  17%. A screen that tells someone who did three hard things that he failed
+ *  is not measuring discipline, it is manufacturing the feeling of lacking
+ *  it, and that is the feeling people close the app to get away from.
+ *
+ *  So a habit can be core, and the score counts only those. The rest still
+ *  tick, still streak, still archive, still show their own run — they are
+ *  simply additional rather than the measure. Five, for the same reason the
+ *  tasks are three: a core of twelve is the old list wearing a new word.
+ *
+ *  With nothing marked the score falls back to every habit, which is exactly
+ *  what it did before. That fallback is a floor, not the resting state — the
+ *  routine screen asks for a core while there is none, because a feature
+ *  that waits to be discovered in a settings pane never is.
+ * ---------------------------------------------------------------------- */
+const CORE_CAP = 5;
+const coreOf = (habits) => habits.filter((h) => h.core);
+/* The one roster the score is read from. Every caller goes through it — the
+   ring, the archive row, the streak, the toast the server sends — so they
+   cannot end up dividing by three different denominators and disagreeing
+   about the same day. */
+const scoredOf = (habits) => {
+  const core = coreOf(habits);
+  return core.length ? core : habits;
+};
+const disciplineOf = (habits) => {
+  const list = scoredOf(habits);
+  if (!list.length) return 0;
+  return Math.round((list.filter((h) => h.done).length / list.length) * 100);
+};
 
 /* The day ends when you sleep, not at midnight. Ticking «أذكار النوم» at
    01:00 is finishing yesterday, not starting today — and a sheet that wiped
@@ -1194,99 +1230,11 @@ const CUP_FORMS = ["كوب", "كوبان", "أكواب", "كوبًا"];
 const cupWord = (n) => arCount(n, CUP_FORMS);
 
 /* --- prayer times ----------------------------------------------------- *
- *  Computed here, never fetched. The routine's six blocks are anchored to
- *  the prayers, so the times they are anchored to cannot be the one part of
- *  the screen that needs a network: this file is opened straight off disk as
- *  `file://`, where a fetch is at the mercy of CORS and of being offline,
- *  and a blank prayer card would take the meaning of «بعد العصر» with it.
- *
- *  The maths is the standard solar-position method (the same one the public
- *  APIs run server-side) with Umm al-Qura's parameters: Fajr at 18.5° of
- *  depression and Isha a fixed ninety minutes after Maghrib. Verified
- *  against Umm al-Qura's own published times for Riyadh on five dates spread
- *  across a year — every prayer landed within a single minute.
+ *  The maths moved to ./prayer-times.mjs, because the sync server fires the
+ *  block reminders and has to land on the same minute this screen shows. It
+ *  is bundled in by esbuild, so the built page is still one self-contained
+ *  file — the split is in the source, not in what ships.
  * ---------------------------------------------------------------------- */
-const RAD = Math.PI / 180;
-const dSin = (d) => Math.sin(d * RAD);
-const dCos = (d) => Math.cos(d * RAD);
-const dTan = (d) => Math.tan(d * RAD);
-const fixAngle = (a) => ((a % 360) + 360) % 360;
-const fixHour = (h) => ((h % 24) + 24) % 24;
-
-/* Julian day at 00:00 UT of a civil date (Gregorian). */
-function julianDay(y, m, d) {
-  if (m <= 2) {
-    y -= 1;
-    m += 12;
-  }
-  const a = Math.floor(y / 100);
-  const b = 2 - a + Math.floor(a / 4);
-  return (
-    Math.floor(365.25 * (y + 4716)) +
-    Math.floor(30.6001 * (m + 1)) +
-    d +
-    b -
-    1524.5
-  );
-}
-
-function sunPosition(jd) {
-  const D = jd - 2451545.0; // days from J2000
-  const g = fixAngle(357.529 + 0.98560028 * D); // mean anomaly
-  const q = fixAngle(280.459 + 0.98564736 * D); // mean longitude
-  const L = fixAngle(q + 1.915 * dSin(g) + 0.02 * dSin(2 * g)); // apparent
-  const e = 23.439 - 0.00000036 * D; // obliquity
-  const decl = Math.asin(dSin(e) * dSin(L)) / RAD;
-  const ra = fixHour(Math.atan2(dCos(e) * dSin(L), dCos(L)) / RAD / 15);
-  /* Both terms are already wrapped into [0,24), so their difference lands a
-     whole day out whenever one of them has just crossed zero. Folding
-     through 12 puts it back in [-12,12), where the equation of time lives. */
-  const eqt = fixHour(q / 15 - ra + 12) - 12;
-  return { decl, eqt };
-}
-
-/* Hours between solar noon and the moment the sun sits `angle` degrees below
-   the horizon. `null` when the day has no such moment at all — a polar
-   summer has no Fajr, and inventing one would be worse than an honest dash. */
-function hourAngle(angle, decl, lat) {
-  const x =
-    (-dSin(angle) - dSin(decl) * dSin(lat)) / (dCos(decl) * dCos(lat));
-  if (!(x >= -1 && x <= 1)) return null;
-  return Math.acos(x) / RAD / 15;
-}
-
-/* Asr is a shadow length, not an angle: the sun's altitude at the moment a
-   shadow has grown `factor` object-heights past its noon length. One for the
-   Shafii school, two for the Hanafi. */
-const asrAltitude = (factor, decl, lat) =>
-  -Math.atan(1 / (factor + dTan(Math.abs(lat - decl)))) / RAD;
-
-const FAJR_ANGLE = 18.5; // Umm al-Qura
-const ISHA_GAP_MIN = 90; // Umm al-Qura: ninety minutes after Maghrib
-
-/* Returns decimal hours in the place's own standard time, or null per prayer
-   where the sun never reaches that depression. */
-function prayerTimes(place, date) {
-  const { lat, lng, tz, asr = 1 } = place;
-  /* The sun's position is wanted at local noon, not at 00:00 UT — a whole
-     time zone's worth of drift otherwise shows up as a minute or two of
-     error at the solstices, which is exactly where it is most visible. */
-  const jd = julianDay(date.getFullYear(), date.getMonth() + 1, date.getDate()) - lng / 360;
-  const { decl, eqt } = sunPosition(jd);
-  const noon = 12 - eqt - lng / 15 + tz;
-  const riseSet = hourAngle(0.833, decl, lat); // refraction + solar radius
-  const fajrT = hourAngle(FAJR_ANGLE, decl, lat);
-  const asrT = hourAngle(asrAltitude(asr, decl, lat), decl, lat);
-  const maghrib = riseSet === null ? null : noon + riseSet;
-  return {
-    fajr: fajrT === null ? null : noon - fajrT,
-    sunrise: riseSet === null ? null : noon - riseSet,
-    dhuhr: noon,
-    asr: asrT === null ? null : noon + asrT,
-    maghrib,
-    isha: maghrib === null ? null : maghrib + ISHA_GAP_MIN / 60,
-  };
-}
 
 /* The six rows, in the order of the day. «الشروق» is not a prayer and is
    marked so: it is the end of Fajr's window, which is why it is shown. */
@@ -4171,6 +4119,12 @@ function migrate(saved) {
      down on `.find(h => h.date === today)`, which is a white screen that
      reloading cannot clear because the payload is already saved. */
   let habits = rows(saved.habits);
+  /* Schema 20 gives a habit a `core` flag. Nobody's is set on the way in, and
+     that is the point: the fallback keeps the score exactly where it was,
+     and the routine screen asks him which five rather than this function
+     guessing at them. Which habits carry someone's day is not a question a
+     migration is in any position to answer. */
+  habits = habits.map((h) => ({ ...h, core: !!h.core }));
 
   if (from < 4) {
     habits = habits.map((h) =>
@@ -5429,6 +5383,7 @@ function HabitRow({
   onDelete,
   onNudge,
   onDrop,
+  onToggleCore,
   first,
   last,
   dragging,
@@ -5503,6 +5458,31 @@ function HabitRow({
         label={habit.label}
         tint={T.primary}
       />
+      {/* Amber, because being core is an achievement marker and not an action
+          — and never emerald, which in this app means only that something was
+          finished. Always visible once set, so the five can be read off the
+          screen at a glance; faint and hover-revealed while unset, so twelve
+          grey stars do not compete with the twelve checkboxes beside them. */}
+      <button
+        onClick={onToggleCore}
+        title={habit.core ? "إزالة من الأساسيات" : "تعيين كعادة أساسية"}
+        aria-label={`${habit.core ? "إزالة" : "تعيين"} ${habit.label} ${
+          habit.core ? "من" : "ضمن"
+        } الأساسيات`}
+        aria-pressed={!!habit.core}
+        className={`shrink-0 rounded p-1 transition-all duration-200${
+          habit.core
+            ? ""
+            : " opacity-40 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        }`}
+        style={{ color: habit.core ? T.accent : "rgba(255,255,255,0.25)" }}
+      >
+        <Star
+          size={13}
+          fill={habit.core ? T.accent : "none"}
+          style={habit.core ? { filter: `drop-shadow(0 0 5px ${T.accent}AA)` } : undefined}
+        />
+      </button>
       {/* The run you are protecting, where you are protecting it. Two days is
           not a streak yet, so it stays quiet until there is something to
           lose — a badge that reads «١» next to every habit is noise. */}
@@ -6187,6 +6167,118 @@ function HabitLedger({ state }) {
   );
 }
 
+/* --- choosing the five ------------------------------------------------ *
+ *  A draft, not a live edit. Picking the core means weighing five against
+ *  seventeen, and that is done by trying combinations — so the checkboxes
+ *  move a local list and only «احفظ» writes it. Toggling state directly here
+ *  would change the discipline score behind the modal while he is still
+ *  deciding, which turns the thing he is measuring into a moving target.
+ * ---------------------------------------------------------------------- */
+function CorePicker({ open, onClose, habits, onSave }) {
+  const [picked, setPicked] = useState([]);
+
+  /* Seeded on each open, not once: he comes back to change it, and a draft
+     left over from the previous visit would quietly discard the five he
+     has been keeping. */
+  useEffect(() => {
+    if (open) setPicked(habits.filter((h) => h.core).map((h) => h.id));
+  }, [open, habits]);
+
+  const full = picked.length >= CORE_CAP;
+  const flip = (id) =>
+    setPicked((p) =>
+      p.includes(id) ? p.filter((x) => x !== id) : full ? p : [...p, id],
+    );
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="اختر أساسياتك"
+      footer={
+        <>
+          <Btn
+            variant="default"
+            className="flex-1"
+            onClick={() => {
+              onSave(picked);
+              onClose();
+            }}
+          >
+            احفظ{" "}
+            <span dir="ltr" className="tabular-nums">
+              ({picked.length}/{CORE_CAP})
+            </span>
+          </Btn>
+          <Btn variant="outline" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-[11.5px] leading-relaxed text-white/50">
+        هذي العادات وحدها تحسب نسبة انضباطك اليومية. الباقي يبقى في مكانه،
+        بسلسلته وسجلّه، لكنه إضافي — لأن مقياسًا يعدّ كل شيء لا يقيس شيئًا.
+      </p>
+      {!picked.length && (
+        <p className="text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+          واحدة على الأقل، وإلا رجع المؤشر يعدّ كل عاداتك.
+        </p>
+      )}
+
+      <div className="space-y-4">
+        {GROUPS.map((g) => {
+          const list = habits.filter((h) => h.group === g.id);
+          if (!list.length) return null;
+          const Icon = g.icon;
+          return (
+            <div key={g.id}>
+              <p
+                className="mb-2 flex items-center gap-1.5 text-[11px] font-extrabold"
+                style={{ color: g.tint }}
+              >
+                <Icon size={12} /> {g.label}
+              </p>
+              <div className="space-y-1">
+                {list.map((h) => {
+                  const on = picked.includes(h.id);
+                  return (
+                    <div
+                      key={h.id}
+                      className="rounded-lg px-2 py-1 transition-opacity duration-200"
+                      style={{
+                        backgroundColor: on ? `${T.accent}14` : "transparent",
+                        /* Dimmed, not disabled: a greyed-out row reads as
+                           broken, while a faded one reads as "not until you
+                           free a slot" — which is what it means. */
+                        opacity: !on && full ? 0.35 : 1,
+                      }}
+                    >
+                      <Checkbox
+                        checked={on}
+                        onToggle={() => flip(h.id)}
+                        label={h.label}
+                        tint={T.accent}
+                        size="sm"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {full && (
+        <p className="text-[11px] leading-relaxed" style={{ color: T.ember }}>
+          وصلت الحدّ. أزل واحدة لتختار غيرها.
+        </p>
+      )}
+    </Modal>
+  );
+}
+
 function RoutineModule({
   state,
   setState,
@@ -6207,6 +6299,7 @@ function RoutineModule({
   const [logging, setLogging] = useState(null); // habit awaiting a page count
   const [dragging, setDragging] = useState(null); // habit id being dragged
   const [overGroup, setOverGroup] = useState(null);
+  const [picking, setPicking] = useState(false); // choosing the core five
   const dateLabel = useMemo(
     () =>
       new Date().toLocaleDateString("ar-EG", {
@@ -6322,6 +6415,36 @@ function RoutineModule({
   const nudge = (id, dir) =>
     setState((s) => ({ ...s, habits: nudgeHabit(s.habits, id, dir) }));
 
+  /* Refused at the cap, and told why — the same contract the three tasks
+     hold. A sixth star that silently does nothing teaches that the button is
+     broken; one that says «خمس أساسيات تكفي» teaches what the cap is for. */
+  const [coreNote, setCoreNote] = useState(null);
+  const toggleCore = (id) =>
+    setState((s) => {
+      const h = s.habits.find((x) => x.id === id);
+      if (!h) return s;
+      if (!h.core && coreOf(s.habits).length >= CORE_CAP) {
+        setCoreNote(id);
+        return s;
+      }
+      setCoreNote(null);
+      return {
+        ...s,
+        habits: s.habits.map((x) => (x.id === id ? { ...x, core: !x.core } : x)),
+      };
+    });
+  /* The refusal is a moment, not a state. Left on screen it becomes part of
+     the layout and stops being read. */
+  useEffect(() => {
+    if (coreNote === null) return;
+    const t = setTimeout(() => setCoreNote(null), 4000);
+    return () => clearTimeout(t);
+  }, [coreNote]);
+
+  const core = coreOf(state.habits);
+  const coreDone = core.filter((h) => h.done).length;
+  const extra = core.length ? state.habits.filter((h) => !h.core) : [];
+  const extraDone = extra.filter((h) => h.done).length;
   const done = state.habits.filter((h) => h.done).length;
   /* Indexed once for the whole screen: every row asks for its own run, and
      rebuilding the map per row would walk the archive once per habit. */
@@ -6414,10 +6537,77 @@ function RoutineModule({
             <CalendarDays size={13} /> {dateLabel}
           </p>
           <SaveStamp at={savedAt} />
-          <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
-            {done} من {state.habits.length} عادة. المؤشر يمتلئ مع كل علامة —
-            وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
-          </p>
+          {core.length ? (
+            <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
+              <span className="font-extrabold" style={{ color: T.accent }}>
+                <span dir="ltr" className="tabular-nums">
+                  {coreDone} / {core.length}
+                </span>{" "}
+                أساسيات
+              </span>
+              {extra.length > 0 && (
+                <>
+                  {" · إضافي "}
+                  <span dir="ltr" className="tabular-nums">
+                    {extraDone} / {extra.length}
+                  </span>
+                </>
+              )}
+              . المؤشر يقيس أساسياتك وحدها — وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
+            </p>
+          ) : (
+            <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
+              {done} من {state.habits.length} عادة. المؤشر يمتلئ مع كل علامة —
+              وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
+            </p>
+          )}
+
+          {/* The invitation, shown only while there is no core. It sits here
+              rather than in settings because this is the sentence it is
+              arguing with: the percentage directly above it is the one that
+              counts eighteen habits and calls three of them a failure. */}
+          {!core.length && (
+            <button
+              onClick={() => setPicking(true)}
+              className="los-in mt-3 flex w-full max-w-sm items-start gap-2.5 rounded-xl border px-3.5 py-3 text-right transition-all duration-200"
+              style={{
+                borderColor: `${T.accent}3D`,
+                background: `${T.accent}12`,
+              }}
+            >
+              <Star size={15} className="mt-0.5 shrink-0" style={{ color: T.accent }} />
+              <span>
+                <span className="block text-[12px] font-extrabold" style={{ color: T.accent }}>
+                  اختر أساسياتك
+                </span>
+                <span className="mt-1 block text-[11px] leading-relaxed text-white/45">
+                  حتى {CORE_CAP} عادات تحسب نسبتك وحدها، والباقي إضافي. ثلاث
+                  عادات حقيقية من {state.habits.length} تقرأ الآن{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {state.habits.length
+                      ? Math.round((3 / state.habits.length) * 100)
+                      : 0}
+                    %
+                  </span>
+                  .
+                </span>
+              </span>
+            </button>
+          )}
+
+          {coreNote !== null && (
+            <p
+              className="los-in mt-3 max-w-sm rounded-xl border px-3.5 py-2.5 text-[11px] leading-relaxed"
+              style={{
+                borderColor: `${T.ember}4D`,
+                background: `${T.ember}14`,
+                color: T.ember,
+              }}
+            >
+              {CORE_CAP} أساسيات تكفي. أزل نجمة قبل أن تضيف أخرى — الحدّ هو ما
+              يجعلها أساسيات.
+            </p>
+          )}
           <div className="mt-4 flex items-center justify-center gap-3 lg:justify-start">
             <div
               className="flex items-center gap-2 rounded-xl border px-4 py-2"
@@ -6595,6 +6785,7 @@ function RoutineModule({
                       }}
                       onDrop={(dragId) => reorder(dragId, h.id)}
                       onNudge={(dir) => nudge(h.id, dir)}
+                      onToggleCore={() => toggleCore(h.id)}
                       onToggle={() => toggle(h.id)}
                       onEdit={() =>
                         /* `book` has to be seeded here: the form writes
@@ -6632,6 +6823,18 @@ function RoutineModule({
         onClose={() => setQuotesOpen(false)}
         quotes={state.quotes || []}
         setState={setState}
+      />
+
+      <CorePicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        habits={state.habits}
+        onSave={(ids) =>
+          setState((s) => ({
+            ...s,
+            habits: s.habits.map((h) => ({ ...h, core: ids.includes(h.id) })),
+          }))
+        }
       />
 
       <Modal
@@ -20897,10 +21100,10 @@ export default function LifeOS() {
     }
   }, [tab, collapsed, nag, leading]);
 
-  const habitsDone = state.habits.filter((h) => h.done).length;
-  const discipline = state.habits.length
-    ? Math.round((habitsDone / state.habits.length) * 100)
-    : 0;
+  /* Through `disciplineOf`, never recomputed here — the archive row, the streak and
+     the ring all read the same denominator or they will disagree about the
+     same day the first time a habit is marked core. */
+  const discipline = disciplineOf(state.habits);
 
   /* Which habits, not just how many. Reviewing a month is asking "what was I
      actually keeping", and a bare percentage cannot answer that. Ids rather

@@ -269,6 +269,17 @@ const server = http.createServer((req, res) => {
       keepPrevious(file);
       writeAtomic(file, text);
       snapshot(name, text);
+      /* The prayer times are computed for a city, so changing it has to move
+         today's reminders too — otherwise they keep firing on the old
+         horizon until the next day rollover. Compared as text because the
+         payload arrives whole on every save and only this part matters. */
+      if (name === "lifeos") {
+        const place = JSON.stringify(msg.payload.place || null);
+        if (place !== lastPlace) {
+          lastPlace = place;
+          armToday();
+        }
+      }
     } catch {
       return end(res, 500);
     }
@@ -284,6 +295,185 @@ const server = http.createServer((req, res) => {
     end(res, 204);
   });
 });
+
+/* --- the reminders ----------------------------------------------------- *
+ *  The app's own evening prompt only fires while the app is open, and the
+ *  record said that is the problem: four days written out of six, two
+ *  missing entirely, longest streak zero. A tracker that waits to be
+ *  remembered is one more thing to remember.
+ *
+ *  So the reminding is done from here, where it does not depend on a window
+ *  being open. This process already starts with Windows and already holds
+ *  the state, which means it can say what is actually left rather than
+ *  "don't forget" — the difference between a nag and a reminder is whether
+ *  it knows anything.
+ *
+ *  Windows toasts, not browser notifications: a service worker cannot wake
+ *  itself on a timer (Chrome never shipped notification triggers), so the
+ *  only way the browser could do this is by staying open, which is the
+ *  assumption being removed.
+ * ---------------------------------------------------------------------- */
+
+/* Timers are set per block for today only, and re-armed just after midnight.
+   setTimeout is milliseconds in a signed 32-bit int, so anything beyond ~24
+   days silently fires at once; a day at a time stays far inside that, and
+   also picks up a changed city or a new prayer time without a restart. */
+let blockTimers = [];
+let rollTimer = null;
+let lastPlace = null;
+
+function readState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(DATA, PROJECTS.lifeos), "utf8"));
+    return s && Array.isArray(s.habits) ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+/* The app's own day boundary: anything before 04:00 belongs to the day
+   before. Duplicated from the app as a constant rather than imported with
+   the prayer maths because it is one number — but it is the same number, and
+   a reminder that disagrees about which day it is would be worse than none. */
+const DAY_START_HOUR = 4;
+function dayKey(d = new Date()) {
+  const x = new Date(d);
+  if (x.getHours() < DAY_START_HOUR) x.setDate(x.getDate() - 1);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+}
+
+const esc = (s) =>
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+/* PowerShell, with the text passed as base64 rather than interpolated. A
+   habit's label is user-written Arabic that can contain a quote or a dollar
+   sign, and splicing that into a script is how a reminder turns into
+   arbitrary code. Decoded inside PowerShell, it is only ever data. */
+/* Windows will only show a toast for an identity it knows, and it fails
+   silently for one it does not — Show() returns perfectly happily and
+   nothing appears. The installed PWA is a registered identity (Chrome wrote
+   it a Start Menu shortcut carrying this id), so the reminder arrives under
+   the app's own name and icon rather than as "Windows PowerShell". If the
+   app is ever uninstalled this quietly stops showing; that is the trade for
+   not registering a second identity of our own. */
+const TOAST_AUMID = "Chrome._crx_hbagjjmjdegoabokdhefbamhpknhehmb";
+
+function toast(title, lines) {
+  const xml =
+    "<toast><visual><binding template='ToastGeneric'><text>" +
+    esc(title) +
+    "</text><text>" +
+    esc(lines) +
+    "</text></binding></visual></toast>";
+  const b64 = Buffer.from(xml, "utf16le").toString("base64");
+  const a64 = Buffer.from(TOAST_AUMID, "utf16le").toString("base64");
+  const ps = [
+    "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null",
+    /* Loaded explicitly: the manager's own assembly does not drag the XML
+       type in with it, and without this line New-Object cannot find it. */
+    "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType=WindowsRuntime] | Out-Null",
+    "$x = New-Object Windows.Data.Xml.Dom.XmlDocument",
+    `$x.LoadXml([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${b64}')))`,
+    "$n = New-Object Windows.UI.Notifications.ToastNotification $x",
+    `$a = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${a64}'))`,
+    "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($a).Show($n)",
+  ].join("; ");
+  try {
+    const child = require("child_process").spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps],
+      { stdio: "ignore", windowsHide: true },
+    );
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    /* No PowerShell, or it refused. The reminder is a courtesy; nothing
+       downstream depends on it having been shown. */
+  }
+}
+
+/* What is still open in this block, said plainly. Core habits lead because
+   they are the ones the score counts; the rest are named only as a number,
+   so the toast stays a glance rather than a list. */
+function blockMessage(state, blockId, label) {
+  const inBlock = state.habits.filter((h) => h.group === blockId);
+  if (!inBlock.length) return null;
+  const open = inBlock.filter((h) => !h.done);
+  if (!open.length) return null;
+
+  const core = state.habits.filter((h) => h.core);
+  const scored = core.length ? core : state.habits;
+  const pct = scored.length
+    ? Math.round((scored.filter((h) => h.done).length / scored.length) * 100)
+    : 0;
+
+  const openCore = open.filter((h) => h.core);
+  const named = (openCore.length ? openCore : open).slice(0, 3).map((h) => h.label);
+  const rest = open.length - named.length;
+  const body =
+    named.join(" · ") + (rest > 0 ? ` و${rest} غيرها` : "") + ` — اليوم ${pct}%`;
+  return { title: label, body };
+}
+
+function fireBlock(blockId, label) {
+  const state = readState();
+  if (!state) return;
+  /* The day on disk is yesterday's: nothing has opened the app since the
+     rollover, so its ticks are stale and a message built from them would
+     name habits that were done yesterday. Say the true thing instead. */
+  if (state.date !== dayKey()) {
+    toast(label, "لم تفتح اليوم بعد. افتح 2027 Life OS وابدأ يومك.");
+    return;
+  }
+  const msg = blockMessage(state, blockId, label);
+  if (!msg) return; // nothing open in this block — silence is the right output
+  toast(msg.title, msg.body);
+}
+
+async function armToday() {
+  for (const t of blockTimers) clearTimeout(t);
+  blockTimers = [];
+  const state = readState();
+  const place = state && state.place;
+  if (!place || !Number.isFinite(place.lat)) return;
+
+  let blockTimes;
+  try {
+    ({ blockTimes } = await import("./prayer-times.mjs"));
+  } catch {
+    return; // the maths is missing; the serving half carries on regardless
+  }
+
+  const now = Date.now();
+  let armed = 0;
+  for (const b of blockTimes(place)) {
+    const wait = b.when.getTime() - now;
+    if (wait <= 0) continue; // already passed today; tomorrow's arming catches it
+    const t = setTimeout(() => fireBlock(b.id, b.label), wait);
+    t.unref?.(); // a pending reminder must never be the reason node stays up
+    blockTimers.push(t);
+    armed++;
+  }
+  if (!QUIET) console.log(`          reminders   ${armed} armed for today`);
+}
+
+/* Re-armed a minute past the app's own day boundary, so the new day's times
+   are computed from the new day and the window between is not a hole. */
+function scheduleRoll() {
+  clearTimeout(rollTimer);
+  const next = new Date();
+  next.setHours(DAY_START_HOUR, 1, 0, 0);
+  if (next.getTime() <= Date.now()) next.setDate(next.getDate() + 1);
+  rollTimer = setTimeout(() => {
+    armToday();
+    scheduleRoll();
+  }, next.getTime() - Date.now());
+  rollTimer.unref?.();
+}
 
 server.on("clientError", (e, socket) => {
   try {
@@ -309,3 +499,6 @@ server.listen(PORT, HOST, () => {
   console.log("  data  " + DATA);
   console.log("  auto  " + AUTO);
 });
+
+armToday();
+scheduleRoll();
