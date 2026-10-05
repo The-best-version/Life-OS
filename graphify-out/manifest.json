@@ -498,10 +498,10 @@
     "semantic_hash": "df373b88e6606b057755344869ab41d9"
   },
   "life-os/sw.js": {
-    "mtime": 1791202853.8588803,
-    "seen": 1791204932.5942388,
-    "ast_hash": "3b9dfea691f1e8e33b3e732012090cc2",
-    "semantic_hash": "3b9dfea691f1e8e33b3e732012090cc2"
+    "mtime": 1791206589.3873353,
+    "seen": 1791208460.3445208,
+    "ast_hash": "cd3011d0e7623aebb50cfddbe0a61ace",
+    "semantic_hash": "cd3011d0e7623aebb50cfddbe0a61ace"
   },
   "local-sync-server.js": {
     "mtime": 1791202440.118584,
@@ -550,5 +550,11 @@
     "seen": 1791204932.5942388,
     "ast_hash": "206cd06a94224d7f5aaca2a1c7b3f627",
     "semantic_hash": "206cd06a94224d7f5aaca2a1c7b3f627"
+  },
+  "life-os/hub.html": {
+    "mtime": 1791206716.291793,
+    "seen": 1791208460.3445208,
+    "ast_hash": "04377d060a58322a4a742e778cdba434",
+    "semantic_hash": "04377d060a58322a4a742e778cdba434"
   }
 }

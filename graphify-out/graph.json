@@ -90,7 +90,7 @@
         "id": "life_os_dashboard_flow",
         "label": "Life OS Dashboard Data Flow",
         "nodes": [
-          "hub_state_fetch",
+          "hub_state_fetcher",
           "hub_settile",
           "hub_daykey"
         ],
@@ -793,6 +793,58 @@
       "source_location": "L45"
     },
     {
+      "id": "iron_log_src_components_charts_sparkline_sparklineprops",
+      "label": "SparklineProps",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "sparklineprops",
+      "source_file": "iron-log/src/components/charts/sparkline.tsx",
+      "source_location": "L4"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_exercise_progress_card_metric",
+      "label": "Metric",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "metric",
+      "source_file": "iron-log/src/components/dashboard/exercise-progress-card.tsx",
+      "source_location": "L21"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_stat_tile_stattileprops",
+      "label": "StatTileProps",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "stattileprops",
+      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
+      "source_location": "L30"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_stat_tile_stattone",
+      "label": "StatTone",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "stattone",
+      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
+      "source_location": "L20"
+    },
+    {
       "id": "iron_log_src_components_ui_badge_badgeprops",
       "label": "BadgeProps",
       "_callable": true,
@@ -817,32 +869,6 @@
       "norm_label": "buttonprops",
       "source_file": "iron-log/src/components/ui/button.tsx",
       "source_location": "L40"
-    },
-    {
-      "id": "iron_log_src_components_ui_toast_toast",
-      "label": "Toast",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 29,
-      "community_name": "Iron Log UI Primitives",
-      "file_type": "code",
-      "norm_label": "toast",
-      "source_file": "iron-log/src/components/ui/toast.tsx",
-      "source_location": "L28"
-    },
-    {
-      "id": "iron_log_src_components_ui_toast_toasttone",
-      "label": "ToastTone",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 29,
-      "community_name": "Iron Log UI Primitives",
-      "file_type": "code",
-      "norm_label": "toasttone",
-      "source_file": "iron-log/src/components/ui/toast.tsx",
-      "source_location": "L26"
     },
     {
       "id": "iron_log_src_lib_legacy_import_importreport",
@@ -897,43 +923,30 @@
       "source_location": "L406"
     },
     {
-      "id": "iron_log_src_components_charts_sparkline_sparklineprops",
-      "label": "SparklineProps",
+      "id": "iron_log_src_components_ui_toast_toast",
+      "label": "Toast",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 40,
       "community_name": "Iron Log Stat Tiles",
       "file_type": "code",
-      "norm_label": "sparklineprops",
-      "source_file": "iron-log/src/components/charts/sparkline.tsx",
-      "source_location": "L4"
+      "norm_label": "toast",
+      "source_file": "iron-log/src/components/ui/toast.tsx",
+      "source_location": "L28"
     },
     {
-      "id": "iron_log_src_components_dashboard_stat_tile_stattileprops",
-      "label": "StatTileProps",
+      "id": "iron_log_src_components_ui_toast_toasttone",
+      "label": "ToastTone",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 40,
       "community_name": "Iron Log Stat Tiles",
       "file_type": "code",
-      "norm_label": "stattileprops",
-      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
-      "source_location": "L30"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_stat_tile_stattone",
-      "label": "StatTone",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "Iron Log Stat Tiles",
-      "file_type": "code",
-      "norm_label": "stattone",
-      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
-      "source_location": "L20"
+      "norm_label": "toasttone",
+      "source_file": "iron-log/src/components/ui/toast.tsx",
+      "source_location": "L26"
     },
     {
       "id": "iron_log_scripts_standalone_shims_next_link_linkprops",
@@ -1064,19 +1077,6 @@
       "norm_label": "tablecolumn",
       "source_file": "iron-log/src/components/charts/chart-kit.tsx",
       "source_location": "L265"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_exercise_progress_card_metric",
-      "label": "Metric",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "metric",
-      "source_file": "iron-log/src/components/dashboard/exercise-progress-card.tsx",
-      "source_location": "L21"
     },
     {
       "id": "lifeos_appmodal",
@@ -1547,18 +1547,6 @@
       "source_location": "L32"
     },
     {
-      "id": "iron_log_src_components_body_health_panel_healthpatch",
-      "label": "healthPatch()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "Iron Log Screens",
-      "file_type": "code",
-      "norm_label": "healthpatch()",
-      "source_file": "iron-log/src/components/body/health-panel.tsx",
-      "source_location": "L29"
-    },
-    {
       "id": "iron_log_src_components_charts_bar_list_barlist",
       "label": "BarList()",
       "_callable": true,
@@ -1617,18 +1605,6 @@
       "norm_label": "meter()",
       "source_file": "iron-log/src/components/ui/meter.tsx",
       "source_location": "L16"
-    },
-    {
-      "id": "iron_log_src_lib_utils_clamp",
-      "label": "clamp()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "Iron Log Screens",
-      "file_type": "code",
-      "norm_label": "clamp()",
-      "source_file": "iron-log/src/lib/utils.ts",
-      "source_location": "L57"
     },
     {
       "id": "iron_log_src_lib_utils_cn",
@@ -1967,6 +1943,18 @@
       "source_location": "L19"
     },
     {
+      "id": "iron_log_src_lib_utils_isisodate",
+      "label": "isIsoDate()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "Iron Log Storage & Seed",
+      "file_type": "code",
+      "norm_label": "isisodate()",
+      "source_file": "iron-log/src/lib/utils.ts",
+      "source_location": "L110"
+    },
+    {
       "id": "iron_log_src_lib_utils_tofinitenumber",
       "label": "toFiniteNumber()",
       "_callable": true,
@@ -2159,18 +2147,6 @@
       "source_location": "L3665"
     },
     {
-      "id": "lifeos_lectureword",
-      "label": "lectureWord()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 11,
-      "community_name": "Life OS University",
-      "file_type": "code",
-      "norm_label": "lectureword()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1628"
-    },
-    {
       "id": "lifeos_meetingsof",
       "label": "meetingsOf()",
       "_callable": true,
@@ -2181,6 +2157,18 @@
       "norm_label": "meetingsof()",
       "source_file": "LifeOS.jsx",
       "source_location": "L3943"
+    },
+    {
+      "id": "lifeos_minsof",
+      "label": "minsOf()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 11,
+      "community_name": "Life OS University",
+      "file_type": "code",
+      "norm_label": "minsof()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3366"
     },
     {
       "id": "lifeos_nearestgrade",
@@ -2217,18 +2205,6 @@
       "norm_label": "nextsection()",
       "source_file": "LifeOS.jsx",
       "source_location": "L4027"
-    },
-    {
-      "id": "lifeos_nowmins",
-      "label": "nowMins()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 11,
-      "community_name": "Life OS University",
-      "file_type": "code",
-      "norm_label": "nowmins()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3373"
     },
     {
       "id": "lifeos_safeurl",
@@ -2279,6 +2255,18 @@
       "source_location": "L3710"
     },
     {
+      "id": "lifeos_unidue",
+      "label": "uniDue()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 11,
+      "community_name": "Life OS University",
+      "file_type": "code",
+      "norm_label": "unidue()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3988"
+    },
+    {
       "id": "lifeos_unimodule",
       "label": "UniModule()",
       "_callable": true,
@@ -2301,18 +2289,6 @@
       "norm_label": "unitaskmodal()",
       "source_file": "LifeOS.jsx",
       "source_location": "L18435"
-    },
-    {
-      "id": "lifeos_useminuteclock",
-      "label": "useMinuteClock()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 11,
-      "community_name": "Life OS University",
-      "file_type": "code",
-      "norm_label": "useminuteclock()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L4052"
     },
     {
       "id": "lifeos_weekgrid",
@@ -2759,6 +2735,18 @@
       "source_location": "L87"
     },
     {
+      "id": "lifeos_amcoredone",
+      "label": "amCoreDone()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Life OS Habits & Career",
+      "file_type": "code",
+      "norm_label": "amcoredone()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3245"
+    },
+    {
       "id": "lifeos_askedon",
       "label": "askedOn()",
       "_callable": true,
@@ -2817,6 +2805,18 @@
       "norm_label": "careermodule()",
       "source_file": "LifeOS.jsx",
       "source_location": "L15337"
+    },
+    {
+      "id": "lifeos_careertoday",
+      "label": "careerToday()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Life OS Habits & Career",
+      "file_type": "code",
+      "norm_label": "careertoday()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3207"
     },
     {
       "id": "lifeos_dailystreak",
@@ -3011,18 +3011,6 @@
       "source_location": "L5256"
     },
     {
-      "id": "lifeos_readstreak",
-      "label": "readStreak()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "Life OS Habits & Career",
-      "file_type": "code",
-      "norm_label": "readstreak()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1885"
-    },
-    {
       "id": "lifeos_routinemodule",
       "label": "RoutineModule()",
       "_callable": true,
@@ -3045,6 +3033,30 @@
       "norm_label": "stamp()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1574"
+    },
+    {
+      "id": "lifeos_stepword",
+      "label": "stepWord()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Life OS Habits & Career",
+      "file_type": "code",
+      "norm_label": "stepword()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1614"
+    },
+    {
+      "id": "lifeos_toggledaily",
+      "label": "toggleDaily()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Life OS Habits & Career",
+      "file_type": "code",
+      "norm_label": "toggledaily()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3211"
     },
     {
       "id": "lifeos_urgeshape",
@@ -3167,6 +3179,18 @@
       "source_location": "L93"
     },
     {
+      "id": "lifeos_adddays",
+      "label": "addDays()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "Life OS Agenda & Day Sheet",
+      "file_type": "code",
+      "norm_label": "adddays()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3338"
+    },
+    {
       "id": "lifeos_agendamodule",
       "label": "AgendaModule()",
       "_callable": true,
@@ -3275,6 +3299,18 @@
       "source_location": "L3540"
     },
     {
+      "id": "lifeos_fmtday",
+      "label": "fmtDay()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 17,
+      "community_name": "Life OS Agenda & Day Sheet",
+      "file_type": "code",
+      "norm_label": "fmtday()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1154"
+    },
+    {
       "id": "lifeos_iseventdone",
       "label": "isEventDone()",
       "_callable": true,
@@ -3311,18 +3347,6 @@
       "source_location": "L3421"
     },
     {
-      "id": "lifeos_minsof",
-      "label": "minsOf()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "Life OS Agenda & Day Sheet",
-      "file_type": "code",
-      "norm_label": "minsof()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3366"
-    },
-    {
       "id": "lifeos_occurrences",
       "label": "occurrences()",
       "_callable": true,
@@ -3357,18 +3381,6 @@
       "norm_label": "repeatof()",
       "source_file": "LifeOS.jsx",
       "source_location": "L3430"
-    },
-    {
-      "id": "lifeos_unidue",
-      "label": "uniDue()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 17,
-      "community_name": "Life OS Agenda & Day Sheet",
-      "file_type": "code",
-      "norm_label": "unidue()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3988"
     },
     {
       "id": "lifeos_uniduerow",
@@ -3443,6 +3455,30 @@
       "source_location": "L3623"
     },
     {
+      "id": "lifeos_bookdesk",
+      "label": "BookDesk()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "bookdesk()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L10191"
+    },
+    {
+      "id": "lifeos_bookshape",
+      "label": "bookShape()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "bookshape()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1846"
+    },
+    {
       "id": "lifeos_clocklabel",
       "label": "clockLabel()",
       "_callable": true,
@@ -3513,18 +3549,6 @@
       "norm_label": "deadlinechip()",
       "source_file": "LifeOS.jsx",
       "source_location": "L8692"
-    },
-    {
-      "id": "lifeos_fmtday",
-      "label": "fmtDay()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 18,
-      "community_name": "Life OS Countdown & Quarters",
-      "file_type": "code",
-      "norm_label": "fmtday()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1154"
     },
     {
       "id": "lifeos_goalcard",
@@ -3647,6 +3671,18 @@
       "source_location": "L699"
     },
     {
+      "id": "lifeos_pctof",
+      "label": "pctOf()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "pctof()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L10174"
+    },
+    {
       "id": "lifeos_pillarof",
       "label": "pillarOf()",
       "_callable": true,
@@ -3671,6 +3707,42 @@
       "source_location": "L645"
     },
     {
+      "id": "lifeos_readlogmodal",
+      "label": "ReadLogModal()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "readlogmodal()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L5274"
+    },
+    {
+      "id": "lifeos_readstreak",
+      "label": "readStreak()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "readstreak()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1885"
+    },
+    {
+      "id": "lifeos_resizeimage",
+      "label": "resizeImage()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "resizeimage()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L10148"
+    },
+    {
       "id": "lifeos_rows",
       "label": "rows()",
       "_callable": true,
@@ -3681,6 +3753,30 @@
       "norm_label": "rows()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1180"
+    },
+    {
+      "id": "lifeos_sumpages",
+      "label": "sumPages()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "sumpages()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1880"
+    },
+    {
+      "id": "lifeos_vaultmodule",
+      "label": "VaultModule()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "Life OS Countdown & Quarters",
+      "file_type": "code",
+      "norm_label": "vaultmodule()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L10510"
     },
     {
       "id": "lifeos_windowof",
@@ -3705,18 +3801,6 @@
       "norm_label": "windowstand()",
       "source_file": "LifeOS.jsx",
       "source_location": "L2165"
-    },
-    {
-      "id": "lifeos_yesterdaykey",
-      "label": "yesterdayKey()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 18,
-      "community_name": "Life OS Countdown & Quarters",
-      "file_type": "code",
-      "norm_label": "yesterdaykey()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1160"
     },
     {
       "id": "report_agent_adddays",
@@ -4307,30 +4391,6 @@
       "source_location": "L42"
     },
     {
-      "id": "lifeos_breakertoday",
-      "label": "breakerToday()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 22,
-      "community_name": "Life OS Discipline & Lease",
-      "file_type": "code",
-      "norm_label": "breakertoday()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1789"
-    },
-    {
-      "id": "lifeos_claimhandover",
-      "label": "claimHandover()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 22,
-      "community_name": "Life OS Discipline & Lease",
-      "file_type": "code",
-      "norm_label": "claimhandover()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1065"
-    },
-    {
       "id": "lifeos_coreof",
       "label": "coreOf()",
       "_callable": true,
@@ -4353,18 +4413,6 @@
       "norm_label": "disciplineof()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1110"
-    },
-    {
-      "id": "lifeos_droplock",
-      "label": "dropLock()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 22,
-      "community_name": "Life OS Discipline & Lease",
-      "file_type": "code",
-      "norm_label": "droplock()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1054"
     },
     {
       "id": "lifeos_inreflectwindow",
@@ -4439,18 +4487,6 @@
       "source_location": "L587"
     },
     {
-      "id": "lifeos_readlock",
-      "label": "readLock()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 22,
-      "community_name": "Life OS Discipline & Lease",
-      "file_type": "code",
-      "norm_label": "readlock()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1040"
-    },
-    {
       "id": "lifeos_readui",
       "label": "readUI()",
       "_callable": true,
@@ -4487,16 +4523,16 @@
       "source_location": "L298"
     },
     {
-      "id": "lifeos_tabid",
-      "label": "tabId()",
+      "id": "lifeos_usedailyquote",
+      "label": "useDailyQuote()",
       "_callable": true,
       "_origin": "ast",
       "community": 22,
       "community_name": "Life OS Discipline & Lease",
       "file_type": "code",
-      "norm_label": "tabid()",
+      "norm_label": "usedailyquote()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L1025"
+      "source_location": "L4664"
     },
     {
       "id": "lifeos_useskyphase",
@@ -4509,30 +4545,6 @@
       "norm_label": "useskyphase()",
       "source_file": "LifeOS.jsx",
       "source_location": "L308"
-    },
-    {
-      "id": "lifeos_usewritelease",
-      "label": "useWriteLease()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 22,
-      "community_name": "Life OS Discipline & Lease",
-      "file_type": "code",
-      "norm_label": "usewritelease()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L4530"
-    },
-    {
-      "id": "lifeos_writelock",
-      "label": "writeLock()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 22,
-      "community_name": "Life OS Discipline & Lease",
-      "file_type": "code",
-      "norm_label": "writelock()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1047"
     },
     {
       "id": "iron_log_src_components_layout_app_shell_banner",
@@ -4763,18 +4775,6 @@
       "source_location": "L54"
     },
     {
-      "id": "iron_log_src_components_workout_rest_timer_useresttimer",
-      "label": "useRestTimer()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 28,
-      "community_name": "Iron Log Rest Timer",
-      "file_type": "code",
-      "norm_label": "useresttimer()",
-      "source_file": "iron-log/src/components/workout/rest-timer.tsx",
-      "source_location": "L251"
-    },
-    {
       "id": "iron_log_src_app_error_errorboundary",
       "label": "ErrorBoundary()",
       "_callable": true,
@@ -4785,6 +4785,78 @@
       "norm_label": "errorboundary()",
       "source_file": "iron-log/src/app/error.tsx",
       "source_location": "L13"
+    },
+    {
+      "id": "iron_log_src_app_not_found_notfound",
+      "label": "NotFound()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "notfound()",
+      "source_file": "iron-log/src/app/not-found.tsx",
+      "source_location": "L5"
+    },
+    {
+      "id": "iron_log_src_components_charts_sparkline_sparkline",
+      "label": "Sparkline()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "sparkline()",
+      "source_file": "iron-log/src/components/charts/sparkline.tsx",
+      "source_location": "L13"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_stat_tile_stattile",
+      "label": "StatTile()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "stattile()",
+      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
+      "source_location": "L62"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_studio_hero_barbell",
+      "label": "Barbell()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "barbell()",
+      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
+      "source_location": "L239"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_studio_hero_chip",
+      "label": "Chip()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "chip()",
+      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
+      "source_location": "L213"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_studio_hero_goalring",
+      "label": "GoalRing()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "goalring()",
+      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
+      "source_location": "L159"
     },
     {
       "id": "iron_log_src_components_ui_badge_badge",
@@ -5219,18 +5291,6 @@
       "source_location": "L1232"
     },
     {
-      "id": "lifeos_habitrow",
-      "label": "HabitRow()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 30,
-      "community_name": "Life OS UI Primitives",
-      "file_type": "code",
-      "norm_label": "habitrow()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L5379"
-    },
-    {
       "id": "lifeos_matrixmodule",
       "label": "MatrixModule()",
       "_callable": true,
@@ -5471,18 +5531,6 @@
       "source_location": "L185"
     },
     {
-      "id": "iron_log_src_lib_utils_formatrelativeday",
-      "label": "formatRelativeDay()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 31,
-      "community_name": "Iron Log Standalone Routes",
-      "file_type": "code",
-      "norm_label": "formatrelativeday()",
-      "source_file": "iron-log/src/lib/utils.ts",
-      "source_location": "L196"
-    },
-    {
       "id": "iron_log_src_lib_utils_formatweekday",
       "label": "formatWeekday()",
       "_callable": true,
@@ -5675,6 +5723,18 @@
       "source_location": "L13945"
     },
     {
+      "id": "lifeos_careertrack",
+      "label": "CareerTrack()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "Life OS Career Plan",
+      "file_type": "code",
+      "norm_label": "careertrack()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L14792"
+    },
+    {
       "id": "lifeos_careerweekno",
       "label": "careerWeekNo()",
       "_callable": true,
@@ -5685,6 +5745,30 @@
       "norm_label": "careerweekno()",
       "source_file": "LifeOS.jsx",
       "source_location": "L3192"
+    },
+    {
+      "id": "lifeos_consistencycard",
+      "label": "ConsistencyCard()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "Life OS Career Plan",
+      "file_type": "code",
+      "norm_label": "consistencycard()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L15613"
+    },
+    {
+      "id": "lifeos_daysbetween",
+      "label": "daysBetween()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "Life OS Career Plan",
+      "file_type": "code",
+      "norm_label": "daysbetween()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1541"
     },
     {
       "id": "lifeos_missioncount",
@@ -5721,6 +5805,18 @@
       "norm_label": "missionsin()",
       "source_file": "LifeOS.jsx",
       "source_location": "L3197"
+    },
+    {
+      "id": "lifeos_needsfollowup",
+      "label": "needsFollowUp()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "Life OS Career Plan",
+      "file_type": "code",
+      "norm_label": "needsfollowup()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3253"
     },
     {
       "id": "lifeos_phaseof",
@@ -5771,6 +5867,30 @@
       "source_location": "L3244"
     },
     {
+      "id": "lifeos_since",
+      "label": "Since()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "Life OS Career Plan",
+      "file_type": "code",
+      "norm_label": "since()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1631"
+    },
+    {
+      "id": "lifeos_stageof",
+      "label": "stageOf()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 34,
+      "community_name": "Life OS Career Plan",
+      "file_type": "code",
+      "norm_label": "stageof()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L3135"
+    },
+    {
       "id": "lifeos_weekof",
       "label": "weekOf()",
       "_callable": true,
@@ -5783,16 +5903,88 @@
       "source_location": "L2636"
     },
     {
-      "id": "iron_log_src_components_workout_add_exercise_form_addexerciseform",
-      "label": "AddExerciseForm()",
+      "id": "iron_log_src_app_settings_page_settingspage",
+      "label": "SettingsPage()",
       "_callable": true,
       "_origin": "ast",
       "community": 36,
       "community_name": "Iron Log Legacy Import",
       "file_type": "code",
-      "norm_label": "addexerciseform()",
-      "source_file": "iron-log/src/components/workout/add-exercise-form.tsx",
-      "source_location": "L21"
+      "norm_label": "settingspage()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L93"
+    },
+    {
+      "id": "iron_log_src_app_settings_page_settingspage_handleexport",
+      "label": "handleExport()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "handleexport()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L202"
+    },
+    {
+      "id": "iron_log_src_app_settings_page_settingspage_handleimport",
+      "label": "handleImport()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "handleimport()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L222"
+    },
+    {
+      "id": "iron_log_src_app_settings_page_settingspage_handlesavepreferences",
+      "label": "handleSavePreferences()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "handlesavepreferences()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L130"
+    },
+    {
+      "id": "iron_log_src_app_settings_page_usearmedaction",
+      "label": "useArmedAction()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "usearmedaction()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L68"
+    },
+    {
+      "id": "iron_log_src_app_settings_page_usearmedaction_arm",
+      "label": "arm()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "arm()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L79"
+    },
+    {
+      "id": "iron_log_src_app_settings_page_usearmedaction_disarm",
+      "label": "disarm()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "disarm()",
+      "source_file": "iron-log/src/app/settings/page.tsx",
+      "source_location": "L85"
     },
     {
       "id": "iron_log_src_components_workout_add_exercise_form_addexerciseform_handleadd",
@@ -5867,6 +6059,90 @@
       "source_location": "L44"
     },
     {
+      "id": "iron_log_src_lib_repository_addexercise",
+      "label": "addExercise()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "addexercise()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L304"
+    },
+    {
+      "id": "iron_log_src_lib_repository_fail",
+      "label": "fail()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "fail()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L43"
+    },
+    {
+      "id": "iron_log_src_lib_repository_logset",
+      "label": "logSet()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "logset()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L171"
+    },
+    {
+      "id": "iron_log_src_lib_repository_ok",
+      "label": "ok()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "ok()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L39"
+    },
+    {
+      "id": "iron_log_src_lib_repository_sethealth",
+      "label": "setHealth()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "sethealth()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L621"
+    },
+    {
+      "id": "iron_log_src_lib_repository_updateexercise",
+      "label": "updateExercise()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "updateexercise()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L465"
+    },
+    {
+      "id": "iron_log_src_lib_repository_updateset",
+      "label": "updateSet()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "updateset()",
+      "source_file": "iron-log/src/lib/repository.ts",
+      "source_location": "L227"
+    },
+    {
       "id": "iron_log_src_lib_seed_guessmusclegroup",
       "label": "guessMuscleGroup()",
       "_callable": true,
@@ -5877,6 +6153,18 @@
       "norm_label": "guessmusclegroup()",
       "source_file": "iron-log/src/lib/seed.ts",
       "source_location": "L338"
+    },
+    {
+      "id": "iron_log_src_lib_utils_clamp",
+      "label": "clamp()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 36,
+      "community_name": "Iron Log Legacy Import",
+      "file_type": "code",
+      "norm_label": "clamp()",
+      "source_file": "iron-log/src/lib/utils.ts",
+      "source_location": "L57"
     },
     {
       "id": "lifeos_api",
@@ -5999,88 +6287,16 @@
       "source_location": "L62"
     },
     {
-      "id": "iron_log_src_components_ui_toast_usetoast",
-      "label": "useToast()",
+      "id": "iron_log_src_components_body_health_panel_healthpatch",
+      "label": "healthPatch()",
       "_callable": true,
       "_origin": "ast",
       "community": 4,
       "community_name": "Iron Log Metrics & Logger",
       "file_type": "code",
-      "norm_label": "usetoast()",
-      "source_file": "iron-log/src/components/ui/toast.tsx",
-      "source_location": "L132"
-    },
-    {
-      "id": "iron_log_src_components_workout_exercise_logger_exerciselogger",
-      "label": "ExerciseLogger()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "exerciselogger()",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L72"
-    },
-    {
-      "id": "iron_log_src_components_workout_exercise_logger_exerciselogger_applytarget",
-      "label": "applyTarget()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "applytarget()",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L170"
-    },
-    {
-      "id": "iron_log_src_components_workout_exercise_logger_exercisepanel",
-      "label": "ExercisePanel()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "exercisepanel()",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L601"
-    },
-    {
-      "id": "iron_log_src_components_workout_exercise_logger_exercisepanel_commit",
-      "label": "commit()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "commit()",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L615"
-    },
-    {
-      "id": "iron_log_src_components_workout_exercise_logger_exercisepanel_parseoptional",
-      "label": "parseOptional()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "parseoptional()",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L621"
-    },
-    {
-      "id": "iron_log_src_lib_metrics_bestsetfor",
-      "label": "bestSetFor()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "bestsetfor()",
-      "source_file": "iron-log/src/lib/metrics.ts",
-      "source_location": "L206"
+      "norm_label": "healthpatch()",
+      "source_file": "iron-log/src/components/body/health-panel.tsx",
+      "source_location": "L29"
     },
     {
       "id": "iron_log_src_lib_metrics_bodychange",
@@ -6105,6 +6321,18 @@
       "norm_label": "bodyseries()",
       "source_file": "iron-log/src/lib/metrics.ts",
       "source_location": "L779"
+    },
+    {
+      "id": "iron_log_src_lib_metrics_chartableexerciseids",
+      "label": "chartableExerciseIds()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "community_name": "Iron Log Metrics & Logger",
+      "file_type": "code",
+      "norm_label": "chartableexerciseids()",
+      "source_file": "iron-log/src/lib/metrics.ts",
+      "source_location": "L1041"
     },
     {
       "id": "iron_log_src_lib_metrics_currentstreak",
@@ -6191,18 +6419,6 @@
       "source_location": "L293"
     },
     {
-      "id": "iron_log_src_lib_metrics_overloadtarget",
-      "label": "overloadTarget()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "overloadtarget()",
-      "source_file": "iron-log/src/lib/metrics.ts",
-      "source_location": "L603"
-    },
-    {
       "id": "iron_log_src_lib_metrics_personalrecords",
       "label": "personalRecords()",
       "_callable": true,
@@ -6213,30 +6429,6 @@
       "norm_label": "personalrecords()",
       "source_file": "iron-log/src/lib/metrics.ts",
       "source_location": "L335"
-    },
-    {
-      "id": "iron_log_src_lib_metrics_previoussessionsets",
-      "label": "previousSessionSets()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "previoussessionsets()",
-      "source_file": "iron-log/src/lib/metrics.ts",
-      "source_location": "L229"
-    },
-    {
-      "id": "iron_log_src_lib_metrics_progressionrules",
-      "label": "progressionRules()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "progressionrules()",
-      "source_file": "iron-log/src/lib/metrics.ts",
-      "source_location": "L579"
     },
     {
       "id": "iron_log_src_lib_metrics_sessionvolume",
@@ -6335,18 +6527,6 @@
       "source_location": "L863"
     },
     {
-      "id": "iron_log_src_lib_metrics_warmupramp",
-      "label": "warmupRamp()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "warmupramp()",
-      "source_file": "iron-log/src/lib/metrics.ts",
-      "source_location": "L695"
-    },
-    {
       "id": "iron_log_src_lib_metrics_weeklybuckets",
       "label": "weeklyBuckets()",
       "_callable": true,
@@ -6405,18 +6585,6 @@
       "norm_label": "fromisodate()",
       "source_file": "iron-log/src/lib/utils.ts",
       "source_location": "L117"
-    },
-    {
-      "id": "iron_log_src_lib_utils_maxof",
-      "label": "maxOf()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "maxof()",
-      "source_file": "iron-log/src/lib/utils.ts",
-      "source_location": "L232"
     },
     {
       "id": "iron_log_src_lib_utils_round",
@@ -6479,124 +6647,244 @@
       "source_location": "L101"
     },
     {
-      "id": "iron_log_src_components_charts_sparkline_sparkline",
-      "label": "Sparkline()",
+      "id": "iron_log_src_components_ui_toast_usetoast",
+      "label": "useToast()",
       "_callable": true,
       "_origin": "ast",
       "community": 40,
       "community_name": "Iron Log Stat Tiles",
       "file_type": "code",
-      "norm_label": "sparkline()",
-      "source_file": "iron-log/src/components/charts/sparkline.tsx",
-      "source_location": "L13"
+      "norm_label": "usetoast()",
+      "source_file": "iron-log/src/components/ui/toast.tsx",
+      "source_location": "L132"
     },
     {
-      "id": "iron_log_src_components_dashboard_stat_tile_stattile",
-      "label": "StatTile()",
+      "id": "iron_log_src_components_workout_add_exercise_form_addexerciseform",
+      "label": "AddExerciseForm()",
       "_callable": true,
       "_origin": "ast",
       "community": 40,
       "community_name": "Iron Log Stat Tiles",
       "file_type": "code",
-      "norm_label": "stattile()",
-      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
-      "source_location": "L62"
+      "norm_label": "addexerciseform()",
+      "source_file": "iron-log/src/components/workout/add-exercise-form.tsx",
+      "source_location": "L21"
     },
     {
-      "id": "lifeos_bookdesk",
-      "label": "BookDesk()",
+      "id": "iron_log_src_components_workout_exercise_logger_exerciselogger",
+      "label": "ExerciseLogger()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "exerciselogger()",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L72"
+    },
+    {
+      "id": "iron_log_src_components_workout_exercise_logger_exerciselogger_applytarget",
+      "label": "applyTarget()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "applytarget()",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L170"
+    },
+    {
+      "id": "iron_log_src_components_workout_exercise_logger_exercisepanel",
+      "label": "ExercisePanel()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "exercisepanel()",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L601"
+    },
+    {
+      "id": "iron_log_src_components_workout_exercise_logger_exercisepanel_commit",
+      "label": "commit()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "commit()",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L615"
+    },
+    {
+      "id": "iron_log_src_components_workout_exercise_logger_exercisepanel_parseoptional",
+      "label": "parseOptional()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "parseoptional()",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L621"
+    },
+    {
+      "id": "iron_log_src_components_workout_rest_timer_useresttimer",
+      "label": "useRestTimer()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "useresttimer()",
+      "source_file": "iron-log/src/components/workout/rest-timer.tsx",
+      "source_location": "L251"
+    },
+    {
+      "id": "iron_log_src_lib_metrics_bestsetfor",
+      "label": "bestSetFor()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "bestsetfor()",
+      "source_file": "iron-log/src/lib/metrics.ts",
+      "source_location": "L206"
+    },
+    {
+      "id": "iron_log_src_lib_metrics_overloadtarget",
+      "label": "overloadTarget()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "overloadtarget()",
+      "source_file": "iron-log/src/lib/metrics.ts",
+      "source_location": "L603"
+    },
+    {
+      "id": "iron_log_src_lib_metrics_previoussessionsets",
+      "label": "previousSessionSets()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "previoussessionsets()",
+      "source_file": "iron-log/src/lib/metrics.ts",
+      "source_location": "L229"
+    },
+    {
+      "id": "iron_log_src_lib_metrics_progressionrules",
+      "label": "progressionRules()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "progressionrules()",
+      "source_file": "iron-log/src/lib/metrics.ts",
+      "source_location": "L579"
+    },
+    {
+      "id": "iron_log_src_lib_metrics_warmupramp",
+      "label": "warmupRamp()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "warmupramp()",
+      "source_file": "iron-log/src/lib/metrics.ts",
+      "source_location": "L695"
+    },
+    {
+      "id": "iron_log_src_lib_utils_maxof",
+      "label": "maxOf()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "maxof()",
+      "source_file": "iron-log/src/lib/utils.ts",
+      "source_location": "L232"
+    },
+    {
+      "id": "lifeos_claimhandover",
+      "label": "claimHandover()",
       "_callable": true,
       "_origin": "ast",
       "community": 41,
       "community_name": "Life OS Library & Reading",
       "file_type": "code",
-      "norm_label": "bookdesk()",
+      "norm_label": "claimhandover()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L10191"
+      "source_location": "L1065"
     },
     {
-      "id": "lifeos_bookshape",
-      "label": "bookShape()",
+      "id": "lifeos_droplock",
+      "label": "dropLock()",
       "_callable": true,
       "_origin": "ast",
       "community": 41,
       "community_name": "Life OS Library & Reading",
       "file_type": "code",
-      "norm_label": "bookshape()",
+      "norm_label": "droplock()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L1846"
+      "source_location": "L1054"
     },
     {
-      "id": "lifeos_pctof",
-      "label": "pctOf()",
+      "id": "lifeos_readlock",
+      "label": "readLock()",
       "_callable": true,
       "_origin": "ast",
       "community": 41,
       "community_name": "Life OS Library & Reading",
       "file_type": "code",
-      "norm_label": "pctof()",
+      "norm_label": "readlock()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L10174"
+      "source_location": "L1040"
     },
     {
-      "id": "lifeos_readlogmodal",
-      "label": "ReadLogModal()",
+      "id": "lifeos_tabid",
+      "label": "tabId()",
       "_callable": true,
       "_origin": "ast",
       "community": 41,
       "community_name": "Life OS Library & Reading",
       "file_type": "code",
-      "norm_label": "readlogmodal()",
+      "norm_label": "tabid()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L5274"
+      "source_location": "L1025"
     },
     {
-      "id": "lifeos_resizeimage",
-      "label": "resizeImage()",
+      "id": "lifeos_usewritelease",
+      "label": "useWriteLease()",
       "_callable": true,
       "_origin": "ast",
       "community": 41,
       "community_name": "Life OS Library & Reading",
       "file_type": "code",
-      "norm_label": "resizeimage()",
+      "norm_label": "usewritelease()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L10148"
+      "source_location": "L4530"
     },
     {
-      "id": "lifeos_sumpages",
-      "label": "sumPages()",
+      "id": "lifeos_writelock",
+      "label": "writeLock()",
       "_callable": true,
       "_origin": "ast",
       "community": 41,
       "community_name": "Life OS Library & Reading",
       "file_type": "code",
-      "norm_label": "sumpages()",
+      "norm_label": "writelock()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L1880"
-    },
-    {
-      "id": "lifeos_usedailyquote",
-      "label": "useDailyQuote()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 41,
-      "community_name": "Life OS Library & Reading",
-      "file_type": "code",
-      "norm_label": "usedailyquote()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L4664"
-    },
-    {
-      "id": "lifeos_vaultmodule",
-      "label": "VaultModule()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 41,
-      "community_name": "Life OS Library & Reading",
-      "file_type": "code",
-      "norm_label": "vaultmodule()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L10510"
+      "source_location": "L1047"
     },
     {
       "id": "iron_log_scripts_standalone_entry_app",
@@ -6671,112 +6959,28 @@
       "source_location": "L39"
     },
     {
-      "id": "iron_log_src_app_settings_page_settingspage",
-      "label": "SettingsPage()",
+      "id": "lifeos_nowmins",
+      "label": "nowMins()",
       "_callable": true,
       "_origin": "ast",
       "community": 45,
       "community_name": "Iron Log Settings Page",
       "file_type": "code",
-      "norm_label": "settingspage()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L93"
-    },
-    {
-      "id": "iron_log_src_app_settings_page_settingspage_handleexport",
-      "label": "handleExport()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 45,
-      "community_name": "Iron Log Settings Page",
-      "file_type": "code",
-      "norm_label": "handleexport()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L202"
-    },
-    {
-      "id": "iron_log_src_app_settings_page_settingspage_handleimport",
-      "label": "handleImport()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 45,
-      "community_name": "Iron Log Settings Page",
-      "file_type": "code",
-      "norm_label": "handleimport()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L222"
-    },
-    {
-      "id": "iron_log_src_app_settings_page_settingspage_handlesavepreferences",
-      "label": "handleSavePreferences()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 45,
-      "community_name": "Iron Log Settings Page",
-      "file_type": "code",
-      "norm_label": "handlesavepreferences()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L130"
-    },
-    {
-      "id": "iron_log_src_app_settings_page_usearmedaction",
-      "label": "useArmedAction()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 45,
-      "community_name": "Iron Log Settings Page",
-      "file_type": "code",
-      "norm_label": "usearmedaction()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L68"
-    },
-    {
-      "id": "iron_log_src_app_settings_page_usearmedaction_arm",
-      "label": "arm()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 45,
-      "community_name": "Iron Log Settings Page",
-      "file_type": "code",
-      "norm_label": "arm()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L79"
-    },
-    {
-      "id": "iron_log_src_app_settings_page_usearmedaction_disarm",
-      "label": "disarm()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 45,
-      "community_name": "Iron Log Settings Page",
-      "file_type": "code",
-      "norm_label": "disarm()",
-      "source_file": "iron-log/src/app/settings/page.tsx",
-      "source_location": "L85"
-    },
-    {
-      "id": "lifeos_deepworkmodule",
-      "label": "DeepWorkModule()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": "Life OS Sky & Motion",
-      "file_type": "code",
-      "norm_label": "deepworkmodule()",
+      "norm_label": "nowmins()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L7826"
+      "source_location": "L3373"
     },
     {
-      "id": "lifeos_progressring",
-      "label": "ProgressRing()",
+      "id": "lifeos_useminuteclock",
+      "label": "useMinuteClock()",
       "_callable": true,
       "_origin": "ast",
-      "community": 48,
-      "community_name": "Life OS Sky & Motion",
+      "community": 45,
+      "community_name": "Iron Log Settings Page",
       "file_type": "code",
-      "norm_label": "progressring()",
+      "norm_label": "useminuteclock()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L4993"
+      "source_location": "L4052"
     },
     {
       "id": "lifeos_skybackdrop",
@@ -6791,18 +6995,6 @@
       "source_location": "L346"
     },
     {
-      "id": "lifeos_useprefersreducedmotion",
-      "label": "usePrefersReducedMotion()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": "Life OS Sky & Motion",
-      "file_type": "code",
-      "norm_label": "useprefersreducedmotion()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L4642"
-    },
-    {
       "id": "lifeos_usestars",
       "label": "useStars()",
       "_callable": true,
@@ -6813,18 +7005,6 @@
       "norm_label": "usestars()",
       "source_file": "LifeOS.jsx",
       "source_location": "L319"
-    },
-    {
-      "id": "lifeos_amcoredone",
-      "label": "amCoreDone()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "amcoredone()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3245"
     },
     {
       "id": "lifeos_amstep",
@@ -6959,28 +7139,16 @@
       "source_location": "L1660"
     },
     {
-      "id": "lifeos_careertoday",
-      "label": "careerToday()",
+      "id": "lifeos_breakertoday",
+      "label": "breakerToday()",
       "_callable": true,
       "_origin": "ast",
       "community": 5,
       "community_name": "Life OS Modules",
       "file_type": "code",
-      "norm_label": "careertoday()",
+      "norm_label": "breakertoday()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L3207"
-    },
-    {
-      "id": "lifeos_careertrack",
-      "label": "CareerTrack()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "careertrack()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L14792"
+      "source_location": "L1789"
     },
     {
       "id": "lifeos_cleandays",
@@ -6993,18 +7161,6 @@
       "norm_label": "cleandays()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1645"
-    },
-    {
-      "id": "lifeos_consistencycard",
-      "label": "ConsistencyCard()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "consistencycard()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L15613"
     },
     {
       "id": "lifeos_costestimator",
@@ -7067,18 +7223,6 @@
       "source_location": "L1755"
     },
     {
-      "id": "lifeos_daysbetween",
-      "label": "daysBetween()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "daysbetween()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1541"
-    },
-    {
       "id": "lifeos_dayword",
       "label": "dayWord()",
       "_callable": true,
@@ -7103,6 +7247,18 @@
       "source_location": "L11574"
     },
     {
+      "id": "lifeos_eventmodal",
+      "label": "EventModal()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 5,
+      "community_name": "Life OS Modules",
+      "file_type": "code",
+      "norm_label": "eventmodal()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L16370"
+    },
+    {
       "id": "lifeos_fallword",
       "label": "fallWord()",
       "_callable": true,
@@ -7113,6 +7269,18 @@
       "norm_label": "fallword()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1620"
+    },
+    {
+      "id": "lifeos_habitrow",
+      "label": "HabitRow()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 5,
+      "community_name": "Life OS Modules",
+      "file_type": "code",
+      "norm_label": "habitrow()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L5379"
     },
     {
       "id": "lifeos_horizonrow",
@@ -7137,6 +7305,18 @@
       "norm_label": "hourword()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1622"
+    },
+    {
+      "id": "lifeos_lectureword",
+      "label": "lectureWord()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 5,
+      "community_name": "Life OS Modules",
+      "file_type": "code",
+      "norm_label": "lectureword()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1628"
     },
     {
       "id": "lifeos_levelof",
@@ -7199,18 +7379,6 @@
       "source_location": "L1466"
     },
     {
-      "id": "lifeos_needsfollowup",
-      "label": "needsFollowUp()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "needsfollowup()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3253"
-    },
-    {
       "id": "lifeos_relapsemodal",
       "label": "RelapseModal()",
       "_callable": true,
@@ -7221,42 +7389,6 @@
       "norm_label": "relapsemodal()",
       "source_file": "LifeOS.jsx",
       "source_location": "L11290"
-    },
-    {
-      "id": "lifeos_since",
-      "label": "Since()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "since()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1631"
-    },
-    {
-      "id": "lifeos_stageof",
-      "label": "stageOf()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "stageof()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3135"
-    },
-    {
-      "id": "lifeos_stepword",
-      "label": "stepWord()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "stepword()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L1614"
     },
     {
       "id": "lifeos_tagfallrate",
@@ -7293,18 +7425,6 @@
       "norm_label": "timesword()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1618"
-    },
-    {
-      "id": "lifeos_toggledaily",
-      "label": "toggleDaily()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "Life OS Modules",
-      "file_type": "code",
-      "norm_label": "toggledaily()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3211"
     },
     {
       "id": "lifeos_topshare",
@@ -7391,18 +7511,6 @@
       "source_location": "L21"
     },
     {
-      "id": "iron_log_src_app_not_found_notfound",
-      "label": "NotFound()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 55,
-      "community_name": "Not Found Page",
-      "file_type": "code",
-      "norm_label": "notfound()",
-      "source_file": "iron-log/src/app/not-found.tsx",
-      "source_location": "L5"
-    },
-    {
       "id": "life_os_sw_shellrequest",
       "label": "shellRequest()",
       "_callable": true,
@@ -7413,18 +7521,6 @@
       "norm_label": "shellrequest()",
       "source_file": "life-os/sw.js",
       "source_location": "L59"
-    },
-    {
-      "id": "lifeos_adddays",
-      "label": "addDays()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 6,
-      "community_name": "Life OS Shapes & Goals",
-      "file_type": "code",
-      "norm_label": "adddays()",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L3338"
     },
     {
       "id": "lifeos_added_goals",
@@ -7535,16 +7631,16 @@
       "source_location": "L3773"
     },
     {
-      "id": "lifeos_eventmodal",
-      "label": "EventModal()",
+      "id": "lifeos_deepworkmodule",
+      "label": "DeepWorkModule()",
       "_callable": true,
       "_origin": "ast",
       "community": 6,
       "community_name": "Life OS Shapes & Goals",
       "file_type": "code",
-      "norm_label": "eventmodal()",
+      "norm_label": "deepworkmodule()",
       "source_file": "LifeOS.jsx",
-      "source_location": "L16370"
+      "source_location": "L7826"
     },
     {
       "id": "lifeos_eventshape",
@@ -7677,6 +7773,18 @@
       "norm_label": "placeshape()",
       "source_file": "LifeOS.jsx",
       "source_location": "L1269"
+    },
+    {
+      "id": "lifeos_progressring",
+      "label": "ProgressRing()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "Life OS Shapes & Goals",
+      "file_type": "code",
+      "norm_label": "progressring()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L4993"
     },
     {
       "id": "lifeos_promptsmodule",
@@ -7869,6 +7977,30 @@
       "norm_label": "unitaskshape()",
       "source_file": "LifeOS.jsx",
       "source_location": "L3819"
+    },
+    {
+      "id": "lifeos_useprefersreducedmotion",
+      "label": "usePrefersReducedMotion()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "Life OS Shapes & Goals",
+      "file_type": "code",
+      "norm_label": "useprefersreducedmotion()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L4642"
+    },
+    {
+      "id": "lifeos_yesterdaykey",
+      "label": "yesterdayKey()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "Life OS Shapes & Goals",
+      "file_type": "code",
+      "norm_label": "yesterdaykey()",
+      "source_file": "LifeOS.jsx",
+      "source_location": "L1160"
     },
     {
       "id": "lifeos_cueimagecard",
@@ -8147,18 +8279,6 @@
       "source_location": "L157"
     },
     {
-      "id": "iron_log_src_lib_repository_addexercise",
-      "label": "addExercise()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "addexercise()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L304"
-    },
-    {
       "id": "iron_log_src_lib_repository_addexercisetoday",
       "label": "addExerciseToDay()",
       "_callable": true,
@@ -8207,18 +8327,6 @@
       "source_location": "L66"
     },
     {
-      "id": "iron_log_src_lib_repository_fail",
-      "label": "fail()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "fail()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L43"
-    },
-    {
       "id": "iron_log_src_lib_repository_findsessionbydate",
       "label": "findSessionByDate()",
       "_callable": true,
@@ -8241,30 +8349,6 @@
       "norm_label": "latestbodyweight()",
       "source_file": "iron-log/src/lib/repository.ts",
       "source_location": "L676"
-    },
-    {
-      "id": "iron_log_src_lib_repository_logset",
-      "label": "logSet()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "logset()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L171"
-    },
-    {
-      "id": "iron_log_src_lib_repository_ok",
-      "label": "ok()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "ok()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L39"
     },
     {
       "id": "iron_log_src_lib_repository_pruneemptysessions",
@@ -8313,18 +8397,6 @@
       "norm_label": "setbodymetric()",
       "source_file": "iron-log/src/lib/repository.ts",
       "source_location": "L556"
-    },
-    {
-      "id": "iron_log_src_lib_repository_sethealth",
-      "label": "setHealth()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "sethealth()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L621"
     },
     {
       "id": "iron_log_src_lib_repository_setnutrition",
@@ -8399,30 +8471,6 @@
       "source_location": "L47"
     },
     {
-      "id": "iron_log_src_lib_repository_updateexercise",
-      "label": "updateExercise()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "updateexercise()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L465"
-    },
-    {
-      "id": "iron_log_src_lib_repository_updateset",
-      "label": "updateSet()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "updateset()",
-      "source_file": "iron-log/src/lib/repository.ts",
-      "source_location": "L227"
-    },
-    {
       "id": "iron_log_src_lib_repository_updatesettings",
       "label": "updateSettings()",
       "_callable": true,
@@ -8433,18 +8481,6 @@
       "norm_label": "updatesettings()",
       "source_file": "iron-log/src/lib/repository.ts",
       "source_location": "L693"
-    },
-    {
-      "id": "iron_log_src_lib_utils_isisodate",
-      "label": "isIsoDate()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 8,
-      "community_name": "Iron Log Repository",
-      "file_type": "code",
-      "norm_label": "isisodate()",
-      "source_file": "iron-log/src/lib/utils.ts",
-      "source_location": "L110"
     },
     {
       "id": "iron_log_src_app_page_dashboardpage",
@@ -8579,42 +8615,6 @@
       "source_location": "L29"
     },
     {
-      "id": "iron_log_src_components_dashboard_studio_hero_barbell",
-      "label": "Barbell()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "barbell()",
-      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
-      "source_location": "L239"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_studio_hero_chip",
-      "label": "Chip()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "chip()",
-      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
-      "source_location": "L213"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_studio_hero_goalring",
-      "label": "GoalRing()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "goalring()",
-      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
-      "source_location": "L159"
-    },
-    {
       "id": "iron_log_src_components_dashboard_studio_hero_studiohero",
       "label": "StudioHero()",
       "_callable": true,
@@ -8651,18 +8651,6 @@
       "source_location": "L31"
     },
     {
-      "id": "iron_log_src_lib_metrics_chartableexerciseids",
-      "label": "chartableExerciseIds()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "chartableexerciseids()",
-      "source_file": "iron-log/src/lib/metrics.ts",
-      "source_location": "L1041"
-    },
-    {
       "id": "iron_log_src_lib_store_useironlog",
       "label": "useIronLog()",
       "_callable": true,
@@ -8697,6 +8685,18 @@
       "norm_label": "formatnumber()",
       "source_file": "iron-log/src/lib/utils.ts",
       "source_location": "L71"
+    },
+    {
+      "id": "iron_log_src_lib_utils_formatrelativeday",
+      "label": "formatRelativeDay()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Iron Log Dashboard",
+      "file_type": "code",
+      "norm_label": "formatrelativeday()",
+      "source_file": "iron-log/src/lib/utils.ts",
+      "source_location": "L196"
     },
     {
       "id": "iron_log_src_lib_utils_formatshortdate",
@@ -9801,17 +9801,6 @@
       "source_location": "L1"
     },
     {
-      "id": "iron_log_src_components_dashboard_stall_card",
-      "label": "stall-card.tsx",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "Iron Log Screens",
-      "file_type": "code",
-      "norm_label": "stall-card.tsx",
-      "source_file": "iron-log/src/components/dashboard/stall-card.tsx",
-      "source_location": "L1"
-    },
-    {
       "id": "iron_log_src_components_dashboard_volume_landmarks_card",
       "label": "volume-landmarks-card.tsx",
       "_origin": "ast",
@@ -9988,28 +9977,6 @@
       "source_location": "L1"
     },
     {
-      "id": "iron_log_src_components_ui_select",
-      "label": "select.tsx",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "Iron Log Screens",
-      "file_type": "code",
-      "norm_label": "select.tsx",
-      "source_file": "iron-log/src/components/ui/select.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_components_ui_select_select",
-      "label": "Select",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "Iron Log Screens",
-      "file_type": "code",
-      "norm_label": "select",
-      "source_file": "iron-log/src/components/ui/select.tsx",
-      "source_location": "L13"
-    },
-    {
       "id": "iron_log_src_components_ui_separator",
       "label": "separator.tsx",
       "_origin": "ast",
@@ -10096,17 +10063,6 @@
       "norm_label": "tabstrigger",
       "source_file": "iron-log/src/components/ui/tabs.tsx",
       "source_location": "L25"
-    },
-    {
-      "id": "ref_lucide_react",
-      "label": "lucide-react",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "Iron Log Screens",
-      "file_type": "concept",
-      "norm_label": "lucide-react",
-      "source_file": "iron-log/package.json",
-      "source_location": "L21"
     },
     {
       "id": "ref_react",
@@ -11297,17 +11253,6 @@
       "source_location": "L15"
     },
     {
-      "id": "ref_radix_ui_react_slot",
-      "label": "@radix-ui/react-slot",
-      "_origin": "ast",
-      "community": 24,
-      "community_name": "Package Manifest",
-      "file_type": "concept",
-      "norm_label": "@radix-ui/react-slot",
-      "source_file": "iron-log/package.json",
-      "source_location": "L16"
-    },
-    {
       "id": "ref_radix_ui_react_switch",
       "label": "@radix-ui/react-switch",
       "_origin": "ast",
@@ -11328,6 +11273,17 @@
       "norm_label": "@radix-ui/react-tabs",
       "source_file": "iron-log/package.json",
       "source_location": "L18"
+    },
+    {
+      "id": "ref_react_dom",
+      "label": "react-dom",
+      "_origin": "ast",
+      "community": 24,
+      "community_name": "Package Manifest",
+      "file_type": "concept",
+      "norm_label": "react-dom",
+      "source_file": "iron-log/package.json",
+      "source_location": "L24"
     },
     {
       "id": "ref_tailwind_merge",
@@ -11528,6 +11484,94 @@
       "source_location": "L1"
     },
     {
+      "id": "iron_log_src_app_not_found",
+      "label": "not-found.tsx",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "not-found.tsx",
+      "source_file": "iron-log/src/app/not-found.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_charts_sparkline",
+      "label": "sparkline.tsx",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "sparkline.tsx",
+      "source_file": "iron-log/src/components/charts/sparkline.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_exercise_progress_card",
+      "label": "exercise-progress-card.tsx",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "exercise-progress-card.tsx",
+      "source_file": "iron-log/src/components/dashboard/exercise-progress-card.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_exercise_progress_card_columns",
+      "label": "COLUMNS",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "columns",
+      "source_file": "iron-log/src/components/dashboard/exercise-progress-card.tsx",
+      "source_location": "L23"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_kpi_grid",
+      "label": "kpi-grid.tsx",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "kpi-grid.tsx",
+      "source_file": "iron-log/src/components/dashboard/kpi-grid.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_stat_tile",
+      "label": "stat-tile.tsx",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "stat-tile.tsx",
+      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_stat_tile_tone",
+      "label": "TONE",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "tone",
+      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
+      "source_location": "L22"
+    },
+    {
+      "id": "iron_log_src_components_dashboard_studio_hero",
+      "label": "studio-hero.tsx",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "code",
+      "norm_label": "studio-hero.tsx",
+      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
+      "source_location": "L1"
+    },
+    {
       "id": "iron_log_src_components_ui_badge",
       "label": "badge.tsx",
       "_origin": "ast",
@@ -11583,37 +11627,26 @@
       "source_location": "L9"
     },
     {
-      "id": "iron_log_src_components_ui_toast",
-      "label": "toast.tsx",
+      "id": "iron_log_src_components_ui_select",
+      "label": "select.tsx",
       "_origin": "ast",
       "community": 29,
       "community_name": "Iron Log UI Primitives",
       "file_type": "code",
-      "norm_label": "toast.tsx",
-      "source_file": "iron-log/src/components/ui/toast.tsx",
+      "norm_label": "select.tsx",
+      "source_file": "iron-log/src/components/ui/select.tsx",
       "source_location": "L1"
     },
     {
-      "id": "iron_log_src_components_ui_toast_toastcontext",
-      "label": "ToastContext",
+      "id": "iron_log_src_components_ui_select_select",
+      "label": "Select",
       "_origin": "ast",
       "community": 29,
       "community_name": "Iron Log UI Primitives",
       "file_type": "code",
-      "norm_label": "toastcontext",
-      "source_file": "iron-log/src/components/ui/toast.tsx",
-      "source_location": "L41"
-    },
-    {
-      "id": "iron_log_src_components_workout_add_exercise_form",
-      "label": "add-exercise-form.tsx",
-      "_origin": "ast",
-      "community": 29,
-      "community_name": "Iron Log UI Primitives",
-      "file_type": "code",
-      "norm_label": "add-exercise-form.tsx",
-      "source_file": "iron-log/src/components/workout/add-exercise-form.tsx",
-      "source_location": "L1"
+      "norm_label": "select",
+      "source_file": "iron-log/src/components/ui/select.tsx",
+      "source_location": "L13"
     },
     {
       "id": "ref_class_variance_authority",
@@ -11625,6 +11658,39 @@
       "norm_label": "class-variance-authority",
       "source_file": "iron-log/package.json",
       "source_location": "L19"
+    },
+    {
+      "id": "ref_lucide_react",
+      "label": "lucide-react",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "concept",
+      "norm_label": "lucide-react",
+      "source_file": "iron-log/package.json",
+      "source_location": "L21"
+    },
+    {
+      "id": "ref_next",
+      "label": "next",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "concept",
+      "norm_label": "next",
+      "source_file": "iron-log/package.json",
+      "source_location": "L22"
+    },
+    {
+      "id": "ref_radix_ui_react_slot",
+      "label": "@radix-ui/react-slot",
+      "_origin": "ast",
+      "community": 29,
+      "community_name": "Iron Log UI Primitives",
+      "file_type": "concept",
+      "norm_label": "@radix-ui/react-slot",
+      "source_file": "iron-log/package.json",
+      "source_location": "L16"
     },
     {
       "id": "local_sync_server",
@@ -11845,17 +11911,6 @@
       "norm_label": "history/page.tsx",
       "source_file": "iron-log/src/app/history/page.tsx",
       "source_location": "L1"
-    },
-    {
-      "id": "ref_react_dom",
-      "label": "react-dom",
-      "_origin": "ast",
-      "community": 31,
-      "community_name": "Iron Log Standalone Routes",
-      "file_type": "concept",
-      "norm_label": "react-dom",
-      "source_file": "iron-log/package.json",
-      "source_location": "L24"
     },
     {
       "id": "life_os_prayer_times",
@@ -12155,28 +12210,6 @@
       "source_location": "L36"
     },
     {
-      "id": "iron_log_src_components_workout_exercise_logger",
-      "label": "exercise-logger.tsx",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "exercise-logger.tsx",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_components_workout_exercise_logger_reason_text",
-      "label": "REASON_TEXT",
-      "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
-      "file_type": "code",
-      "norm_label": "reason_text",
-      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
-      "source_location": "L56"
-    },
-    {
       "id": "iron_log_src_lib_metrics",
       "label": "metrics.ts",
       "_origin": "ast",
@@ -12188,48 +12221,70 @@
       "source_location": "L1"
     },
     {
+      "id": "iron_log_src_components_ui_toast",
+      "label": "toast.tsx",
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "toast.tsx",
+      "source_file": "iron-log/src/components/ui/toast.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_ui_toast_toastcontext",
+      "label": "ToastContext",
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "toastcontext",
+      "source_file": "iron-log/src/components/ui/toast.tsx",
+      "source_location": "L41"
+    },
+    {
+      "id": "iron_log_src_components_workout_add_exercise_form",
+      "label": "add-exercise-form.tsx",
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "add-exercise-form.tsx",
+      "source_file": "iron-log/src/components/workout/add-exercise-form.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_workout_exercise_logger",
+      "label": "exercise-logger.tsx",
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "exercise-logger.tsx",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "iron_log_src_components_workout_exercise_logger_reason_text",
+      "label": "REASON_TEXT",
+      "_origin": "ast",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
+      "file_type": "code",
+      "norm_label": "reason_text",
+      "source_file": "iron-log/src/components/workout/exercise-logger.tsx",
+      "source_location": "L56"
+    },
+    {
       "id": "iron_log_src_lib_types_muscle_group_labels",
       "label": "MUSCLE_GROUP_LABELS",
       "_origin": "ast",
-      "community": 4,
-      "community_name": "Iron Log Metrics & Logger",
+      "community": 40,
+      "community_name": "Iron Log Stat Tiles",
       "file_type": "code",
       "norm_label": "muscle_group_labels",
       "source_file": "iron-log/src/lib/types.ts",
       "source_location": "L32"
-    },
-    {
-      "id": "iron_log_src_components_charts_sparkline",
-      "label": "sparkline.tsx",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "Iron Log Stat Tiles",
-      "file_type": "code",
-      "norm_label": "sparkline.tsx",
-      "source_file": "iron-log/src/components/charts/sparkline.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_stat_tile",
-      "label": "stat-tile.tsx",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "Iron Log Stat Tiles",
-      "file_type": "code",
-      "norm_label": "stat-tile.tsx",
-      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_stat_tile_tone",
-      "label": "TONE",
-      "_origin": "ast",
-      "community": 40,
-      "community_name": "Iron Log Stat Tiles",
-      "file_type": "code",
-      "norm_label": "tone",
-      "source_file": "iron-log/src/components/dashboard/stat-tile.tsx",
-      "source_location": "L22"
     },
     {
       "id": "iron_log_scripts_standalone_shims_next_navigation",
@@ -12505,28 +12560,6 @@
       "norm_label": "next-link.tsx",
       "source_file": "iron-log/scripts/standalone/shims/next-link.tsx",
       "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_app_not_found",
-      "label": "not-found.tsx",
-      "_origin": "ast",
-      "community": 55,
-      "community_name": "Not Found Page",
-      "file_type": "code",
-      "norm_label": "not-found.tsx",
-      "source_file": "iron-log/src/app/not-found.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "ref_next",
-      "label": "next",
-      "_origin": "ast",
-      "community": 55,
-      "community_name": "Not Found Page",
-      "file_type": "concept",
-      "norm_label": "next",
-      "source_file": "iron-log/package.json",
-      "source_location": "L22"
     },
     {
       "id": "life_os_sw",
@@ -12815,47 +12848,14 @@
       "source_location": "L14"
     },
     {
-      "id": "iron_log_src_components_dashboard_exercise_progress_card",
-      "label": "exercise-progress-card.tsx",
+      "id": "iron_log_src_components_dashboard_stall_card",
+      "label": "stall-card.tsx",
       "_origin": "ast",
       "community": 9,
       "community_name": "Iron Log Dashboard",
       "file_type": "code",
-      "norm_label": "exercise-progress-card.tsx",
-      "source_file": "iron-log/src/components/dashboard/exercise-progress-card.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_exercise_progress_card_columns",
-      "label": "COLUMNS",
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "columns",
-      "source_file": "iron-log/src/components/dashboard/exercise-progress-card.tsx",
-      "source_location": "L23"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_kpi_grid",
-      "label": "kpi-grid.tsx",
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "kpi-grid.tsx",
-      "source_file": "iron-log/src/components/dashboard/kpi-grid.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "iron_log_src_components_dashboard_studio_hero",
-      "label": "studio-hero.tsx",
-      "_origin": "ast",
-      "community": 9,
-      "community_name": "Iron Log Dashboard",
-      "file_type": "code",
-      "norm_label": "studio-hero.tsx",
-      "source_file": "iron-log/src/components/dashboard/studio-hero.tsx",
+      "norm_label": "stall-card.tsx",
+      "source_file": "iron-log/src/components/dashboard/stall-card.tsx",
       "source_location": "L1"
     },
     {
@@ -13604,6 +13604,70 @@
       "source_url": null
     },
     {
+      "id": "claude_life_os_2027",
+      "label": "2027 Life OS",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "2027 life os",
+      "rationale": null,
+      "source_file": "CLAUDE.md",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "step_arena_app",
+      "label": "STEP Study Arena",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 49,
+      "community_name": "STEP Study Arena",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "step study arena",
+      "rationale": null,
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "step_arena_ask_tutor",
+      "label": "askTutor",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 49,
+      "community_name": "STEP Study Arena",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "asktutor",
+      "rationale": "Handles communication with the AI Tutor, supporting both API and local Socratic fallback.",
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "step_arena_log_act",
+      "label": "logAct",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 49,
+      "community_name": "STEP Study Arena",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "logact",
+      "rationale": "Persists user activity metrics to localStorage.",
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "suhail_setup_five_shot_routine",
       "label": "\u0631\u0648\u062a\u064a\u0646 \u0627\u0644\u0644\u0642\u0637\u0627\u062a \u0627\u0644\u062e\u0645\u0633 (Five-Shot Routine)",
       "_origin": "semantic",
@@ -13758,6 +13822,38 @@
       "source_url": null
     },
     {
+      "id": "step_arena_sync_local",
+      "label": "syncLocal",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "STEP Arena Sync",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "synclocal",
+      "rationale": "Checks if the application is running locally to enable synchronization.",
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "step_arena_sync_out",
+      "label": "syncOut",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 65,
+      "community_name": "STEP Arena Sync",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "syncout",
+      "rationale": "Mirrors localStorage to a local sync server.",
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
       "id": "suhail_growth_customer_database",
       "label": "\u0642\u0627\u0639\u062f\u0629 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621 (Customer Database / Occasion Field)",
       "_origin": "semantic",
@@ -13878,6 +13974,22 @@
       "norm_label": "\u0627\u0646\u0634\u0631 \u0627\u0644\u0627\u0633\u0639\u0627\u0631 \u0639\u0644\u0646\u0627 (publish prices publicly)",
       "rationale": "Identified as the single biggest weakness across every competitor.",
       "source_file": "Suhail-Project/\u062e\u0637\u0648\u0627\u062a-\u062a\u0623\u0633\u064a\u0633-\u0633\u0647\u064a\u0644.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "ats_resume_ziyad_2026_ziyad_almutairi",
+      "label": "Ziyad Almutairi",
+      "_origin": "semantic",
+      "author": null,
+      "captured_at": null,
+      "community": 70,
+      "community_name": "ATS_Resume_Ziyad_2026",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "ziyad almutairi",
+      "rationale": null,
+      "source_file": "ATS_Resume_Ziyad_2026.html",
       "source_location": null,
       "source_url": null
     },
@@ -14006,113 +14118,9 @@
       "source_url": null
     },
     {
-      "id": "step_arena_app",
-      "label": "STEP Study Arena",
-      "author": null,
-      "captured_at": null,
-      "community": 49,
-      "community_name": "STEP Study Arena",
-      "contributor": null,
-      "file_type": "code",
-      "norm_label": "step study arena",
-      "rationale": null,
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "step_arena_ask_tutor",
-      "label": "askTutor",
-      "author": null,
-      "captured_at": null,
-      "community": 49,
-      "community_name": "STEP Study Arena",
-      "contributor": null,
-      "file_type": "code",
-      "norm_label": "asktutor",
-      "rationale": "Handles communication with the AI Tutor, supporting both API and local Socratic fallback.",
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "step_arena_log_act",
-      "label": "logAct",
-      "author": null,
-      "captured_at": null,
-      "community": 49,
-      "community_name": "STEP Study Arena",
-      "contributor": null,
-      "file_type": "code",
-      "norm_label": "logact",
-      "rationale": "Persists user activity metrics to localStorage.",
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "step_arena_sync_local",
-      "label": "syncLocal",
-      "author": null,
-      "captured_at": null,
-      "community": 65,
-      "community_name": "STEP Arena Sync",
-      "contributor": null,
-      "file_type": "code",
-      "norm_label": "synclocal",
-      "rationale": "Checks if the application is running locally to enable synchronization.",
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "step_arena_sync_out",
-      "label": "syncOut",
-      "author": null,
-      "captured_at": null,
-      "community": 65,
-      "community_name": "STEP Arena Sync",
-      "contributor": null,
-      "file_type": "code",
-      "norm_label": "syncout",
-      "rationale": "Mirrors localStorage to a local sync server.",
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "ats_resume_ziyad_2026_ziyad_almutairi",
-      "label": "Ziyad Almutairi",
-      "author": null,
-      "captured_at": null,
-      "community": 70,
-      "community_name": "ATS_Resume_Ziyad_2026",
-      "contributor": null,
-      "file_type": "code",
-      "norm_label": "ziyad almutairi",
-      "rationale": null,
-      "source_file": "ATS_Resume_Ziyad_2026.html",
-      "source_location": null,
-      "source_url": null
-    },
-    {
-      "id": "claude_life_os_2027",
-      "label": "2027 Life OS",
-      "author": null,
-      "captured_at": null,
-      "community": 72,
-      "community_name": "CLAUDE",
-      "contributor": null,
-      "file_type": "document",
-      "norm_label": "2027 life os",
-      "rationale": null,
-      "source_file": "CLAUDE.md",
-      "source_location": null,
-      "source_url": null
-    },
-    {
       "id": "iron_log_src_components_ui_tabs_tabs",
       "label": "iron_log_src_components_ui_tabs_tabs",
+      "_origin": "semantic",
       "community": 1,
       "community_name": "Iron Log Screens",
       "external": true,
@@ -14124,6 +14132,7 @@
     {
       "id": "ref_node_child_process",
       "label": "ref_node_child_process",
+      "_origin": "semantic",
       "community": 19,
       "community_name": "Life OS Build Pipeline",
       "external": true,
@@ -14135,6 +14144,7 @@
     {
       "id": "ref_node_fs",
       "label": "ref_node_fs",
+      "_origin": "semantic",
       "community": 19,
       "community_name": "Life OS Build Pipeline",
       "external": true,
@@ -14146,6 +14156,7 @@
     {
       "id": "ref_node_os",
       "label": "ref_node_os",
+      "_origin": "semantic",
       "community": 19,
       "community_name": "Life OS Build Pipeline",
       "external": true,
@@ -14157,6 +14168,7 @@
     {
       "id": "ref_node_path",
       "label": "ref_node_path",
+      "_origin": "semantic",
       "community": 19,
       "community_name": "Life OS Build Pipeline",
       "external": true,
@@ -14168,6 +14180,7 @@
     {
       "id": "ref_node_url",
       "label": "ref_node_url",
+      "_origin": "semantic",
       "community": 19,
       "community_name": "Life OS Build Pipeline",
       "external": true,
@@ -14179,6 +14192,7 @@
     {
       "id": "ref_vm",
       "label": "ref_vm",
+      "_origin": "semantic",
       "community": 2,
       "community_name": "Report Agent & Charts",
       "external": true,
@@ -14190,6 +14204,7 @@
     {
       "id": "ref_fs",
       "label": "ref_fs",
+      "_origin": "semantic",
       "community": 3,
       "community_name": "Sync Server & Prayer Times",
       "external": true,
@@ -14201,6 +14216,7 @@
     {
       "id": "ref_http",
       "label": "ref_http",
+      "_origin": "semantic",
       "community": 3,
       "community_name": "Sync Server & Prayer Times",
       "external": true,
@@ -14212,6 +14228,7 @@
     {
       "id": "ref_path",
       "label": "ref_path",
+      "_origin": "semantic",
       "community": 3,
       "community_name": "Sync Server & Prayer Times",
       "external": true,
@@ -14223,6 +14240,7 @@
     {
       "id": "iron_log_standalone_index_al",
       "label": "aL (Database Loader)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14234,6 +14252,7 @@
     {
       "id": "iron_log_standalone_index_bl",
       "label": "bL (IronLogProvider)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14245,6 +14264,7 @@
     {
       "id": "iron_log_standalone_index_cl",
       "label": "Cl (Database Initializer)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14256,6 +14276,7 @@
     {
       "id": "iron_log_standalone_index_kd",
       "label": "Kd (useHash Hook)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14267,6 +14288,7 @@
     {
       "id": "iron_log_standalone_index_ll",
       "label": "LL (App Layout)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14278,6 +14300,7 @@
     {
       "id": "iron_log_standalone_index_os",
       "label": "Os (Link Component)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14289,6 +14312,7 @@
     {
       "id": "iron_log_standalone_index_p0",
       "label": "P0 (RestTimer UI)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14300,6 +14324,7 @@
     {
       "id": "iron_log_standalone_index_q0",
       "label": "q0 (RestTimerProvider)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14311,6 +14336,7 @@
     {
       "id": "iron_log_standalone_index_r0",
       "label": "R0 (Navigation Component)",
+      "_origin": "semantic",
       "community": 38,
       "community_name": "Iron Log Bundled Runtime",
       "file_type": "code",
@@ -14320,74 +14346,9 @@
       "verification": "unverified"
     },
     {
-      "id": "hub_daykey",
-      "label": "dayKey",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "code",
-      "norm_label": "daykey",
-      "source_file": "hub.html"
-    },
-    {
-      "id": "hub_html",
-      "label": "Hub Page",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "code",
-      "norm_label": "hub page",
-      "rationale": "A unified center for the Life OS system and knowledge map, acting as a read-only dashboard.",
-      "source_file": "hub.html"
-    },
-    {
-      "id": "hub_settile",
-      "label": "setTile",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "code",
-      "norm_label": "settile",
-      "source_file": "hub.html"
-    },
-    {
-      "id": "hub_state_fetch",
-      "label": "State Fetcher",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "code",
-      "norm_label": "state fetcher",
-      "rationale": "Fetches the system state from /state?project=lifeos to populate dashboard tiles.",
-      "source_file": "hub.html"
-    },
-    {
-      "id": "hub_sky",
-      "label": "Sky System",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "concept",
-      "norm_label": "sky system",
-      "rationale": "Dynamic background system that changes based on the time of day (6 phases).",
-      "source_file": "hub.html"
-    },
-    {
-      "id": "apple_touch_icon_png",
-      "label": "Apple Touch Icon",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "image",
-      "norm_label": "apple touch icon",
-      "source_file": "apple-touch-icon.png"
-    },
-    {
-      "id": "icon_192_png",
-      "label": "Icon 192px",
-      "community": 42,
-      "community_name": "Unified Hub Page",
-      "file_type": "image",
-      "norm_label": "icon 192px",
-      "source_file": "icon-192.png"
-    },
-    {
       "id": "iron_log_standalone_index_html",
       "label": "React DOM Standalone",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "code",
@@ -14398,6 +14359,7 @@
     {
       "id": "lucide_icons",
       "label": "Lucide Icons",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "code",
@@ -14408,6 +14370,7 @@
     {
       "id": "event_system",
       "label": "React Synthetic Event System",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "concept",
@@ -14418,6 +14381,7 @@
     {
       "id": "react_dom_client",
       "label": "React DOM Client",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "concept",
@@ -14428,6 +14392,7 @@
     {
       "id": "react_hooks",
       "label": "React Hooks Implementation",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "concept",
@@ -14438,6 +14403,7 @@
     {
       "id": "react_reconciler",
       "label": "React Reconciler",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "concept",
@@ -14448,6 +14414,7 @@
     {
       "id": "view_transition_api",
       "label": "View Transition Integration",
+      "_origin": "semantic",
       "community": 43,
       "community_name": "React & Icon Vendors",
       "file_type": "concept",
@@ -14458,6 +14425,7 @@
     {
       "id": "step_arena_aitutor",
       "label": "AiTutor",
+      "_origin": "semantic",
       "community": 49,
       "community_name": "STEP Study Arena",
       "file_type": "code",
@@ -14468,6 +14436,7 @@
     {
       "id": "step_arena_mockexam",
       "label": "MockExam",
+      "_origin": "semantic",
       "community": 49,
       "community_name": "STEP Study Arena",
       "file_type": "code",
@@ -14476,26 +14445,19 @@
       "source_file": "step-arena.html"
     },
     {
-      "id": "hub_paintsky",
-      "label": "paintSky",
-      "community": 59,
-      "community_name": "Hub Sky Rendering",
-      "file_type": "code",
-      "norm_label": "paintsky",
-      "source_file": "hub.html"
-    },
-    {
-      "id": "hub_skyat",
-      "label": "skyAt",
-      "community": 59,
-      "community_name": "Hub Sky Rendering",
-      "file_type": "code",
-      "norm_label": "skyat",
-      "source_file": "hub.html"
+      "id": "apple_touch_icon_png",
+      "label": "Apple Touch Icon",
+      "_origin": "semantic",
+      "community": 55,
+      "community_name": "Not Found Page",
+      "file_type": "image",
+      "norm_label": "apple touch icon",
+      "source_file": "apple-touch-icon.png"
     },
     {
       "id": "iron_log_standalone_index",
       "label": "Iron Log Standalone",
+      "_origin": "semantic",
       "community": 60,
       "community_name": "Iron Log Standalone Entry",
       "file_type": "code",
@@ -14506,6 +14468,7 @@
     {
       "id": "react_internals",
       "label": "React Internals",
+      "_origin": "semantic",
       "community": 60,
       "community_name": "Iron Log Standalone Entry",
       "file_type": "code",
@@ -14516,6 +14479,7 @@
     {
       "id": "iron_log_standalone_index_e",
       "label": "E (Class Merger)",
+      "_origin": "semantic",
       "community": 61,
       "community_name": "Tailwind Merge Utils",
       "file_type": "code",
@@ -14527,6 +14491,7 @@
     {
       "id": "iron_log_standalone_index_ut",
       "label": "uT (Tailwind Merge Utility)",
+      "_origin": "semantic",
       "community": 61,
       "community_name": "Tailwind Merge Utils",
       "file_type": "code",
@@ -14538,6 +14503,7 @@
     {
       "id": "iron_log_standalone_index_gc",
       "label": "gc (Progress Dashboard)",
+      "_origin": "semantic",
       "community": 62,
       "community_name": "Progress Dashboard",
       "file_type": "code",
@@ -14549,6 +14515,7 @@
     {
       "id": "iron_log_standalone_index_jr",
       "label": "Jr (Summary Calculator)",
+      "_origin": "semantic",
       "community": 62,
       "community_name": "Progress Dashboard",
       "file_type": "code",
@@ -14560,6 +14527,7 @@
     {
       "id": "iron_log_src_app_globals",
       "label": "iron_log_src_app_globals",
+      "_origin": "semantic",
       "community": 7,
       "community_name": "Iron Log Theme & Layout",
       "external": true,
@@ -14571,6 +14539,7 @@
     {
       "id": "icon_512_png",
       "label": "Icon 512px",
+      "_origin": "semantic",
       "community": 74,
       "community_name": "icon-512",
       "file_type": "image",
@@ -14580,6 +14549,7 @@
     {
       "id": "iron_log_standalone_index_e0",
       "label": "E0 (ThemeProvider)",
+      "_origin": "semantic",
       "community": 75,
       "community_name": "Iron Log index",
       "file_type": "code",
@@ -14591,12 +14561,164 @@
     {
       "id": "iron_log_readme",
       "label": "Iron Log Documentation",
+      "_origin": "semantic",
       "community": 8,
       "community_name": "Iron Log Repository",
       "file_type": "document",
       "norm_label": "iron log documentation",
       "rationale": "Technical documentation for the Iron Log workout tracker, detailing design decisions like Double Progression and Epley 1RM.",
       "source_file": "iron-log/README.md"
+    },
+    {
+      "id": "icon_192_png",
+      "label": "Icon 192px",
+      "_origin": "semantic",
+      "community": 84,
+      "community_name": "Icon 192px",
+      "file_type": "image",
+      "norm_label": "icon 192px",
+      "source_file": "icon-192.png"
+    },
+    {
+      "id": "graphify_graph",
+      "label": "Knowledge Graph",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "knowledge graph",
+      "rationale": null,
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "hub_html",
+      "label": "The Hub (\u0627\u0644\u0645\u0631\u0643\u0632)",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "the hub (\u0627\u0644\u0645\u0631\u0643\u0632)",
+      "rationale": "A unified dashboard for the Life OS ecosystem, designed to be independent of the main app bundle to ensure availability during rebuilds.",
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "hub_sky",
+      "label": "Sky Engine",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "sky engine",
+      "rationale": "Dynamic background system that reflects the current time of day using six distinct phases (night, fajr, sunrise, day, asr, maghrib).",
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "hub_state_fetcher",
+      "label": "State Fetcher",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "code",
+      "norm_label": "state fetcher",
+      "rationale": "Reads system state from disk via /state endpoint; strictly read-only to prevent data collisions with the main app.",
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "ironlog_state",
+      "label": "Iron Log Data",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "iron log data",
+      "rationale": "External project data for gym and physical activity tracking.",
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "step_state",
+      "label": "STEP Data",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "concept",
+      "norm_label": "step data",
+      "rationale": "External project data for STEP exam/activity progress.",
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "graphify_report",
+      "label": "Graph Report",
+      "author": null,
+      "captured_at": null,
+      "community": 42,
+      "community_name": "Unified Hub Page",
+      "contributor": null,
+      "file_type": "document",
+      "norm_label": "graph report",
+      "rationale": null,
+      "source_file": "hub.html",
+      "source_location": null,
+      "source_url": null
+    },
+    {
+      "id": "hub_paintsky",
+      "label": "paintSky",
+      "community": 59,
+      "community_name": "Hub paintSky & skyAt",
+      "file_type": "code",
+      "norm_label": "paintsky",
+      "source_file": "hub.html"
+    },
+    {
+      "id": "hub_skyat",
+      "label": "skyAt",
+      "community": 59,
+      "community_name": "Hub paintSky & skyAt",
+      "file_type": "code",
+      "norm_label": "skyat",
+      "source_file": "hub.html"
+    },
+    {
+      "id": "hub_daykey",
+      "label": "dayKey",
+      "community": 72,
+      "community_name": "Hub dayKey",
+      "file_type": "code",
+      "norm_label": "daykey",
+      "source_file": "hub.html"
+    },
+    {
+      "id": "hub_settile",
+      "label": "setTile",
+      "community": 83,
+      "community_name": "Hub setTile",
+      "file_type": "code",
+      "norm_label": "settile",
+      "source_file": "hub.html"
     }
   ],
   "links": [
@@ -14778,18 +14900,6 @@
       "context": "call",
       "source_file": "focus-flow/app.js",
       "source_location": "L218",
-      "weight": 1.0
-    },
-    {
-      "source": "focus_flow_app_rendertasks",
-      "target": "focus_flow_app_rendertasks",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "focus-flow/app.js",
-      "source_location": "L219",
       "weight": 1.0
     },
     {
@@ -21262,18 +21372,6 @@
     },
     {
       "source": "lifeos_careertoday",
-      "target": "lifeos_careertoday",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L13695",
-      "weight": 1.0
-    },
-    {
-      "source": "lifeos_careertoday",
       "target": "lifeos_useburst",
       "relation": "calls",
       "_origin": "ast",
@@ -22866,18 +22964,6 @@
       "context": "call",
       "source_file": "LifeOS.jsx",
       "source_location": "L2125",
-      "weight": 1.0
-    },
-    {
-      "source": "lifeos_goalpct",
-      "target": "lifeos_goalpct",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "LifeOS.jsx",
-      "source_location": "L2111",
       "weight": 1.0
     },
     {
@@ -26697,18 +26783,6 @@
       "weight": 1.0
     },
     {
-      "source": "local_sync_server_end",
-      "target": "local_sync_server_end",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "local-sync-server.js",
-      "source_location": "L90",
-      "weight": 1.0
-    },
-    {
       "source": "local_sync_server_fireblock",
       "target": "local_sync_server_readstate",
       "relation": "calls",
@@ -26769,18 +26843,6 @@
       "weight": 1.0
     },
     {
-      "source": "local_sync_server_scheduleroll",
-      "target": "local_sync_server_scheduleroll",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "local-sync-server.js",
-      "source_location": "L518",
-      "weight": 1.0
-    },
-    {
       "source": "local_sync_server_servefile",
       "target": "local_sync_server_end",
       "relation": "calls",
@@ -26790,18 +26852,6 @@
       "context": "call",
       "source_file": "local-sync-server.js",
       "source_location": "L194",
-      "weight": 1.0
-    },
-    {
-      "source": "local_sync_server_servefile",
-      "target": "local_sync_server_servefile",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "local-sync-server.js",
-      "source_location": "L198",
       "weight": 1.0
     },
     {
@@ -27873,18 +27923,6 @@
       "weight": 1.0
     },
     {
-      "source": "report_agent_log",
-      "target": "report_agent_log",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "report-agent.js",
-      "source_location": "L52",
-      "weight": 1.0
-    },
-    {
       "source": "report_agent_lt",
       "target": "report_agent_esc",
       "relation": "calls",
@@ -28086,18 +28124,6 @@
       "context": "call",
       "source_file": "report-agent.js",
       "source_location": "L1405",
-      "weight": 1.0
-    },
-    {
-      "source": "report_agent_watch",
-      "target": "report_agent_watch",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "report-agent.js",
-      "source_location": "L1410",
       "weight": 1.0
     },
     {
@@ -49409,6 +49435,168 @@
       "weight": 1.0
     },
     {
+      "source": "react_hooks",
+      "target": "react_reconciler",
+      "relation": "shares_data_with",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "rationale": "Hooks interact with the fiber's memoizedState and queue for updates.",
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "react_reconciler",
+      "target": "view_transition_api",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "rationale": "The commit phase (BI, Lm) optionally triggers view transitions via u2.",
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "react_dom_client",
+      "target": "react_reconciler",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "rationale": "createRoot calls Wv to initialize the internal fiber root.",
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_bl",
+      "target": "iron_log_standalone_index_al",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_bl",
+      "target": "iron_log_standalone_index_cl",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_e",
+      "target": "iron_log_standalone_index_ut",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_gc",
+      "target": "iron_log_standalone_index_jr",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_ll",
+      "target": "iron_log_standalone_index_p0",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_ll",
+      "target": "iron_log_standalone_index_q0",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_ll",
+      "target": "iron_log_standalone_index_r0",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_r0",
+      "target": "iron_log_standalone_index_kd",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_r0",
+      "target": "iron_log_standalone_index_os",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "step_arena_app",
+      "target": "step_arena_ask_tutor",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "step_arena_app",
+      "target": "step_arena_log_act",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "step_arena_app",
+      "target": "step_arena_aitutor",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "step-arena.html"
+    },
+    {
+      "source": "step_arena_app",
+      "target": "step_arena_mockexam",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "step-arena.html"
+    },
+    {
+      "source": "step_arena_sync_out",
+      "target": "step_arena_sync_local",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "step-arena.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
       "source": "suhail_growth_content_harvesting",
       "target": "suhail_growth_free_photo_delivery",
       "relation": "conceptually_related_to",
@@ -49871,6 +50059,78 @@
       "weight": 1.0
     },
     {
+      "source": "iron_log_readme",
+      "target": "iron_log_src_lib_metrics",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/README.md"
+    },
+    {
+      "source": "iron_log_readme",
+      "target": "iron_log_src_lib_repository",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/README.md"
+    },
+    {
+      "source": "iron_log_readme",
+      "target": "iron_log_src_lib_storage",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/README.md"
+    },
+    {
+      "source": "iron_log_standalone_index_html",
+      "target": "lucide_icons",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_html",
+      "target": "react_hooks",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_html",
+      "target": "react_reconciler",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_ll",
+      "target": "iron_log_standalone_index_bl",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_os",
+      "target": "iron_log_standalone_index_p0",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
       "source": "suhail_landing_service_area",
       "target": "suhail_landing_addon_jubail",
       "relation": "references",
@@ -50025,6 +50285,34 @@
       "weight": 1.0
     },
     {
+      "source": "react_reconciler",
+      "target": "event_system",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "rationale": "The reconciler triggers event listener attachment/detachment during the commit phase (Tp, yf).",
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index_kd",
+      "target": "iron_log_standalone_index_os",
+      "relation": "calls",
+      "_origin": "semantic",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
+      "source": "iron_log_standalone_index",
+      "target": "react_internals",
+      "relation": "references",
+      "_origin": "semantic",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "iron-log/standalone/index.html"
+    },
+    {
       "source": "suhail_landing_addon_jubail",
       "target": "suhail_pricing_recommended_list",
       "relation": "semantically_similar_to",
@@ -50080,31 +50368,20 @@
       "weight": 1.0
     },
     {
-      "source": "react_hooks",
-      "target": "react_reconciler",
-      "relation": "shares_data_with",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "rationale": "Hooks interact with the fiber's memoizedState and queue for updates.",
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "react_reconciler",
-      "target": "view_transition_api",
+      "source": "hub_html",
+      "target": "hub_sky",
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "rationale": "The commit phase (BI, Lm) optionally triggers view transitions via u2.",
-      "source_file": "iron-log/standalone/index.html"
+      "source_file": "hub.html"
     },
     {
-      "source": "react_dom_client",
-      "target": "react_reconciler",
+      "source": "hub_html",
+      "target": "hub_state_fetcher",
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "rationale": "createRoot calls Wv to initialize the internal fiber root.",
-      "source_file": "iron-log/standalone/index.html"
+      "source_file": "hub.html"
     },
     {
       "source": "hub_paintsky",
@@ -50115,150 +50392,8 @@
       "source_file": "hub.html"
     },
     {
-      "source": "hub_state_fetch",
-      "target": "hub_daykey",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "hub.html"
-    },
-    {
-      "source": "hub_state_fetch",
-      "target": "hub_settile",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "hub.html"
-    },
-    {
-      "source": "iron_log_standalone_index_bl",
-      "target": "iron_log_standalone_index_al",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_bl",
-      "target": "iron_log_standalone_index_cl",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_e",
-      "target": "iron_log_standalone_index_ut",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_gc",
-      "target": "iron_log_standalone_index_jr",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_ll",
-      "target": "iron_log_standalone_index_p0",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_ll",
-      "target": "iron_log_standalone_index_q0",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_ll",
-      "target": "iron_log_standalone_index_r0",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_r0",
-      "target": "iron_log_standalone_index_kd",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_r0",
-      "target": "iron_log_standalone_index_os",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "step_arena_app",
-      "target": "step_arena_ask_tutor",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "step_arena_app",
-      "target": "step_arena_log_act",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "step_arena_app",
-      "target": "step_arena_aitutor",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "step-arena.html"
-    },
-    {
-      "source": "step_arena_app",
-      "target": "step_arena_mockexam",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "step-arena.html"
-    },
-    {
-      "source": "step_arena_sync_out",
-      "target": "step_arena_sync_local",
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "step-arena.html",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
       "source": "hub_html",
-      "target": "hub_sky",
-      "relation": "conceptually_related_to",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "hub.html"
-    },
-    {
-      "source": "hub_html",
-      "target": "apple_touch_icon_png",
+      "target": "claude_life_os_2027",
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -50266,109 +50401,43 @@
     },
     {
       "source": "hub_html",
-      "target": "icon_192_png",
+      "target": "graphify_graph",
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "hub.html"
-    },
-    {
-      "source": "iron_log_readme",
-      "target": "iron_log_src_lib_metrics",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/README.md"
-    },
-    {
-      "source": "iron_log_readme",
-      "target": "iron_log_src_lib_repository",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/README.md"
-    },
-    {
-      "source": "iron_log_readme",
-      "target": "iron_log_src_lib_storage",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/README.md"
-    },
-    {
-      "source": "iron_log_standalone_index_html",
-      "target": "lucide_icons",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_html",
-      "target": "react_hooks",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_html",
-      "target": "react_reconciler",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_ll",
-      "target": "iron_log_standalone_index_bl",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "iron_log_standalone_index_os",
-      "target": "iron_log_standalone_index_p0",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "iron-log/standalone/index.html"
-    },
-    {
-      "source": "react_reconciler",
-      "target": "event_system",
-      "relation": "calls",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "rationale": "The reconciler triggers event listener attachment/detachment during the commit phase (Tp, yf).",
-      "source_file": "iron-log/standalone/index.html"
     },
     {
       "source": "hub_html",
-      "target": "hub_state_fetch",
-      "relation": "calls",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "rationale": "The script block within hub.html initiates the fetch request.",
+      "target": "graphify_report",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
       "source_file": "hub.html"
     },
     {
-      "source": "iron_log_standalone_index_kd",
-      "target": "iron_log_standalone_index_os",
-      "relation": "calls",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": "iron-log/standalone/index.html"
+      "source": "hub_state_fetcher",
+      "target": "claude_life_os_2027",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hub.html"
     },
     {
-      "source": "iron_log_standalone_index",
-      "target": "react_internals",
+      "source": "hub_state_fetcher",
+      "target": "ironlog_state",
       "relation": "references",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": "iron-log/standalone/index.html"
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hub.html"
+    },
+    {
+      "source": "hub_state_fetcher",
+      "target": "step_state",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "hub.html"
     }
   ],
   "hyperedges": [
@@ -50459,7 +50528,7 @@
       "id": "life_os_dashboard_flow",
       "label": "Life OS Dashboard Data Flow",
       "nodes": [
-        "hub_state_fetch",
+        "hub_state_fetcher",
         "hub_settile",
         "hub_daykey"
       ],
@@ -50535,5 +50604,5 @@
       "source_file": "iron-log/standalone/index.html"
     }
   ],
-  "built_at_commit": "5070b5e3837c87a771cd47dfb7e2786e269ac25b"
+  "built_at_commit": "679ad200c16bb86568f56ee2b7a84036250b4008"
 }
