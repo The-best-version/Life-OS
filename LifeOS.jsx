@@ -132,7 +132,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 
-import { fixHour, prayerTimes } from "./prayer-times.mjs";
+import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
 
 /* The state itself — the day boundary, the seeds, the shapes, the migration
    and the discipline score — lives in ./life-state.mjs so that `node --test`
@@ -147,6 +147,8 @@ import {
   appShape,
   ARC,
   badHabitShape,
+  BLOCK_IDS,
+  blockRank,
   bookShape,
   carryOf,
   clampGoal,
@@ -190,6 +192,7 @@ import {
   placeShape,
   QUARTERS,
   READ_ACTIVE,
+  remainingIn,
   REPEATS,
   rollDay,
   rows,
@@ -207,6 +210,7 @@ import {
   UNI_DAYS,
   UNI_TASK_KINDS,
   uniDayOf,
+  uniPending,
   uniShape,
   uniTaskShape,
   URGE_MOODS,
@@ -754,6 +758,7 @@ function NowStamp({ compact = false }) {
  *  hides in a saved payload.
  * --------------------------------------------------------------------- */
 const NAV_META = {
+  today: { label: "اليوم", short: "اليوم", icon: Compass },
   routine: { label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
   agenda: { label: "التقويم", short: "التقويم", icon: CalendarDays },
   uni: { label: "الجامعة", short: "الجامعة", icon: GraduationCap },
@@ -838,14 +843,26 @@ const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
    From 2027 onward this is the arc and nothing else, so no goal's year ever
    stops being selectable underneath it. */
 /* --- routine groups -------------------------------------------------- */
-const GROUPS = [
-  { id: "morning", label: "الصباح", icon: Sunrise, tint: "#FFB020" },
-  { id: "afternoon", label: "بعد الظهر", icon: Sun, tint: "#FF7A45" },
-  { id: "asr", label: "بعد العصر", icon: Sunset, tint: "#FF4D8D" },
-  { id: "maghrib", label: "بعد المغرب", icon: Moon, tint: "#9D5CFF" },
-  { id: "postisha", label: "بعد العشاء", icon: MoonStar, tint: "#00C2FF" },
-  { id: "night", label: "قبل النوم", icon: Bed, tint: "#5B8CFF" },
-];
+/* The six blocks, drawn. `BLOCK_IDS` in life-state.mjs is the canonical
+   order — the one the day runs in and the one `remainingIn` ranks «فاتك»
+   against — and this only fastens the label, the icon and the tint onto
+   each id, exactly like `NAV_META` does for the tabs. A block added there
+   with no entry here renders nameless, which is a bug you see on the first
+   open rather than one that hides in a saved payload. */
+const BLOCK_META = {
+  morning: { label: "الصباح", icon: Sunrise, tint: "#FFB020" },
+  afternoon: { label: "بعد الظهر", icon: Sun, tint: "#FF7A45" },
+  asr: { label: "بعد العصر", icon: Sunset, tint: "#FF4D8D" },
+  maghrib: { label: "بعد المغرب", icon: Moon, tint: "#9D5CFF" },
+  postisha: { label: "بعد العشاء", icon: MoonStar, tint: "#00C2FF" },
+  night: { label: "قبل النوم", icon: Bed, tint: "#5B8CFF" },
+};
+const GROUPS = BLOCK_IDS.map((id) => ({ id, ...BLOCK_META[id] }));
+const GROUP_BY_ID = new Map(GROUPS.map((g) => [g.id, g]));
+/* A habit whose block this build no longer has still has to render. The
+   night block is the honest place for it: last in the day, so nothing is
+   announced as missed on the strength of a damaged payload. */
+const groupOf = (id) => GROUP_BY_ID.get(id) || GROUPS[GROUPS.length - 1];
 
 /* --- Eisenhower quadrants -------------------------------------------- */
 const QUADRANTS = [
@@ -1142,6 +1159,9 @@ async function adoptDisk() {
 }
 
 const UI_KEY = "life-os-2027:ui";
+/* Per page session, not per profile: its only job is to tell a fresh open
+   from a reload, so it has to die with the tab. */
+const OPENED_KEY = "life-os-2027:opened";
 
 /* --- one window at a time --------------------------------------------- *
  *  Every change writes the whole payload, so two open copies clobber each
@@ -3951,6 +3971,616 @@ function TopThree({ state, setState }) {
 }
 
 /* ==================================================================== *
+ *  MODULE 0 — اليوم
+ *
+ *  The screen the app opens on, and the only one that answers «وش عليّ
+ *  الآن؟» without being asked twice. Nothing here is a new store: the
+ *  prayers are computed, the three tasks are the same `TopThree` the routine
+ *  shows, the habits are the same flat array ticked through the same
+ *  `useHabitTick`, and the lectures and the deadlines are read off the
+ *  university desk and the calendar where they already live. A second copy
+ *  of any of it would be a second day that disagrees with the first.
+ *
+ *  It is deliberately short. A landing screen that lists everything is the
+ *  fifteen-tab sidebar again with extra steps — what belongs here is what
+ *  the next hour needs, and a way into the screen that owns the rest.
+ * ==================================================================== */
+
+/* How long a ticked habit stays on «اليوم» before it drops out of the list.
+   Longer than the 700ms reward burst, so the animation finishes on a row
+   that is still there. */
+const REWARD_HOLD = 1100;
+
+/* One habit, light. No drag, no arrows, no delete: this screen is for doing
+   them, and the routine screen is where they are managed. The payout is the
+   same, because a completion that animates nothing is a bug wherever it is
+   ticked. */
+function TodayHabit({ habit, book, onToggle, late = false }) {
+  const [burst, fireBurst] = useBurst(700);
+  const g = groupOf(habit.group);
+  const Icon = g.icon;
+
+  const handle = () => {
+    if (!habit.done) fireBurst();
+    onToggle();
+  };
+
+  return (
+    <div
+      className={`group flex items-center gap-2 rounded-xl border px-2 py-1 transition-all duration-200${
+        burst ? " los-reward" : ""
+      }`}
+      style={{
+        borderColor: burst
+          ? T.primary
+          : late
+            ? `${T.accent}2E`
+            : "rgba(255,255,255,0.07)",
+        backgroundColor: burst
+          ? `${T.primary}26`
+          : late
+            ? `${T.accent}0D`
+            : "rgba(255,255,255,0.025)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
+        style={{
+          borderColor: `${g.tint}33`,
+          backgroundColor: `${g.tint}14`,
+          color: g.tint,
+        }}
+        title={g.label}
+      >
+        <Icon size={13} />
+      </span>
+      <Checkbox
+        checked={habit.done}
+        onToggle={handle}
+        label={habit.label}
+        tint={T.primary}
+        size="sm"
+      />
+      {habit.core && (
+        <Star
+          size={12}
+          aria-label="عادة أساسية"
+          className="shrink-0"
+          fill={T.accent}
+          style={{ color: T.accent, filter: `drop-shadow(0 0 5px ${T.accent}AA)` }}
+        />
+      )}
+      {late && (
+        <span
+          className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold"
+          style={{ backgroundColor: `${T.accent}1F`, color: T.accent }}
+        >
+          {g.label}
+        </span>
+      )}
+      {book && (
+        <span
+          title={`مربوطة بـ«${book.title}»`}
+          className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] sm:inline-flex"
+          style={{ backgroundColor: `${T.accent}1A`, color: T.accent }}
+        >
+          <Library size={10} />
+          <span className="max-w-[7rem] truncate">{book.title}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* A row on the two cards at the foot of the screen — a lecture, a
+   deliverable, an exam. One shape for all three so the eye reads them the
+   same way: a tint, what it is, and when. */
+function TodayLine({
+  tint,
+  icon: Icon,
+  title,
+  sub,
+  when,
+  time,
+  hot = false,
+  now = false,
+}) {
+  return (
+    <div
+      className="flex items-center gap-2.5 rounded-xl border px-2.5 py-2"
+      style={{
+        borderColor: now
+          ? `${T.cta}59`
+          : hot
+            ? `${T.danger}3D`
+            : "rgba(255,255,255,0.07)",
+        backgroundColor: now
+          ? `${T.cta}1A`
+          : hot
+            ? `${T.danger}0F`
+            : "rgba(255,255,255,0.025)",
+        boxShadow: now ? `0 0 22px -10px ${T.cta}` : "none",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+        style={{ borderColor: `${tint}33`, backgroundColor: `${tint}14`, color: tint }}
+      >
+        <Icon size={14} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-bold" style={{ color: T.fg }}>
+          {title}
+        </p>
+        {sub && (
+          <p className="truncate text-[10.5px]" style={{ color: T.faint }}>
+            {sub}
+          </p>
+        )}
+      </div>
+      <div className="shrink-0 text-left">
+        {time && (
+          <p
+            dir="ltr"
+            className="text-[12px] font-extrabold tabular-nums"
+            style={{ color: now ? T.ctaLift : hot ? T.danger : T.muted }}
+          >
+            {time}
+          </p>
+        )}
+        {when && (
+          <p className="text-[10px]" style={{ color: hot ? T.danger : T.faint }}>
+            {when}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings }) {
+  /* Every number on this screen is a function of the clock: the open block,
+     the countdown to the next prayer, which lecture is running. One tick a
+     minute re-reads them all. */
+  useMinuteClock();
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const place = placeShape(state.place);
+  const uni = state.uni || uniShape();
+
+  const next = nextPrayer(place, now);
+  /* The block the day is actually in, from the prayers rather than from
+     clock hours — the same anchoring the six routine blocks use, because a
+     screen that says «بعد العصر» ten minutes before العصر is a screen that
+     has to be checked against another one. */
+  const block = blockAt(place, now);
+  const g = groupOf(block?.id);
+  const BlockIcon = g.icon;
+
+  const { toggle, logging, closeLog, logRead } = useHabitTick(state, setState);
+
+  /* A habit ticked here leaves the list it was ticked from, and a row that
+     vanishes under the finger animates nothing — the ripple, the pop and the
+     emerald glow all play on a row that is no longer mounted. So the id is
+     held for a moment longer than the animation and the row goes out after
+     it, struck through. On a timer and never through requestAnimationFrame:
+     a hidden tab does not run frames, and the reward would be swallowed and
+     then replayed when the tab came back. */
+  const [fading, setFading] = useState(() => new Set());
+  const timers = useRef([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const tick = (id) => {
+    const h = (state.habits || []).find((x) => x.id === id);
+    if (h && !h.done) {
+      setFading((prev) => new Set(prev).add(id));
+      timers.current.push(
+        setTimeout(
+          () =>
+            setFading((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            }),
+          REWARD_HOLD,
+        ),
+      );
+    }
+    toggle(id);
+  };
+
+  const habits = state.habits || [];
+  const open = remainingIn(habits, block?.id, fading);
+  /* His own order inside a block is his; across blocks the flat array can
+     interleave them, so what is behind him is read in the order the day ran
+     — earliest block first, which is also the order it has to be caught up
+     in. */
+  const missed = useMemo(
+    () => open.missed.slice().sort((a, b) => blockRank(a.group) - blockRank(b.group)),
+    [open.missed],
+  );
+  const doneCount = habits.filter((h) => h.done).length;
+  const allDone = habits.length > 0 && doneCount === habits.length;
+
+  const dateLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString("ar-EG", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+    [],
+  );
+
+  /* The weekday the timetable is read on is the wall clock's, not the
+     logical day's: at 01:00 the logical day is still yesterday, and the
+     lectures someone awake at that hour needs are the ones he is about to
+     walk into. The weekday is printed under the heading for that exact
+     reason — «اليوم» is ambiguous in those four hours and a named day is
+     not. */
+  const dow = now.getDay();
+  const courses = useMemo(() => coursesIn(uni, uni.term), [uni]);
+  const sections = useMemo(() => daySections(courses, dow, mins), [courses, dow, mins]);
+  const ahead = useMemo(
+    () => (sections.length ? null : nextSection(courses, dow, mins)),
+    [sections.length, courses, dow, mins],
+  );
+
+  /* The university's deliverables and the calendar's exams and deadlines,
+     in one list. Two sources, never copied into a third: a due date edited
+     on either screen moves here in the same render. Overdue rows come first
+     because the list is sorted by date and a date that has passed is the one
+     that needs saying out loud. */
+  const soon = useMemo(() => {
+    const out = [];
+    for (const t of uniPending(uni)) {
+      const k = UNI_TASK_KINDS.find((x) => x.id === t.kind) || UNI_TASK_KINDS[0];
+      const c = t.course ? courseIn(uni, t.course) : null;
+      out.push({
+        key: `u-${t.id}`,
+        on: t.due,
+        time: t.time,
+        title: t.title || k.label,
+        tint: k.tint,
+        sub: [k.label, c ? courseName(c) : ""].filter(Boolean).join(" · "),
+        go: "uni",
+      });
+    }
+    for (const r of upcomingRows(state.events || [])) {
+      if (r.ev.kind !== "exam" && r.ev.kind !== "deadline") continue;
+      const k = kindOf(r.ev.kind);
+      out.push({
+        key: `e-${r.ev.id}-${r.on}`,
+        on: r.on,
+        time: r.ev.time,
+        title: r.ev.title || k.label,
+        tint: k.tint,
+        sub: [k.label, r.ev.place].filter(Boolean).join(" · "),
+        go: "agenda",
+      });
+    }
+    out.sort((a, b) =>
+      a.on === b.on
+        ? (minsOf(a.time) ?? 1441) - (minsOf(b.time) ?? 1441)
+        : a.on < b.on
+          ? -1
+          : 1,
+    );
+    return out;
+  }, [uni, state.events]);
+
+  const nearest = soon.slice(0, 4);
+
+  return (
+    <div className="space-y-5">
+      {/* Where the day is, in one card: the date, the open block, the next
+          prayer and the one score the day is judged by. */}
+      <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 lg:flex-row lg:justify-between">
+        <div className="min-w-0 text-center lg:text-right">
+          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+            اليوم
+          </h2>
+          <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
+            <CalendarDays size={13} /> {dateLabel}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
+            <span
+              className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] font-extrabold"
+              style={{
+                borderColor: `${g.tint}3D`,
+                backgroundColor: `${g.tint}14`,
+                color: g.tint,
+              }}
+            >
+              <BlockIcon size={14} /> {g.label}
+            </span>
+            {next && (
+              <button
+                onClick={onOpenSettings}
+                title="تغيير المدينة"
+                className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] transition-colors hover:bg-white/[0.06]"
+                style={{ borderColor: `${T.violet}3D`, backgroundColor: `${T.violet}12` }}
+              >
+                <MoonStar size={14} style={{ color: T.violet }} />
+                <span style={{ color: T.muted }}>
+                  {next.tomorrow ? "فجر غدٍ" : next.label}
+                </span>
+                <span
+                  dir="ltr"
+                  className="font-extrabold tabular-nums"
+                  style={{ color: T.cta }}
+                >
+                  {clockAt(next.at / 60)}
+                </span>
+                <span className="text-[10.5px]" style={{ color: T.faint }}>
+                  {next.left >= 60
+                    ? `بعد ${Math.floor(next.left / 60)} س ${next.left % 60} د`
+                    : `بعد ${next.left} د`}
+                </span>
+              </button>
+            )}
+            <span
+              className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
+              style={{ borderColor: T.border }}
+            >
+              <Flame size={14} style={{ color: streak > 0 ? T.ember : T.faint }} />
+              <span className="font-extrabold tabular-nums">{streak}</span>
+              <span className="text-[10.5px]" style={{ color: T.faint }}>
+                يوم متتالٍ
+              </span>
+            </span>
+          </div>
+          <p className="mt-3 max-w-md text-xs leading-relaxed text-white/35">
+            <span dir="ltr" className="font-extrabold tabular-nums">
+              {doneCount} / {habits.length}
+            </span>{" "}
+            عادة اليوم. ما في هذه الشاشة هو ما تبقّى من يومك — والتفاصيل في
+            شاشاتها.
+          </p>
+        </div>
+        <ProgressRing value={discipline} size={150} />
+      </Card>
+
+      {/* The three. The same component the routine screen shows, not a copy
+          of it: the cap is the rule, and one rule cannot have two
+          renderings. */}
+      <TopThree state={state} setState={setState} />
+
+      {/* What is still open, the block in front of you first. */}
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <h3
+            className="flex items-center gap-2 text-[15px] font-extrabold"
+            style={{ color: T.primaryLift }}
+          >
+            <ListChecks size={16} /> العادات المتبقية
+          </h3>
+          <div className="flex items-center gap-2">
+            <Badge tint={allDone ? T.primary : T.cta}>
+              <span dir="ltr" className="tabular-nums">
+                {habits.length - doneCount}
+              </span>
+              {" متبقية"}
+            </Badge>
+            <Btn variant="ghost" size="sm" onClick={() => onGo("routine")}>
+              الروتين <ArrowLeft size={13} />
+            </Btn>
+          </div>
+        </div>
+
+        {allDone ? (
+          <p
+            className="mt-4 rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
+            style={{
+              borderColor: `${T.primary}3D`,
+              backgroundColor: `${T.primary}12`,
+              color: T.primaryLift,
+            }}
+          >
+            كل عادات اليوم تمّت. أغلق الشاشة واذهب — لا شيء ينتظرك هنا.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div>
+              <p className="mb-2 text-[11px] font-bold" style={{ color: g.tint }}>
+                {g.label} — الآن
+              </p>
+              {open.here.length ? (
+                <div className="space-y-1.5">
+                  {open.here.map((h) => (
+                    <TodayHabit
+                      key={h.id}
+                      habit={h}
+                      book={bookForHabit(h, state.books)}
+                      onToggle={() => tick(h.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p
+                  className="rounded-xl border border-dashed px-3 py-3 text-center text-[11.5px]"
+                  style={{ borderColor: T.border, color: T.faint }}
+                >
+                  لا شيء متبقٍّ في هذا البلوك.
+                </p>
+              )}
+            </div>
+
+            {/* Behind him, not hidden. A habit whose block has closed is
+                still tickable — the day is not over until 04:00 — and a
+                screen that drops it is a screen that quietly lowers the
+                score without saying so. */}
+            {missed.length > 0 && (
+              <div>
+                <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
+                  فاتك في بلوكات مضت —{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {missed.length}
+                  </span>
+                </p>
+                <div className="space-y-1.5">
+                  {missed.slice(0, 5).map((h) => (
+                    <TodayHabit
+                      key={h.id}
+                      habit={h}
+                      book={bookForHabit(h, state.books)}
+                      onToggle={() => tick(h.id)}
+                      late
+                    />
+                  ))}
+                </div>
+                {missed.length > 5 && (
+                  <button
+                    onClick={() => onGo("routine")}
+                    className="mt-2 w-full rounded-xl border border-dashed py-2 text-[11.5px] transition-colors hover:bg-white/[0.06]"
+                    style={{ borderColor: T.border, color: T.muted }}
+                  >
+                    وبقي{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {missed.length - 5}
+                    </span>{" "}
+                    — افتح الروتين
+                  </button>
+                )}
+              </div>
+            )}
+
+            {open.later.length > 0 && (
+              <p className="text-[11px]" style={{ color: T.faint }}>
+                وأمامك{" "}
+                <span dir="ltr" className="tabular-nums">
+                  {open.later.length}
+                </span>{" "}
+                عادة في بلوكات لم تبدأ بعد.
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* The timetable, for one day only. */}
+        <Card className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3
+                className="flex items-center gap-2 text-[15px] font-extrabold"
+                style={{ color: T.sky }}
+              >
+                <School size={16} /> محاضرات اليوم
+              </h3>
+              <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
+                {uniDayOf(dow)?.label || "نهاية الأسبوع"}
+              </p>
+            </div>
+            <Btn variant="ghost" size="sm" onClick={() => onGo("uni")}>
+              الجامعة <ArrowLeft size={13} />
+            </Btn>
+          </div>
+
+          <div className="mt-4 space-y-1.5">
+            {sections.length ? (
+              sections.map((r) => (
+                <TodayLine
+                  key={r.slot.id}
+                  tint={r.course.tint}
+                  icon={GraduationCap}
+                  title={courseName(r.course)}
+                  sub={[r.slot.room, r.course.instructor].filter(Boolean).join(" · ")}
+                  time={`${prettyTime(r.slot.from)} – ${prettyTime(r.slot.to)}`}
+                  when={r.now ? "الآن" : r.to <= mins ? "انتهت" : ""}
+                  now={r.now}
+                />
+              ))
+            ) : (
+              <>
+                <p
+                  className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
+                  style={{ borderColor: T.border, color: T.faint }}
+                >
+                  لا محاضرات اليوم.
+                </p>
+                {ahead && (
+                  <TodayLine
+                    tint={ahead.course.tint}
+                    icon={CalendarClock}
+                    title={courseName(ahead.course)}
+                    sub={`القادمة · ${uniDayOf(ahead.slot.day)?.label || ""}`}
+                    time={prettyTime(ahead.slot.from)}
+                    when={ahead.inDays === 1 ? "غدًا" : ahead.inDays === 0 ? "اليوم" : ""}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </Card>
+
+        {/* The nearest thing with a date on it. */}
+        <Card className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3
+                className="flex items-center gap-2 text-[15px] font-extrabold"
+                style={{ color: T.rose }}
+              >
+                <AlarmClock size={16} /> أقرب اختبار أو تسليم
+              </h3>
+              <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
+                من الجامعة والتقويم معًا
+              </p>
+            </div>
+            <Btn variant="ghost" size="sm" onClick={() => onGo("agenda")}>
+              التقويم <ArrowLeft size={13} />
+            </Btn>
+          </div>
+
+          <div className="mt-4 space-y-1.5">
+            {nearest.length ? (
+              nearest.map((r) => {
+                const left = daysUntil(r.on);
+                return (
+                  <button
+                    key={r.key}
+                    onClick={() => onGo(r.go)}
+                    className="block w-full text-right"
+                  >
+                    <TodayLine
+                      tint={r.tint}
+                      icon={ClipboardList}
+                      title={r.title}
+                      sub={r.sub}
+                      time={r.time ? prettyTime(r.time) : ""}
+                      when={whenWord(r.on)}
+                      hot={left !== null && left <= 1}
+                    />
+                  </button>
+                );
+              })
+            ) : (
+              <p
+                className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
+                style={{ borderColor: T.border, color: T.faint }}
+              >
+                لا تسليمات ولا اختبارات مسجّلة.
+              </p>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <ReadLogModal
+        open={!!logging}
+        book={logging ? bookForHabit(logging, state.books) : null}
+        onClose={closeLog}
+        onLog={logRead}
+      />
+    </div>
+  );
+}
+
+/* ==================================================================== *
  *  MODULE 1 — Daily routine
  * ==================================================================== */
 /* Habits live in one flat array and the blocks are a filtered view of it,
@@ -3999,6 +4629,95 @@ function nudgeHabit(habits, id, dir) {
     return next;
   }
   return habits;
+}
+
+/* --- ticking a habit -------------------------------------------------- *
+ *  Two screens tick the same habits — the routine, where the blocks are
+ *  managed, and «اليوم», where what is still open is answered — and the tick
+ *  is not a boolean flip. A linked habit opens the reading log after the
+ *  tick has landed, and unticking withdraws today's sessions for it and
+ *  rolls the book's page counter back. A second copy of that in a second
+ *  screen is two copies of the library's arithmetic, and the day the two
+ *  disagree the shelf keeps pages the user undid.
+ * ---------------------------------------------------------------------- */
+function useHabitTick(state, setState) {
+  const [logging, setLogging] = useState(null); // habit awaiting a page count
+
+  const toggle = useCallback(
+    (id) => {
+      const habit = state.habits.find((h) => h.id === id);
+      const turningOn = habit && !habit.done;
+
+      setState((s) => {
+        const next = {
+          ...s,
+          habits: s.habits.map((h) => (h.id === id ? { ...h, done: !h.done } : h)),
+        };
+        /* Unticking withdraws today's sessions for this habit and rolls the
+           page counters back, so the library never keeps pages that were
+           undone in the routine. */
+        if (habit && habit.book && !turningOn) {
+          const today = dayKey();
+          const dropped = (s.reading || []).filter(
+            (r) => r.habitId === id && r.date === today,
+          );
+          if (dropped.length) {
+            const back = new Map();
+            for (const r of dropped)
+              back.set(r.bookId, (back.get(r.bookId) || 0) + r.pages);
+            next.reading = (s.reading || []).filter(
+              (r) => !(r.habitId === id && r.date === today),
+            );
+            next.books = s.books.map((b) => {
+              const n = back.get(b.id);
+              if (!n) return b;
+              const at = parseInt(b.page, 10);
+              if (!Number.isFinite(at)) return b;
+              return { ...b, page: String(Math.max(0, at - n)) };
+            });
+          }
+        }
+        return next;
+      });
+
+      /* Ask only after the tick has landed, so the reward animation plays
+         and a skipped prompt still leaves the habit done. */
+      if (habit?.book && turningOn) setLogging(habit);
+    },
+    [state.habits, setState],
+  );
+
+  const logRead = useCallback(
+    (pages) => {
+      const habit = logging;
+      if (!habit) return;
+      setState((s) => {
+        const book = bookForHabit(habit, s.books);
+        if (!book) return s;
+        const total = parseInt(book.pages, 10);
+        const at = parseInt(book.page, 10);
+        const base = Number.isFinite(at) ? at : 0;
+        const next = Number.isFinite(total) && total > 0
+          ? Math.min(total, base + pages)
+          : base + pages;
+        return {
+          ...s,
+          reading: [
+            ...(s.reading || []),
+            { id: uid(), date: dayKey(), bookId: book.id, habitId: habit.id, pages },
+          ],
+          books: s.books.map((b) =>
+            b.id === book.id ? { ...b, page: String(next) } : b,
+          ),
+        };
+      });
+      setLogging(null);
+    },
+    [logging, setState],
+  );
+
+  const closeLog = useCallback(() => setLogging(null), []);
+  return { toggle, logging, closeLog, logRead };
 }
 
 /* Asked right after a reading habit is ticked. Deliberately skippable: the
@@ -5033,7 +5752,6 @@ function RoutineModule({
 }) {
   const [editing, setEditing] = useState(null); // {id?, label, group}
   const [quotesOpen, setQuotesOpen] = useState(false);
-  const [logging, setLogging] = useState(null); // habit awaiting a page count
   const [dragging, setDragging] = useState(null); // habit id being dragged
   const [overGroup, setOverGroup] = useState(null);
   const [picking, setPicking] = useState(false); // choosing the core five
@@ -5048,72 +5766,10 @@ function RoutineModule({
     []
   );
 
-  const toggle = (id) => {
-    const habit = state.habits.find((h) => h.id === id);
-    const turningOn = habit && !habit.done;
-
-    setState((s) => {
-      const next = {
-        ...s,
-        habits: s.habits.map((h) => (h.id === id ? { ...h, done: !h.done } : h)),
-      };
-      /* Unticking withdraws today's sessions for this habit and rolls the
-         page counters back, so the library never keeps pages that were
-         undone in the routine. */
-      if (habit && habit.book && !turningOn) {
-        const today = dayKey();
-        const dropped = (s.reading || []).filter(
-          (r) => r.habitId === id && r.date === today,
-        );
-        if (dropped.length) {
-          const back = new Map();
-          for (const r of dropped)
-            back.set(r.bookId, (back.get(r.bookId) || 0) + r.pages);
-          next.reading = (s.reading || []).filter(
-            (r) => !(r.habitId === id && r.date === today),
-          );
-          next.books = s.books.map((b) => {
-            const n = back.get(b.id);
-            if (!n) return b;
-            const at = parseInt(b.page, 10);
-            if (!Number.isFinite(at)) return b;
-            return { ...b, page: String(Math.max(0, at - n)) };
-          });
-        }
-      }
-      return next;
-    });
-
-    /* Ask only after the tick has landed, so the reward animation plays
-       and a skipped prompt still leaves the habit done. */
-    if (habit?.book && turningOn) setLogging(habit);
-  };
-
-  const logRead = (pages) => {
-    const habit = logging;
-    if (!habit) return;
-    setState((s) => {
-      const book = bookForHabit(habit, s.books);
-      if (!book) return s;
-      const total = parseInt(book.pages, 10);
-      const at = parseInt(book.page, 10);
-      const base = Number.isFinite(at) ? at : 0;
-      const next = Number.isFinite(total) && total > 0
-        ? Math.min(total, base + pages)
-        : base + pages;
-      return {
-        ...s,
-        reading: [
-          ...(s.reading || []),
-          { id: uid(), date: dayKey(), bookId: book.id, habitId: habit.id, pages },
-        ],
-        books: s.books.map((b) =>
-          b.id === book.id ? { ...b, page: String(next) } : b,
-        ),
-      };
-    });
-    setLogging(null);
-  };
+  /* One place a habit is ticked, shared with the «اليوم» screen — the
+     withdrawal of a reading log on an untick is not logic that may exist in
+     two copies drifting apart. */
+  const { toggle, logging, closeLog, logRead } = useHabitTick(state, setState);
 
   const save = () => {
     const label = editing.label.trim();
@@ -5551,7 +6207,7 @@ function RoutineModule({
       <ReadLogModal
         open={!!logging}
         book={logging ? bookForHabit(logging, state.books) : null}
-        onClose={() => setLogging(null)}
+        onClose={closeLog}
         onLog={logRead}
       />
 
@@ -20040,9 +20696,27 @@ export default function LifeOS() {
      a tab renamed or dropped, or a hand-edited preferences key — renders
      no module at all: an empty page with a working sidebar, which reads as
      the app having lost everything. */
+  /* «اليوم» on a fresh open, where he left off on a reload.
+   *
+   *  The two are different questions and `localStorage` alone cannot tell
+   *  them apart. Opening the app in the morning should land on the screen
+   *  that says what the next hour needs — that is the whole reason the
+   *  screen exists. A reload is not an open: the conflict bar's «حمّل
+   *  الأحدث» reloads, a follower window reloads itself, and F5 in the middle
+   *  of writing a goal is the user asking for the same screen back, not for
+   *  a landing page. `sessionStorage` survives a reload and is empty in a
+   *  new tab or window, which is exactly that line. */
   const [tab, setTab] = useState(() => {
     const saved = readUI().tab;
-    return NAV_IDS.includes(saved) ? saved : "routine";
+    const back = NAV_IDS.includes(saved) ? saved : "today";
+    try {
+      if (window.sessionStorage.getItem(OPENED_KEY)) return back;
+      window.sessionStorage.setItem(OPENED_KEY, "1");
+    } catch {
+      /* Blocked storage means every render is a fresh open, which lands on
+         «اليوم» — the safe side of a preference nobody can read. */
+    }
+    return "today";
   });
   const [collapsed, setCollapsed] = useState(() => !!readUI().collapsed);
   const [streakToast, setStreakToast] = useState(null); // streak count when banked
@@ -20645,6 +21319,16 @@ export default function LifeOS() {
               onOpen={() => go("breaker")}
             />
             <div key={tab} className="los-in">
+              {tab === "today" && (
+                <TodayModule
+                  state={state}
+                  setState={setState}
+                  discipline={discipline}
+                  streak={streak}
+                  onGo={go}
+                  onOpenSettings={() => setSettings(true)}
+                />
+              )}
               {tab === "routine" && (
                 <RoutineModule
                   state={state}

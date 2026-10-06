@@ -40,7 +40,13 @@ import {
   coreOf,
   bookShape,
   goalShape,
+  BLOCK_IDS,
+  blockRank,
+  remainingIn,
+  uniPending,
+  minsIn,
 } from "../life-state.mjs";
+import { BLOCK_ANCHORS, blockAt } from "../prayer-times.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => JSON.parse(readFileSync(join(here, "fixtures", name), "utf8"));
@@ -399,9 +405,11 @@ test("migrate hands a schema-20 payload the default «المزيد» list, untou
   const order = ["routine", "graph", "agenda", "uni", "career"];
   const out = migrate({ schema: 20, navOrder: order });
   assert.deepEqual(out.navMore, MORE_IDS, "the map did not move behind المزيد");
+  /* «اليوم» is placed at the front by schema 22 — see its own test. Every
+     tab he had ordered keeps its place behind it. */
   assert.deepEqual(
-    out.navOrder.slice(0, 5),
-    order,
+    out.navOrder.slice(0, 6),
+    ["today", ...order],
     "a tab lost its place in the order",
   );
   assert.equal(out.navOrder.length, NAV_IDS.length, "a tab left the order");
@@ -439,4 +447,186 @@ test("bookShape keeps what the user wrote", () => {
 
 test("goalShape defaults to the 90-day horizon", () => {
   assert.equal(goalShape({ text: "x" }).horizon, "quarter");
+});
+
+/* ===================================================================== *
+ *  «اليوم» — the screen the app opens on
+ *
+ *  Nothing below touches a render. What is tested is the arithmetic the
+ *  screen is a drawing of: which block the day is in, what is still open in
+ *  it, what is behind you, and what is owed next — plus the one thing a
+ *  migration can get wrong here, which is burying the new tab at the end of
+ *  a fifteen-tab order where a phone never shows it.
+ * ===================================================================== */
+
+test("the day's blocks run in one order, in both modules", () => {
+  /* `BLOCK_IDS` ranks «فاتك»; `BLOCK_ANCHORS` pins each block to a prayer.
+     Two lists, one day — if they ever disagree, the screen says a habit is
+     behind you while the clock says its block has not opened. */
+  assert.deepEqual(
+    BLOCK_ANCHORS.map((b) => b.id),
+    BLOCK_IDS,
+  );
+});
+
+test("blockRank puts an unknown block last, not first", () => {
+  assert.equal(blockRank("morning"), 0);
+  assert.equal(blockRank("night"), BLOCK_IDS.length - 1);
+  /* The safe side: a habit from a damaged payload is "still ahead", never
+     announced as missed. */
+  assert.equal(blockRank("not-a-block"), BLOCK_IDS.length);
+  assert.equal(blockRank(undefined), BLOCK_IDS.length);
+});
+
+test("blockAt walks the day through its six blocks", () => {
+  const place = { lat: 24.7136, lng: 46.6753, tz: 3, asr: 1 };
+  const at = (h, m = 30) => blockAt(place, new Date(2026, 9, 6, h, m)).id;
+  assert.equal(at(5), "morning");
+  assert.equal(at(9), "morning");
+  assert.equal(at(13), "afternoon");
+  assert.equal(at(16), "asr");
+  assert.equal(at(23), "night");
+});
+
+test("after midnight the day is still in its last block", () => {
+  /* The same mistake the evening prompt made with `getHours() >= 20`: the
+     logical day rolls at 04:00 and Fajr can be later still, so 00:30 and
+     03:30 are «قبل النوم» of the evening that has not finished. A null there
+     would tell someone plainly awake in his day that it has not started. */
+  const place = { lat: 24.7136, lng: 46.6753, tz: 3, asr: 1 };
+  for (const h of [0, 2, 3]) {
+    assert.equal(blockAt(place, new Date(2026, 9, 6, h, 30)).id, "night");
+  }
+});
+
+test("remainingIn splits what is open by where the day has got to", () => {
+  const habits = [
+    { id: "a", group: "morning", done: true },
+    { id: "b", group: "morning", done: false },
+    { id: "c", group: "asr", done: false },
+    { id: "d", group: "asr", done: true },
+    { id: "e", group: "night", done: false },
+  ];
+  const { here, missed, later } = remainingIn(habits, "asr");
+  assert.deepEqual(
+    here.map((h) => h.id),
+    ["c"],
+  );
+  assert.deepEqual(
+    missed.map((h) => h.id),
+    ["b"],
+    "a ticked habit is not missed, and a closed block's open one is",
+  );
+  assert.deepEqual(
+    later.map((h) => h.id),
+    ["e"],
+  );
+});
+
+test("remainingIn keeps his own order and survives junk", () => {
+  const habits = [
+    { id: "z", group: "morning", done: false },
+    { id: "y", group: "morning", done: false },
+    null,
+    7,
+    { id: "x", group: "wiped-block", done: false },
+  ];
+  const { here, later } = remainingIn(habits, "morning");
+  assert.deepEqual(
+    here.map((h) => h.id),
+    ["z", "y"],
+    "the list was re-sorted — the order on this screen is the user's",
+  );
+  assert.deepEqual(
+    later.map((h) => h.id),
+    ["x"],
+    "a habit from a damaged payload must still render somewhere",
+  );
+  assert.deepEqual(remainingIn(null, "morning"), { here: [], missed: [], later: [] });
+});
+
+test("remainingIn holds a habit that was just ticked", () => {
+  /* The reward has to play on a mounted row. Without the hold, the ripple,
+     the pop and the emerald glow all fire on a row the same render removes,
+     and ticking a habit here pays out nothing. */
+  const habits = [
+    { id: "a", group: "asr", done: true },
+    { id: "b", group: "asr", done: false },
+  ];
+  assert.deepEqual(
+    remainingIn(habits, "asr", new Set(["a"])).here.map((h) => h.id),
+    ["a", "b"],
+  );
+  assert.deepEqual(
+    remainingIn(habits, "asr", ["a"]).here.map((h) => h.id),
+    ["a", "b"],
+    "an array of ids reads the same as a set",
+  );
+  assert.deepEqual(
+    remainingIn(habits, "asr").here.map((h) => h.id),
+    ["b"],
+    "nothing held, nothing kept",
+  );
+  assert.deepEqual(remainingIn(habits, "asr", "junk").here.map((h) => h.id), ["b"]);
+});
+
+test("uniPending puts the overdue first and drops what is done", () => {
+  const uni = {
+    tasks: [
+      { id: "1", title: "واجب", due: "2026-10-09", time: "" },
+      { id: "2", title: "كويز", due: "2026-10-02", time: "10:00" },
+      { id: "3", title: "مسلّم", due: "2026-10-01", time: "", done: true },
+      { id: "4", title: "عرض", due: "2026-10-02", time: "08:00" },
+    ],
+  };
+  assert.deepEqual(
+    uniPending(uni, "2026-10-06").map((t) => t.id),
+    ["4", "2", "1"],
+    "date then clock, and a finished deliverable is not owed",
+  );
+});
+
+test("uniPending is total", () => {
+  for (const junk of [null, undefined, 7, "x", {}, { tasks: [null, 3] }]) {
+    assert.deepEqual(uniPending(junk, "2026-10-06"), []);
+  }
+});
+
+test("minsIn reads a clock and refuses a half-typed one", () => {
+  assert.equal(minsIn("08:30"), 510);
+  assert.equal(minsIn("00:00"), 0);
+  /* Null, never zero: a row with no time sorts after the timed ones, and a
+     zero would float every one of them to dawn. */
+  assert.equal(minsIn(""), null);
+  assert.equal(minsIn("8"), null);
+  assert.equal(minsIn(undefined), null);
+});
+
+test("«اليوم» is the first tab, and migrate puts it at the front", () => {
+  assert.equal(NAV_IDS[0], "today");
+  /* Appended by `orderNavIds` it would land sixteenth, which on a phone is
+     behind «المزيد» — the opposite of a screen whose whole job is to be the
+     one the app opens on. */
+  const out = migrate({ schema: 21, navOrder: ["routine", "goals", "uni"] });
+  assert.equal(out.navOrder[0], "today");
+  assert.deepEqual(
+    out.navOrder.slice(1, 4),
+    ["routine", "goals", "uni"],
+    "placing the new tab reshuffled the order he set",
+  );
+  assert.equal(out.navOrder.length, NAV_IDS.length);
+  assert.ok(!out.navMore.includes("today"), "the landing screen must not hide");
+});
+
+test("migrate leaves «اليوم» where he has already put it", () => {
+  const order = ["routine", "today", "uni"];
+  const out = migrate({ schema: 21, navOrder: order });
+  assert.deepEqual(out.navOrder.slice(0, 3), order);
+});
+
+test("«اليوم» takes a row on the phone bar", () => {
+  /* It is the landing screen: if it can be pushed out of the four the bar
+     shows, the app opens on a screen with no way back to itself. */
+  const { main } = navSplit(null, null);
+  assert.ok(main.slice(0, TAB_BAR).includes("today"));
 });

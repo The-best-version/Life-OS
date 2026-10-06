@@ -24,6 +24,7 @@
  *  means adding it here first and the screen asks for its label next.
  * ---------------------------------------------------------------------- */
 export const NAV_IDS = [
+  "today",
   "routine",
   "agenda",
   "uni",
@@ -313,7 +314,7 @@ export const READING_QUOTES = [
 
 export const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 21;
+export const SCHEMA = 22;
 /* How many archive rows are kept, and the discipline a day has to reach to
    bank the streak. */
 export const HISTORY_CAP = 500;
@@ -401,6 +402,67 @@ export const uid = () => Math.random().toString(36).slice(2, 9);
 export const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 export const rows = (v) =>
   Array.isArray(v) ? v.filter((x) => x && typeof x === "object" && !Array.isArray(x)) : [];
+
+/* --- the six blocks --------------------------------------------------- *
+ *  The ids, in the order the day runs through them — the one canonical list
+ *  of what blocks exist. Their labels, icons and tints live in LifeOS.jsx
+ *  keyed by these ids, exactly like `NAV_IDS` and `NAV_META`, because a
+ *  lucide component cannot be imported here.
+ *
+ *  The order is what makes «فاتك» answerable: a habit is behind you when its
+ *  block opened before the one you are in, and that question needs a rank,
+ *  not a label. `BLOCK_ANCHORS` in prayer-times.mjs pins each of them to a
+ *  prayer in this same order — a test holds the two side by side, because
+ *  the day cannot run in two different orders.
+ * ---------------------------------------------------------------------- */
+export const BLOCK_IDS = [
+  "morning",
+  "afternoon",
+  "asr",
+  "maghrib",
+  "postisha",
+  "night",
+];
+/* Where a block sits in the day. A group id this build no longer has — a
+   hand-edited backup, an older seed — ranks last rather than throwing: it
+   is still the user's habit and it still has to render somewhere. */
+export const blockRank = (id) => {
+  const at = BLOCK_IDS.indexOf(id);
+  return at < 0 ? BLOCK_IDS.length : at;
+};
+
+/* The habits still open, split by where the day has got to: the block he is
+   in now, the blocks that have already closed, and the ones still ahead.
+ *
+ *  His own order is kept inside each group, never re-sorted — the routine
+ *  screen lets him drag the list into the order he lives it, and a second
+ *  screen quietly showing a different order is a second app. Core habits are
+ *  marked, not moved, for the same reason.
+ *
+ *  An unknown block id lands in `later` by way of `blockRank`, which is the
+ *  safe side: a habit announced as missed when it never opened is a screen
+ *  manufacturing guilt out of a damaged payload.
+ */
+export function remainingIn(habits, blockId, keep) {
+  const here = [];
+  const missed = [];
+  const later = [];
+  const now = blockRank(blockId);
+  /* A habit that was ticked a moment ago is still listed, because the reward
+     has to play somewhere. A row that vanishes on the tap animates nothing,
+     and «every completion pays out» is not a decoration — it is the whole
+     transaction the screen offers. The caller holds the ids for as long as
+     the animation runs and then lets them go. */
+  const held = keep instanceof Set ? keep : new Set(Array.isArray(keep) ? keep : []);
+  for (const h of rows(habits)) {
+    if (h.done && !held.has(h.id)) continue;
+    const at = blockRank(h.group);
+    if (at === now) here.push(h);
+    else if (at < now) missed.push(h);
+    else later.push(h);
+  }
+  return { here, missed, later };
+}
 
 /* The "بعد العشاء" block was split out of "المساء" in schema 4. These labels
    drive both the seed and the migration, so an existing user's صلاة العشاء
@@ -1100,6 +1162,16 @@ export const hhmm = (v, fallback = "") => {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 };
 
+/* "HH:MM" as minutes past midnight, or null for anything that is not a
+   real clock reading. Sorting "" as a time would float every untimed row to
+   dawn, which is why the null survives instead of becoming a zero. */
+export const minsIn = (v) => {
+  const t = hhmm(v);
+  if (!t) return null;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+
 export const clampNum = (v, min, max, fallback) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
@@ -1331,6 +1403,27 @@ export const uniShape = (u) => {
     tasks: Array.isArray(u.tasks) ? u.tasks.map(uniTaskShape) : [],
   };
 };
+
+/* The deliverables still owed, nearest first — the overdue ones included,
+   and first, because a deadline that slipped is the one that needs saying
+   out loud. Date then time, so two things due the same day come back in the
+   order the day will meet them; an untimed one sits after the timed ones
+   rather than at dawn. Nothing is filtered by term: a deliverable is owed
+   whether or not its course belongs to the term that is currently open. */
+export function uniPending(uni, today = dayKey()) {
+  const list = rows(obj(uni).tasks)
+    .map(uniTaskShape)
+    .filter((t) => !t.done);
+  return list.sort((a, b) => {
+    if (a.due !== b.due) return a.due < b.due ? -1 : 1;
+    const x = minsIn(a.time);
+    const y = minsIn(b.time);
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return x - y;
+  });
+}
 
 export const SEED_UNI = () => {
   const start = dayKey();
@@ -1680,6 +1773,17 @@ export function migrate(saved) {
           : [...rest.slice(0, at + 1), id, ...rest.slice(at + 1)];
       anchor = id;
     }
+  }
+
+  /* Schema 22 adds «اليوم», and it is placed at the front by hand rather
+     than appended by `orderNavIds` — the whole point of the screen is that
+     it is the one the app opens on, and a tab appended to the end of a
+     fifteen-tab order opens behind «المزيد» on a phone, which is the
+     opposite. Same reasoning as «مسار التوظيف» in schema 14 and the two
+     tabs in schema 17, and the same guard: a user who has already put it
+     somewhere himself keeps where he put it. */
+  if (from < 22 && !(saved.navOrder || []).includes("today")) {
+    navOrder = ["today", ...navOrder.filter((id) => id !== "today")];
   }
 
   /* Schema 21 lets a tab answer from «المزيد» instead of taking a row. A

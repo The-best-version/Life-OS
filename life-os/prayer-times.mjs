@@ -138,3 +138,27 @@ export function blockTimes(place, date = new Date()) {
   }
   return out.sort((a, b) => a.when - b.when);
 }
+
+/* Which block the day is in right now — the one whose prayer has already
+   been called and whose successor has not.
+ *
+ *  Before the first one opens, the answer is the last block of the day, not
+ *  nothing: 00:30 is «قبل النوم» of the evening that is still going on, and
+ *  the logical day rolls at 04:00 while Fajr can be later than that. A null
+ *  there would leave the screen saying the day has not started to someone
+ *  who is plainly still awake in it — which is the same mistake the evening
+ *  prompt made when it tested `getHours() >= 20`.
+ *
+ *  Null is kept for the one case that means it: a place the sun never
+ *  reaches, where `blockTimes` hands back nothing at all.
+ */
+export function blockAt(place, date = new Date()) {
+  const list = blockTimes(place, date);
+  if (!list.length) return null;
+  let at = list[0];
+  for (const b of list) {
+    if (b.when <= date) at = b;
+    else break;
+  }
+  return date < list[0].when ? list[list.length - 1] : at;
+}
