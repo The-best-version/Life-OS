@@ -48,6 +48,7 @@ const BACKUPS = DATA === path.join(ROOT, "graphify-out", "data")
 const AUTO = path.join(BACKUPS, "auto");
 const DAILY = path.join(BACKUPS, "daily");
 const GUARD = path.join(BACKUPS, "guard");
+const MANUAL = path.join(BACKUPS, "manual");
 const SITE = path.join(ROOT, "life-os");
 
 const PROJECTS = {
@@ -92,6 +93,7 @@ fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(AUTO, { recursive: true });
 fs.mkdirSync(DAILY, { recursive: true });
 fs.mkdirSync(GUARD, { recursive: true });
+fs.mkdirSync(MANUAL, { recursive: true });
 
 // A local page is either file:// (Origin: null) or a localhost dev server.
 // Any ordinary site you browse sends its own https origin and gets no
@@ -120,7 +122,7 @@ function cors(res, origin) {
   res.setHeader("Vary", "Origin");
   if (origin !== undefined) res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "content-type, x-local-sync, x-force");
+  res.setHeader("Access-Control-Allow-Headers", "content-type, x-local-sync, x-force, x-guard");
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
@@ -299,6 +301,155 @@ function guardSnapshot(name, text, why) {
   } catch {}
 }
 
+/* --- the recovery centre's half of the deal ---------------------------- *
+ *  Three directories of snapshots have existed since phase 1 and none of
+ *  them was reachable from inside the app: knowing a copy of Tuesday is on
+ *  disk is no use to someone who would have to be told the path, open a file
+ *  manager and paste JSON into an import box. So the snapshots are listed
+ *  and handed back over the same origin the app already talks to.
+ *
+ *  Reading, never writing — and no path joining of anything a request said.
+ *  A name is matched whole against `SNAP_NAME`, then against what `readdir`
+ *  actually lists in that one directory: the listing *is* the whitelist, the
+ *  same philosophy as `GRAPHIFY_FILES` above. A crafted name cannot name a
+ *  file that readdir did not just hand us, so there is nothing for a
+ *  traversal to traverse.
+ * ---------------------------------------------------------------------- */
+const SNAP_KINDS = {
+  auto: { dir: AUTO, label: "كل ساعة" },
+  daily: { dir: DAILY, label: "يومية" },
+  guard: { dir: GUARD, label: "قبل تغيير ناقص" },
+  manual: { dir: MANUAL, label: "يدوية" },
+  verified: { dir: BACKUPS, label: "موثّقة" },
+};
+/* No slash, no backslash, no leading dot, ends in .json, bounded length. The
+   readdir check below is what makes it safe; this is what makes it cheap. */
+const SNAP_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,96}\.json$/;
+/* This app's snapshots and nothing else. `backups/` itself also holds the
+   verified copies, which were named by hand under the product's own name. */
+const SNAP_PREFIX = /^(lifeos|life-os-2027)-/;
+/* Enough to walk back from anything noticed the same season, and few enough
+   that the listing stays a list rather than a wall. */
+const SNAP_PER_KIND = 80;
+
+/* Parsing every snapshot on every request would read a few megabytes to
+   answer one click. Keyed by name, size and mtime, so a file that changed —
+   the hourly snapshot being overwritten within its hour — is re-read and the
+   rest are not. */
+const snapCache = new Map();
+
+function snapSummary(dir, name) {
+  const full = path.join(dir, name);
+  let st;
+  try {
+    st = fs.statSync(full);
+  } catch {
+    return null;
+  }
+  if (!st.isFile()) return null;
+  const key = dir + "|" + name + "|" + st.size + "|" + st.mtimeMs;
+  const hit = snapCache.get(key);
+  if (hit) return hit;
+
+  let s = null;
+  try {
+    s = JSON.parse(fs.readFileSync(full, "utf8"));
+  } catch {
+    /* An unreadable snapshot is still worth listing — as unreadable. Hiding
+       it would make a corrupted file look like a file that was never taken. */
+  }
+  const len = (k) => (s && Array.isArray(s[k]) ? s[k].length : null);
+  /* `Number(null)` is 0 and `Number("")` is 0, so a missing field would be
+     reported as a real zero — a snapshot with no revision looking like
+     revision zero, and a day with no score looking like a day that scored
+     nothing. Absent has to come back absent. */
+  const num = (v) =>
+    v === null || v === undefined || v === "" || !Number.isFinite(Number(v))
+      ? null
+      : Number(v);
+  const row =
+    s && Array.isArray(s.history)
+      ? s.history.find((h) => h && h.date === s.date) || null
+      : null;
+  const out = {
+    name,
+    at: st.mtimeMs,
+    size: st.size,
+    ok: !!(s && Array.isArray(s.habits)),
+    schema: num(s && s.schema),
+    rev: num(s && s.rev),
+    date: s && typeof s.date === "string" ? s.date : null,
+    /* What that day had actually reached when the copy was taken. The one
+       figure that tells two snapshots of the same afternoon apart. */
+    pct: num(row && row.pct),
+    done: row && Array.isArray(row.done) ? row.done.length : null,
+    core: s && Array.isArray(s.habits) ? s.habits.filter((h) => h && h.core).length : null,
+    counts: {
+      habits: len("habits"),
+      tasks: len("tasks"),
+      goals: len("goals"),
+      books: len("books"),
+      history: len("history"),
+      events: len("events"),
+      quotes: len("quotes"),
+      reading: len("reading"),
+      badHabits: len("badHabits"),
+      sessions: len("sessions"),
+      reviews: len("reviews"),
+      income: len("income"),
+    },
+  };
+  snapCache.set(key, out);
+  /* Bounded, and trimmed from the oldest insertion — a Map iterates in
+     insertion order, so the first key is the stalest. */
+  while (snapCache.size > 800) snapCache.delete(snapCache.keys().next().value);
+  return out;
+}
+
+function snapList() {
+  const kinds = [];
+  for (const [kind, { dir, label }] of Object.entries(SNAP_KINDS)) {
+    let names;
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    const items = names
+      .filter((n) => SNAP_NAME.test(n) && SNAP_PREFIX.test(n))
+      .map((n) => snapSummary(dir, n))
+      .filter(Boolean)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, SNAP_PER_KIND);
+    kinds.push({ kind, label, items });
+  }
+  return kinds;
+}
+
+/* One snapshot's contents, by kind and name. The name has to survive the
+   regex *and* be in the directory listing taken a moment ago. */
+function snapRead(kind, name) {
+  const spec = Object.prototype.hasOwnProperty.call(SNAP_KINDS, kind)
+    ? SNAP_KINDS[kind]
+    : null;
+  if (!spec) return null;
+  if (!SNAP_NAME.test(name) || !SNAP_PREFIX.test(name)) return null;
+  let names;
+  try {
+    names = fs.readdirSync(spec.dir);
+  } catch {
+    return null;
+  }
+  if (!names.includes(name)) return null;
+  try {
+    const text = fs.readFileSync(path.join(spec.dir, name), "utf8");
+    JSON.parse(text); // refuse to hand back something unparseable
+    return text;
+  } catch {
+    return null;
+  }
+}
+
 /* --- static site ------------------------------------------------------ */
 
 const TYPES = {
@@ -431,6 +582,39 @@ const server = http.createServer((req, res) => {
         "Cache-Control": "no-store",
       });
     }
+    /* The snapshots on disk, listed and handed back. See SNAP_KINDS: a
+       request names a kind and a file, and the file has to be one readdir
+       just listed in that kind's own directory. No path joining of anything
+       the request said. */
+    if (url.pathname === "/snapshots") {
+      let body;
+      try {
+        body = JSON.stringify({ now: Date.now(), kinds: snapList() });
+      } catch {
+        return end(res, 500);
+      }
+      return end(res, 200, body, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+    }
+    if (url.pathname.startsWith("/snapshots/")) {
+      let rest;
+      try {
+        rest = decodeURIComponent(url.pathname.slice(11));
+      } catch {
+        return end(res, 400);
+      }
+      const at = rest.indexOf("/");
+      if (at <= 0) return end(res, 404);
+      const text = snapRead(rest.slice(0, at), rest.slice(at + 1));
+      if (text === null) return end(res, 404);
+      return end(res, 200, text, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+    }
+
     /* The hub. A page of its own rather than a route into the app: the app
        is one bundle behind one service worker, and the hub has to stay
        reachable when that bundle is the thing being rebuilt. It lives in
@@ -519,6 +703,12 @@ const server = http.createServer((req, res) => {
        logical day, and a guard that compares fields another app does not have
        would refuse writes for no reason. */
     const forced = req.headers["x-force"] === "1";
+    /* A restore from the recovery centre. It is a deliberate overwrite of a
+       perfectly good file with an older one, so the file it lands on is
+       stowed first no matter what the shapes say — `shrinkReason` would miss
+       a restore that happens to add rows, and the one copy a restore must
+       never destroy is the one the user was about to undo back to. */
+    const guarded = req.headers["x-guard"] === "1";
     let duplicate = false;
     if (name === "lifeos" && disk && !forced) {
       const theirs = Number(disk.rev);
@@ -582,7 +772,11 @@ const server = http.createServer((req, res) => {
     const savedAt = Date.now();
     try {
       if (name === "lifeos") {
-        const why = forced ? "forced over a newer copy" : shrinkReason(disk, msg.payload);
+        const why = forced
+          ? "forced over a newer copy"
+          : guarded
+            ? "asked for before a restore"
+            : shrinkReason(disk, msg.payload);
         if (why) guardSnapshot(name, JSON.stringify(disk, null, 2), why);
       }
       keepPrevious(file);

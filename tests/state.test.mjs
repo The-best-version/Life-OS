@@ -35,6 +35,15 @@ import {
   carryOf,
   rollDay,
   migrate,
+  addDays,
+  HISTORY_CAP,
+  GAP_REACH,
+  isGap,
+  fillGaps,
+  firstDay,
+  pctOfRow,
+  setDayDone,
+  streakBaseFrom,
   scoredOf,
   disciplineOf,
   coreOf,
@@ -243,7 +252,21 @@ test("rollDay unchecks and keeps everything else", () => {
     rolled.habits.map((h) => h.id),
     stale.habits.map((h) => h.id),
   );
-  assert.equal(rolled.history.length, stale.history.length);
+  /* Not an equal count: a rollover now also writes down the days the app
+     was never opened. What may never happen is a *recorded* row being lost
+     or rewritten, which is what this checks instead. */
+  for (const h of stale.history) {
+    assert.deepEqual(
+      rolled.history.find((x) => x.date === h.date),
+      h,
+      `${h.date} was lost or rewritten by the rollover`,
+    );
+  }
+  assert.equal(
+    rolled.history.filter((h) => !isGap(h)).length,
+    stale.history.filter((h) => !isGap(h)).length,
+    "the rollover invented a recorded day",
+  );
   assert.equal(rolled.goals.length, stale.goals.length);
   assert.equal(rolled.books.length, stale.books.length);
   assert.equal(rolled.water, 0);
@@ -629,4 +652,239 @@ test("«اليوم» takes a row on the phone bar", () => {
      shows, the app opens on a screen with no way back to itself. */
   const { main } = navSplit(null, null);
   assert.ok(main.slice(0, TAB_BAR).includes("today"));
+});
+
+/* ===================================================================== *
+ *  Unrecorded days — the difference between a zero and a silence
+ * ===================================================================== */
+
+test("fillGaps writes a row for every day nobody recorded", () => {
+  const out = fillGaps(
+    [
+      { date: "2026-09-29", pct: 0, done: [], all: ["a"] },
+      { date: "2026-10-02", pct: 40, done: ["a"], all: ["a"] },
+    ],
+    "2026-09-29",
+    "2026-10-03",
+  );
+  assert.deepEqual(
+    out.map((h) => h.date),
+    ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"],
+    "the archive must come out in date order, with no day skipped",
+  );
+  assert.deepEqual(
+    out.filter(isGap).map((h) => h.date),
+    ["2026-09-30", "2026-10-01", "2026-10-03"],
+  );
+  /* A recorded day is never touched, whatever it scored. */
+  assert.deepEqual(out[0], { date: "2026-09-29", pct: 0, done: [], all: ["a"] });
+});
+
+test("a gap row is not a zero: no score, no roster", () => {
+  const [row] = fillGaps([], "2026-10-01", "2026-10-01");
+  assert.deepEqual(row, { date: "2026-10-01", gap: true });
+  assert.equal("pct" in row, false, "a day nobody recorded cannot have a score");
+  assert.equal("done" in row, false, "and it cannot have a roll call");
+  /* Which is what keeps it out of every consumer that reads the archive —
+     all of them gate on `Array.isArray(row.done)`. */
+  assert.equal(Array.isArray(row.done), false);
+});
+
+test("fillGaps refuses a range it cannot walk", () => {
+  const h = [{ date: "2026-10-01", pct: 1 }];
+  for (const [a, b] of [
+    [null, "2026-10-05"],
+    ["2026-10-01", "x"],
+    ["2026-02-31", "2026-10-05"],
+    ["2026-10-05", "2026-10-01"],
+  ]) {
+    assert.equal(fillGaps(h, a, b), h, `${a} → ${b} should have been refused whole`);
+  }
+});
+
+test("fillGaps cannot blow the archive open", () => {
+  /* A clock that ran away, or a payload whose `date` is years stale. Reach
+     is bounded, so the real days are never pushed out of a capped archive by
+     invented silences — and the recorded row is still there afterwards. */
+  const out = fillGaps([{ date: "2020-01-01", pct: 5 }], "2020-01-01", "2026-10-05");
+  assert.ok(out.length <= GAP_REACH + 1, `${out.length} rows came out`);
+  assert.ok(out.length <= HISTORY_CAP);
+  assert.deepEqual(out[0], { date: "2020-01-01", pct: 5 });
+  assert.equal(out.filter(isGap).length, GAP_REACH);
+});
+
+test("migrate fills the days the old payload never recorded", () => {
+  const raw = fixture("schema-20.json");
+  const out = migrate(raw);
+  const by = new Map(out.history.map((h) => [h.date, h]));
+  /* The two real holes in the first week of October. */
+  for (const d of ["2026-10-01", "2026-10-03"]) {
+    assert.ok(by.has(d), `${d} is still missing from the archive`);
+    assert.ok(isGap(by.get(d)), `${d} came back as something other than a gap`);
+  }
+  /* And every day he did record is still there, untouched. */
+  for (const h of raw.history) {
+    assert.deepEqual(by.get(h.date), h, `${h.date} was rewritten by the migration`);
+  }
+});
+
+test("migrate invents no day before the first one he recorded", () => {
+  const out = migrate(fixture("schema-20.json"));
+  const first = fixture("schema-20.json")
+    .history.map((h) => h.date)
+    .sort()[0];
+  assert.ok(
+    out.history.every((h) => h.date >= first),
+    "the archive reaches back before the first day there was an app to open",
+  );
+});
+
+test("migrate leaves today alone — today is still being lived", () => {
+  const out = migrate({ schema: 20, date: dayKey(), history: [{ date: "2026-01-01", pct: 3 }] });
+  const today = out.history.find((h) => h.date === dayKey());
+  assert.ok(!today || !isGap(today), "today was written down as unrecorded");
+});
+
+test("rollDay writes down the days the app was never opened", () => {
+  const two = addDays(dayKey(), -3);
+  const s = {
+    ...freshState(),
+    date: two,
+    history: [{ date: two, pct: 50, done: [], all: [] }],
+  };
+  const out = rollDay(s);
+  const gaps = out.history.filter(isGap).map((h) => h.date);
+  assert.deepEqual(gaps, [addDays(dayKey(), -2), addDays(dayKey(), -1)]);
+  /* The day being left behind already had its own row and keeps it. */
+  assert.ok(out.history.some((h) => h.date === two && !isGap(h)));
+});
+
+test("firstDay ignores what is not a date", () => {
+  assert.equal(
+    firstDay([{ date: "x" }, { date: "2026-05-04" }, null, { date: "2026-02-30" }]),
+    "2026-05-04",
+  );
+  assert.equal(firstDay([]), null);
+  assert.equal(firstDay(null), null);
+});
+
+/* ===================================================================== *
+ *  A past day's score, and correcting one
+ * ===================================================================== */
+
+test("pctOfRow reads the same denominator the ring reads", () => {
+  const habits = [
+    { id: "a", core: true },
+    { id: "b", core: true },
+    { id: "c" },
+    { id: "d" },
+  ];
+  /* Two of four ticked is 50% with no core set... */
+  assert.equal(pctOfRow({ all: ["a", "b", "c", "d"], done: ["a", "c"] }, habits.map((h) => ({ id: h.id }))), 50);
+  /* ...and one of the two core habits is also 50% — but for a different
+     reason, and the two must be computed by the same function or the archive
+     and the ring will disagree about the same day. */
+  assert.equal(pctOfRow({ all: ["a", "b", "c", "d"], done: ["a", "c"] }, habits), 50);
+  assert.equal(pctOfRow({ all: ["a", "b", "c", "d"], done: ["a", "b", "c"] }, habits), 100);
+  assert.equal(pctOfRow({ all: ["a", "b", "c", "d"], done: ["c", "d"] }, habits), 0);
+});
+
+test("pctOfRow scores the day the roster it actually had", () => {
+  const habits = [{ id: "a" }, { id: "b" }];
+  /* Three were asked that day and one of them has since been deleted. It
+     still counts: dropping it would rescore a finished day every time the
+     routine is edited, and the roll call lists it as «عادة لم تعد في روتينك»
+     rather than forgetting it — so one of three, not one of two. */
+  assert.equal(pctOfRow({ all: ["a", "b", "gone"], done: ["a"] }, habits), 33);
+  /* And a deleted habit can never be core, because the core is a choice
+     about the live routine. */
+  assert.equal(
+    pctOfRow({ all: ["a", "b", "gone"], done: ["a"] }, [{ id: "a", core: true }, { id: "b" }]),
+    100,
+  );
+});
+
+test("re-opening a day that was never edited previews the score it was lived at", () => {
+  /* The bug this rule exists for: the editor showed 21% beside the 35% the
+     day was recorded at, because three of that day's habits had been deleted
+     since. An untouched row must preview exactly what it stored. */
+  const all = ["a", "b", "c", "d", "e", "f"];
+  const row = { date: "2026-10-05", all, done: ["a", "b"], pct: 33 };
+  assert.equal(pctOfRow(row, [{ id: "a" }, { id: "b" }, { id: "c" }]), row.pct);
+});
+
+test("pctOfRow falls back to the live roster for a row that has none", () => {
+  const habits = [{ id: "a" }, { id: "b" }];
+  assert.equal(pctOfRow({ done: ["a"] }, habits), 50);
+  assert.equal(pctOfRow({}, habits), 0);
+  assert.equal(pctOfRow(null, []), 0);
+});
+
+test("setDayDone rewrites one row and nothing else", () => {
+  const habits = [{ id: "a" }, { id: "b" }];
+  const history = [
+    { date: "2026-10-04", pct: 0, done: [], all: ["a", "b"] },
+    { date: "2026-10-05", pct: 0, done: [], all: ["a", "b"], distraction: "النوم" },
+  ];
+  const out = setDayDone(history, "2026-10-05", ["a"], habits);
+  assert.deepEqual(out[0], history[0], "the day before was touched");
+  assert.equal(out[1].pct, 50);
+  assert.deepEqual(out[1].done, ["a"]);
+  /* Merged, never rebuilt: the row also carries the evening reflection. */
+  assert.equal(out[1].distraction, "النوم");
+});
+
+test("setDayDone turns a gap into an ordinary day", () => {
+  const habits = [{ id: "a" }, { id: "b" }];
+  const out = setDayDone([{ date: "2026-10-03", gap: true }], "2026-10-03", ["a", "b"], habits);
+  assert.equal(out.length, 1);
+  assert.equal(isGap(out[0]), false);
+  assert.equal("gap" in out[0], false, "`gap: false` is a second shape meaning one thing");
+  assert.equal(out[0].pct, 100);
+  assert.deepEqual(out[0].all, ["a", "b"], "a gap has no roster, so the live one is used");
+});
+
+test("setDayDone cannot tick a habit that day never asked", () => {
+  const habits = [{ id: "a" }, { id: "b" }];
+  const out = setDayDone(
+    [{ date: "2026-10-05", done: [], all: ["a"] }],
+    "2026-10-05",
+    ["a", "b", "a"],
+    habits,
+  );
+  assert.deepEqual(out[0].done, ["a"], "a habit off that day's roster, or listed twice");
+  assert.equal(out[0].pct, 100);
+});
+
+test("setDayDone refuses a date that is not one", () => {
+  const h = [{ date: "2026-10-05", done: [], all: [] }];
+  for (const d of [null, "", "x", "2026-02-31"]) assert.equal(setDayDone(h, d, [], []), h);
+});
+
+test("streakBaseFrom counts back from yesterday and stops at the first miss", () => {
+  const day = (n) => addDays(dayKey(), -n);
+  const hit = (n) => ({ date: day(n), pct: 90, done: [], all: [] });
+  assert.equal(streakBaseFrom([hit(1), hit(2), hit(3)]), 3);
+  /* Today is not part of the base — `dayBanked` adds it, and counting it
+     twice is how a streak reads one day ahead of itself. */
+  assert.equal(streakBaseFrom([{ date: dayKey(), pct: 100, done: [], all: [] }]), 0);
+  /* A short day breaks the run where it falls. */
+  assert.equal(
+    streakBaseFrom([hit(1), { date: day(2), pct: 40, done: [], all: [] }, hit(3)]),
+    1,
+  );
+});
+
+test("a day nobody recorded cannot be claimed as part of a run", () => {
+  const day = (n) => addDays(dayKey(), -n);
+  const hit = (n) => ({ date: day(n), pct: 95, done: [], all: [] });
+  assert.equal(streakBaseFrom([hit(1), { date: day(2), gap: true }, hit(3)]), 1);
+  assert.equal(streakBaseFrom([{ date: day(1), gap: true }, hit(2)]), 0);
+});
+
+test("the archive still carries no gap once it has been filled", () => {
+  /* Idempotence where it matters: filling twice must not double the rows. */
+  const once = fillGaps([{ date: "2026-10-01", pct: 1 }], "2026-10-01", "2026-10-04");
+  const twice = fillGaps(once, "2026-10-01", "2026-10-04");
+  assert.deepEqual(twice, once);
 });

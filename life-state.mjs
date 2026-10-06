@@ -314,7 +314,7 @@ export const READING_QUOTES = [
 
 export const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 22;
+export const SCHEMA = 23;
 /* How many archive rows are kept, and the discipline a day has to reach to
    bank the streak. */
 export const HISTORY_CAP = 500;
@@ -1436,6 +1436,150 @@ export const SEED_UNI = () => {
   return uniShape({ terms: [t], term: t.id });
 };
 
+/* --- the days that were never written -------------------------------- *
+ *  `history` carried a row for every day the app was opened and nothing at
+ *  all for the days it was not, and those are not the same answer. A month
+ *  grid with an empty square cannot say whether that day went to zero, was
+ *  never opened, or has not happened yet — and an average taken over "the
+ *  rows that exist" quietly flatters every stretch where the recording
+ *  stopped. 18% across four rows is not the same month as 18% across four
+ *  rows and nine silences.
+ *
+ *  So an unrecorded day is written down as one: `{ date, gap: true }`, and
+ *  nothing else. No `done` and no `all`, which is exactly what keeps it out
+ *  of the habit ledger, the consistency card and every average — all of them
+ *  already gate on `Array.isArray(row.done)`. It draws as «لم يُسجَّل» and it
+ *  is counted out loud, because "two days unrecorded this month" is the
+ *  number worth seeing.
+ *
+ *  Today is never a gap. Today is still being lived, and the archive effect
+ *  stamps its row the moment the app is open.
+ * -------------------------------------------------------------------- */
+export const isGap = (row) => !!row && row.gap === true && !Array.isArray(row.done);
+
+/* Ascending by date — the order every writer in the app already appends in,
+   and the order `HISTORY_CAP` has to prune from the front of. */
+const byDateAsc = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+/* How far back a silence is still worth writing down. The same depth the
+   server keeps daily snapshots to, and for the same reason: four months is
+   as far back as going to look changes anything. Past it, a dashed square is
+   not information — and an unbounded walk is how a stale `date`, or a clock
+   that ran away, turns into years of empty rows that then push real days out
+   of an archive capped at `HISTORY_CAP`. */
+export const GAP_REACH = 120;
+
+/* Both ends inclusive. `to` is yesterday at every call site; passing it in
+   rather than reading the clock here is what makes this testable without a
+   fake date. */
+export function fillGaps(history, from, to) {
+  const have = rows(history);
+  if (!isKey(from) || !isKey(to) || from > to) return history;
+  const floor = addDays(to, -(GAP_REACH - 1));
+  const start = from < floor ? floor : from;
+  const seen = new Set(have.map((h) => h.date));
+  const added = [];
+  for (let d = start; d <= to; d = addDays(d, 1)) {
+    if (!seen.has(d)) added.push({ date: d, gap: true });
+  }
+  if (!added.length) return history;
+  return [...have, ...added].sort(byDateAsc).slice(-HISTORY_CAP);
+}
+
+/* The earliest day the archive knows about — where the gap filling starts.
+   Before his first recorded day there was no app to open, and inventing
+   silences back to the epoch would be a different lie. */
+export const firstDay = (history) => {
+  let first = null;
+  for (const h of rows(history)) {
+    if (!isKey(h.date)) continue;
+    if (first === null || h.date < first) first = h.date;
+  }
+  return first;
+};
+
+/* --- a past day's score ----------------------------------------------- *
+ *  A stored row carries habit ids, not habits, so the roster is rebuilt and
+ *  handed to `disciplineOf` — the one denominator the ring, the archive, the
+ *  streak and the server's reminder all read. Doing this arithmetic inline is
+ *  precisely how two screens end up disagreeing about one day the first time
+ *  a habit is marked core.
+ *
+ *  The roster is the one the row recorded, whole — including ids whose habit
+ *  has since been deleted. Dropping them was tried and is wrong twice over:
+ *  it rescores a finished day every time the routine is edited, so re-opening
+ *  yesterday showed 21% beside the 35% it was actually lived at; and it makes
+ *  the denominator here disagree with the one the roll call renders, which
+ *  lists a missing habit as «عادة لم تعد في روتينك» rather than forgetting it.
+ *  A deleted habit simply carries no `core` flag, which is right — the core is
+ *  a choice about the live routine.
+ * -------------------------------------------------------------------- */
+export function pctOfRow(row, habits) {
+  const live = new Map(rows(habits).map((h) => [h.id, h]));
+  const roster =
+    Array.isArray(row?.all) && row.all.length
+      ? row.all
+      : rows(habits).map((h) => h.id);
+  const done = new Set(Array.isArray(row?.done) ? row.done : []);
+  return disciplineOf(
+    roster.map((id) => ({ ...(live.get(id) || { id }), done: done.has(id) })),
+  );
+}
+
+/* --- yesterday, corrected --------------------------------------------- *
+ *  Forgetting to tick is not the same as not having done it, and until now
+ *  the day simply went. This rewrites one archive row and touches nothing
+ *  else: no habit on today's list moves, because today is a different day
+ *  and the whole point of a hard day boundary is that it holds.
+ *
+ *  A gap row becomes an ordinary one. It has no roster of its own — the app
+ *  was never opened, so nothing was ever asked — and the live list is the
+ *  only honest answer available for what that day consisted of.
+ * -------------------------------------------------------------------- */
+export function setDayDone(history, date, doneIds, habits) {
+  if (!isKey(date)) return history;
+  const have = rows(history);
+  const prev = have.find((h) => h.date === date) || null;
+  const roster =
+    Array.isArray(prev?.all) && prev.all.length
+      ? prev.all
+      : rows(habits).map((h) => h.id);
+  const asked = new Set(roster);
+  const done = [
+    ...new Set((Array.isArray(doneIds) ? doneIds : []).filter((id) => asked.has(id))),
+  ];
+  /* `gap` is dropped, never set to false: a row saying `gap: false` and a row
+     with no `gap` at all would be two shapes meaning one thing, and `isGap`
+     would then have to know about both. */
+  const { gap, ...kept } = prev || {};
+  void gap;
+  const row = { ...kept, date, all: roster, done };
+  row.pct = pctOfRow(row, habits);
+  return [...have.filter((h) => h.date !== date), row].sort(byDateAsc).slice(-HISTORY_CAP);
+}
+
+/* --- the streak, read back off the archive ---------------------------- *
+ *  `streakBase` counts the days before today, and it has always been carried
+ *  as a counter incremented at each rollover. Correcting yesterday can change
+ *  whether yesterday qualified at all, so after an edit the number is read
+ *  back off the rows instead of trusted. Walks back from yesterday and stops
+ *  at the first day that did not reach the target — which a gap row never
+ *  does, because a day nobody recorded cannot be claimed as part of a run.
+ * -------------------------------------------------------------------- */
+export function streakBaseFrom(history) {
+  const by = new Map(rows(history).map((h) => [h.date, h]));
+  const d = logicalNow();
+  d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (n < HISTORY_CAP) {
+    const r = by.get(fmtDay(d));
+    if (!r || isGap(r) || !(Number(r.pct) >= STREAK_TARGET)) return n;
+    n += 1;
+    d.setDate(d.getDate() - 1);
+  }
+  return n;
+}
+
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
   date: dayKey(),
@@ -1797,6 +1941,19 @@ export function migrate(saved) {
      it rather than at the end of the list. */
   const navMore = navSplit(navOrder, saved.navMore).behind;
 
+  /* The archive row the whole app writes to. A hole here is the one that
+     reaches the render rather than a shape, so it is cleaned here too — and
+     a row whose date is not a date is not a day, it is damage. */
+  let history = rows(saved.history).filter((h) => isKey(h.date));
+
+  /* Schema 23 writes the unrecorded days down. Every payload before it has a
+     row only for the days the app was opened, so the two days missed in the
+     first week of October were indistinguishable from days that went to zero
+     — and from days that have not happened yet. Filled once here, from the
+     earliest row the archive holds through to yesterday. Today is left alone:
+     it is still being lived, and the archive effect stamps it on mount. */
+  if (from < 23) history = fillGaps(history, firstDay(history), yesterdayKey());
+
   return {
     ...saved,
     schema: SCHEMA,
@@ -1812,9 +1969,7 @@ export function migrate(saved) {
     uni,
     navOrder,
     navMore,
-    /* The archive row the whole app writes to. A hole here is the one that
-       reaches the render rather than a shape, so it is cleaned here too. */
-    history: rows(saved.history).filter((h) => typeof h.date === "string"),
+    history,
     sessions: rows(saved.sessions),
     income: rows(saved.income),
     ventures: rows(saved.ventures),
@@ -1887,6 +2042,13 @@ export function rollDay(s) {
   const continued = s.date === yesterdayKey() && s.dayBanked;
   return freshState({
     ...carryOf(s),
+    /* Every day between the one being left behind and yesterday, written
+       down as unrecorded. Closing the laptop on Thursday and opening it on
+       Monday used to leave three blank squares that read exactly like three
+       zeroes; now they say so. The day being left behind already has a row
+       of its own — the archive effect stamped it — so the walk starts the
+       day after it. */
+    history: fillGaps(s.history, addDays(s.date, 1), yesterdayKey()),
     streakBase: continued ? (s.streakBase || 0) + 1 : 0,
   });
 }

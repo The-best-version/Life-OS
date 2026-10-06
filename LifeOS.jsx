@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useMemo,
   useCallback,
+  useContext,
   useRef,
 } from "react";
 import { createRoot, createPortal } from "react-dom";
@@ -130,6 +131,10 @@ import {
   Link2,
   Layers,
   TrendingDown,
+  Undo2,
+  History,
+  Archive,
+  GitCompare,
 } from "lucide-react";
 
 import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
@@ -174,6 +179,7 @@ import {
   hhmm,
   HISTORY_CAP,
   HORIZONS,
+  isGap,
   isKey,
   keyToDate,
   logicalNow,
@@ -183,11 +189,13 @@ import {
   MORE_IDS,
   NAV_IDS,
   navSplit,
+  northStarShape,
   obj,
   orderNavIds,
   parentHorizon,
   PILLARS,
   PLACE_BY_ID,
+  pctOfRow,
   PLACES,
   placeShape,
   QUARTERS,
@@ -197,8 +205,10 @@ import {
   rollDay,
   rows,
   SCHEMA,
+  setDayDone,
   slotShape,
   sprintShape,
+  streakBaseFrom,
   TAB_BAR,
   storyShape,
   tagOf,
@@ -220,6 +230,7 @@ import {
   WARN_CHOICES,
   WATER_GOAL_MAX,
   WORD_MAX,
+  yesterdayKey,
 } from "./life-state.mjs";
 
 /* --- the icons, fastened on ------------------------------------------- *
@@ -1074,10 +1085,16 @@ const onSyncResult = (fn) => {
    completes because hiding a tab is not closing it. */
 const KEEPALIVE_MAX = 60 * 1024;
 
-function postSync(payload, rev, { force = false, keepalive = false } = {}) {
+function postSync(payload, rev, { force = false, guard = false, keepalive = false } = {}) {
   const body = JSON.stringify({ project: "lifeos", payload: { ...payload, rev } });
   const headers = { "Content-Type": "text/plain", "X-Local-Sync": "1" };
   if (force) headers["X-Force"] = "1";
+  /* A restore from the recovery centre. The file it lands on is perfectly
+     good — it is simply not the one he wants — so the server stows it first
+     whatever the shapes say. `shrinkReason` cannot catch this on its own: a
+     restore that happens to *add* rows still destroys the copy he would
+     undo back to. */
+  if (guard) headers["X-Guard"] = "1";
   const opts = { method: "POST", headers, body };
   if (keepalive && body.length < KEEPALIVE_MAX) opts.keepalive = true;
   return fetch(api("/sync"), opts).then(
@@ -1428,6 +1445,11 @@ const arCount = (n, forms) => {
 };
 const DAY_FORMS = ["يوم", "يومان", "أيام", "يومًا"];
 const dayWord = (n) => arCount(n, DAY_FORMS);
+/* The whole phrase, numeral included — and the numeral is *dropped* for one
+   and two, because Arabic's dual already carries it and «٢ يومان» reads as a
+   translation rather than a sentence. */
+const daysPhrase = (n) =>
+  Math.abs(n) === 1 ? "يوم واحد" : Math.abs(n) === 2 ? "يومان" : null;
 const MIN_FORMS = ["دقيقة", "دقيقتان", "دقائق", "دقيقة"];
 const minWord = (n) => arCount(n, MIN_FORMS);
 const STEP_FORMS = ["خطوة", "خطوتان", "خطوات", "خطوة"];
@@ -3856,6 +3878,7 @@ function ProgressRing({
  *  The 80/20 hook — exactly three non-negotiables a day
  * ==================================================================== */
 function TopThree({ state, setState }) {
+  const arm = useUndo();
   const picked = state.tasks.filter((t) => t.today);
   const done = picked.filter((t) => t.done).length;
   const slots = [...Array(TOP_TASK_CAP)].map((_, i) => picked[i] || null);
@@ -3926,12 +3949,13 @@ function TopThree({ state, setState }) {
                   onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
                   onToggleDone={() => patch(task.id, { done: !task.done })}
                   onToggleToday={() => patch(task.id, { today: false })}
-                  onDelete={() =>
+                  onDelete={() => {
+                    arm("حُذفت المهمة", { tasks: state.tasks });
                     setState((s) => ({
                       ...s,
                       tasks: s.tasks.filter((t) => t.id !== task.id),
-                    }))
-                  }
+                    }));
+                  }}
                 />
               </div>
             </div>
@@ -4631,6 +4655,80 @@ function nudgeHabit(habits, id, dir) {
   return habits;
 }
 
+/* --- the eight seconds after a delete --------------------------------- *
+ *  Every destructive button in this app was immediate and final, and three
+ *  of them sit a few pixels from a button that is not. A habit deleted by a
+ *  slip took its whole run with it, and the only route back was the import
+ *  box and whatever the disk happened to hold.
+ *
+ *  So a delete keeps the list it replaced for eight seconds. Not a diff and
+ *  not a reverse-patch: the whole array as it stood, put back wholesale,
+ *  which is the only way the row returns *in its own place* rather than at
+ *  the end. Eight seconds because that is long enough to read a toast and
+ *  reach it, and short enough that the snapshot is not quietly holding a
+ *  deleted book alive for the rest of the session.
+ *
+ *  A context rather than a prop, because the delete buttons are scattered
+ *  across sixteen modules and threading a callback to all of them is how a
+ *  new one quietly ships without an undo.
+ * ---------------------------------------------------------------------- */
+const UNDO_MS = 8000;
+const UndoBus = React.createContext(null);
+
+/* `arm(label, before)` — `before` is the slice of state to restore, e.g.
+   `{ habits: s.habits }`. Spread back over whatever the state is by then, so
+   an unrelated change made in those eight seconds is not undone with it. */
+function useUndo() {
+  return useContext(UndoBus) || noUndo;
+}
+const noUndo = () => {};
+
+function UndoToast({ undo, onUndo, onDismiss }) {
+  /* The countdown is the toast's own, restarted whenever a new delete arms
+     it — keyed on the stamp so a second delete gets its own eight seconds
+     rather than inheriting the tail of the first. */
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(onDismiss, UNDO_MS);
+    return () => clearTimeout(t);
+  }, [undo, onDismiss]);
+
+  if (!undo) return null;
+  return (
+    <div
+      /* Above `BottomTabs` on a phone, and clear of the stray-copy and
+         disk-stopped bars that live at the same edge. Centred with
+         `inset-x`/`mx-auto`, never a translate: `.los-in` owns `transform`
+         on this element and a Tailwind translate utility would be discarded. */
+      className="los-in fixed inset-x-3 z-[88] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-2.5 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(420px,92vw)]"
+      style={{
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
+        backgroundColor: T.cardSolid,
+        backgroundImage: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
+        borderColor: `${T.accent}73`,
+        boxShadow: `0 0 50px -14px ${T.accent}`,
+      }}
+      role="status"
+    >
+      <p className="text-[12px] font-bold" style={{ color: T.fg }}>
+        {undo.label}
+      </p>
+      <Btn size="sm" className="shrink-0" onClick={onUndo}>
+        <Undo2 size={13} /> تراجع
+      </Btn>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="إخفاء"
+        className="shrink-0 rounded-lg p-1 transition-colors hover:bg-white/10"
+        style={{ color: T.faint }}
+      >
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
+
 /* --- ticking a habit -------------------------------------------------- *
  *  Two screens tick the same habits — the routine, where the blocks are
  *  managed, and «اليوم», where what is still open is answered — and the tick
@@ -4642,11 +4740,25 @@ function nudgeHabit(habits, id, dir) {
  * ---------------------------------------------------------------------- */
 function useHabitTick(state, setState) {
   const [logging, setLogging] = useState(null); // habit awaiting a page count
+  const arm = useUndo();
 
   const toggle = useCallback(
     (id) => {
       const habit = state.habits.find((h) => h.id === id);
       const turningOn = habit && !habit.done;
+
+      /* An untick is a deletion in everything but name: it withdraws today's
+         reading sessions for the habit and rolls the book's page counter
+         back, and a mis-tapped row on a phone can cost an evening's pages.
+         Only the untick is armed — a tick that went in by mistake is undone
+         by tapping it again, which is the same gesture. */
+      if (habit && !turningOn) {
+        arm("أُزيل التأشير", {
+          habits: state.habits,
+          reading: state.reading,
+          books: state.books,
+        });
+      }
 
       setState((s) => {
         const next = {
@@ -4684,7 +4796,7 @@ function useHabitTick(state, setState) {
          and a skipped prompt still leaves the habit done. */
       if (habit?.book && turningOn) setLogging(habit);
     },
-    [state.habits, setState],
+    [state.habits, state.reading, state.books, setState, arm],
   );
 
   const logRead = useCallback(
@@ -5099,6 +5211,7 @@ function CueImageCard({ src, onChange }) {
    card falls back to an invitation rather than a blank when the list empties. */
 function QuotesModal({ open, onClose, quotes, setState }) {
   const [draft, setDraft] = useState({ id: null, text: "", author: "" });
+  const arm = useUndo();
 
   const commit = () => {
     const text = draft.text.trim();
@@ -5113,8 +5226,10 @@ function QuotesModal({ open, onClose, quotes, setState }) {
     setDraft({ id: null, text: "", author: "" });
   };
 
-  const drop = (id) =>
+  const drop = (id) => {
+    arm("حُذف الاقتباس", { quotes });
     setState((s) => ({ ...s, quotes: s.quotes.filter((q) => q.id !== id) }));
+  };
 
   return (
     <Modal
@@ -5733,6 +5848,198 @@ function CorePicker({ open, onClose, habits, onSave }) {
   );
 }
 
+/* --- yesterday, corrected --------------------------------------------- *
+ *  A habit system that only accepts today's answer punishes the one failure
+ *  it cannot do anything about: forgetting to open the app. The day went to
+ *  zero, the streak broke, and the number on the ring was about his memory
+ *  rather than his discipline.
+ *
+ *  So yesterday stays open for exactly as long as today lasts — until the
+ *  logical day boundary at 04:00, which is also when yesterday stops being
+ *  the day before and becomes the day before that. One row is rewritten and
+ *  nothing else moves: today's habits are not touched, because today is a
+ *  different day and the whole value of a hard boundary is that it holds.
+ *
+ *  It works on a gap row too, which is the common case — the day he did not
+ *  open the app is precisely the day worth going back for. A gap has no
+ *  roster of its own, so the live routine is what it is asked against.
+ * ---------------------------------------------------------------------- */
+const GONE_BLOCK = {
+  id: "__gone",
+  label: "عادات لم تعد في روتينك",
+  tint: T.faint,
+  icon: Trash2,
+};
+
+function EditYesterdayModal({ open, onClose, state, setState }) {
+  const ykey = yesterdayKey();
+  const row = useMemo(
+    () => (state.history || []).find((h) => h.date === ykey) || null,
+    [state.history, ykey],
+  );
+
+  /* The roster as it stood that day where the row recorded one, and the live
+     routine where it did not. A habit since deleted stays on the list, named
+     the way the roll call names it — it was asked that day, and dropping it
+     would rescore a finished day every time the routine is edited. */
+  const roster = useMemo(() => {
+    const live = new Map((state.habits || []).map((h) => [h.id, h]));
+    const ids =
+      Array.isArray(row?.all) && row.all.length
+        ? row.all
+        : (state.habits || []).map((h) => h.id);
+    return ids.map((id) => {
+      const h = live.get(id);
+      return h
+        ? { ...h, gone: false }
+        : { id, label: "عادة لم تعد في روتينك", group: null, core: false, gone: true };
+    });
+  }, [row, state.habits]);
+
+  const [picked, setPicked] = useState([]);
+  /* Seeded from the archive each time it opens, exactly like the reflection
+     box: opening it a second time on an empty list and saving would wipe the
+     correction with nothing. */
+  useEffect(() => {
+    if (!open) return;
+    const asked = new Set(roster.map((h) => h.id));
+    setPicked((Array.isArray(row?.done) ? row.done : []).filter((id) => asked.has(id)));
+  }, [open, row, roster]);
+
+  const toggle = (id) =>
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  /* Through `pctOfRow`, which goes through `disciplineOf` — the five core
+     habits carry the number here too, or the ring and this screen would
+     disagree about the same day the moment a core is set. */
+  const pct = pctOfRow({ all: roster.map((h) => h.id), done: picked }, state.habits);
+  const was = isGap(row) ? null : Number.isFinite(Number(row?.pct)) ? Number(row.pct) : null;
+
+  /* Grouped by the block each habit belongs to, in the order the day runs.
+     A habit whose block this build no longer has goes through `groupOf` into
+     the night block, exactly as it does on every other screen. */
+  const byBlock = useMemo(() => {
+    const live = roster.filter((h) => !h.gone);
+    return GROUPS.map((g) => ({
+      g,
+      list: live.filter((h) => groupOf(h.group).id === g.id),
+    })).filter((x) => x.list.length);
+  }, [roster]);
+  /* The deleted habits get a heading of their own rather than being swept
+     into the last block — they were asked that day and still count in the
+     denominator, but saying «قبل النوم» over them would be a plain lie. */
+  const gone = roster.filter((h) => h.gone);
+
+  const commit = () => {
+    setState((s) => {
+      const history = setDayDone(s.history, ykey, picked, s.habits);
+      /* The streak is read back off the rows rather than nudged: correcting
+         yesterday can make or break the run that ends today, and a counter
+         adjusted by hand here would be a second opinion about the same
+         archive. */
+      return { ...s, history, streakBase: streakBaseFrom(history) };
+    });
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`عدّل ${arDate(ykey)}`}
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={commit}>
+            <Check size={14} strokeWidth={3} /> احفظ أمس
+          </Btn>
+          <Btn variant="outline" className="flex-1" onClick={onClose}>
+            إلغاء
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-3"
+          style={{ borderColor: `${T.violet}3D`, background: `${T.violet}12` }}
+        >
+          <p className="text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+            {isGap(row)
+              ? "هذا اليوم لم يُسجَّل. أشّر ما أنجزته فعلًا فيه."
+              : "تعديل صف أمس فقط — عادات اليوم لا تتغيّر."}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            {was !== null && was !== pct && (
+              <Badge tint={T.faint}>
+                <span dir="ltr" className="tabular-nums">
+                  {was}%
+                </span>
+                {" كان"}
+              </Badge>
+            )}
+            <Badge tint={pct >= STREAK_TARGET ? T.primary : T.cta}>
+              <span dir="ltr" className="tabular-nums">
+                {pct}%
+              </span>
+            </Badge>
+          </div>
+        </div>
+
+        {!roster.length ? (
+          <p
+            className="rounded-xl border border-dashed px-3.5 py-5 text-center text-[11.5px] leading-relaxed"
+            style={{ borderColor: T.border, color: T.faint }}
+          >
+            لا عادات في روتينك بعد — أضف عادة أولًا ثم ارجع لهذا اليوم.
+          </p>
+        ) : (
+          <div className="space-y-3.5">
+            {[...byBlock, ...(gone.length ? [{ g: GONE_BLOCK, list: gone }] : [])].map(
+              ({ g, list }) => {
+                const Icon = g.icon;
+                return (
+                  <div key={g.id}>
+                    <p
+                      className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold"
+                      style={{ color: g.tint }}
+                    >
+                      <Icon size={12} /> {g.label}
+                    </p>
+                    <div className="space-y-1">
+                      {list.map((h) => (
+                        <div key={h.id} className="flex items-center gap-2">
+                          <Checkbox
+                            size="sm"
+                            checked={picked.includes(h.id)}
+                            onToggle={() => toggle(h.id)}
+                            label={h.label}
+                            /* The completion colour, never the block's tint —
+                               a done row that borrows its category colour
+                               stops reading as done. */
+                            tint={T.primary}
+                          />
+                          {h.core && (
+                            <Star
+                              size={11}
+                              aria-label="أساسية"
+                              style={{ color: T.accent, fill: T.accent }}
+                            />
+                          )}
+
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              },
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function RoutineModule({
   state,
   setState,
@@ -5746,6 +6053,7 @@ function RoutineModule({
   diskStuck,
   onOpenMirror,
   onOpenReflect,
+  onOpenFix,
   onOpenSettings,
   onGoGoals,
   reflected,
@@ -5770,6 +6078,7 @@ function RoutineModule({
      withdrawal of a reading log on an untick is not logic that may exist in
      two copies drifting apart. */
   const { toggle, logging, closeLog, logRead } = useHabitTick(state, setState);
+  const arm = useUndo();
 
   const save = () => {
     const label = editing.label.trim();
@@ -5796,8 +6105,13 @@ function RoutineModule({
     setEditing(null);
   };
 
-  const remove = (id) =>
+  const remove = (id) => {
+    /* The whole list, not the row: a habit put back at the end of the list
+       is a habit in the wrong block and the wrong order, which is its own
+       small loss. */
+    arm("حُذفت العادة", { habits: state.habits });
     setState((s) => ({ ...s, habits: s.habits.filter((h) => h.id !== id) }));
+  };
 
   const reorder = (dragId, targetId) =>
     setState((s) => ({ ...s, habits: dropHabit(s.habits, dragId, targetId) }));
@@ -6042,6 +6356,22 @@ function RoutineModule({
               }}
             >
               <MessageSquareQuote size={16} strokeWidth={2} />
+            </button>
+            {/* Open for as long as today is today. A day missed because the
+                app was never opened is the one failure the app itself caused,
+                and it has to be answerable. */}
+            <button
+              onClick={onOpenFix}
+              title="عدّل أمس"
+              aria-label="عدّل أمس"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+              style={{
+                borderColor: `${T.violet}3D`,
+                background: `${T.violet}0F`,
+                color: T.violet,
+              }}
+            >
+              <History size={16} strokeWidth={2} />
             </button>
             <button
               onClick={onOpenMirror}
@@ -6395,6 +6725,7 @@ function MatrixModule({ state, setState }) {
   const [draftQ, setDraftQ] = useState("q2");
   const [over, setOver] = useState(null);
   const [capHit, fireCapHit] = useBurst(2800);
+  const arm = useUndo();
 
   const add = () => {
     const text = draft.trim();
@@ -6430,8 +6761,10 @@ function MatrixModule({ state, setState }) {
   const toggleToday = (t) =>
     t.today ? patch(t.id, { today: false }) : promote(t.id);
 
-  const remove = (id) =>
+  const remove = (id) => {
+    arm("حُذفت المهمة", { tasks: state.tasks });
     setState((s) => ({ ...s, tasks: s.tasks.filter((t) => t.id !== id) }));
+  };
 
   const onDrop = (zone) => (e) => {
     e.preventDefault();
@@ -8794,6 +9127,7 @@ function GoalsModule({ state, setState }) {
      that has not begun, because the wall clock happens to say October, is
      the one window nobody is planning in. */
   const here = new Date().getFullYear();
+  const arm = useUndo();
   const [horizon, setHorizon] = useState("quarter");
   const [quarter, setQuarter] = useState(() => openingWindow(state.goals).quarter);
   const [year, setYear] = useState(() => openingWindow(state.goals).year);
@@ -8873,7 +9207,10 @@ function GoalsModule({ state, setState }) {
       ),
     }));
 
-  const remove = (id) =>
+  const remove = (id) => {
+    /* The cut links come back with the list, which is the point of restoring
+       the array whole rather than re-inserting the row. */
+    arm("حُذف الهدف", { goals: state.goals || [] });
     setState((s) => ({
       ...s,
       /* The children stay — they are the user's own rows, not this goal's
@@ -8884,6 +9221,7 @@ function GoalsModule({ state, setState }) {
         .filter((g) => g.id !== id)
         .map((g) => (g.parent === id ? { ...g, parent: null } : g)),
     }));
+  };
 
   /* A new goal lands in the window on screen and opens straight onto its own
      desk: a goal with no reason, no measure and nothing it serves is the kind
@@ -9903,6 +10241,7 @@ function VaultModule({ state, setState }) {
   const [filter, setFilter] = useState("all");
   const [deskId, setDeskId] = useState(null);
   const [read, shuffleRead] = useDailyQuote(state.reads || [], READ_KEY);
+  const arm = useUndo();
 
   const save = () => {
     const title = editing.title.trim();
@@ -9932,8 +10271,13 @@ function VaultModule({ state, setState }) {
         status === "finished" ? b.finishedAt || dayKey() : null,
     });
 
-  const remove = (id) =>
+  const remove = (id) => {
+    /* The reading log stays — it records evenings that happened, and a book
+       removed from the shelf does not un-read them — so only the shelf is
+       held aside. */
+    arm("حُذف الكتاب", { books: state.books });
     setState((s) => ({ ...s, books: s.books.filter((b) => b.id !== id) }));
+  };
 
   const shown =
     filter === "all" ? state.books : state.books.filter((b) => b.status === filter);
@@ -15199,10 +15543,26 @@ function AnalyticsModule({ state, discipline, streak }) {
   const [openNote, setOpenNote] = useState(null);
 
   const byDate = useMemo(() => {
-    const map = new Map((state.history || []).map((h) => [h.date, h.pct]));
+    const map = new Map(
+      /* A gap row carries no percentage on purpose — it is a day nobody
+         recorded, not a day that scored nothing — so it is kept out of this
+         map entirely and answered from `gapDates` below. */
+      rows(state.history)
+        .filter((h) => !isGap(h))
+        .map((h) => [h.date, h.pct]),
+    );
     map.set(dayKey(), discipline); // today is live, not yet archived
     return map;
   }, [state.history, discipline]);
+
+  /* The days written down as unrecorded. A square that is grey because the
+     app was never opened and a square that is grey because the month has not
+     got there yet are two different facts, and a tracker that draws them the
+     same way is the one that let two silent days pass unnoticed. */
+  const gapDates = useMemo(
+    () => new Set(rows(state.history).filter(isGap).map((h) => h.date)),
+    [state.history],
+  );
 
   const notesByDate = useMemo(
     () =>
@@ -15226,10 +15586,10 @@ function AnalyticsModule({ state, discipline, streak }) {
     const cells = Array.from({ length: lead }, () => null);
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = dayKey(new Date(cursor.y, cursor.m, d));
-      cells.push({ d, ds, pct: byDate.get(ds) });
+      cells.push({ d, ds, pct: byDate.get(ds), gap: gapDates.has(ds) });
     }
     return cells;
-  }, [cursor, byDate]);
+  }, [cursor, byDate, gapDates]);
 
   const monthStats = useMemo(() => {
     const vals = grid.filter((c) => c && c.pct !== undefined).map((c) => c.pct);
@@ -15240,14 +15600,20 @@ function AnalyticsModule({ state, discipline, streak }) {
         : 0,
       best: vals.length ? Math.max(...vals) : 0,
       hit: vals.filter((v) => v >= STREAK_TARGET).length,
+      /* Counted, never averaged. An unrecorded day folded into the average
+         as a zero would punish a day nobody has any record of; left out of
+         the count entirely it would flatter a month of four entries. Said
+         out loud is the only honest third option. */
+      gaps: grid.filter((c) => c && c.gap).length,
     };
   }, [grid]);
 
   const yearBars = useMemo(() => {
     return AR_MONTHS.map((label, m) => {
-      const vals = (state.history || [])
+      const vals = rows(state.history)
         .filter((h) => {
-          const [y, mm] = h.date.split("-").map(Number);
+          if (isGap(h)) return false;
+          const [y, mm] = String(h.date).split("-").map(Number);
           return y === cursor.y && mm - 1 === m;
         })
         .map((h) => h.pct);
@@ -15332,15 +15698,24 @@ function AnalyticsModule({ state, discipline, streak }) {
                 onClick={() => row && setOpenNote(row)}
                 disabled={!row}
                 title={
-                  cell.pct === undefined
+                  cell.gap
+                    ? `${cell.ds} — لم يُسجَّل`
+                    : cell.pct === undefined
                     ? `${cell.ds} — لا سجلّ`
                     : `${cell.ds} — ${cell.pct}٪${note ? " — فيه وقفة" : ""}${
                         row?.holds ? ` — صمدت ${row.holds}` : ""
                       }${row?.falls ? ` — سقطت ${row.falls}` : ""}`
                 }
-                className="relative flex aspect-square items-center justify-center rounded-lg border text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default"
+                className={`relative flex aspect-square items-center justify-center rounded-lg text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default ${
+                  /* Dashed, so an unrecorded day is distinguishable from a
+                     day that has not happened yet without needing a colour
+                     the sky can wash out. */
+                  cell.gap ? "border border-dashed" : "border"
+                }`}
                 style={{
-                  background: LEVEL_BG[levelOf(cell.pct ?? 0)],
+                  background: cell.gap
+                    ? "rgba(255,255,255,0.02)"
+                    : LEVEL_BG[levelOf(cell.pct ?? 0)],
                   /* A tracked day and an untracked one must never look the
                      same. A 20% day is a day you showed up for, and at 0.28
                      alpha against a noon sky it read as blank — which is
@@ -15348,11 +15723,14 @@ function AnalyticsModule({ state, discipline, streak }) {
                   borderColor:
                     cell.ds === dayKey()
                       ? T.accent
+                      : cell.gap
+                      ? "rgba(255,255,255,0.22)"
                       : cell.pct !== undefined
                       ? `${T.primary}66`
                       : "rgba(255,255,255,0.06)",
-                  color:
-                    (cell.pct ?? 0) >= 45
+                  color: cell.gap
+                    ? "rgba(253,248,246,0.3)"
+                    : (cell.pct ?? 0) >= 45
                       ? "#04140E"
                       : cell.pct !== undefined
                       ? "rgba(253,248,246,0.8)"
@@ -15392,6 +15770,29 @@ function AnalyticsModule({ state, discipline, streak }) {
             );
           })}
         </div>
+
+        {/* Said out loud, under the grid it is about. Two silent days in a
+            month is the fact that explains a flattering average, and a
+            number nobody renders is a number nobody acts on. */}
+        {monthStats.gaps > 0 && (
+          <p
+            className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3.5 py-2.5 text-center text-[11.5px] font-bold leading-relaxed"
+            style={{ borderColor: "rgba(255,255,255,0.22)", color: T.muted }}
+          >
+            <CalendarDays size={13} style={{ color: T.faint }} />
+            <span>
+              {daysPhrase(monthStats.gaps) || (
+                <>
+                  <span dir="ltr" className="tabular-nums">
+                    {monthStats.gaps}
+                  </span>{" "}
+                  {dayWord(monthStats.gaps)}
+                </>
+              )}
+              {" بدون تسجيل هذا الشهر — لا تدخل في المتوسط."}
+            </span>
+          </p>
+        )}
 
         <Modal
           open={!!openNote}
@@ -20048,19 +20449,58 @@ function BottomTabs({ items, more: behind, tab, onGo, onSettings }) {
  *  end up re-exporting by hand every week just in case — so each one is
  *  stated here with whether it currently holds.
  * ==================================================================== */
-function DataHealth({ open }) {
+/* --- the data health screen ------------------------------------------- *
+ *  Everything the app knows about its own data, on one card, in the one
+ *  place he goes when he is worried about it. Three kinds of line, and they
+ *  are three different questions:
+ *
+ *  - Is the data *safe* — the origin, the disk copy, persistence, offline.
+ *  - What *is* the data — the schema, the revision, the two save times, how
+ *    much of the browser's quota it takes, how many rows in each section.
+ *  - What is *missing* — and every one of those lines carries the button
+ *    that fixes it, because an alert with no route to the fix is a second
+ *    thing to feel bad about.
+ * ---------------------------------------------------------------------- */
+function DataHealth({ open, state, savedAt, diskAt, onGo, onEditYesterday, onRecover }) {
   const [info, setInfo] = useState(null);
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
     (async () => {
-      const out = { origin: served(), persisted: false, offline: false, disk: null };
+      const out = {
+        origin: served(),
+        persisted: false,
+        offline: false,
+        disk: null,
+        rev: readRev(),
+        used: null,
+        quota: null,
+        bytes: null,
+      };
       try {
         out.persisted = !!(await navigator.storage?.persisted?.());
       } catch {}
       try {
         out.offline = ((await navigator.serviceWorker?.getRegistrations?.()) || []).length > 0;
+      } catch {}
+      /* What this one payload costs, and what the whole origin is allowed.
+         `estimate()` answers for the origin — caches, the service worker and
+         the state together — so the payload is measured separately: an
+         oversized cue image is the one thing that can push a save over the
+         edge, and it needs its own number. */
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        /* UTF-16 in the browser's accounting, so a character is two bytes —
+           Arabic or not. This is the number the quota is spent against. */
+        if (raw) out.bytes = raw.length * 2;
+      } catch {}
+      try {
+        const est = await navigator.storage?.estimate?.();
+        if (est) {
+          out.used = Number(est.usage) || 0;
+          out.quota = Number(est.quota) || 0;
+        }
       } catch {}
       try {
         const stop = new AbortController();
@@ -20084,52 +20524,579 @@ function DataHealth({ open }) {
     };
   }, [open]);
 
-  const rows = info
+  const guards = info
     ? [
-        [info.origin, "يعمل من الخادم المحلي", "يعمل كملف — التخزين مشترك مع بقيّة الصفحات"],
+        [info.origin, "يعمل من الخادم المحلي", "يعمل من نسخة غير أساسية — لا يُحفظ على القرص"],
         [!!info.disk, "نسخة محفوظة على القرص", "لا توجد نسخة على القرص — الخادم متوقّف"],
         [info.persisted, "المتصفّح يحفظ البيانات دائمًا", "المتصفّح لم يثبّت الحفظ بعد"],
         [info.offline, "يفتح بلا إنترنت", "يحتاج الإنترنت في أول تشغيل"],
       ]
     : [];
 
+  /* Days written down as unrecorded inside the last seven. Read off the same
+     rows the calendar reads, so the two can never give different numbers. */
+  const gapsThisWeek = useMemo(() => {
+    const from = addDays(dayKey(), -7);
+    return rows(state.history).filter((h) => isGap(h) && h.date > from).length;
+  }, [state.history]);
+
+  const core = coreOf(state.habits || []).length;
+  const star = northStarShape(state.northStar);
+
+  /* Each one names what is missing and carries the button that fixes it. */
+  const todo = [
+    core === 0 && {
+      key: "core",
+      text: "لم تحدّد العادات الأساسية الخمس — النسبة الآن تُقسم على كل عاداتك.",
+      action: "حدّدها",
+      run: () => onGo("routine"),
+    },
+    !(star.word || "").trim() && {
+      key: "star",
+      text: "الكلمة والرؤية فارغتان — لا شيء يربط أهداف ٢٠٢٧ ببعضها.",
+      action: "اكتبهما",
+      run: () => onGo("goals"),
+    },
+    gapsThisWeek > 0 && {
+      key: "gaps",
+      text:
+        (daysPhrase(gapsThisWeek) || `${gapsThisWeek} ${dayWord(gapsThisWeek)}`) +
+        " بدون تسجيل هذا الأسبوع.",
+      action: "عدّل أمس",
+      run: onEditYesterday,
+    },
+    info &&
+      !info.disk && {
+        key: "disk",
+        text: "لا نسخة على القرص — بياناتك في المتصفح فقط الآن.",
+        action: "النسخ",
+        run: onRecover,
+      },
+  ].filter(Boolean);
+
+  const sections = [
+    ["عادة", state.habits],
+    ["مهمة", state.tasks],
+    ["هدف", state.goals],
+    ["كتاب", state.books],
+    ["صف سجل", state.history],
+    ["موعد", state.events],
+    ["اقتباس", state.quotes],
+    ["جلسة قراءة", state.reading],
+    ["عادة سيئة", state.badHabits],
+    ["جلسة تركيز", state.sessions],
+    ["مراجعة", state.reviews],
+    ["دخل", state.income],
+  ];
+
+  const clock = (at) => {
+    if (!at) return "—";
+    try {
+      return new Date(at).toLocaleTimeString("ar-EG", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "—";
+    }
+  };
+
   return (
     <div
-      className="rounded-2xl border px-3.5 py-3"
+      className="space-y-3.5 rounded-2xl border px-3.5 py-3"
       style={{ borderColor: T.border, backgroundColor: T.card }}
     >
-      <p className="mb-2 flex items-center gap-2 text-[12px] font-extrabold" style={{ color: T.accent }}>
-        <ShieldCheck size={14} /> حماية البيانات
+      <p
+        className="flex items-center gap-2 text-[12px] font-extrabold"
+        style={{ color: T.accent }}
+      >
+        <ShieldCheck size={14} /> صحة البيانات
       </p>
+
       {!info ? (
         <p className="text-[11px] text-white/45">جارٍ الفحص…</p>
       ) : (
-        <ul className="space-y-1.5">
-          {rows.map(([ok, yes, no], i) => (
-            <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
+        <>
+          <ul className="space-y-1.5">
+            {guards.map(([ok, yes, no], i) => (
+              <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
+                <span
+                  className="mt-[3px] inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: ok ? T.primary : T.ember,
+                    boxShadow: `0 0 8px ${ok ? T.primary : T.ember}`,
+                  }}
+                />
+                <span style={{ color: ok ? "rgba(255,255,255,0.72)" : T.ember }}>
+                  {ok ? yes : no}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {/* The numbers. Small and tabular on purpose: this is a readout, not
+              a dashboard, and it is read once when something feels wrong. */}
+          <div
+            className="grid grid-cols-2 gap-x-3 gap-y-1.5 border-t pt-3 text-[10.5px]"
+            style={{ borderColor: T.border, color: T.faint }}
+          >
+            {[
+              ["إصدار البيانات", String(state.schema ?? SCHEMA)],
+              ["رقم الحفظة", String(info.rev)],
+              ["آخر حفظ في المتصفّح", clock(savedAt)],
+              ["آخر حفظ على القرص", clock(diskAt)],
+              [
+                "حجم نسختك",
+                info.bytes === null ? "—" : kbWord(info.bytes),
+              ],
+              [
+                "المستخدم من حصّة المتصفّح",
+                info.quota
+                  ? `${Math.max(1, Math.round((info.used / info.quota) * 100))}%`
+                  : "—",
+              ],
+            ].map(([k, v]) => (
+              <div key={k} className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate">{k}</span>
+                <span dir="ltr" className="shrink-0 font-bold tabular-nums" style={{ color: T.muted }}>
+                  {v}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            className="flex flex-wrap gap-1.5 border-t pt-3"
+            style={{ borderColor: T.border }}
+          >
+            {sections.map(([label, list]) => (
               <span
-                className="mt-[3px] inline-block h-2 w-2 shrink-0 rounded-full"
+                key={label}
+                className="rounded-lg border px-2 py-0.5 text-[10px]"
                 style={{
-                  backgroundColor: ok ? T.primary : T.ember,
-                  boxShadow: `0 0 8px ${ok ? T.primary : T.ember}`,
+                  borderColor: T.border,
+                  color: (list?.length || 0) > 0 ? T.muted : T.faint,
                 }}
-              />
-              <span style={{ color: ok ? "rgba(255,255,255,0.72)" : T.ember }}>{ok ? yes : no}</span>
-            </li>
-          ))}
-        </ul>
+              >
+                <span dir="ltr" className="font-bold tabular-nums">
+                  {list?.length || 0}
+                </span>{" "}
+                {label}
+              </span>
+            ))}
+          </div>
+
+          {!!todo.length && (
+            <div className="space-y-2 border-t pt-3" style={{ borderColor: T.border }}>
+              {todo.map((t) => (
+                <div
+                  key={t.key}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2"
+                  style={{ borderColor: `${T.cta}3D`, background: `${T.cta}0F` }}
+                >
+                  <p
+                    className="min-w-0 flex-1 text-[11px] font-bold leading-relaxed"
+                    style={{ color: T.ctaLift }}
+                  >
+                    {t.text}
+                  </p>
+                  <Btn size="sm" className="shrink-0" onClick={t.run}>
+                    {t.action}
+                  </Btn>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
 /* ==================================================================== *
+ *  Recovery — the snapshots on disk, reachable from inside the app
+ * ==================================================================== */
+
+/* Which sections a snapshot and the live copy disagree about, as a list of
+   signed differences. Counts only: the point of «قارن» is to answer "what
+   would I be giving up", and "two habits fewer, one goal more" answers it
+   faster than a diff of thirty thousand characters would. */
+const RECOVER_SECTIONS = [
+  ["habits", "عادة"],
+  ["tasks", "مهمة"],
+  ["goals", "هدف"],
+  ["books", "كتاب"],
+  ["history", "صف سجل"],
+  ["events", "موعد"],
+  ["quotes", "اقتباس"],
+  ["reading", "جلسة قراءة"],
+  ["badHabits", "عادة سيئة"],
+  ["sessions", "جلسة تركيز"],
+  ["reviews", "مراجعة"],
+  ["income", "دخل"],
+];
+
+function compareCounts(snap, state) {
+  const out = [];
+  for (const [key, label] of RECOVER_SECTIONS) {
+    const theirs = snap?.counts?.[key];
+    if (theirs === null || theirs === undefined) continue;
+    const mine = Array.isArray(state[key]) ? state[key].length : 0;
+    if (theirs !== mine) out.push({ label, delta: theirs - mine });
+  }
+  return out;
+}
+
+const arClock = (ms) => {
+  try {
+    return new Date(ms).toLocaleString("ar-EG", {
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+};
+
+const kbWord = (n) => `${Math.max(1, Math.round(n / 1024))} ك.ب`;
+
+function SnapshotRow({ item, state, onRestore, busy }) {
+  const [open, setOpen] = useState(false);
+  const diff = useMemo(() => (open ? compareCounts(item, state) : []), [open, item, state]);
+
+  return (
+    <div
+      className="rounded-xl border px-3 py-2.5"
+      style={{ borderColor: T.border, backgroundColor: T.card }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11.5px] font-bold" style={{ color: T.fg }}>
+            {arClock(item.at)}
+          </p>
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            {!item.ok ? (
+              "ملف غير مقروء"
+            ) : (
+              <>
+                <span dir="ltr" className="tabular-nums">
+                  {item.date || "—"}
+                </span>
+                {" · "}
+                <span dir="ltr" className="tabular-nums">
+                  {item.pct === null ? "—" : `${item.pct}%`}
+                </span>
+                {" · "}
+                <span dir="ltr" className="tabular-nums">
+                  {item.counts.habits ?? 0}
+                </span>
+                {" عادة · "}
+                <span dir="ltr" className="tabular-nums">
+                  {item.counts.history ?? 0}
+                </span>
+                {" صف · "}
+                {kbWord(item.size)}
+              </>
+            )}
+          </p>
+        </div>
+        <Btn
+          variant="ghost"
+          size="sm"
+          className="shrink-0"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          disabled={!item.ok}
+        >
+          <GitCompare size={13} /> قارن
+        </Btn>
+        <Btn
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => onRestore(item)}
+          disabled={!item.ok || busy}
+        >
+          <RotateCcw size={13} /> استرجع
+        </Btn>
+      </div>
+
+      {open && (
+        <div className="los-in mt-2.5 border-t pt-2.5" style={{ borderColor: T.border }}>
+          {!diff.length ? (
+            <p className="text-[11px]" style={{ color: T.faint }}>
+              نفس أعداد نسختك الحالية في كل قسم.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {diff.map((d) => (
+                <Badge key={d.label} tint={d.delta > 0 ? T.primary : T.ember}>
+                  <span dir="ltr" className="tabular-nums">
+                    {d.delta > 0 ? `+${d.delta}` : d.delta}
+                  </span>
+                  {` ${d.label}`}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            الأرقام بالمقارنة مع نسختك الحالية — الموجب يعني أن هذه النسخة فيها أكثر.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* --- the recovery centre ---------------------------------------------- *
+ *  Three directories of snapshots have been written since the save guard
+ *  shipped and none of them was reachable from inside the app: knowing that
+ *  a copy of Tuesday afternoon is on disk is no use to someone who would
+ *  have to be told the path, open a file manager and paste JSON into an
+ *  import box. This lists them, says what each one holds, and puts one back.
+ *
+ *  A restore is deliberately destructive, so it is also deliberately
+ *  reversible: the server stows the file it is about to overwrite in
+ *  `backups/guard/` (`X-Guard: 1`), which means the copy being replaced
+ *  shows up in this very list a second later under «قبل تغيير ناقص».
+ *  Undoing a restore is restoring that guard copy.
+ * ---------------------------------------------------------------------- */
+function RecoveryModal({ open, onClose, state }) {
+  const [data, setData] = useState(null); // null = loading, "error", or {kinds}
+  const [kind, setKind] = useState("auto");
+  const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(null); // the snapshot awaiting confirmation
+  const [note, setNote] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setData(null);
+    setNote(null);
+    (async () => {
+      try {
+        const res = await fetch(api("/snapshots"), { cache: "no-store" });
+        if (!res.ok) throw new Error("snapshots " + res.status);
+        const json = await res.json();
+        if (alive) setData(json && Array.isArray(json.kinds) ? json : "error");
+      } catch {
+        if (alive) setData("error");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  const kinds = data && data !== "error" ? data.kinds : [];
+  const shown =
+    kinds.find((k) => k.kind === kind) || kinds.find((k) => k.items.length) || null;
+
+  /* The one path in, and it is the path a reload already takes: the payload
+     goes to localStorage and the window reloads, so `loadState` does the
+     migration and the day roll exactly once and in one place. Nothing is put
+     into React state first — a re-render here would fire the save effect on
+     the state being replaced and put it straight back. */
+  const restore = async (item) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch(
+        api(`/snapshots/${shown.kind}/${encodeURIComponent(item.name)}`),
+        { cache: "no-store" },
+      );
+      if (!res.ok) throw new Error("read " + res.status);
+      const saved = await res.json();
+      if (!saved || typeof saved !== "object" || !Array.isArray(saved.habits))
+        throw new Error("not this app's state");
+      /* Same rule as the import box: an unversioned payload is an *old* one,
+         and a payload from a newer build keeps its own number because no
+         branch exists for a version this build has not been taught. */
+      const ver = Number(saved.schema);
+      const from = Number.isFinite(ver) && ver > 0 ? ver : 0;
+      const next = migrate({ ...freshState(), ...saved, schema: from });
+      const rev = readRev() + 1;
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      writeRev(rev);
+      /* Forced, because a snapshot is older than the file by definition and
+         the revision guard would refuse it — and guarded, so the file it
+         lands on is stowed instead of lost. Awaited: the reload must not
+         race the write it depends on. */
+      await postSync(next, rev, { force: true, guard: true });
+      window.location.reload();
+    } catch {
+      setBusy(false);
+      setNote("تعذّر الاسترجاع — تأكّد أن خادم المزامنة يعمل، ثم أعد المحاولة.");
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={busy ? () => {} : onClose}
+      title="مركز الاسترجاع"
+      wide
+      footer={
+        <Btn variant="outline" className="flex-1" onClick={onClose} disabled={busy}>
+          إغلاق
+        </Btn>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+          كل نسخة هنا محفوظة على جهازك. «قارن» يقول لك الفرق بالأرقام، و«استرجع»
+          يعيدها — ونسختك الحالية تُحفظ قبل ذلك في «قبل تغيير ناقص» حتى تقدر
+          تتراجع.
+        </p>
+
+        {data === null && (
+          <p className="text-[11.5px]" style={{ color: T.faint }}>
+            جارٍ قراءة النسخ…
+          </p>
+        )}
+        {data === "error" && (
+          <p
+            className="rounded-xl border px-3.5 py-2.5 text-[11.5px] leading-relaxed"
+            style={{
+              borderColor: `${T.ember}59`,
+              background: `${T.ember}14`,
+              color: T.ember,
+            }}
+          >
+            تعذّر الوصول إلى النسخ — خادم المزامنة متوقّف، أو هذه ليست النسخة
+            الأساسية.
+          </p>
+        )}
+
+        {!!kinds.length && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {kinds.map((k) => {
+                const on = (shown?.kind || "") === k.kind;
+                return (
+                  <button
+                    key={k.kind}
+                    onClick={() => setKind(k.kind)}
+                    aria-pressed={on}
+                    disabled={!k.items.length}
+                    className="rounded-xl border px-3 py-1.5 text-[11px] font-bold transition-all disabled:opacity-35"
+                    style={{
+                      borderColor: on ? `${T.accent}80` : T.border,
+                      background: on ? `${T.accent}1F` : "transparent",
+                      color: on ? T.accent : T.muted,
+                    }}
+                  >
+                    {k.label}{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {k.items.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="max-h-[52vh] space-y-2 overflow-y-auto pl-0.5">
+              {!shown || !shown.items.length ? (
+                <p
+                  className="rounded-xl border border-dashed px-3.5 py-5 text-center text-[11.5px]"
+                  style={{ borderColor: T.border, color: T.faint }}
+                >
+                  لا نسخ في هذا القسم بعد.
+                </p>
+              ) : (
+                shown.items.map((item) => (
+                  <SnapshotRow
+                    key={item.name}
+                    item={item}
+                    state={state}
+                    busy={busy}
+                    onRestore={setAsk}
+                  />
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {note && (
+          <p
+            className="los-in rounded-xl border px-3.5 py-2.5 text-center text-[11.5px] font-bold"
+            style={{
+              borderColor: `${T.danger}59`,
+              background: `${T.danger}1A`,
+              color: T.danger,
+            }}
+          >
+            {note}
+          </p>
+        )}
+
+        {/* The confirmation is a step of its own rather than a
+            `window.confirm`: what is being replaced has to be named, and the
+            time it was taken is the only thing that makes the question
+            answerable. */}
+        {ask && (
+          <div
+            className="los-in rounded-2xl border px-3.5 py-3"
+            style={{ borderColor: `${T.danger}59`, background: `${T.danger}12` }}
+          >
+            <p className="text-[12px] font-bold leading-relaxed" style={{ color: T.fg }}>
+              {`استرجاع نسخة ${arClock(ask.at)}؟`}
+              <span className="block text-[11px] font-normal" style={{ color: T.muted }}>
+                ستستبدل كل بياناتك الحالية، وستُحفظ النسخة الحالية في «قبل تغيير
+                ناقص» قبل ذلك.
+              </span>
+            </p>
+            <div className="mt-2.5 flex gap-2">
+              <Btn
+                variant="danger"
+                size="sm"
+                className="flex-1"
+                disabled={busy}
+                onClick={() => {
+                  const target = ask;
+                  setAsk(null);
+                  restore(target);
+                }}
+              >
+                <RotateCcw size={13} /> استرجع الآن
+              </Btn>
+              <Btn
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                disabled={busy}
+                onClick={() => setAsk(null)}
+              >
+                إلغاء
+              </Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ==================================================================== *
  *  Backup — export / import the whole payload
  * ==================================================================== */
-function SettingsModal({ open, onClose, state, setState }) {
+function SettingsModal({
+  open,
+  onClose,
+  state,
+  setState,
+  savedAt,
+  diskAt,
+  onGo,
+  onEditYesterday,
+}) {
   const fileRef = useRef(null);
   const [note, setNote] = useState(null); // {ok, text}
   const [ordering, setOrdering] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const exportData = () => {
     try {
@@ -20358,7 +21325,23 @@ function SettingsModal({ open, onClose, state, setState }) {
           )}
         </div>
 
-        <DataHealth open={open} />
+        <DataHealth
+          open={open}
+          state={state}
+          savedAt={savedAt}
+          diskAt={diskAt}
+          onGo={onGo}
+          onEditYesterday={onEditYesterday}
+          onRecover={() => setRecovering(true)}
+        />
+
+        {/* The snapshots the server has been writing all along, finally
+            reachable. Above export/import because it is the answer to the
+            same worry and does not require him to have taken a backup
+            himself. */}
+        <Btn variant="outline" className="w-full" onClick={() => setRecovering(true)}>
+          <Archive size={15} /> مركز الاسترجاع
+        </Btn>
 
         <div className="space-y-2.5">
           <Btn variant="default" className="w-full" onClick={exportData}>
@@ -20406,6 +21389,12 @@ function SettingsModal({ open, onClose, state, setState }) {
             {note.text}
           </p>
         )}
+
+        <RecoveryModal
+          open={recovering}
+          onClose={() => setRecovering(false)}
+          state={state}
+        />
       </div>
     </Modal>
   );
@@ -20751,6 +21740,29 @@ export default function LifeOS() {
     setNagState(next);
   }, []);
   const [mirror, setMirror] = useState(false);
+  /* Yesterday's correction sheet. It lives here rather than in the routine
+     screen because the data-health panel reaches it too, and a modal owned
+     by one screen cannot be opened from another without a second copy. */
+  const [fixing, setFixing] = useState(false);
+
+  /* --- the eight seconds after a delete ------------------------------- *
+     The snapshot a delete left behind, and the toast offering it back. Held
+     here because the toast is a fixed bar over everything, and armed from
+     anywhere through `UndoBus`.
+
+     Spread back over whatever the state is by then, never over the state as
+     it was: something unrelated may well have changed in those eight
+     seconds, and undoing a delete must not undo that too. */
+  const [undo, setUndo] = useState(null);
+  const arm = useCallback((label, before) => {
+    setUndo({ label, before, at: Date.now() });
+  }, []);
+  const takeBack = useCallback(() => {
+    if (!undo) return;
+    setState((s) => ({ ...s, ...undo.before }));
+    setUndo(null);
+  }, [undo]);
+  const dropUndo = useCallback(() => setUndo(null), []);
 
   useEffect(() => {
     /* The one gate that matters. A window that lost the lease is holding a
@@ -21115,12 +22127,25 @@ export default function LifeOS() {
 
   const active = NAV.find((n) => n.id === tab) || NAV[0];
 
+  /* From the settings panel: close it, then go. Leaving the modal open over
+     the screen it just sent him to is the oldest way to make a working
+     button look broken. */
+  const goFromSettings = (id) => {
+    setSettings(false);
+    go(id);
+  };
+
   /* Below every hook, without exception — a return placed among them is
      React error #310 and a blank screen, which this file has already paid
      for once. */
   if (!leading) return <SecondWindow onTakeOver={takeOver} phase={phase} />;
 
   return (
+    /* Every delete button in the tree reaches `arm` through here. A provider
+       rather than sixteen props: a new destructive button that forgets to
+       take the callback is a new destructive button with no undo, and that
+       is not a mistake worth leaving available. */
+    <UndoBus.Provider value={arm}>
     <div
       dir="rtl"
       className="min-h-screen w-full text-white antialiased"
@@ -21343,6 +22368,7 @@ export default function LifeOS() {
                   diskStuck={diskStuck}
                   onOpenMirror={() => setMirror(true)}
                   onOpenReflect={() => setReflect(true)}
+                  onOpenFix={() => setFixing(true)}
                   onOpenSettings={() => setSettings(true)}
                   onGoGoals={() => go("goals")}
                   reflected={alreadyReflected}
@@ -21402,6 +22428,8 @@ export default function LifeOS() {
         onGo={go}
         onSettings={() => setSettings(true)}
       />
+
+      <UndoToast undo={undo} onUndo={takeBack} onDismiss={dropUndo} />
 
       {/* Another window has been working, and this one is holding a payload
           from before it started. Nothing is written while this is up: not to
@@ -21540,6 +22568,20 @@ export default function LifeOS() {
         onClose={() => setSettings(false)}
         state={state}
         setState={setState}
+        savedAt={savedAt}
+        diskAt={diskAt}
+        onGo={goFromSettings}
+        onEditYesterday={() => {
+          setSettings(false);
+          setFixing(true);
+        }}
+      />
+
+      <EditYesterdayModal
+        open={fixing}
+        onClose={() => setFixing(false)}
+        state={state}
+        setState={setState}
       />
 
       <ReflectionModal
@@ -21580,6 +22622,7 @@ export default function LifeOS() {
         </div>
       )}
     </div>
+    </UndoBus.Provider>
   );
 }
 

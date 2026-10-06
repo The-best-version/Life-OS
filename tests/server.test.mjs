@@ -270,3 +270,127 @@ test("the copy that caught up cannot overwrite the copy that was recovered", asy
   assert.equal((await sync(stale, { force: true })).status, 200);
   assert.equal(onDisk().habits.length, stale.habits.length);
 });
+
+/* ===================================================================== *
+ *  /snapshots — the recovery centre's half of the deal
+ * ===================================================================== */
+
+const snapshots = async () => {
+  const res = await fetch(BASE + "/snapshots", { headers: { Origin: BASE } });
+  assert.equal(res.status, 200);
+  return res.json();
+};
+
+const kindOf = (json, kind) => json.kinds.find((k) => k.kind === kind) || null;
+
+test("/snapshots lists what is on disk, with enough to tell two apart", async () => {
+  await sync({ ...fixture(), rev: 300 });
+  const json = await snapshots();
+  for (const kind of ["auto", "daily", "guard", "manual", "verified"]) {
+    assert.ok(kindOf(json, kind), `${kind} is missing from the listing`);
+    assert.ok(typeof kindOf(json, kind).label === "string");
+  }
+  const auto = kindOf(json, "auto");
+  assert.ok(auto.items.length >= 1, "the hourly snapshot was not listed");
+  const item = auto.items[0];
+  assert.ok(item.ok, "a snapshot this server just wrote came back unreadable");
+  assert.equal(item.rev, 300);
+  assert.equal(item.date, fixture().date);
+  assert.equal(item.counts.habits, fixture().habits.length);
+  assert.equal(item.counts.history, fixture().history.length);
+  assert.ok(item.size > 0 && item.at > 0);
+  /* The name is what the read route takes back, so it has to be in the row. */
+  assert.ok(/^lifeos-.*\.json$/.test(item.name));
+});
+
+test("/snapshots hands back one snapshot by name", async () => {
+  await sync({ ...fixture(), rev: 310 });
+  const { name } = kindOf(await snapshots(), "daily").items[0];
+  const res = await fetch(`${BASE}/snapshots/daily/${encodeURIComponent(name)}`, {
+    headers: { Origin: BASE },
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.rev, 310);
+  assert.equal(body.habits.length, fixture().habits.length);
+});
+
+test("a snapshot name is matched, never joined onto a path", async () => {
+  /* No path joining, by construction: a name has to pass the regex *and* be
+     in the directory listing taken a moment earlier. Every one of these is a
+     404 rather than a file from somewhere else on the drive. */
+  const attempts = [
+    "auto/../../../graphify-out/data/lifeos.json",
+    "auto/" + encodeURIComponent("../../lifeos.json"),
+    "auto/..%2F..%2Flifeos.json",
+    "auto/lifeos.json",
+    "auto/" + encodeURIComponent("lifeos-2026-10-06-16.json/../../../../etc/hosts"),
+    "bogus/lifeos-2026-10-06-16.json",
+    "auto/not-this-app-2026.json",
+    "auto",
+    "auto/",
+  ];
+  for (const path of attempts) {
+    const res = await fetch(`${BASE}/snapshots/${path}`, { headers: { Origin: BASE } });
+    assert.equal(res.status, 404, `${path} answered ${res.status}`);
+  }
+});
+
+test("an unreadable snapshot is listed as unreadable, not hidden", async () => {
+  writeFileSync(join(data, "backups", "manual", "lifeos-broken-test.json"), "{ not json");
+  const manual = kindOf(await snapshots(), "manual");
+  const row = manual.items.find((i) => i.name === "lifeos-broken-test.json");
+  assert.ok(row, "a corrupted snapshot vanished from the listing");
+  assert.equal(row.ok, false);
+  assert.equal(row.rev, null);
+  /* And it cannot be handed back as state. */
+  const res = await fetch(`${BASE}/snapshots/manual/lifeos-broken-test.json`, {
+    headers: { Origin: BASE },
+  });
+  assert.equal(res.status, 404);
+});
+
+test("the listing re-reads a snapshot that changed under it", async () => {
+  /* The summaries are cached by size and mtime, because parsing every file on
+     every click would read megabytes to answer one question. The hourly
+     snapshot is overwritten within its own hour, so the cache has to notice. */
+  await sync({ ...fixture(), rev: 320 });
+  assert.equal(kindOf(await snapshots(), "daily").items[0].rev, 320);
+  await sync({ ...fixture(), rev: 321, water: 3 });
+  assert.equal(kindOf(await snapshots(), "daily").items[0].rev, 321);
+});
+
+test("X-Guard stows the file before a restore lands on it", async () => {
+  /* A restore is an older copy deliberately overwriting a newer one, and
+     `shrinkReason` cannot catch it: the snapshot may well have *more* rows.
+     Without the guard, the copy the user would undo back to is simply gone. */
+  await sync({ ...fixture(), rev: 400 });
+  const before = backups("guard").length;
+  const bigger = {
+    ...fixture(),
+    rev: 401,
+    habits: [...fixture().habits, { id: "zz1", label: "مستعادة", group: "morning", done: false }],
+  };
+  const res = await fetch(BASE + "/sync", {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain",
+      "X-Local-Sync": "1",
+      "X-Force": "1",
+      "X-Guard": "1",
+      Origin: BASE,
+    },
+    body: JSON.stringify({ project: "lifeos", payload: bigger }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(onDisk().habits.length, bigger.habits.length);
+  const after = backups("guard");
+  assert.equal(after.length, before + 1, "nothing was stowed before the restore");
+  /* And what was stowed is the copy that was replaced, so restoring it is
+     how the restore is undone. */
+  const stowed = JSON.parse(
+    readFileSync(join(data, "backups", "guard", after.sort().at(-1)), "utf8"),
+  );
+  assert.equal(stowed.rev, 400);
+  assert.equal(stowed.habits.length, fixture().habits.length);
+});
