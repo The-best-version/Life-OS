@@ -20,6 +20,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 /* Both are overridable, and only for one reason: so a second copy of this
    server can be run against a throwaway data directory on a throwaway port
@@ -201,6 +202,47 @@ function snapshot(name, text) {
     writeAtomic(path.join(DAILY, `${name}-${dayKey(d)}.json`), text);
     prune(DAILY, name, DAILY_KEEP);
   } catch {}
+}
+
+/* --- is this the same payload, or a different one wearing the same number? -
+ *  The revision guard's whole job is to tell a write that is behind from a
+ *  write that is current, and a number alone cannot do it: the counter lives
+ *  in each window's own localStorage, so a stale copy's revision climbs on
+ *  every save *it* makes and sooner or later arrives at the number already on
+ *  disk. `mine < theirs` is false at that point and last-writer-wins is back
+ *  — which is exactly how a 17-habit copy landed on top of a 22-habit one
+ *  that had just been recovered.
+ *
+ *  So equality is answered by the contents, not by the counter. Two payloads
+ *  that hash the same at the same revision are one write sent twice, and the
+ *  second one is a retry: nothing to do, and refusing it would make an
+ *  ordinary network hiccup look like a conflict. Two payloads that hash
+ *  differently at the same revision are two divergent copies claiming one
+ *  number, and that is the case that must never be allowed through.
+ *
+ *  Key order is sorted out of the comparison. The same state serialized by
+ *  two different code paths can come out with its keys in a different order,
+ *  and a retry that read as a divergence would raise the conflict bar over
+ *  nothing.
+ * ----------------------------------------------------------------------- */
+function canonical(v) {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const k of Object.keys(v).sort()) out[k] = canonical(v[k]);
+    return out;
+  }
+  return v;
+}
+
+function payloadHash(v) {
+  try {
+    return crypto.createHash("sha256").update(JSON.stringify(canonical(v)), "utf8").digest("hex");
+  } catch {
+    /* Unhashable is treated as "not the same payload" by every caller, which
+       is the safe side: the write is refused rather than let through. */
+    return null;
+  }
 }
 
 /* --- the guard ---------------------------------------------------------- *
@@ -477,15 +519,31 @@ const server = http.createServer((req, res) => {
        logical day, and a guard that compares fields another app does not have
        would refuse writes for no reason. */
     const forced = req.headers["x-force"] === "1";
+    let duplicate = false;
     if (name === "lifeos" && disk && !forced) {
       const theirs = Number(disk.rev);
       const mine = Number(msg.payload.rev);
-      const stale =
-        (Number.isFinite(theirs) && Number.isFinite(mine) && mine < theirs) ||
-        (typeof disk.date === "string" &&
-          typeof msg.payload.date === "string" &&
-          msg.payload.date < disk.date);
-      if (stale) {
+      const numbered = Number.isFinite(theirs) && Number.isFinite(mine);
+      /* Behind the file: the clear case, and the only one the first version of
+         this guard tested. */
+      const behind = numbered && mine < theirs;
+      /* Level with the file, which is two different things wearing one
+         number. Identical contents are a retry of a write that already
+         landed — answered 200 and *not* written again, because rewriting it
+         would push the real previous generation out of .prev.json for
+         nothing. Different contents are two divergent copies, and letting
+         that through is the hole this guard was supposed to close: a window
+         holding a 17-habit snapshot saved its way up to the revision of the
+         22-habit copy on disk and then overwrote it. */
+      const level = numbered && mine === theirs;
+      const same = level && payloadHash(disk) !== null && payloadHash(disk) === payloadHash(msg.payload);
+      const divergent = level && !same;
+      const olderDay =
+        typeof disk.date === "string" &&
+        typeof msg.payload.date === "string" &&
+        msg.payload.date < disk.date;
+      duplicate = same;
+      if (!same && (behind || divergent || olderDay)) {
         /* A payload with no revision at all is the first write after this
            shipped, and it is let through: the counter has to start somewhere
            and refusing it would lock the app out of its own file. */
@@ -494,6 +552,31 @@ const server = http.createServer((req, res) => {
           "Cache-Control": "no-store",
         });
       }
+    }
+
+    /* The write already on disk, sent again. Nothing is touched — no file, no
+       .prev.json, no snapshot — and the answer is the one the first attempt
+       should have got, so the save stamp reads «القرص ✓» rather than parking
+       on a failure the disk does not actually have. */
+    if (duplicate) {
+      let savedAt = Date.now();
+      try {
+        savedAt = fs.statSync(file).mtimeMs;
+      } catch {}
+      if (!QUIET) {
+        console.log(
+          new Date().toTimeString().slice(0, 8) +
+            "  " +
+            name.padEnd(8) +
+            PROJECTS[name].padEnd(14) +
+            "same r" +
+            Number(msg.payload.rev),
+        );
+      }
+      return end(res, 200, JSON.stringify({ rev: Number(msg.payload.rev) || 0, savedAt }), {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
     }
 
     const savedAt = Date.now();

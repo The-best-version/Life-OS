@@ -95,6 +95,51 @@ test("a write behind the file is refused with 409", async () => {
   assert.equal(onDisk().rev, 5, "the refused payload was written anyway");
 });
 
+test("a write level with the file but holding something else is refused", async () => {
+  /* The hole. The revision counter lives in each window's own localStorage,
+     so a window holding a stale snapshot keeps numbering its own saves and
+     eventually hands up the number already on disk. `mine < theirs` is false
+     at that point, and last-writer-wins is back. */
+  const full = fixture();
+  const fewer = { ...full, rev: 5, habits: full.habits.slice(0, full.habits.length - 5) };
+  const res = await sync(fewer);
+  assert.equal(res.status, 409);
+  const body = await res.json();
+  assert.equal(body.rev, 5);
+  assert.equal(onDisk().habits.length, full.habits.length, "the level write landed anyway");
+});
+
+test("the same payload at the same revision is a retry, not a conflict", async () => {
+  /* A request that is cut off after the server wrote it, or a flush that
+     overlaps the debounced write it was flushing. The write already landed;
+     refusing the second copy would raise the conflict bar over nothing. */
+  const prevBefore = readFileSync(join(data, "lifeos.prev.json"), "utf8");
+  const guardBefore = backups("guard").length;
+  const res = await sync({ ...fixture(), rev: 5 });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.rev, 5);
+  assert.equal(onDisk().rev, 5);
+  assert.equal(
+    readFileSync(join(data, "lifeos.prev.json"), "utf8"),
+    prevBefore,
+    "a retry pushed the real previous generation out of .prev.json",
+  );
+  assert.equal(backups("guard").length, guardBefore, "a retry was guarded");
+});
+
+test("a retry whose keys come out in another order is still a retry", async () => {
+  /* The same state serialized by two code paths can come out key-ordered
+     differently, and comparing the text rather than the contents would read
+     that as two divergent copies. */
+  const same = { ...fixture(), rev: 5 };
+  const shuffled = {};
+  for (const k of Object.keys(same).reverse()) shuffled[k] = same[k];
+  const res = await sync(shuffled);
+  assert.equal(res.status, 200);
+  assert.equal(onDisk().habits.length, fixture().habits.length);
+});
+
 test("a write from an older logical day is refused with 409", async () => {
   const stale = { ...fixture(), rev: 6, date: "2020-01-01" };
   const res = await sync(stale);
@@ -203,4 +248,25 @@ test("/state hands back exactly what is on disk", async () => {
   const body = await res.json();
   assert.equal(body.rev, 80);
   assert.equal(body.habits.length, fixture().habits.length);
+});
+
+test("the copy that caught up cannot overwrite the copy that was recovered", async () => {
+  /* The whole bug, end to end: a recovered copy on disk, a stale window whose
+     counter has climbed to the same number, and a habit list five rows
+     shorter arriving to sit on top of it. */
+  const recovered = { ...fixture(), rev: 100 };
+  assert.equal((await sync(recovered)).status, 200);
+  const stale = {
+    ...fixture(),
+    rev: 100,
+    habits: fixture().habits.slice(0, fixture().habits.length - 5),
+    books: fixture().books.slice(0, Math.max(0, fixture().books.length - 1)),
+  };
+  assert.equal((await sync(stale)).status, 409);
+  assert.equal(onDisk().habits.length, recovered.habits.length);
+  assert.equal(onDisk().books.length, recovered.books.length);
+  /* And a window that answers «اعتمد هذه النافذة» still gets its way — the
+     guard refuses a guess, not a decision. */
+  assert.equal((await sync(stale, { force: true })).status, 200);
+  assert.equal(onDisk().habits.length, stale.habits.length);
 });
