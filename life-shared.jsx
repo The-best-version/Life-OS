@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
-import { X, Check, Star } from "lucide-react";
-import { uid, STREAK_TARGET } from "./life-state.mjs";
+import { X, Check, Star, Minus, Plus } from "lucide-react";
+import { uid, STREAK_TARGET, dayKey, keyToDate, hhmm, GRADES } from "./life-state.mjs";
 
 /* --- tokens --------------------------------------------------------- *
  *  "Vibrant Deep Slate" — an energetic canvas, not a void. Emerald is
@@ -461,5 +461,279 @@ export function ProgressRing({
         </span>
       </div>
     </div>
+  );
+}
+
+
+
+export const DOW_AR = [
+  "الأحد",
+  "الإثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+  "السبت",
+];
+
+/* The one place a bad habit's fields are written — add form, migration and
+   import all pass through here, so the shape cannot drift between them. */
+export const arCount = (n, forms) => {
+  const h = Math.abs(n) % 100;
+  if (Math.abs(n) === 1) return forms[0];
+  if (Math.abs(n) === 2) return forms[1];
+  if (h >= 3 && h <= 10) return forms[2];
+  return forms[3];
+};
+export const DAY_FORMS = ["يوم", "يومان", "أيام", "يومًا"];
+export const dayWord = (n) => arCount(n, DAY_FORMS);
+/* The whole phrase, numeral included — and the numeral is *dropped* for one
+   and two, because Arabic's dual already carries it and «٢ يومان» reads as a
+   translation rather than a sentence. */
+export const daysPhrase = (n) =>
+  Math.abs(n) === 1 ? "يوم واحد" : Math.abs(n) === 2 ? "يومان" : null;
+export const MIN_FORMS = ["دقيقة", "دقيقتان", "دقائق", "دقيقة"];
+export const minWord = (n) => arCount(n, MIN_FORMS);
+export const STEP_FORMS = ["خطوة", "خطوتان", "خطوات", "خطوة"];
+export const stepWord = (n) => arCount(n, STEP_FORMS);
+export const MEET_FORMS = ["مواجهة", "مواجهتان", "مواجهات", "مواجهة"];
+export const meetWord = (n) => arCount(n, MEET_FORMS);
+export const TIMES_FORMS = ["مرة", "مرتان", "مرات", "مرة"];
+export const timesWord = (n) => arCount(n, TIMES_FORMS);
+export const FALL_FORMS = ["انتكاسة", "انتكاستان", "انتكاسات", "انتكاسة"];
+export const fallWord = (n) => arCount(n, FALL_FORMS);
+export const HOUR_FORMS = ["ساعة", "ساعتان", "ساعات", "ساعة"];
+export const hourWord = (n) => arCount(n, HOUR_FORMS);
+export const COURSE_FORMS = ["مقرّر", "مقرّران", "مقرّرات", "مقرّرًا"];
+export const courseWord = (n) => arCount(n, COURSE_FORMS);
+export const WEEK_FORMS = ["أسبوع", "أسبوعان", "أسابيع", "أسبوعًا"];
+export const weekWord = (n) => arCount(n, WEEK_FORMS);
+export const LECTURE_FORMS = ["محاضرة", "محاضرتان", "محاضرات", "محاضرة"];
+export const lectureWord = (n) => arCount(n, LECTURE_FORMS);
+
+/* Day keys are calendar squares, not instants, and every helper here parses
+   them at LOCAL midnight. `new Date("2027-01-05")` is read as UTC and lands
+   on the 4th for anyone east of Greenwich — which is all of the Gulf, every
+   day of the year. */
+export const daysUntil = (ds, fromKey = dayKey()) => {
+  const a = keyToDate(fromKey);
+  const b = keyToDate(ds);
+  if (!a || !b) return null;
+  return Math.round((b - a) / 86400000);
+};
+
+/* "HH:MM" or nothing at all. A half-typed time is worse than no time: it
+   sorts wrongly and then renders as a lie, so anything that is not a real
+   clock reading is dropped on the way into state. */
+export const minsOf = (t) => {
+  const v = hhmm(t);
+  if (!v) return null;
+  const [h, m] = v.split(":").map(Number);
+  return h * 60 + m;
+};
+
+export const nowMins = (d = new Date()) => d.getHours() * 60 + d.getMinutes();
+
+/* 14:30 → «٢:٣٠ م». A 24-hour clock is what gets typed; a 12-hour one is
+   what gets read. */
+export const prettyTime = (t) => {
+  const v = hhmm(t);
+  if (!v) return "";
+  const [h, m] = v.split(":").map(Number);
+  const suffix = h < 12 ? "ص" : "م";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+};
+
+export const AR_MONTHS = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+];
+export const WEEK_LABELS = ["س", "ح", "ن", "ث", "ر", "خ", "ج"];
+
+/* "2026-10-01" inside Arabic text renders as "01-10-2026" — the hyphens are
+   neutral, so bidi reorders the three numbers right to left. Spelling the
+   month out removes the ambiguity instead of fighting it with isolates. */
+export const arDate = (ds) => {
+  const [y, m, d] = String(ds || "").split("-").map(Number);
+  if (!y || !m || !d) return ds || "";
+  return `${d} ${AR_MONTHS[m - 1]} ${y}`;
+};
+
+/* The Saudi five-point scale with the four-point column beside it. The
+   percentage floors are the standard ones, and they are what lets the mark
+   sheet name the grade a course is currently earning instead of leaving
+   him to look it up. Ordered high to low — `gradeFromPct` depends on that,
+   and F sits at zero so the search can never miss. */
+export const gradePoints = (g, scale) => (Number(scale) === 4 ? g.p4 : g.p5);
+export const gradeFromPct = (pct) =>
+  GRADES.find((g) => pct >= g.min) || GRADES[GRADES.length - 1];
+
+export const coursesIn = (uni, termId) =>
+  (uni.courses || []).filter((c) => c.term === termId);
+export const termOf = (uni, id) => (uni.terms || []).find((t) => t.id === id) || null;
+export const courseIn = (uni, id) => (uni.courses || []).find((c) => c.id === id) || null;
+export const courseName = (c) =>
+  !c ? "" : c.name || c.code || "مقرّر بلا اسم";
+
+/* Today's sections, and the one he is either sitting in or walking to.
+   Minutes are passed in rather than read off the clock so the caller owns
+   the tick — this runs on every render of a screen that re-renders once a
+   minute, and two clocks in one frame can disagree by a minute. */
+export function daySections(courses, dow, mins) {
+  const rows = [];
+  for (const c of courses || [])
+    for (const s of c.slots || [])
+      if (s.day === dow) {
+        const from = minsOf(s.from) ?? 0;
+        const to = minsOf(s.to) ?? from;
+        rows.push({
+          course: c,
+          slot: s,
+          from,
+          to,
+          now: mins >= from && mins < to,
+        });
+      }
+  rows.sort((a, b) => a.from - b.from);
+  return rows;
+}
+
+/* The next section anywhere in the week, walking forward from now. The day
+   offset rides along so the card can say «غدًا» instead of a weekday the
+   user then has to count to. */
+export function nextSection(courses, dow, mins) {
+  for (let i = 0; i < 8; i++) {
+    const rows = daySections(courses, (dow + i) % 7, i === 0 ? mins : -1).filter(
+      (r) => i > 0 || r.to > mins,
+    );
+    if (rows.length) return { ...rows[0], inDays: i };
+  }
+  return null;
+}
+
+/* The timetable, the next-section card and the "now" line all move with
+   the clock, and this screen is left open for hours. One minute is the
+   right grain: a second would re-render the module sixty times a minute
+   for a line that moves one pixel. */
+export function useMinuteClock() {
+  const [mins, setMins] = useState(() => nowMins());
+  useEffect(() => {
+    const check = () => setMins(nowMins());
+    const t = setInterval(check, 60000);
+    /* A background tab throttles intervals hard, so also re-read the clock
+       the moment the tab is looked at again. */
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+  return mins;
+}
+
+/* A link the app is willing to put in an `href`, or nothing.
+ *
+ *  Only http and https pass. `javascript:` in an href runs as the page when
+ *  it is clicked, and this field is reachable through an imported backup —
+ *  a file the app already treats as untrusted. A bare «blackboard.ksu.edu.sa»
+ *  is what people actually paste, so a missing scheme is filled in rather
+ *  than refused. */
+export const safeUrl = (v) => {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const u = new URL(withScheme);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : "";
+  } catch {
+    return "";
+  }
+};
+
+export const whenWord = (on) => {
+  const n = daysUntil(on);
+  if (n === null) return "";
+  if (n === 0) return "اليوم";
+  if (n === 1) return "غدًا";
+  if (n === 2) return "بعد غد";
+  if (n === -1) return "أمس";
+  if (n < 0) {
+    const d = -n;
+    return `متأخر ${d <= 10 ? `${d} ${dayWord(d)}` : `${d} يومًا`}`;
+  }
+  return `بعد ${n <= 10 ? `${n} ${dayWord(n)}` : `${n} يومًا`}`;
+};
+
+export function NumStep({ value, onChange, min = 0, max = 999, step = 1, unit, tint = T.sky }) {
+  const clamp = (n) => Math.min(max, Math.max(min, n));
+  const btn =
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 active:scale-90 disabled:opacity-30";
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value - step))}
+        disabled={value <= min}
+        aria-label="أنقص"
+        className={btn}
+        style={{ borderColor: T.border, color: T.muted }}
+      >
+        <Minus size={13} strokeWidth={3} />
+      </button>
+      <p className="min-w-0 flex-1 text-center leading-none">
+        <span
+          dir="ltr"
+          className="text-[19px] font-extrabold tabular-nums"
+          style={{ color: tint }}
+        >
+          {value}
+        </span>
+        <span className="mr-1.5 text-[11px] font-bold" style={{ color: T.muted }}>
+          {unit}
+        </span>
+      </p>
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value + step))}
+        disabled={value >= max}
+        aria-label="زد"
+        className={btn}
+        style={{ borderColor: `${tint}4D`, color: tint }}
+      >
+        <Plus size={13} strokeWidth={3} />
+      </button>
+    </div>
+  );
+}
+
+export function DateField({ value, onChange, id, min, ...rest }) {
+  return (
+    <Field
+      id={id}
+      type="date"
+      dir="ltr"
+      value={value || ""}
+      min={min}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ colorScheme: "dark", textAlign: "left" }}
+      {...rest}
+    />
+  );
+}
+
+export function TimeField({ value, onChange, id, ...rest }) {
+  return (
+    <Field
+      id={id}
+      type="time"
+      dir="ltr"
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ colorScheme: "dark", textAlign: "left" }}
+      {...rest}
+    />
   );
 }

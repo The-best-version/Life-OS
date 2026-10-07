@@ -28,11 +28,36 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)));
 const src = join(root, "LifeOS.jsx");
+/* Every local module the app is made of. The bundle's entry point is still
+   just `src` — esbuild follows the imports on its own — but the other two
+   things done with these files follow nothing: they are handed exactly what
+   is named here.
+     `scanned` are the files Tailwind reads class names out of. A .jsx file
+   missing from it is a class silently absent from the CSS and a screen that
+   renders unstyled with nothing in any log to say why; that is how the
+   university desk shipped once, thirty classes short.
+     `shipped` are the files copied beside the build, so that
+   life-os/LifeOS.source.jsx is a source that can actually be built. A file
+   missing from it is a published copy that looks complete and is not —
+   life-storage.mjs was carved out of LifeOS.jsx and left off this list, so
+   the shipped source had no save path at all.
+     Both are written out in full rather than one spread into the other: a
+   test reads these two arrays and holds them against what the source
+   actually imports, and it can only read literals. */
+const scanned = ["life-shared.jsx", "life-uni.jsx"];
+const shipped = [
+  "life-shared.jsx",
+  "life-uni.jsx",
+  "prayer-times.mjs",
+  "life-state.mjs",
+  "life-storage.mjs",
+];
+const splitSrc = scanned.map((f) => join(root, f));
 const site = join(root, "life-os");
 const modules = join(root, "iron-log", "node_modules");
 const work = mkdtempSync(join(tmpdir(), "life-os-build-"));
@@ -128,11 +153,14 @@ try {
   });
   const js = built.outputFiles[0].text;
 
-  // 3. The exact CSS these class names need — scanned off the source.
-  copyFileSync(src, join(work, "LifeOS.jsx"));
+  // 3. The exact CSS these class names need — scanned off every source
+  //    file, the split ones included, or a class used only in life-uni.jsx
+  //    comes out of the build silently absent and the university desk
+  //    renders unstyled with nothing in any log to say why.
+  for (const f of [src, ...splitSrc]) copyFileSync(f, join(work, basename(f)));
   writeFileSync(
     join(work, "tailwind.config.js"),
-    "module.exports = { content: ['./LifeOS.jsx'], theme: { extend: {} }, plugins: [] };\n",
+    "module.exports = { content: ['./*.jsx'], theme: { extend: {} }, plugins: [] };\n",
     "utf8",
   );
   writeFileSync(join(work, "in.css"), "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n", "utf8");
@@ -188,11 +216,7 @@ try {
   mkdirSync(site, { recursive: true });
   writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
   copyFileSync(src, join(site, "LifeOS.source.jsx"));
-  /* The source beside the build has to actually build. LifeOS.jsx imports the
-     prayer maths and the state module, so shipping it without either leaves a
-     copy that looks complete and is not. */
-  copyFileSync(join(root, "prayer-times.mjs"), join(site, "prayer-times.mjs"));
-  copyFileSync(join(root, "life-state.mjs"), join(site, "life-state.mjs"));
+  for (const f of shipped) copyFileSync(join(root, f), join(site, f));
 
   const kb = (n) => (n / 1024).toFixed(0) + " KB";
   console.log(`\nlife-os/index.html          css ${kb(css.length)}   js ${kb(js.length)}`);
