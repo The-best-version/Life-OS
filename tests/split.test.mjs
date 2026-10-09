@@ -37,15 +37,45 @@ const read = (f) => readFileSync(join(root, f), "utf8");
 
 /* The modules that export into the tree, and the files that consume them.
    life-shared.jsx and life-uni.jsx are on both lists: they import from each
-   other's side of the split as well as from the state. */
+   other's side of the split as well as from the state.
+
+   life-state.mjs is itself split by domain now — life-state-util.mjs holds
+   the dependency-free helpers every domain file is built on, eight domain
+   files sit on top of it, and life-state.mjs is a thin core plus a barrel
+   that re-exports all eight so no outside consumer's imports change. That
+   makes life-state.mjs, and the one domain file that reads a sibling
+   (life-state-streak.mjs reads `disciplineOf` off life-state-habits.mjs),
+   consumers of this same split in their own right. */
 const MODULES = [
   "life-state.mjs",
   "prayer-times.mjs",
   "life-storage.mjs",
   "life-shared.jsx",
   "life-uni.jsx",
+  "life-state-util.mjs",
+  "life-state-habits.mjs",
+  "life-state-tasks.mjs",
+  "life-state-goals.mjs",
+  "life-state-books.mjs",
+  "life-state-calendar.mjs",
+  "life-state-uni.mjs",
+  "life-state-career.mjs",
+  "life-state-streak.mjs",
 ];
-const CONSUMERS = ["LifeOS.jsx", "life-shared.jsx", "life-uni.jsx"];
+const CONSUMERS = [
+  "LifeOS.jsx",
+  "life-shared.jsx",
+  "life-uni.jsx",
+  "life-state.mjs",
+  "life-state-habits.mjs",
+  "life-state-tasks.mjs",
+  "life-state-goals.mjs",
+  "life-state-books.mjs",
+  "life-state-calendar.mjs",
+  "life-state-uni.mjs",
+  "life-state-career.mjs",
+  "life-state-streak.mjs",
+];
 
 function exportsOf(src) {
   const names = new Set();
@@ -73,6 +103,17 @@ function importsOf(src) {
     }
   }
   for (const m of src.matchAll(/import\s+([A-Za-z_$][\w$]*)\s*,?\s*from/g)) names.add(m[1]);
+  /* A bare re-export — `export { A, B } from "./mod.mjs"` — pulls a name in
+     from another module exactly as an import does, which is how
+     life-state.mjs re-exports the eight domain files it is built from
+     without binding every one of their names locally. Left out of this scan,
+     every such name would read as "used but never imported". */
+  for (const m of src.matchAll(/export\s*\{([^}]*)\}\s*from/g)) {
+    for (const part of m[1].split(",")) {
+      const t = part.trim().split(/\s+as\s+/).pop().trim();
+      if (t) names.add(t);
+    }
+  }
   return names;
 }
 

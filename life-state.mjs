@@ -6,7 +6,22 @@
  *  split is in the source and not in what is served, and `node --test` can
  *  import it without a browser, without React and without installing a thing.
  *
- *  Two rules this module keeps:
+ *  This file is itself split by domain now: the habit list, the goals vault,
+ *  the book shelf and the rest each have their own file
+ *  (`life-state-habits.mjs`, `life-state-goals.mjs`, `life-state-books.mjs`,
+ *  `life-state-tasks.mjs`, `life-state-calendar.mjs`, `life-state-uni.mjs`,
+ *  `life-state-career.mjs`, `life-state-streak.mjs`, and the dependency-free
+ *  `life-state-util.mjs` every one of them is built on). What stays here is
+ *  only what is inherently cross-cutting — the day boundary, `SCHEMA`, the
+ *  nav order, the general cue quotes, and `freshState`/`migrate`/`carryOf`/
+ *  `rollDay`, which by nature touch every domain's shape at once.
+ *
+ *  Every other file in the app still imports from `"./life-state.mjs"`
+ *  alone — this file re-exports everything the 9 domain files export, so the
+ *  split below is invisible to every consumer. Add a field to a domain file
+ *  and it is already exported from here; nothing else needs to change.
+ *
+ *  Two rules this module (and every file beneath it) keeps:
  *
  *  - Nothing in here touches window, document, localStorage or a lucide
  *    icon. The moment one of them appears, the tests stop being able to load
@@ -15,6 +30,55 @@
  *    ReferenceError at first render, which is a blank white page.
  * --------------------------------------------------------------------- */
 
+import {
+  dayKey,
+  uid,
+  obj,
+  rows,
+  isKey,
+  addDays,
+  yesterdayKey,
+} from "./life-state-util.mjs";
+import {
+  LEGACY_POSTISHA,
+  POSTISHA_LABELS,
+  ADDED_HABITS,
+  ASR_HABITS,
+  MAGHRIB_HABITS,
+  badHabitShape,
+  habitShape,
+  clampGoal,
+  SEED_HABITS,
+} from "./life-state-habits.mjs";
+import {
+  ADDED_TASKS,
+  taskShape,
+  capToday,
+  applyPrep,
+  prepCarry,
+  prepShape,
+  SEED_TASKS,
+} from "./life-state-tasks.mjs";
+import {
+  currentQuarter,
+  goalShape,
+  ADDED_GOALS,
+  SEED_LINKS,
+  parentHorizon,
+  northStarShape,
+  SEED_GOALS,
+} from "./life-state-goals.mjs";
+import {
+  bookShape,
+  READ_ACTIVE,
+  READ_GOAL_DEFAULT,
+  SEED_BOOKS,
+  SEED_READS,
+} from "./life-state-books.mjs";
+import { eventShape, placeShape } from "./life-state-calendar.mjs";
+import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
+import { careerShape, SEED_PROMPTS, SEED_PIPELINE } from "./life-state-career.mjs";
+import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 
 /* --- the tabs --------------------------------------------------------- *
  *  The ids, in the order the sidebar shows them — the one canonical list of
@@ -114,82 +178,6 @@ export function navSplit(order, more) {
   };
 }
 
-/* --- 90-day chunks ---------------------------------------------------- *
- *  A year is too big to act on. Four 90-day blocks are not, and the vault
- *  opens on the one you are living in.
- * ---------------------------------------------------------------------- */
-export const QUARTERS = [
-  { id: "q1", label: "الربع الأول", months: "يناير — مارس", tint: "#00C2FF" },
-  { id: "q2", label: "الربع الثاني", months: "أبريل — يونيو", tint: "#9D5CFF" },
-  { id: "q3", label: "الربع الثالث", months: "يوليو — سبتمبر", tint: "#FFB020" },
-  { id: "q4", label: "الربع الرابع", months: "أكتوبر — ديسمبر", tint: "#FF4D8D" },
-];
-export const currentQuarter = (d = new Date()) => QUARTERS[Math.floor(d.getMonth() / 3)].id;
-export const QUARTER_IDS = new Set(QUARTERS.map((q) => q.id));
-/* --- the six pillars of 2027 ----------------------------------------- */
-export const PILLARS = [
-  { id: "faith", label: "الإيماني", tint: "#9D5CFF" },
-  { id: "health", label: "الصحي", tint: "#FF7A45" },
-  { id: "career", label: "المهني", tint: "#00C2FF" },
-  { id: "money", label: "المالي", tint: "#FFB020" },
-  { id: "social", label: "الاجتماعي", tint: "#FF4D8D" },
-  { id: "self", label: "الشخصي", tint: "#5B8CFF" },
-];
-export const PILLAR_IDS = new Set(PILLARS.map((p) => p.id));
-/* --- the three horizons ---------------------------------------------- *
- *  A 90-day goal that serves nothing is a chore with a deadline. Three
- *  horizons, each answering the one above it: who you intend to be in three
- *  years, what this year has to deliver for that, and what the next ninety
- *  days actually execute. The order matters — `HORIZONS` is read top-down
- *  everywhere, and `parentHorizon` is the only place the chain is written.
- * ---------------------------------------------------------------------- */
-export const HORIZONS = [
-  {
-    id: "h3",
-    label: "ثلاث سنوات",
-    short: "٣ سنوات",
-    hint: "من تريد أن تكون في نهاية ٢٠٢٩ — لا قائمة مهام، بل صورة رجل.",
-    tint: "#9D5CFF",
-    child: "هدف سنوي",
-  },
-  {
-    id: "year",
-    label: "هذه السنة",
-    short: "السنة",
-    hint: "ما يجب أن يتحقّق هذه السنة كي تصل الثلاث سنوات.",
-    tint: "#FFB020",
-    child: "هدف ربعي",
-  },
-  {
-    id: "quarter",
-    label: "تسعون يومًا",
-    short: "٩٠ يومًا",
-    hint: "ما تنفّذه الآن. هنا فقط يتحوّل الطموح إلى عمل.",
-    tint: "#FF5722",
-    child: null,
-  },
-];
-export const HORIZON_IDS = new Set(HORIZONS.map((h) => h.id));
-export const parentHorizon = (id) =>
-  id === "quarter" ? "year" : id === "year" ? "h3" : null;
-
-/* The three-year arc. 2027 is the year this whole app is named for, so it
-   anchors the horizon and the two after it complete it. */
-export const ARC = [2027, 2028, 2029];
-export const GOAL_YEARS = (() => {
-  const y = new Date().getFullYear();
-  return y < ARC[0] ? [y, ...ARC] : ARC;
-})();
-
-/* A stored year is validated against this range, not against GOAL_YEARS —
-   GOAL_YEARS shrinks on the first of January once the run-up year is behind
-   us, and validating against it would silently move every goal filed in that
-   year into the next one. The range is fixed, so a 2026 goal stays a 2026
-   goal forever; the screen keeps offering its tab for as long as anything
-   lives there. */
-export const YEAR_MIN = ARC[0] - 1;
-export const YEAR_MAX = ARC[ARC.length - 1];
-
 /* --- daily cue -------------------------------------------------------- */
 export const QUOTES = [
   {
@@ -277,1314 +265,28 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-/* A phone photo is several megabytes and the whole app state shares one
-   localStorage quota, so an oversized image would make every later write
-   throw and silently stop persisting *everything*. The photo is therefore
-   redrawn through a canvas and stepped down until it fits a hard budget —
-   the image gives way, never the user's habits and history. */
-export const READING_QUOTES = [
-  { text: "الكتاب بلا درس مكتوب لم يُقرأ، بل مُرّ عليه.", author: "قاعدة المكتبة" },
-  { text: "من قرأ كتابًا واحدًا وطبّقه، أنفع ممن قرأ مئة ونسيها.", author: "مثل مأثور" },
-  { text: "اقرأ ما تحبّ حتى تُحبّ القراءة.", author: "نافال رافيكانت" },
-  {
-    text: "لو لم يكن في الكتب إلا أنها تقطع عنك وساوس الفراغ لكفى.",
-    author: "ابن الجوزي",
-  },
-  { text: "الكتب هي المرآة التي نرى فيها أنفسنا قبل أن نرى غيرنا.", author: "عباس العقاد" },
-  {
-    text: "قراءة عشر صفحات كل يوم تصنع ١٥ كتابًا في السنة. البطء ليس العدوّ، الانقطاع هو.",
-    author: "قاعدة التراكم",
-  },
-  { text: "خير جليس في الزمان كتاب.", author: "المتنبّي" },
-  {
-    text: "لا تقرأ لتردّ، ولا لتصدّق؛ اقرأ لتزن وتفكّر.",
-    author: "فرانسيس بيكون",
-  },
-  { text: "الفصل الذي لم تلخّصه، ستنساه قبل نهاية الشهر.", author: "قاعدة التلخيص" },
-  {
-    text: "قيمة الكتاب في ما غيّره فيك، لا في عدد صفحاته.",
-    author: "قاعدة المكتبة",
-  },
-  { text: "من لم يذق مرّ التعلّم ساعة، تجرّع ذلّ الجهل طول حياته.", author: "الإمام الشافعي" },
-  {
-    text: "كتاب تقرؤه مرّتين خير من كتابين تقرأ كلًّا منهما مرّة.",
-    author: "قاعدة العمق",
-  },
-];
-
-export const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
-
-export const SCHEMA = 23;
-/* How many archive rows are kept, and the discipline a day has to reach to
-   bank the streak. */
-export const HISTORY_CAP = 500;
-export const STREAK_TARGET = 80;
-/* 80/20: three real tasks a day beat a list of twenty. Hard cap, on purpose. */
-export const TOP_TASK_CAP = 3;
-
-/* --- the core --------------------------------------------------------- *
- *  The tasks were capped at three because a list of twenty is a list nobody
- *  finishes. The habits had no such cap, and the arithmetic made the case on
- *  its own: three real wins on a Sunday — water, Fajr, the gym — rendered as
- *  17%. A screen that tells someone who did three hard things that he failed
- *  is not measuring discipline, it is manufacturing the feeling of lacking
- *  it, and that is the feeling people close the app to get away from.
- *
- *  So a habit can be core, and the score counts only those. The rest still
- *  tick, still streak, still archive, still show their own run — they are
- *  simply additional rather than the measure. Five, for the same reason the
- *  tasks are three: a core of twelve is the old list wearing a new word.
- *
- *  With nothing marked the score falls back to every habit, which is exactly
- *  what it did before. That fallback is a floor, not the resting state — the
- *  routine screen asks for a core while there is none, because a feature
- *  that waits to be discovered in a settings pane never is.
- * ---------------------------------------------------------------------- */
-export const CORE_CAP = 5;
-export const coreOf = (habits) => habits.filter((h) => h.core);
-/* The one roster the score is read from. Every caller goes through it — the
-   ring, the archive row, the streak, the toast the server sends — so they
-   cannot end up dividing by three different denominators and disagreeing
-   about the same day. */
-export const scoredOf = (habits) => {
-  const core = coreOf(habits);
-  return core.length ? core : habits;
-};
-export const disciplineOf = (habits) => {
-  const list = scoredOf(habits);
-  if (!list.length) return 0;
-  return Math.round((list.filter((h) => h.done).length / list.length) * 100);
-};
-
-/* The day ends when you sleep, not at midnight. Ticking «أذكار النوم» at
-   01:00 is finishing yesterday, not starting today — and a sheet that wiped
-   itself at 00:00 is why a night of work kept landing on the wrong row and
-   then being zeroed by the next morning's reload. Anything written between
-   midnight and this hour belongs to the previous day. */
-export const DAY_START_HOUR = 4;
-
-/* "Now", shifted onto the logical day it belongs to. */
-export const logicalNow = (d = new Date()) => {
-  const x = new Date(d.getTime());
-  x.setHours(x.getHours() - DAY_START_HOUR);
-  return x;
-};
-
-/* A calendar date, formatted as a key. The no-argument call means *now* and
-   gets the logical day; a call that passes a date means that exact calendar
-   square — the month grid and the streak walkers depend on the difference,
-   so the shift must not hide inside a default parameter. */
-export const fmtDay = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-export const dayKey = (d) => fmtDay(d === undefined ? logicalNow() : d);
-
-export const yesterdayKey = () => {
-  const d = logicalNow();
-  d.setDate(d.getDate() - 1);
-  return fmtDay(d);
-};
-export const uid = () => Math.random().toString(36).slice(2, 9);
-
-/* --- the two guards every stored shape is built on -------------------- *
- *  A default parameter fires for `undefined` and for nothing else, so
- *  `shape(null)` sailed straight past `(x = {})` and threw on the first
- *  property read. That is not a theoretical payload: a hand-edited backup,
- *  a half-written download and another app's JSON all produce exactly it,
- *  and `[null]` passes the import check because it is still an array.
- *
- *  `obj` makes a shape total — anything that is not an object becomes an
- *  empty one and every field falls back to its default. `rows` does the
- *  same for a list: the holes are dropped rather than carried forward to
- *  throw later, somewhere with no try/catch around it.
- * ---------------------------------------------------------------------- */
-export const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
-export const rows = (v) =>
-  Array.isArray(v) ? v.filter((x) => x && typeof x === "object" && !Array.isArray(x)) : [];
-
-/* --- the six blocks --------------------------------------------------- *
- *  The ids, in the order the day runs through them — the one canonical list
- *  of what blocks exist. Their labels, icons and tints live in LifeOS.jsx
- *  keyed by these ids, exactly like `NAV_IDS` and `NAV_META`, because a
- *  lucide component cannot be imported here.
- *
- *  The order is what makes «فاتك» answerable: a habit is behind you when its
- *  block opened before the one you are in, and that question needs a rank,
- *  not a label. `BLOCK_ANCHORS` in prayer-times.mjs pins each of them to a
- *  prayer in this same order — a test holds the two side by side, because
- *  the day cannot run in two different orders.
- * ---------------------------------------------------------------------- */
-export const BLOCK_IDS = [
-  "morning",
-  "afternoon",
-  "asr",
-  "maghrib",
-  "postisha",
-  "night",
-];
-/* Where a block sits in the day. A group id this build no longer has — a
-   hand-edited backup, an older seed — ranks last rather than throwing: it
-   is still the user's habit and it still has to render somewhere. */
-export const blockRank = (id) => {
-  const at = BLOCK_IDS.indexOf(id);
-  return at < 0 ? BLOCK_IDS.length : at;
-};
-
-/* The habits still open, split by where the day has got to: the block he is
-   in now, the blocks that have already closed, and the ones still ahead.
- *
- *  His own order is kept inside each group, never re-sorted — the routine
- *  screen lets him drag the list into the order he lives it, and a second
- *  screen quietly showing a different order is a second app. Core habits are
- *  marked, not moved, for the same reason.
- *
- *  An unknown block id lands in `later` by way of `blockRank`, which is the
- *  safe side: a habit announced as missed when it never opened is a screen
- *  manufacturing guilt out of a damaged payload.
- */
-export function remainingIn(habits, blockId, keep) {
-  const here = [];
-  const missed = [];
-  const later = [];
-  const now = blockRank(blockId);
-  /* A habit that was ticked a moment ago is still listed, because the reward
-     has to play somewhere. A row that vanishes on the tap animates nothing,
-     and «every completion pays out» is not a decoration — it is the whole
-     transaction the screen offers. The caller holds the ids for as long as
-     the animation runs and then lets them go. */
-  const held = keep instanceof Set ? keep : new Set(Array.isArray(keep) ? keep : []);
-  for (const h of rows(habits)) {
-    if (h.done && !held.has(h.id)) continue;
-    const at = blockRank(h.group);
-    if (at === now) here.push(h);
-    else if (at < now) missed.push(h);
-    else later.push(h);
-  }
-  return { here, missed, later };
-}
-
-/* The "بعد العشاء" block was split out of "المساء" in schema 4. These labels
-   drive both the seed and the migration, so an existing user's صلاة العشاء
-   moves into the new block instead of being duplicated beside it. */
-export const POSTISHA_LABELS = [
-  "صلاة العشاء",
-  "تقييم اليوم: التزمت؟",
-  "تحضير مهام الغد الثلاث",
-];
-export const LEGACY_POSTISHA = new Set(["صلاة العشاء", "تقييم يومي", ...POSTISHA_LABELS]);
-
-/* Added in schema 6. Kept in their own list so the migration can top up an
-   existing profile with exactly the ones it is missing. */
-export const ADDED_HABITS = [
-  { label: "تمارين مقاومة (صدر/بطن) أو T-Bar + ١٥ ألف خطوة", group: "morning" },
-  { label: "محادثة إنجليزية مع متحدث أصلي", group: "afternoon" },
-  { label: "تحضير وجبة الغد: دجاج صيني وأرز", group: "maghrib" },
-];
-
-/* Schema 8 split the old "المساء" block into "بعد العصر" and "بعد المغرب". */
-export const ASR_HABITS = [
-  { label: "صلاة العصر", group: "asr" },
-  { label: "مراجعة سريعة لمهام اليوم", group: "asr" },
-  { label: "مشي أو حركة خفيفة", group: "asr" },
-];
-export const MAGHRIB_HABITS = [{ label: "صلاة المغرب وأذكار", group: "maghrib" }];
-
-export const ADDED_TASKS = [
-  { text: "جلسة مذاكرة PMP — ٩٠ دقيقة", quadrant: "q2" },
-  { text: "تحديث LinkedIn: إبراز إدارة المرافق والتدريب التعاوني", quadrant: "q2" },
-  { text: "ساعتان عمل توصيل مرن", quadrant: "q3" },
-];
-
-export const READ_ACTIVE = "active";
-export const READ_GOAL_DEFAULT = 20;
-
-/* --- water ------------------------------------------------------------ *
- *  Eight cups is the figure everyone already knows, so it is the default.
- *  The count is per-day and deliberately absent from `carryOf`: yesterday's
- *  water is not today's. The cap exists because the cups are rendered one
- *  per glass, and a hand-edited backup asking for four hundred of them
- *  would lock the routine screen up drawing them.
- * ---------------------------------------------------------------------- */
-export const WATER_GOAL_DEFAULT = 8;
-export const WATER_GOAL_MAX = 20;
-export const clampGoal = (n) =>
-  Number.isFinite(+n) && +n >= 1
-    ? Math.min(WATER_GOAL_MAX, Math.round(+n))
-    : WATER_GOAL_DEFAULT;
-export const PLACES = [
-  { id: "riyadh", label: "الرياض", lat: 24.7136, lng: 46.6753, tz: 3 },
-  { id: "makkah", label: "مكة المكرمة", lat: 21.3891, lng: 39.8579, tz: 3 },
-  { id: "madinah", label: "المدينة المنورة", lat: 24.5247, lng: 39.5692, tz: 3 },
-  { id: "jeddah", label: "جدة", lat: 21.4858, lng: 39.1925, tz: 3 },
-  { id: "dammam", label: "الدمام", lat: 26.4207, lng: 50.0888, tz: 3 },
-  { id: "abha", label: "أبها", lat: 18.2164, lng: 42.5053, tz: 3 },
-  { id: "buraydah", label: "بريدة", lat: 26.326, lng: 43.975, tz: 3 },
-  { id: "tabuk", label: "تبوك", lat: 28.3835, lng: 36.5662, tz: 3 },
-  { id: "hail", label: "حائل", lat: 27.5114, lng: 41.7208, tz: 3 },
-  { id: "jizan", label: "جازان", lat: 16.8892, lng: 42.5611, tz: 3 },
-];
-export const PLACE_BY_ID = new Map(PLACES.map((p) => [p.id, p]));
-
-export const placeShape = (p) => {
-  const o = obj(p);
-  const seed = PLACE_BY_ID.get(o.id) || PLACES[0];
-  /* Unary `+` turns null, [], "" and false into 0, and 0 is a perfectly
-     plausible-looking longitude — so a payload that lost a field came back
-     sitting on the prime meridian at UTC+0 and the prayer times were three
-     hours out without anything looking broken. Only a real number, or a
-     string that is entirely one, is allowed to pass. */
-  const num = (v, fb, lim) => {
-    const n =
-      typeof v === "number"
-        ? v
-        : typeof v === "string" && v.trim() !== ""
-          ? Number(v)
-          : NaN;
-    return Number.isFinite(n) && Math.abs(n) <= lim ? n : fb;
-  };
-  return {
-    id: PLACE_BY_ID.has(o.id) ? o.id : o.id === "custom" ? "custom" : seed.id,
-    label: typeof o.label === "string" && o.label.trim() ? o.label.trim() : seed.label,
-    lat: num(o.lat, seed.lat, 90),
-    lng: num(o.lng, seed.lng, 180),
-    tz: num(o.tz, seed.tz, 14),
-    /* 1 = Shafii, 2 = Hanafi. Anything else is not a school. */
-    asr: +o.asr === 2 ? 2 : 1,
-  };
-};
-
-/* Decimal hours → "07:18". Named apart from `hhmm`, which validates a time
-   the user typed; this one formats one the solar maths produced. Rendered
-   LTR by the caller — this only builds the string. */
-export const COST_TYPES = [
-  {
-    id: "money",
-    label: "مال",
-    unit: "ريال",
-    forms: ["ريال", "ريالان", "ريالات", "ريالًا"],
-    tint: "#FFB020",
-  },
-  {
-    id: "time",
-    label: "وقت",
-    unit: "ساعة",
-    forms: ["ساعة", "ساعتان", "ساعات", "ساعة"],
-    tint: "#00C2FF",
-  },
-];
-export const costType = (id) => COST_TYPES.find((c) => c.id === id) || COST_TYPES[0];
-
-/* --- the weakness mirror ---------------------------------------------- *
- *  A relapse written as prose is a diary: it reads well once and can never
- *  be counted. So every confrontation with the urge — the ones that won and
- *  the ones that lost — carries a cause, a mood and the clock hour beside
- *  the free text. That is the whole point of the screen: to say back to the
- *  user the one sentence he cannot say about himself — *this* is what takes
- *  you down, and *this* is when it comes for you.
- *
- *  Every tag ships with its own counter-move. A diagnosis with no
- *  prescription is just a nicer way of telling someone he is weak.
- * ---------------------------------------------------------------------- */
-export const URGE_TAGS = [
-  {
-    id: "big",
-    label: "المهمة كبيرة",
-    tint: "#FF7A45",
-    counter:
-      "قصّها إلى خطوة واحدة مدّتها خمس دقائق، واكتبها كفعل لا كهدف: «افتح الملف»، لا «أنجز التقرير».",
-  },
-  {
-    id: "unclear",
-    label: "لا أعرف من أين أبدأ",
-    tint: "#FFB020",
-    counter:
-      "لا تبدأ — خطّط فقط. اكتب أول ثلاث خطوات على ورقة ثم نفّذ الأولى وحدها. الغموض هو ما يشلّك، لا الكسل.",
-  },
-  {
-    id: "fear",
-    label: "خوف من الفشل",
-    tint: "#FF4D8D",
-    counter:
-      "اصنع نسخة سيئة عمدًا. المسوّدة الرديئة تكسر الرهبة، والجودة تأتي من التعديل لا من البداية.",
-  },
-  {
-    id: "phone",
-    label: "الهاتف بيدي",
-    tint: "#00C2FF",
-    counter:
-      "الهاتف في غرفة أخرى قبل أن تجلس، لا في جيبك. إرادتك لا تنافس إشعارًا صُمّم ليخطفها.",
-  },
-  {
-    id: "bored",
-    label: "ملل",
-    tint: "#9D5CFF",
-    counter:
-      "املأ الفراغ قبل أن يملأك هو. ضع البديل جاهزًا في متناول يدك قبل أن يأتي الملل بساعة.",
-  },
-  {
-    id: "tired",
-    label: "إرهاق",
-    tint: "#5B8CFF",
-    counter:
-      "النوم ليس مكافأة بعد الإنجاز، هو شرطه. نَم بدل أن تقاوم بنصف دماغ — المقاومة المرهقة تخسر دائمًا.",
-  },
-  {
-    id: "stress",
-    label: "ضغط أو قلق",
-    tint: "#FF3B5C",
-    counter:
-      "أفرغ ما يضغطك على ورقة دقيقتين، ثم اختر أصغر بند فيها ونفّذه. القلق يتغذّى على القائمة المخفيّة.",
-  },
-  {
-    id: "lonely",
-    label: "وحدة",
-    tint: "#FF5722",
-    counter:
-      "اتصل بأحدهم أو انتقل إلى مكان فيه ناس. الوحدة هي الساحة المفضّلة لكل عادة تريد كسرها.",
-  },
-  {
-    id: "people",
-    label: "رفقة تجرّني",
-    tint: "#10B981",
-    counter:
-      "جهّز جملة رفض قصيرة تقولها بلا شرح ولا اعتذار. التردّد نصف ثانية هو ما يُستغل.",
-  },
-  {
-    id: "free",
-    label: "فراغ مفاجئ",
-    tint: "#FFB020",
-    counter:
-      "الفراغ غير المخطّط يسلّم نفسه للعادة. احجز له بديلًا داخل الروتين بدل أن تتركه مفتوحًا.",
-  },
-];
-export const tagOf = (id) => URGE_TAGS.find((t) => t.id === id) || null;
-
-export const URGE_MOODS = [
-  { id: "empty", label: "فارغ" },
-  { id: "anxious", label: "قلِق" },
-  { id: "angry", label: "غاضب" },
-  { id: "low", label: "محبط" },
-  { id: "spent", label: "منهك" },
-  { id: "restless", label: "مشتّت" },
-];
-export const moodOf = (id) => URGE_MOODS.find((m) => m.id === id) || null;
-
-/* Bands, not hours. "أكثر ما تسقط الساعة ١١" is a trivia fact; "بعد العشاء
-   إلى منتصف الليل" is a window a person can actually defend. The last band
-   starts at midnight and ends at four, so nothing wraps and every hour of
-   the clock lands in exactly one band. */
-export const urgeShape = (u, kind = "hold") => (
-  (u = obj(u)),
-  {
-  id: u.id || uid(),
-  at: typeof u.at === "string" ? u.at : dayKey(),
-  kind: u.kind === "fall" || kind === "fall" ? "fall" : "hold",
-  days: Number.isFinite(Number(u.days)) ? Math.max(0, Number(u.days)) : 0,
-  tag: tagOf(u.tag) ? u.tag : "",
-  mood: moodOf(u.mood) ? u.mood : "",
-  hour: Number.isFinite(Number(u.hour))
-    ? Math.min(23, Math.max(0, Math.round(Number(u.hour))))
-    : null,
-  dow: Number.isFinite(Number(u.dow)) ? Math.min(6, Math.max(0, Number(u.dow))) : null,
-  trigger: typeof u.trigger === "string" ? u.trigger : "",
-  feeling: typeof u.feeling === "string" ? u.feeling : "",
-});
-
-/* Stamped at the moment of logging, not derived later. The hour comes from
-   the wall clock and the weekday from the logical day: a craving at one in
-   the morning belongs to «بعد منتصف الليل» but to *yesterday's* row, which
-   is exactly how the person lived it. */
-export const badHabitShape = (b) => (
-  (b = obj(b)),
-  {
-  id: b.id || uid(),
-  title: typeof b.title === "string" ? b.title : "",
-  startDate: typeof b.startDate === "string" ? b.startDate : dayKey(),
-  costType: b.costType === "time" ? "time" : "money",
-  costPerDay: Number.isFinite(Number(b.costPerDay))
-    ? Math.max(0, Number(b.costPerDay))
-    : 0,
-  replacement: typeof b.replacement === "string" ? b.replacement : "",
-  /* Falls and holds live in two arrays because they are read separately —
-     the card counts the falls, the mirror counts both. */
-  logs: Array.isArray(b.logs) ? b.logs.map((l) => urgeShape(l, "fall")) : [],
-  urges: Array.isArray(b.urges) ? b.urges.map((u) => urgeShape(u, "hold")) : [],
-});
-
-/* Arabic counts the noun, not just the number: ٣ أيام but ٢٥ يومًا. Printing
-   one fixed form next to a live counter is wrong most of the time. The four
-   forms are [one, two, 3–10, 11+]. */
-export const SEED_HABITS = [
-  { id: uid(), label: "شرب ماء", group: "morning", done: false },
-  { id: uid(), label: "صلاة الفجر وأذكار", group: "morning", done: false },
-  ...ADDED_HABITS.filter((h) => h.group === "morning").map((h) => ({
-    id: uid(),
-    done: false,
-    ...h,
-  })),
-  { id: uid(), label: "جلسة STEP — ٩٠ دقيقة", group: "morning", done: false },
-  { id: uid(), label: "صلاة الظهر", group: "afternoon", done: false },
-  { id: uid(), label: "قراءة", group: "afternoon", done: false, book: READ_ACTIVE },
-  ...ADDED_HABITS.filter((h) => h.group === "afternoon").map((h) => ({
-    id: uid(),
-    done: false,
-    ...h,
-  })),
-  ...ASR_HABITS.map((h) => ({ id: uid(), done: false, ...h })),
-  ...MAGHRIB_HABITS.map((h) => ({ id: uid(), done: false, ...h })),
-  ...ADDED_HABITS.filter((h) => h.group === "maghrib").map((h) => ({
-    id: uid(),
-    done: false,
-    ...h,
-  })),
-  ...POSTISHA_LABELS.map((label) => ({
-    id: uid(),
-    label,
-    group: "postisha",
-    done: false,
-  })),
-  { id: uid(), label: "الابتعاد عن الشاشات", group: "night", done: false },
-  { id: uid(), label: "تدوين", group: "night", done: false },
-  { id: uid(), label: "أذكار النوم", group: "night", done: false },
-];
-
-export const SEED_TASKS = [
-  { id: uid(), text: "تسليم تقرير الجامعة", quadrant: "q1", today: true, done: false },
-  { id: uid(), text: "مراجعة مكثفة لاختبار STEP", quadrant: "q2", today: true, done: false },
-  ...ADDED_TASKS.map((t) => ({ id: uid(), today: false, done: false, ...t })),
-  { id: uid(), text: "بناء صندوق الطوارئ", quadrant: "q2", today: false, done: false },
-  { id: uid(), text: "الرد على الرسائل المتراكمة", quadrant: "q3", today: false, done: false },
-  { id: uid(), text: "تصفّح مواقع التواصل بلا هدف", quadrant: "q4", today: false, done: false },
-];
-
-/* Every book gained a workspace in schema 10: a summary, a list of points
-   with the page they came from, and a page counter. `bookShape` is the one
-   place that shape is written, so the seed, the add form and the migration
-   cannot drift apart. */
-export const bookShape = (b) => (
-  (b = obj(b)),
-  {
-  title: "",
-  author: "",
-  status: "planned",
-  rating: 0,
-  lesson: "",
-  cover: "",
-  summary: "",
-  notes: [],
-  pages: "",
-  page: "",
-  finishedAt: null,
-  ...b,
-});
-
-/* A habit can feed the library. `habit.book` is the link:
-     null        — an ordinary habit, nothing to do with reading
-     "active"    — follows whichever book is marked «أقرأه الآن»
-     "<book id>" — pinned to one book, for a second reading habit
-   Ticking such a habit logs a session; unticking removes today's and rolls
-   the page counter back, so the log can never claim pages that were undone. */
-export const SEED_BOOKS = [
-  {
-    id: uid(),
-    title: "العادات الذرية",
-    author: "جيمس كلير",
-    status: "finished",
-    rating: 5,
-    lesson: "لا ترتقي إلى أهدافك، بل تهبط إلى مستوى أنظمتك. ابنِ النظام قبل الحلم.",
-  },
-  {
-    id: uid(),
-    title: "العمل العميق",
-    author: "كال نيوبورت",
-    status: "finished",
-    rating: 4,
-    lesson: "ساعتان بلا تشتت تهزم يومًا كاملًا مشتتًا. احمِ تركيزك كما تحمي مالك.",
-  },
-  {
-    id: uid(),
-    title: "الفوائد",
-    author: "ابن القيّم",
-    status: "reading",
-    rating: 5,
-    lesson: "القلب يصدأ كما يصدأ الحديد، وجلاؤه الذكر وتلاوة القرآن.",
-  },
-];
-
-/* --- the goal, in one place ------------------------------------------- *
- *  Every goal row is written through here — seed, the add form, and the
- *  migration all go through `goalShape`, so the three can never drift apart.
- *  A goal carries more than a label now: the horizon it belongs to, the
- *  goal one horizon up that it serves, the reason it exists, an optional
- *  meter, its own milestones and a deadline.
- *
- *  Nothing here is permissive by accident. `parent` is validated for shape
- *  only; whether it points at a goal that exists, in the right horizon, is
- *  checked in `migrate` where the whole list is in hand — a shape function
- *  that can only see one row has no way to answer it.
- * ---------------------------------------------------------------------- */
-/* --- the word and the vision ------------------------------------------ *
- *  One word for the arc and a paragraph under it. It sits above every goal
- *  on the screen because it is the thing the goals are for: a list of
- *  eighteen targets with no sentence explaining who they are building is a
- *  list you abandon in March. Capped because it is a motto and a paragraph,
- *  not a journal — and because every byte here shares one storage quota
- *  with the habits and the history, which never give way.
- * ---------------------------------------------------------------------- */
-export const WORD_MAX = 24;
-export const VISION_MAX = 600;
-export const northStarShape = (n) => {
-  const o = obj(n);
-  const str = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
-  return { word: str(o.word, WORD_MAX), vision: str(o.vision, VISION_MAX) };
-};
-
-export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-export const goalShape = (g) => {
-  const o = obj(g);
-  const horizon = HORIZON_IDS.has(o.horizon) ? o.horizon : "quarter";
-  const num = (v, fb = 0) => (Number.isFinite(+v) && +v >= 0 ? +v : fb);
-  const target = num(o.target);
-  return {
-    id: typeof o.id === "string" && o.id ? o.id : uid(),
-    text: typeof o.text === "string" ? o.text : "",
-    pillar: PILLAR_IDS.has(o.pillar) ? o.pillar : "self",
-    horizon,
-    /* A quarter is meaningless above the 90-day horizon and a year is
-       meaningless below it, but both are stored regardless: changing a
-       goal's horizon and changing it back must not lose where it sat. */
-    quarter: QUARTER_IDS.has(o.quarter) ? o.quarter : currentQuarter(),
-    year:
-      Number.isInteger(+o.year) && +o.year >= YEAR_MIN && +o.year <= YEAR_MAX
-        ? +o.year
-        : GOAL_YEARS[0],
-    parent: typeof o.parent === "string" && o.parent ? o.parent : null,
-    why: typeof o.why === "string" ? o.why : "",
-    /* A target of zero is not a broken meter, it is a goal that has none —
-       a yes/no goal, scored by its milestones or its children instead. */
-    target,
-    current: target > 0 ? Math.min(target, num(o.current)) : num(o.current),
-    unit: typeof o.unit === "string" ? o.unit.slice(0, 16) : "",
-    step: num(o.step, 1) > 0 ? num(o.step, 1) : 1,
-    deadline: DATE_RE.test(o.deadline) ? o.deadline : "",
-    steps: rows(o.steps).map((s) => ({
-      id: typeof s.id === "string" && s.id ? s.id : uid(),
-      text: typeof s.text === "string" ? s.text : "",
-      done: !!s.done,
-    })),
-    done: !!o.done,
-  };
-};
-
-/* How far along a goal is, read from whatever evidence it actually has: a
-   meter first, then its own milestones, then the goals one horizon down
-   that serve it. An explicit «مُحقَّق» wins over all three — declaring a goal
-   done is a judgement the owner is allowed to make, and a meter that reads
-   94% must not argue with it.
- *
- *  The depth guard is not theoretical. The chain is three deep by design, but
- *  a hand-edited backup can point a goal at its own descendant, and without
- *  a floor the recursion would never return — a white screen that reloading
- *  cannot clear, because the payload on disk is already the bad one. */
-export const GOAL_TREE = [
-  {
-    text: "أكون من أهل القرآن: حفظًا وتدبّرًا وعملًا",
-    pillar: "faith",
-    why: "لأن كل ما بعده يُسأل عنه، وهذا وحده يبقى.",
-    kids: [
-      {
-        text: "ختم القرآن تدبّرًا ثلاث مرّات",
-        year: 2027,
-        target: 3,
-        unit: "ختمة",
-        kids: [
-          { text: "ختم القرآن تدبّرًا مرّة", quarter: "q1" },
-          { text: "المحافظة على الصلوات في وقتها", quarter: "q4" },
-        ],
-      },
-      {
-        text: "حفظ جزأين إتقانًا لا كمًّا",
-        year: 2027,
-        target: 2,
-        unit: "جزء",
-        kids: [
-          { text: "حفظ جزء عمّ إتقانًا", quarter: "q3" },
-          { text: "قيام الليل ٣ مرّات أسبوعيًّا", quarter: "q2" },
-        ],
-      },
-    ],
-  },
-  {
-    text: "جسد قويّ لا يعتذر: وزن صحّي ثابت وقوّة تُرى",
-    pillar: "health",
-    why: "الانضباط يبدأ من الجسد — ما لا تقدر عليه بدنك لن تقدر عليه بعزمك.",
-    kids: [
-      {
-        text: "الوصول إلى الوزن الصحّي وثباته ثلاثة أشهر",
-        year: 2027,
-        kids: [
-          { text: "الوصول إلى وزن صحّي وثباته", quarter: "q3" },
-          { text: "نوم ٧ ساعات ثابتة كل ليلة", quarter: "q2" },
-        ],
-      },
-      {
-        text: "مئتا حصّة نادي هذه السنة",
-        year: 2027,
-        target: 200,
-        unit: "حصّة",
-        step: 1,
-        kids: [{ text: "نادي ٤ مرّات أسبوعيًّا بلا انقطاع", quarter: "q1" }],
-      },
-    ],
-  },
-  {
-    text: "وظيفة أحبّها بدخل يكفيني ويزيد",
-    pillar: "career",
-    why: "الشهادة لا تُوظّف، النظام يُوظّف — وثلاث سنوات تكفي لبناء سيرة لا تُرَدّ.",
-    kids: [
-      {
-        text: "التخرّج ثم التوظيف في وظيفة إدارية",
-        year: 2027,
-        kids: [
-          { text: "إنهاء مشروع تخرّج يُفتخر به", quarter: "q4" },
-          { text: "إرسال ٦٠ طلب توظيف مدروس", quarter: "q2", target: 60, unit: "طلب", step: 5 },
-        ],
-      },
-      {
-        text: "اجتياز STEP بتسعين أو أكثر",
-        year: 2027,
-        kids: [
-          { text: "اجتياز اختبار STEP بدرجة عالية", quarter: "q1" },
-          { text: "إتقان الإنجليزية محادثةً", quarter: "q3" },
-        ],
-      },
-    ],
-  },
-  {
-    text: "استقلال مالي: لا دَين، وصندوق يكفي سنة",
-    pillar: "money",
-    why: "المال لا يشترى به الوقت إلا إذا كان فائضًا — والفائض يُبنى، لا يُنتظر.",
-    kids: [
-      {
-        text: "صندوق طوارئ يغطّي ستة أشهر",
-        year: 2027,
-        kids: [
-          { text: "بناء صندوق طوارئ يغطّي ٦ أشهر", quarter: "q2" },
-          { text: "ادّخار ٢٠٪ من كل دخل", quarter: "q3" },
-        ],
-      },
-      {
-        text: "مصدر دخل ثانٍ يغطّي مصاريفي الشهرية",
-        year: 2027,
-        kids: [{ text: "مصدر دخل ثانٍ", quarter: "q4" }],
-      },
-    ],
-  },
-  {
-    text: "صحبة وأهل يُعينونني على الآخرة",
-    pillar: "social",
-    why: "المرء على دين خليله — وهذه الدائرة تُختار مرّة وتُحمل عمرًا.",
-    kids: [
-      {
-        text: "صلة الرحم أسبوعيًّا بلا انقطاع",
-        year: 2027,
-        kids: [
-          { text: "صلة الرحم أسبوعيًّا", quarter: "q1" },
-          { text: "بناء دائرة صحبة صالحة", quarter: "q3" },
-        ],
-      },
-    ],
-  },
-  {
-    text: "عقل مقروء: مئة كتاب ولغة ثانية أتكلّمها بثقة",
-    pillar: "self",
-    why: "ما تقرؤه في ثلاث سنوات هو من ستكون عليه في الرابعة.",
-    kids: [
-      {
-        text: "قراءة أربعة وعشرين كتابًا",
-        year: 2027,
-        target: 24,
-        unit: "كتاب",
-        kids: [{ text: "قراءة ٦ كتب", quarter: "q3", target: 6, unit: "كتاب" }],
-      },
-      {
-        text: "مهارة واحدة تُتقنها إتقانًا يُدفع فيه",
-        year: 2027,
-        kids: [
-          { text: "تعلّم مهارة جديدة كليًّا", quarter: "q4" },
-          { text: "تقليل وقت الشاشات إلى ساعة يوميًّا", quarter: "q2" },
-        ],
-      },
-    ],
-  },
-];
-
-/* Walks the tree into the flat list the app stores, stamping each level with
-   its horizon and each row with the id of the one above it. */
-export function buildGoals(tree) {
-  const out = [];
-  const walk = (node, depth, parent, pillar) => {
-    const horizon = HORIZONS[Math.min(depth, HORIZONS.length - 1)].id;
-    const row = goalShape({ ...node, horizon, parent, pillar });
-    out.push(row);
-    for (const kid of node.kids || []) walk(kid, depth + 1, row.id, pillar);
-  };
-  for (const root of tree) walk(root, 0, null, root.pillar);
-  return out;
-}
-
-export const SEED_GOALS = () => buildGoals(GOAL_TREE);
-
-/* The rows a profile written before the horizons existed is topped up with:
-   everything above the 90-day line, which it has none of. Matched on text so
-   a user who already typed one of these never gets a second copy beside it. */
-export const ADDED_GOALS = () =>
-  SEED_GOALS().filter((g) => g.horizon !== "quarter");
-
-/* Which yearly goal each seeded 90-day goal was written to serve, by text.
-   An existing profile's eighteen goals came from this same seed list before
-   the horizons existed, so matching on text is what lets the migration wire
-   the user's own rows into the tree instead of leaving them orphans beside a
-   duplicate set that does have parents. */
-export const SEED_LINKS = (() => {
-  const map = new Map();
-  for (const root of GOAL_TREE)
-    for (const year of root.kids || [])
-      for (const q of year.kids || []) map.set(q.text, year.text);
-  return map;
-})();
-
-export const SEED_PROMPTS = [
-  {
-    title: "محاكي اختبار PMP",
-    body: "تصرّف كمحاكي صارم لاختبار PMP. اطرح عليّ سؤالًا موقفيًّا صعبًا من نمط الاختبار الحقيقي، بأربعة خيارات متقاربة. لا تكشف الإجابة حتى أجيب، ثم اشرح لماذا الخيار الصحيح صحيح ولماذا كل خيار آخر خاطئ، مع ربطه بمجال المعرفة ومجموعة العمليات.",
-  },
-  {
-    title: "بريد إدارة المرافق",
-    body: "اكتب بريدًا مهنيًّا موجزًا لمدير المرافق بخصوص [الموضوع]. النبرة: محترمة وحازمة وواضحة. ابدأ بالسياق في سطر، ثم المشكلة بالأرقام، ثم الإجراء المطلوب بتاريخ محدّد. لا تزيد على ١٥٠ كلمة، ولا تستخدم عبارات إنشائية.",
-  },
-].map((p) => ({ id: uid(), ...p }));
-
-export const SEED_PIPELINE = [
-  { title: "إنهاء اختبار PMP التجريبي الأول", lane: "todo" },
-  { title: "دراسة جدوى عربة الآيس كريم", lane: "todo" },
-  { title: "تحديث LinkedIn بخبرة التدريب التعاوني", lane: "doing" },
-].map((c) => ({ id: uid(), ...c }));
-
-export const APP_STAGES = [
-  { id: "sent", label: "مُرسَل", tint: "#5B8CFF" },
-  { id: "touch", label: "تمت المتابعة", tint: "#00C2FF" },
-  { id: "screen", label: "فرز هاتفي", tint: "#9D5CFF" },
-  { id: "intv", label: "مقابلة", tint: "#FFB020" },
-  { id: "offer", label: "عرض", tint: "#10B981" },
-  { id: "closed", label: "مُغلَق", tint: "#FF4D8D" },
-];
-export const sprintShape = (s) => (
-  (s = obj(s)),
-  {
-  id: s.id || uid(),
-  company: typeof s.company === "string" ? s.company : "",
-  role: typeof s.role === "string" ? s.role : "",
-  startedAt: typeof s.startedAt === "string" ? s.startedAt : dayKey(),
-  pain: typeof s.pain === "string" ? s.pain : "",
-  solution: typeof s.solution === "string" ? s.solution : "",
-  contact: typeof s.contact === "string" ? s.contact : "",
-  days: s.days && typeof s.days === "object" ? s.days : {},
-  notes: s.notes && typeof s.notes === "object" ? s.notes : {},
-});
-
-export const appShape = (a) => (
-  (a = obj(a)),
-  {
-  id: a.id || uid(),
-  company: typeof a.company === "string" ? a.company : "",
-  role: typeof a.role === "string" ? a.role : "",
-  stage: APP_STAGES.some((s) => s.id === a.stage) ? a.stage : "sent",
-  sentAt: typeof a.sentAt === "string" ? a.sentAt : dayKey(),
-  touchedAt: typeof a.touchedAt === "string" ? a.touchedAt : null,
-  note: typeof a.note === "string" ? a.note : "",
-});
-
-export const storyShape = (s) => (
-  (s = obj(s)),
-  {
-  id: s.id || uid(),
-  title: typeof s.title === "string" ? s.title : "",
-  situation: typeof s.situation === "string" ? s.situation : "",
-  task: typeof s.task === "string" ? s.task : "",
-  action: typeof s.action === "string" ? s.action : "",
-  result: typeof s.result === "string" ? s.result : "",
-});
-
-export const careerShape = (c) => (
-  (c = obj(c)),
-  {
-  startedAt: typeof c.startedAt === "string" ? c.startedAt : null,
-  /* The one-time Saudi registrations. An object keyed by id rather than an
-     array of done ids, so adding a row later cannot shift anyone's ticks. */
-  setup: c.setup && typeof c.setup === "object" ? c.setup : {},
-  missions: c.missions && typeof c.missions === "object" ? c.missions : {},
-  sprints: Array.isArray(c.sprints) ? c.sprints.map(sprintShape) : [],
-  apps: Array.isArray(c.apps) ? c.apps.map(appShape) : [],
-  stories: Array.isArray(c.stories) ? c.stories.map(storyShape) : [],
-  log: Array.isArray(c.log) ? c.log : [],
-});
-
-export const keyToDate = (ds) => {
-  const [y, m, d] = String(ds || "").split("-").map(Number);
-  if (!y || !m || !d || m < 1 || m > 12 || d < 1 || d > 31) return null;
-  const x = new Date(y, m - 1, d);
-  /* Rejects 31 February outright instead of quietly accepting it as the
-     3rd of March, which is how an invalid date becomes a wrong one. */
-  if (x.getFullYear() !== y || x.getMonth() !== m - 1 || x.getDate() !== d)
-    return null;
-  return x;
-};
-
-export const isKey = (ds) => !!keyToDate(ds);
-
-export const addDays = (ds, n) => {
-  const d = keyToDate(ds);
-  if (!d) return ds;
-  return fmtDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
-};
-
-/* Signed, unlike `daysBetween`, which floors at zero for the streak
-   counters. A calendar needs the sign: «متأخر ٣ أيام» and «بعد ٣ أيام» are
-   opposite facts, and clamping collapses them into the same number. */
-export const hhmm = (v, fallback = "") => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
-  if (!m) return fallback;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return fallback;
-  return `${String(h).padStart(2, "0")}:${m[2]}`;
-};
-
-/* "HH:MM" as minutes past midnight, or null for anything that is not a
-   real clock reading. Sorting "" as a time would float every untimed row to
-   dawn, which is why the null survives instead of becoming a zero. */
-export const minsIn = (v) => {
-  const t = hhmm(v);
-  if (!t) return null;
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-};
-
-export const clampNum = (v, min, max, fallback) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-};
-
-export const EVENT_KINDS = [
-  { id: "exam", label: "اختبار", tint: "#FF3B5C" },
-  { id: "deadline", label: "موعد تسليم", tint: "#FF7A45" },
-  { id: "class", label: "محاضرة أو دورة", tint: "#00C2FF" },
-  { id: "meet", label: "مقابلة أو اجتماع", tint: "#5B8CFF" },
-  { id: "money", label: "استحقاق مالي", tint: "#FFB020" },
-  { id: "social", label: "مناسبة", tint: "#FF4D8D" },
-  { id: "travel", label: "سفر", tint: "#9D5CFF" },
-  { id: "note", label: "تذكير", tint: "#10B981" },
-];
-export const REPEATS = [
-  { id: "none", label: "مرّة واحدة", short: "" },
-  { id: "weekly", label: "كل أسبوع", short: "أسبوعي" },
-  { id: "monthly", label: "كل شهر", short: "شهري" },
-  { id: "yearly", label: "كل سنة", short: "سنوي" },
-];
-export const WARN_CHOICES = [0, 1, 3, 7, 14, 30];
-
-export const eventShape = (e) => (
-  (e = obj(e)),
-  {
-  id: e.id || uid(),
-  title: typeof e.title === "string" ? e.title : "",
-  date: isKey(e.date) ? e.date : dayKey(),
-  time: hhmm(e.time),
-  kind: EVENT_KINDS.some((k) => k.id === e.kind) ? e.kind : "note",
-  repeat: REPEATS.some((r) => r.id === e.repeat) ? e.repeat : "none",
-  /* An open-ended weekly entry is a legitimate thing to want, so `null`
-     here is a real value and not a missing one. */
-  until: isKey(e.until) ? e.until : null,
-  place: typeof e.place === "string" ? e.place : "",
-  note: typeof e.note === "string" ? e.note : "",
-  warn: WARN_CHOICES.includes(Number(e.warn)) ? Number(e.warn) : 0,
-  /* Per occurrence, not one flag: a weekly entry ticked this Sunday must
-     still be waiting next Sunday, and a boolean cannot say that. */
-  doneOn: Array.isArray(e.doneOn)
-    ? e.doneOn.filter((d) => typeof d === "string" && isKey(d))
-    : [],
-});
-
-/* Every square an entry lands on inside a window — the only real
-   arithmetic on this screen, so it is written once and read everywhere.
- *
- *  Bounded by the window at BOTH ends on purpose: walking forward from the
- *  start date would cost a weekly entry from 2019 three hundred iterations
- *  to draw one month, and the year view asks for twelve months at a time.
- *
- *  A monthly entry on the 31st is SKIPPED in a thirty-day month rather than
- *  pulled back onto the 30th, and 29 February exists only in a leap year.
- *  Moving a due date silently is the one thing a calendar must never do.
- */
-export const GRADES = [
-  { id: "A+", ar: "ممتاز مرتفع", p5: 5, p4: 4, min: 95 },
-  { id: "A", ar: "ممتاز", p5: 4.75, p4: 3.75, min: 90 },
-  { id: "B+", ar: "جيد جدًا مرتفع", p5: 4.5, p4: 3.5, min: 85 },
-  { id: "B", ar: "جيد جدًا", p5: 4, p4: 3, min: 80 },
-  { id: "C+", ar: "جيد مرتفع", p5: 3.5, p4: 2.5, min: 75 },
-  { id: "C", ar: "جيد", p5: 3, p4: 2, min: 70 },
-  { id: "D+", ar: "مقبول مرتفع", p5: 2.5, p4: 1.5, min: 65 },
-  { id: "D", ar: "مقبول", p5: 2, p4: 1, min: 60 },
-  { id: "F", ar: "راسب", p5: 1, p4: 0, min: 0 },
-];
-export const gradeOf = (id) => GRADES.find((g) => g.id === id) || null;
-export const UNI_DAYS = [
-  { d: 0, label: "الأحد", short: "ح" },
-  { d: 1, label: "الإثنين", short: "ن" },
-  { d: 2, label: "الثلاثاء", short: "ث" },
-  { d: 3, label: "الأربعاء", short: "ر" },
-  { d: 4, label: "الخميس", short: "خ" },
-  { d: 6, label: "السبت", short: "س" },
-];
-export const uniDayOf = (d) => UNI_DAYS.find((x) => x.d === Number(d)) || null;
-
-/* Vivid, never pastel — the tint is how a block is found on the timetable
-   at a glance, and a washed-out one finds nothing. */
-export const COURSE_TINTS = [
-  "#00C2FF",
-  "#FFB020",
-  "#FF4D8D",
-  "#9D5CFF",
-  "#5B8CFF",
-  "#FF7A45",
-  "#10B981",
-  "#FF5722",
-];
-
-/* A quarter of the meetings is the usual bar for being barred from the
-   final. Derived from how often the course actually meets rather than
-   asked for — but still editable, because it is a regulation and
-   regulations differ between universities. */
-export const TERM_WEEKS_DEFAULT = 15;
-
-export const UNI_TASK_KINDS = [
-  { id: "assign", label: "واجب", tint: "#FF7A45" },
-  { id: "quiz", label: "كويز", tint: "#FFB020" },
-  { id: "mid", label: "اختبار فصلي", tint: "#FF4D8D" },
-  { id: "final", label: "اختبار نهائي", tint: "#FF3B5C" },
-  { id: "project", label: "مشروع", tint: "#9D5CFF" },
-  { id: "present", label: "عرض تقديمي", tint: "#00C2FF" },
-];
-export const slotShape = (s) => (
-  (s = obj(s)),
-  {
-  id: s.id || uid(),
-  day: uniDayOf(s.day) ? Number(s.day) : 0,
-  from: hhmm(s.from, "08:00"),
-  to: hhmm(s.to, "09:50"),
-  room: typeof s.room === "string" ? s.room : "",
-});
-
-export const markShape = (m) => (
-  (m = obj(m)),
-  {
-  id: m.id || uid(),
-  label: typeof m.label === "string" ? m.label : "",
-  /* `null` is "not returned yet" and has to survive as null. A zero is a
-     zero he actually scored, and folding the two together is exactly how a
-     mark sheet starts lying about where he stands. */
-  score:
-    m.score === null || m.score === undefined || m.score === ""
-      ? null
-      : Number.isFinite(Number(m.score))
-        ? Math.max(0, Number(m.score))
-        : null,
-  max: clampNum(m.max, 0.01, 1000, 100),
-  weight: clampNum(m.weight, 0, 100, 0),
-});
-
-export const courseShape = (c) => (
-  (c = obj(c)),
-  {
-  id: c.id || uid(),
-  code: typeof c.code === "string" ? c.code : "",
-  name: typeof c.name === "string" ? c.name : "",
-  credits: clampNum(c.credits, 1, 12, 3),
-  instructor: typeof c.instructor === "string" ? c.instructor : "",
-  term: typeof c.term === "string" ? c.term : "",
-  tint: COURSE_TINTS.includes(c.tint) ? c.tint : COURSE_TINTS[0],
-  slots: Array.isArray(c.slots) ? c.slots.map(slotShape) : [],
-  marks: Array.isArray(c.marks) ? c.marks.map(markShape) : [],
-  /* Set by hand once the final grade is published. Until then the mark
-     sheet projects one and the GPA leaves the course out entirely. */
-  grade: gradeOf(c.grade) ? c.grade : null,
-  absences: clampNum(c.absences, 0, 200, 0),
-  /* The days the quick button recorded. `absences` stays the authoritative
-     count — it has to, because a term usually starts with absences taken
-     before the app did — and this is what lets the button refuse a second
-     tap on a day it already recorded. Tapping «غياب» twice after one
-     lecture is the easiest mistake on this screen and the hardest to
-     notice: the number is simply wrong from then on. */
-  absentOn: Array.isArray(c.absentOn)
-    ? c.absentOn.filter((d) => typeof d === "string" && isKey(d))
-    : [],
-  absenceCap: clampNum(c.absenceCap, 0, 200, 0), // 0 → derive from the slots
-  target: clampNum(c.target, 0, 100, 90),
-  /* Blackboard, Teams, a shared drive — whatever the course actually lives
-     in. Stored exactly as typed: running it through `safeUrl` here would
-     rewrite the field between keystrokes, so «b» became «https://b/» before
-     the second letter arrived. It is sanitised where it is used as an
-     `href` instead, which is the only place it can do harm. */
-  link: typeof c.link === "string" ? c.link : "",
-  notes: typeof c.notes === "string" ? c.notes : "",
-});
-
-export const termShape = (t) => (
-  (t = obj(t)),
-  {
-  id: t.id || uid(),
-  label: typeof t.label === "string" ? t.label : "",
-  start: isKey(t.start) ? t.start : dayKey(),
-  end: isKey(t.end) ? t.end : addDays(dayKey(), 7 * TERM_WEEKS_DEFAULT),
-  weeks: clampNum(t.weeks, 1, 40, TERM_WEEKS_DEFAULT),
-});
-
-export const uniTaskShape = (t) => (
-  (t = obj(t)),
-  {
-  id: t.id || uid(),
-  title: typeof t.title === "string" ? t.title : "",
-  kind: UNI_TASK_KINDS.some((k) => k.id === t.kind) ? t.kind : "assign",
-  course: typeof t.course === "string" ? t.course : "",
-  due: isKey(t.due) ? t.due : dayKey(),
-  time: hhmm(t.time),
-  place: typeof t.place === "string" ? t.place : "",
-  weight: clampNum(t.weight, 0, 100, 0),
-  done: !!t.done,
-  notes: typeof t.notes === "string" ? t.notes : "",
-});
-
-/* The whole desk, reshaped. The active-term pointer is normalised here and
-   nowhere else: a dangling id — a term deleted, or a hand-edited backup —
-   would otherwise render an empty screen that looks exactly like lost data. */
-export const uniShape = (u) => {
-  u = obj(u);
-  const terms = Array.isArray(u.terms) ? u.terms.map(termShape) : [];
-  const ids = new Set(terms.map((t) => t.id));
-  let term = typeof u.term === "string" && ids.has(u.term) ? u.term : "";
-  if (!term && terms.length) {
-    const today = dayKey();
-    term = (terms.find((t) => t.start <= today && today <= t.end) || terms[0]).id;
-  }
-  return {
-    scale: Number(u.scale) === 4 ? 4 : 5,
-    /* Everything before the terms listed here, as one pair. Asking for
-       every past term just to show a cumulative figure is a wall nobody
-       climbs; two numbers off a transcript is thirty seconds. */
-    priorGpa: clampNum(u.priorGpa, 0, 5, 0),
-    priorCredits: clampNum(u.priorCredits, 0, 500, 0),
-    /* Which scale that figure was typed on. Without it, flipping the scale
-       folds a four-point average into a five-point cumulative — a wrong
-       number stated confidently, which is worse than no number at all. */
-    priorScale: Number(u.priorScale) === 4 ? 4 : 5,
-    /* The degree's total credit hours, for the graduation bar. Zero means
-       «not set» and the bar stays hidden — a progress bar against a number
-       the user never gave is a progress bar against a guess. */
-    gradCredits: clampNum(u.gradCredits, 0, 400, 0),
-    /* The cumulative he is aiming at, for the «كم أحتاج هذا الفصل»
-       calculator. Zero means «not set», same reasoning. */
-    targetGpa: clampNum(u.targetGpa, 0, 5, 0),
-    term,
-    terms,
-    courses: Array.isArray(u.courses) ? u.courses.map(courseShape) : [],
-    tasks: Array.isArray(u.tasks) ? u.tasks.map(uniTaskShape) : [],
-  };
-};
-
-/* The deliverables still owed, nearest first — the overdue ones included,
-   and first, because a deadline that slipped is the one that needs saying
-   out loud. Date then time, so two things due the same day come back in the
-   order the day will meet them; an untimed one sits after the timed ones
-   rather than at dawn. Nothing is filtered by term: a deliverable is owed
-   whether or not its course belongs to the term that is currently open. */
-export function uniPending(uni, today = dayKey()) {
-  const list = rows(obj(uni).tasks)
-    .map(uniTaskShape)
-    .filter((t) => !t.done);
-  return list.sort((a, b) => {
-    if (a.due !== b.due) return a.due < b.due ? -1 : 1;
-    const x = minsIn(a.time);
-    const y = minsIn(b.time);
-    if (x === null && y === null) return 0;
-    if (x === null) return 1;
-    if (y === null) return -1;
-    return x - y;
-  });
-}
-
-export const SEED_UNI = () => {
-  const start = dayKey();
-  const t = termShape({
-    label: "الفصل الحالي",
-    start,
-    end: addDays(start, 7 * TERM_WEEKS_DEFAULT),
-    weeks: TERM_WEEKS_DEFAULT,
-  });
-  return uniShape({ terms: [t], term: t.id });
-};
-
-/* --- the days that were never written -------------------------------- *
- *  `history` carried a row for every day the app was opened and nothing at
- *  all for the days it was not, and those are not the same answer. A month
- *  grid with an empty square cannot say whether that day went to zero, was
- *  never opened, or has not happened yet — and an average taken over "the
- *  rows that exist" quietly flatters every stretch where the recording
- *  stopped. 18% across four rows is not the same month as 18% across four
- *  rows and nine silences.
- *
- *  So an unrecorded day is written down as one: `{ date, gap: true }`, and
- *  nothing else. No `done` and no `all`, which is exactly what keeps it out
- *  of the habit ledger, the consistency card and every average — all of them
- *  already gate on `Array.isArray(row.done)`. It draws as «لم يُسجَّل» and it
- *  is counted out loud, because "two days unrecorded this month" is the
- *  number worth seeing.
- *
- *  Today is never a gap. Today is still being lived, and the archive effect
- *  stamps its row the moment the app is open.
- * -------------------------------------------------------------------- */
-export const isGap = (row) => !!row && row.gap === true && !Array.isArray(row.done);
-
-/* Ascending by date — the order every writer in the app already appends in,
-   and the order `HISTORY_CAP` has to prune from the front of. */
-const byDateAsc = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-
-/* How far back a silence is still worth writing down. The same depth the
-   server keeps daily snapshots to, and for the same reason: four months is
-   as far back as going to look changes anything. Past it, a dashed square is
-   not information — and an unbounded walk is how a stale `date`, or a clock
-   that ran away, turns into years of empty rows that then push real days out
-   of an archive capped at `HISTORY_CAP`. */
-export const GAP_REACH = 120;
-
-/* Both ends inclusive. `to` is yesterday at every call site; passing it in
-   rather than reading the clock here is what makes this testable without a
-   fake date. */
-export function fillGaps(history, from, to) {
-  const have = rows(history);
-  if (!isKey(from) || !isKey(to) || from > to) return history;
-  const floor = addDays(to, -(GAP_REACH - 1));
-  const start = from < floor ? floor : from;
-  const seen = new Set(have.map((h) => h.date));
-  const added = [];
-  for (let d = start; d <= to; d = addDays(d, 1)) {
-    if (!seen.has(d)) added.push({ date: d, gap: true });
-  }
-  if (!added.length) return history;
-  return [...have, ...added].sort(byDateAsc).slice(-HISTORY_CAP);
-}
-
-/* The earliest day the archive knows about — where the gap filling starts.
-   Before his first recorded day there was no app to open, and inventing
-   silences back to the epoch would be a different lie. */
-export const firstDay = (history) => {
-  let first = null;
-  for (const h of rows(history)) {
-    if (!isKey(h.date)) continue;
-    if (first === null || h.date < first) first = h.date;
-  }
-  return first;
-};
-
-/* --- a past day's score ----------------------------------------------- *
- *  A stored row carries habit ids, not habits, so the roster is rebuilt and
- *  handed to `disciplineOf` — the one denominator the ring, the archive, the
- *  streak and the server's reminder all read. Doing this arithmetic inline is
- *  precisely how two screens end up disagreeing about one day the first time
- *  a habit is marked core.
- *
- *  The roster is the one the row recorded, whole — including ids whose habit
- *  has since been deleted. Dropping them was tried and is wrong twice over:
- *  it rescores a finished day every time the routine is edited, so re-opening
- *  yesterday showed 21% beside the 35% it was actually lived at; and it makes
- *  the denominator here disagree with the one the roll call renders, which
- *  lists a missing habit as «عادة لم تعد في روتينك» rather than forgetting it.
- *  A deleted habit simply carries no `core` flag, which is right — the core is
- *  a choice about the live routine.
- * -------------------------------------------------------------------- */
-export function pctOfRow(row, habits) {
-  const live = new Map(rows(habits).map((h) => [h.id, h]));
-  const roster =
-    Array.isArray(row?.all) && row.all.length
-      ? row.all
-      : rows(habits).map((h) => h.id);
-  const done = new Set(Array.isArray(row?.done) ? row.done : []);
-  return disciplineOf(
-    roster.map((id) => ({ ...(live.get(id) || { id }), done: done.has(id) })),
-  );
-}
-
-/* --- yesterday, corrected --------------------------------------------- *
- *  Forgetting to tick is not the same as not having done it, and until now
- *  the day simply went. This rewrites one archive row and touches nothing
- *  else: no habit on today's list moves, because today is a different day
- *  and the whole point of a hard day boundary is that it holds.
- *
- *  A gap row becomes an ordinary one. It has no roster of its own — the app
- *  was never opened, so nothing was ever asked — and the live list is the
- *  only honest answer available for what that day consisted of.
- * -------------------------------------------------------------------- */
-export function setDayDone(history, date, doneIds, habits) {
-  if (!isKey(date)) return history;
-  const have = rows(history);
-  const prev = have.find((h) => h.date === date) || null;
-  const roster =
-    Array.isArray(prev?.all) && prev.all.length
-      ? prev.all
-      : rows(habits).map((h) => h.id);
-  const asked = new Set(roster);
-  const done = [
-    ...new Set((Array.isArray(doneIds) ? doneIds : []).filter((id) => asked.has(id))),
-  ];
-  /* `gap` is dropped, never set to false: a row saying `gap: false` and a row
-     with no `gap` at all would be two shapes meaning one thing, and `isGap`
-     would then have to know about both. */
-  const { gap, ...kept } = prev || {};
-  void gap;
-  const row = { ...kept, date, all: roster, done };
-  row.pct = pctOfRow(row, habits);
-  return [...have.filter((h) => h.date !== date), row].sort(byDateAsc).slice(-HISTORY_CAP);
-}
-
-/* --- the streak, read back off the archive ---------------------------- *
- *  `streakBase` counts the days before today, and it has always been carried
- *  as a counter incremented at each rollover. Correcting yesterday can change
- *  whether yesterday qualified at all, so after an edit the number is read
- *  back off the rows instead of trusted. Walks back from yesterday and stops
- *  at the first day that did not reach the target — which a gap row never
- *  does, because a day nobody recorded cannot be claimed as part of a run.
- * -------------------------------------------------------------------- */
-export function streakBaseFrom(history) {
-  const by = new Map(rows(history).map((h) => [h.date, h]));
-  const d = logicalNow();
-  d.setDate(d.getDate() - 1);
-  let n = 0;
-  while (n < HISTORY_CAP) {
-    const r = by.get(fmtDay(d));
-    if (!r || isGap(r) || !(Number(r.pct) >= STREAK_TARGET)) return n;
-    n += 1;
-    d.setDate(d.getDate() - 1);
-  }
-  return n;
-}
+export const SCHEMA = 25;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
   date: dayKey(),
-  habits: (carry.habits || SEED_HABITS).map((h) => ({ ...h, done: false })),
-  tasks: (carry.tasks || SEED_TASKS).map((t) => ({ ...t, done: false })),
+  /* `tiny` resets with `done` and for the same reason: it is this day's
+     answer about this habit, not a property of the habit. Yesterday's floor
+     is not today's. */
+  habits: (carry.habits || SEED_HABITS).map((h) => ({
+    ...h,
+    done: false,
+    tiny: false,
+  })),
+  /* Tomorrow's three, if they were chosen last night. `applyPrep` reads the
+     prep that is riding along in the carry and promotes exactly those;
+     with nothing prepared it only re-asserts the cap and leaves his flags
+     where they were. */
+  tasks: applyPrep(
+    (carry.tasks || SEED_TASKS).map((t) => ({ ...t, done: false })),
+    carry.tomorrow,
+    dayKey(),
+  ),
   books: carry.books || SEED_BOOKS,
   goals: carry.goals || SEED_GOALS(),
   sessions: carry.sessions || [],
@@ -1617,6 +319,10 @@ export const freshState = (carry = {}) => ({
   northStar: northStarShape(carry.northStar),
   place: placeShape(carry.place),
   waterGoal: clampGoal(carry.waterGoal),
+  /* The evening's prep, spent or still waiting. It carries — a prep written
+     at 22:00 has to survive the rollover that consumes it — but it is spent
+     by the line above, so the day it named clears it. */
+  tomorrow: prepCarry(carry.tomorrow, dayKey()),
   water: 0,
   cueImage: carry.cueImage ?? null,
   history: carry.history || [],
@@ -1653,6 +359,7 @@ export function migrate(saved) {
      guessing at them. Which habits carry someone's day is not a question a
      migration is in any position to answer. */
   habits = habits.map((h) => ({ ...h, core: !!h.core }));
+
 
   if (from < 4) {
     habits = habits.map((h) =>
@@ -1695,9 +402,9 @@ export function migrate(saved) {
        90-day goal and the same words as a yearly one are two different
        commitments, and treating the first as proof of the second would leave
        the yearly row missing and its children with nothing to serve. */
-    const have = new Set(goals.map((g) => `${g.horizon} ${g.text.trim()}`));
+    const have = new Set(goals.map((g) => `${g.horizon} ${g.text.trim()}`));
     const added = ADDED_GOALS().filter(
-      (g) => !have.has(`${g.horizon} ${g.text.trim()}`),
+      (g) => !have.has(`${g.horizon} ${g.text.trim()}`),
     );
     goals = [...goals, ...added];
 
@@ -1780,6 +487,20 @@ export function migrate(saved) {
       ];
     }
   }
+
+  /* Schema 24 gives a task the first step it starts with, and gives the
+     night before it the screen that picks tomorrow's three. Neither needs
+     converting: `taskShape` hands every existing task an empty step and
+     `prepShape` hands an older payload an empty prep.
+   *
+   *  The cap does need converting. Until now the only door onto «أهم ٣
+   *  مهام» was the matrix's promote button, which has refused a fourth
+   *  since the rule existed — so a payload that came by its flags any other
+   *  way (an older build, a hand-edited backup, a merge of two profiles)
+   *  can be carrying four, and the prep is about to become a second door.
+   *  Repaired once here; held at every door from now on by `capToday`. */
+  tasks = tasks.map(taskShape);
+  if (from < 24) tasks = capToday(tasks);
 
   /* "المساء" became "بعد المغرب", and "بعد العصر" is new. The old block's
      habits move rather than being recreated, so nothing the user wrote in
@@ -1954,10 +675,27 @@ export function migrate(saved) {
      it is still being lived, and the archive effect stamps it on mount. */
   if (from < 23) history = fillGaps(history, firstDay(history), yesterdayKey());
 
+  /* Schema 25 forgives a day, and `streakBase` is a stored counter: every
+     payload before this one holds a number that was computed under the rule
+     that a single short day ends everything. Leaving it alone would leave
+     the counter and the archive disagreeing about the same run — a second
+     opinion, which is the one thing this app does not allow a streak to
+     have — and would make the tolerance arrive only for days not yet lived.
+     So it is read back off the rows, which is what `setDayDone` has done
+     after every correction since the rule existed.
+   *
+   *  The habit's own floor (`min`) is NOT written here. Which smaller
+   *  version of «ساعة في النادي» he would accept on a bad day is a question
+   *  only he can answer, exactly as schema 20 refused to guess anybody's
+   *  core; `habitShape` hands every habit an empty one and the routine
+   *  screen asks. */
+  const streakBase = from < 25 ? streakBaseFrom(history) : saved.streakBase;
+
   return {
     ...saved,
     schema: SCHEMA,
-    habits,
+    streakBase: Number.isFinite(+streakBase) && +streakBase > 0 ? +streakBase : 0,
+    habits: habits.map(habitShape),
     goals,
     tasks,
     quotes,
@@ -1991,6 +729,12 @@ export function migrate(saved) {
     northStar: northStarShape(saved.northStar),
     place: placeShape(saved.place),
     waterGoal: clampGoal(saved.waterGoal),
+    /* Schema 24's evening prep. Shaped rather than branched, like the three
+       above: an older payload simply arrives with nothing prepared, which is
+       exactly what it means. Stale is not this function's problem — a prep
+       for a day that has passed is dropped by `prepCarry` on the way through
+       the rollover, where the day is known. */
+    tomorrow: prepShape(saved.tomorrow),
     water:
       Number.isFinite(+saved.water) && +saved.water > 0
         ? Math.min(clampGoal(saved.waterGoal), Math.round(+saved.water))
@@ -2026,6 +770,7 @@ export const carryOf = (s) => ({
   northStar: s.northStar,
   place: s.place,
   waterGoal: s.waterGoal,
+  tomorrow: s.tomorrow,
   cueImage: s.cueImage,
   history: s.history,
   bestStreak: s.bestStreak,
@@ -2039,7 +784,13 @@ export const carryOf = (s) => ({
    changed, so React can bail out of the render. */
 export function rollDay(s) {
   if (s.date === dayKey()) return s;
-  const continued = s.date === yesterdayKey() && s.dayBanked;
+  /* The archive, with the missed days written down — built first because
+     the streak is now read back off it rather than nudged. A counter that
+     said «+1 if yesterday banked, else 0» cannot forgive anything: it has
+     no idea whether the day before yesterday was a run or a ruin. Reading
+     the rows is also the rule `setDayDone` has followed after every
+     correction since the rule existed, so there is one answer and not two. */
+  const history = fillGaps(s.history, addDays(s.date, 1), yesterdayKey());
   return freshState({
     ...carryOf(s),
     /* Every day between the one being left behind and yesterday, written
@@ -2048,8 +799,168 @@ export function rollDay(s) {
        zeroes; now they say so. The day being left behind already has a row
        of its own — the archive effect stamped it — so the walk starts the
        day after it. */
-    history: fillGaps(s.history, addDays(s.date, 1), yesterdayKey()),
-    streakBase: continued ? (s.streakBase || 0) + 1 : 0,
+    history,
+    streakBase: streakBaseFrom(history),
   });
 }
 
+/* --- the re-export barrel ----------------------------------------------
+ *  Every name every domain file exports, re-exported so a consumer can keep
+ *  importing from this one file exactly as before the split. One statement
+ *  per domain file, listing that file's full public surface — nothing here
+ *  is picked and chosen.
+ * --------------------------------------------------------------------- */
+export {
+  DAY_START_HOUR,
+  logicalNow,
+  fmtDay,
+  dayKey,
+  yesterdayKey,
+  uid,
+  obj,
+  rows,
+  keyToDate,
+  isKey,
+  addDays,
+  hhmm,
+  minsIn,
+  clampNum,
+} from "./life-state-util.mjs";
+
+export {
+  CORE_CAP,
+  coreOf,
+  scoredOf,
+  disciplineOf,
+  BLOCK_IDS,
+  blockRank,
+  remainingIn,
+  POSTISHA_LABELS,
+  LEGACY_POSTISHA,
+  ADDED_HABITS,
+  ASR_HABITS,
+  MAGHRIB_HABITS,
+  WATER_GOAL_DEFAULT,
+  WATER_GOAL_MAX,
+  clampGoal,
+  HABIT_MIN_MAX,
+  habitShape,
+  SEED_HABITS,
+  COST_TYPES,
+  costType,
+  URGE_TAGS,
+  tagOf,
+  URGE_MOODS,
+  moodOf,
+  urgeShape,
+  badHabitShape,
+} from "./life-state-habits.mjs";
+
+export {
+  TOP_TASK_CAP,
+  ADDED_TASKS,
+  SEED_TASKS,
+  QUADRANT_IDS,
+  STEP_MAX,
+  taskShape,
+  capToday,
+  tomorrowKey,
+  prepShape,
+  prepPicks,
+  prepFull,
+  prepHas,
+  prepPickAdd,
+  prepPickDrop,
+  prepPickEvent,
+  prepReady,
+  applyPrep,
+  prepCarry,
+} from "./life-state-tasks.mjs";
+
+export {
+  QUARTERS,
+  currentQuarter,
+  QUARTER_IDS,
+  PILLARS,
+  PILLAR_IDS,
+  HORIZONS,
+  HORIZON_IDS,
+  parentHorizon,
+  ARC,
+  GOAL_YEARS,
+  YEAR_MIN,
+  YEAR_MAX,
+  WORD_MAX,
+  VISION_MAX,
+  northStarShape,
+  DATE_RE,
+  goalShape,
+  GOAL_TREE,
+  buildGoals,
+  SEED_GOALS,
+  ADDED_GOALS,
+  SEED_LINKS,
+} from "./life-state-goals.mjs";
+
+export {
+  READ_ACTIVE,
+  READ_GOAL_DEFAULT,
+  bookShape,
+  SEED_BOOKS,
+  READING_QUOTES,
+  SEED_READS,
+} from "./life-state-books.mjs";
+
+export {
+  PLACES,
+  PLACE_BY_ID,
+  placeShape,
+  EVENT_KINDS,
+  REPEATS,
+  WARN_CHOICES,
+  eventShape,
+} from "./life-state-calendar.mjs";
+
+export {
+  GRADES,
+  gradeOf,
+  UNI_DAYS,
+  uniDayOf,
+  COURSE_TINTS,
+  TERM_WEEKS_DEFAULT,
+  UNI_TASK_KINDS,
+  slotShape,
+  markShape,
+  courseShape,
+  termShape,
+  uniTaskShape,
+  uniShape,
+  uniPending,
+  SEED_UNI,
+} from "./life-state-uni.mjs";
+
+export {
+  SEED_PROMPTS,
+  SEED_PIPELINE,
+  APP_STAGES,
+  sprintShape,
+  appShape,
+  storyShape,
+  careerShape,
+} from "./life-state-career.mjs";
+
+export {
+  HISTORY_CAP,
+  GAP_REACH,
+  isGap,
+  fillGaps,
+  firstDay,
+  pctOfRow,
+  setDayDone,
+  STREAK_TARGET,
+  STREAK_FORGIVE,
+  streakRunFrom,
+  streakBaseFrom,
+  COMEBACK_MIN,
+  comebackFrom,
+} from "./life-state-streak.mjs";

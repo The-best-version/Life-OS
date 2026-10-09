@@ -56,6 +56,15 @@ const shipped = [
   "prayer-times.mjs",
   "life-state.mjs",
   "life-storage.mjs",
+  "life-state-util.mjs",
+  "life-state-habits.mjs",
+  "life-state-tasks.mjs",
+  "life-state-goals.mjs",
+  "life-state-books.mjs",
+  "life-state-calendar.mjs",
+  "life-state-uni.mjs",
+  "life-state-career.mjs",
+  "life-state-streak.mjs",
 ];
 const splitSrc = scanned.map((f) => join(root, f));
 const site = join(root, "life-os");
