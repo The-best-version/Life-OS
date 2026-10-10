@@ -50,7 +50,11 @@ export const GLASS = {
   backgroundImage:
     "linear-gradient(135deg, rgba(255,150,110,0.11) 0%, rgba(255,255,255,0.045) 42%, rgba(157,92,255,0.05) 100%)",
   borderColor: "rgba(255,225,210,0.18)",
-  backdropFilter: "blur(22px) saturate(180%)",
+  /* 12px, not 22px. The blur is recomputed on every frame a card moves over
+     the fixed sky — which is every frame of every scroll — and the cost
+     scales with the radius. Behind a veil this dark the two are hard to tell
+     apart, so the cheaper one is the honest default. */
+  backdropFilter: "blur(12px) saturate(150%)",
   boxShadow:
     "inset 0 1px 0 0 rgba(255,235,225,0.14), 0 22px 52px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,87,34,0.04)",
 };
