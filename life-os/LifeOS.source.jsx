@@ -1,5 +1,6 @@
-import { safeUrl, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, DAY_FORMS, dayWord, daysPhrase, MIN_FORMS, minWord, STEP_FORMS, stepWord, MEET_FORMS, meetWord, TIMES_FORMS, timesWord, FALL_FORMS, fallWord, HOUR_FORMS, hourWord, COURSE_FORMS, courseWord, WEEK_FORMS, weekWord, LECTURE_FORMS, lectureWord, daysUntil, minsOf, nowMins, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, gradePoints, gradeFromPct, coursesIn, termOf, courseIn, courseName, daySections, nextSection, useMinuteClock } from "./life-shared.jsx";
+import { safeUrl, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, DAY_FORMS, dayWord, daysPhrase, MIN_FORMS, minWord, STEP_FORMS, stepWord, MEET_FORMS, meetWord, TIMES_FORMS, timesWord, FALL_FORMS, fallWord, HOUR_FORMS, hourWord, COURSE_FORMS, courseWord, WEEK_FORMS, weekWord, LECTURE_FORMS, lectureWord, TASK_FORMS, taskWord, tasksPhrase, forgivenPhrase, COUNTED_FORMS, countedWord, daysUntil, minsOf, nowMins, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, gradePoints, gradeFromPct, coursesIn, termOf, courseIn, courseName, daySections, nextSection, useMinuteClock } from "./life-shared.jsx";
 import { UNI_VIEWS, nearestGrade, GPA_BANDS, gpaBand, ABSENCE_LIMIT, uniKindOf, UNI_EXAM_KINDS, gpaNeeded, courseStanding, needFor, meetingsOf, absenceCapOf, ATTEND_BANDS, attendBand, gpaOf, uniDue, DAY_FROM, DAY_TO, spanPct, NumField, GradePicker, StatTile, CourseDesk, CourseCard, CourseModal, TermModal, UniTaskModal, UniTaskRow, WeekGrid, UniModule } from "./life-uni.jsx";
+import { FinanceModule } from "./life-finance.jsx";
 import React, {
   useState,
   useEffect,
@@ -137,6 +138,8 @@ import {
   History,
   Archive,
   GitCompare,
+  Footprints,
+  Feather,
 } from "lucide-react";
 
 import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
@@ -210,12 +213,31 @@ import {
   setDayDone,
   slotShape,
   sprintShape,
+  scoredOf,
   streakBaseFrom,
+  streakRunFrom,
+  STREAK_FORGIVE,
+  habitShape,
+  HABIT_MIN_MAX,
+  comebackFrom,
+  COMEBACK_MIN,
   TAB_BAR,
   storyShape,
   tagOf,
   TERM_WEEKS_DEFAULT,
   TOP_TASK_CAP,
+  taskShape,
+  capToday,
+  STEP_MAX,
+  tomorrowKey,
+  prepShape,
+  prepPicks,
+  prepFull,
+  prepHas,
+  prepPickAdd,
+  prepPickDrop,
+  prepPickEvent,
+  prepReady,
   STREAK_TARGET,
   termShape,
   uid,
@@ -2858,6 +2880,34 @@ function TopThree({ state, setState }) {
                     }));
                   }}
                 />
+                {/* The step he wrote the night before, under the task it
+                    belongs to. A task is a sentence; this is the thing a
+                    body can start, and it is the only reason the prep
+                    screen is worth opening twice. */}
+                {!!task.step && (
+                  <p
+                    className="mt-1 flex items-start gap-1.5 pr-2 text-[11px] leading-relaxed"
+                    style={{ color: task.done ? T.faint : T.muted }}
+                  >
+                    <Footprints
+                      size={11}
+                      className="mt-[3px] shrink-0"
+                      style={{ color: task.done ? T.faint : T.cta }}
+                    />
+                    <span
+                      style={
+                        task.done
+                          ? {
+                              textDecorationLine: "line-through",
+                              textDecorationColor: `${T.primary}80`,
+                            }
+                          : undefined
+                      }
+                    >
+                      {task.step}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -2920,7 +2970,7 @@ const REWARD_HOLD = 1100;
    them, and the routine screen is where they are managed. The payout is the
    same, because a completion that animates nothing is a bug wherever it is
    ticked. */
-function TodayHabit({ habit, book, onToggle, late = false }) {
+function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
   const [burst, fireBurst] = useBurst(700);
   const g = groupOf(habit.group);
   const Icon = g.icon;
@@ -2928,6 +2978,14 @@ function TodayHabit({ habit, book, onToggle, late = false }) {
   const handle = () => {
     if (!habit.done) fireBurst();
     onToggle();
+  };
+
+  /* Same payout as the full tick — see HabitRow. This screen is where a bad
+     day is actually lived, so the floor has to be reachable here or it is a
+     feature that only exists on the screen nobody opens at 23:40. */
+  const handleTiny = () => {
+    if (!habit.done) fireBurst();
+    onToggleTiny();
   };
 
   return (
@@ -2967,6 +3025,23 @@ function TodayHabit({ habit, book, onToggle, late = false }) {
         tint={T.primary}
         size="sm"
       />
+      {/* Kept visible through the reward hold, when `done` has just flipped
+          and the row is still on screen — a mark that vanishes under the
+          finger that set it reads as a tap that did not land. */}
+      {!!habit.min && (habit.tiny || !habit.done) && (
+        <button
+          onClick={handleTiny}
+          title={`نسخة صغيرة: ${habit.min}`}
+          aria-label={`إنجاز النسخة الصغيرة من ${habit.label}`}
+          className="shrink-0 rounded p-1 opacity-50 transition-all duration-200 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          style={{ color: T.sky }}
+        >
+          <Feather
+            size={12}
+            style={habit.tiny ? { filter: `drop-shadow(0 0 5px ${T.sky}AA)` } : undefined}
+          />
+        </button>
+      )}
       {habit.core && (
         <Star
           size={12}
@@ -3065,7 +3140,17 @@ function TodayLine({
   );
 }
 
-function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings }) {
+function TodayModule({
+  state,
+  setState,
+  discipline,
+  streak,
+  onGo,
+  onOpenSettings,
+  onOpenTomorrow,
+  comeback = 0,
+  onCloseComeback,
+}) {
   /* Every number on this screen is a function of the clock: the open block,
      the countdown to the next prayer, which lecture is running. One tick a
      minute re-reads them all. */
@@ -3096,7 +3181,7 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
   const [fading, setFading] = useState(() => new Set());
   const timers = useRef([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  const tick = (id) => {
+  const tick = (id, tiny = false) => {
     const h = (state.habits || []).find((x) => x.id === id);
     if (h && !h.done) {
       setFading((prev) => new Set(prev).add(id));
@@ -3112,7 +3197,7 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
         ),
       );
     }
-    toggle(id);
+    toggle(id, tiny);
   };
 
   const habits = state.habits || [];
@@ -3198,8 +3283,37 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
 
   const nearest = soon.slice(0, 4);
 
+  /* Tomorrow's prep, read and never written here. `useMinuteClock` above is
+     what makes the window live: the card appears when 20:00 arrives on a
+     screen that was already open, instead of waiting for a reload. */
+  const evening = inReflectWindow(now);
+  const tomorrowOn = tomorrowKey();
+  const prepared = useMemo(() => {
+    const byId = new Map((state.tasks || []).map((t) => [t.id, t]));
+    const events = state.events || [];
+    return prepReady(state.tomorrow, state.tasks, tomorrowOn)
+      .map((p) => ({
+        task: byId.get(p.task),
+        at: p.event ? events.find((e) => e.id === p.event)?.time || "" : "",
+      }))
+      .filter((r) => r.task);
+  }, [state.tomorrow, state.tasks, state.events, tomorrowOn]);
+
   return (
     <div className="space-y-5">
+      {/* First on the screen, above the ring and the score, because what it
+          replaces is the first sentence the app says after a week away. */}
+      {comeback > 0 && (
+        <ComebackCard
+          state={state}
+          setState={setState}
+          days={comeback}
+          onTick={tick}
+          onTickTiny={(id) => tick(id, true)}
+          onClose={onCloseComeback}
+        />
+      )}
+
       {/* Where the day is, in one card: the date, the open block, the next
           prayer and the one score the day is judged by. */}
       <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 lg:flex-row lg:justify-between">
@@ -3246,16 +3360,22 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
                 </span>
               </button>
             )}
-            <span
-              className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
-              style={{ borderColor: T.border }}
-            >
-              <Flame size={14} style={{ color: streak > 0 ? T.ember : T.faint }} />
-              <span className="font-extrabold tabular-nums">{streak}</span>
-              <span className="text-[10.5px]" style={{ color: T.faint }}>
-                يوم متتالٍ
+            {/* Hidden while the comeback card is up. A zero beside a flame
+                is a verdict, and the one thing someone opening this after a
+                week away must not be handed first is a verdict. It is back
+                the moment the card is closed. */}
+            {comeback === 0 && (
+              <span
+                className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
+                style={{ borderColor: T.border }}
+              >
+                <Flame size={14} style={{ color: streak > 0 ? T.ember : T.faint }} />
+                <span className="font-extrabold tabular-nums">{streak}</span>
+                <span className="text-[10.5px]" style={{ color: T.faint }}>
+                  {countedWord(streak)}
+                </span>
               </span>
-            </span>
+            )}
           </div>
           <p className="mt-3 max-w-md text-xs leading-relaxed text-white/35">
             <span dir="ltr" className="font-extrabold tabular-nums">
@@ -3272,6 +3392,104 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
           of it: the cap is the rule, and one rule cannot have two
           renderings. */}
       <TopThree state={state} setState={setState} />
+
+      {/* Tomorrow, asked for in the evening and nowhere else. Read-only
+          here like everything on this screen — the picks, the steps and the
+          hours all live where they already lived, and the card only says
+          what is prepared and opens the screen that prepares it. */}
+      {evening && (
+        <Card
+          className="p-5 sm:p-6"
+          style={{
+            borderColor: `${T.violet}59`,
+            backgroundColor: `${T.violet}0D`,
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border"
+                style={{
+                  borderColor: `${T.violet}4D`,
+                  background: `linear-gradient(160deg, ${T.violet}33, ${T.violet}0F)`,
+                  color: T.violet,
+                }}
+              >
+                <Sunrise size={18} strokeWidth={2.4} />
+              </span>
+              <div>
+                <h3 className="text-[15px] font-extrabold" style={{ color: T.violet }}>
+                  {prepared.length ? "غدك مجهّز" : "جهّز غدك"}
+                </h3>
+                {/* The count, never the word «ثلاث» — two picks announced as
+                    three is the screen lying about the one number it
+                    exists to carry. */}
+                <p className="mt-0.5 text-[11px] leading-relaxed" style={{ color: T.faint }}>
+                  {!prepared.length ? (
+                    "اختر ثلاثًا الآن، وابدأ الغد بلا مساومة"
+                  ) : tasksPhrase(prepared.length) ? (
+                    <>
+                      {tasksPhrase(prepared.length)} {arDate(tomorrowOn)}
+                    </>
+                  ) : (
+                    <>
+                      <span dir="ltr" className="font-bold tabular-nums">
+                        {prepared.length}
+                      </span>{" "}
+                      {taskWord(prepared.length)} تنتظر {arDate(tomorrowOn)}
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <Btn variant={prepared.length ? "outline" : "default"} size="sm" onClick={onOpenTomorrow}>
+              {prepared.length ? "عدّل" : "ابدأ"} <ArrowLeft size={13} />
+            </Btn>
+          </div>
+
+          {prepared.length > 0 && (
+            <div className="mt-4 space-y-1.5">
+              {prepared.map((r, i) => (
+                <div
+                  key={r.task.id}
+                  className="flex items-start gap-2.5 rounded-xl border px-3 py-2"
+                  style={{ borderColor: T.border }}
+                >
+                  <span
+                    className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-extrabold tabular-nums"
+                    style={{ background: `${T.violet}26`, color: T.violet }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-bold text-white/80">
+                      {r.task.text}
+                    </p>
+                    {!!r.task.step && (
+                      <p
+                        className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-relaxed"
+                        style={{ color: T.faint }}
+                      >
+                        <Footprints size={10} className="mt-[3px] shrink-0" />
+                        <span>{r.task.step}</span>
+                      </p>
+                    )}
+                  </div>
+                  {!!r.at && (
+                    <span
+                      dir="ltr"
+                      className="mt-0.5 shrink-0 text-[11px] font-extrabold tabular-nums"
+                      style={{ color: T.violet }}
+                    >
+                      {prettyTime(r.at)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* What is still open, the block in front of you first. */}
       <Card className="p-5 sm:p-6">
@@ -3320,6 +3538,7 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
                       habit={h}
                       book={bookForHabit(h, state.books)}
                       onToggle={() => tick(h.id)}
+                      onToggleTiny={() => tick(h.id, true)}
                     />
                   ))}
                 </div>
@@ -3352,6 +3571,7 @@ function TodayModule({ state, setState, discipline, streak, onGo, onOpenSettings
                       habit={h}
                       book={bookForHabit(h, state.books)}
                       onToggle={() => tick(h.id)}
+                      onToggleTiny={() => tick(h.id, true)}
                       late
                     />
                   ))}
@@ -3643,8 +3863,11 @@ function useHabitTick(state, setState) {
   const [logging, setLogging] = useState(null); // habit awaiting a page count
   const arm = useUndo();
 
+  /* `tiny` is the second way in, not a second hook: «نسخة صغيرة» lands here
+     like every other tick, so the reading withdrawal, the undo and the
+     reward are one implementation and cannot drift into two. */
   const toggle = useCallback(
-    (id) => {
+    (id, tiny = false) => {
       const habit = state.habits.find((h) => h.id === id);
       const turningOn = habit && !habit.done;
 
@@ -3664,7 +3887,15 @@ function useHabitTick(state, setState) {
       setState((s) => {
         const next = {
           ...s,
-          habits: s.habits.map((h) => (h.id === id ? { ...h, done: !h.done } : h)),
+          habits: s.habits.map((h) =>
+            h.id === id
+              ? /* The mark rides with the tick and leaves with it. A habit
+                   unticked is not «done the small way», it is not done —
+                   and a `tiny` left behind on an unticked row is a mark the
+                   archive would read back as a day that was carried. */
+                { ...h, done: !h.done, tiny: !h.done ? !!tiny : false }
+              : h,
+          ),
         };
         /* Unticking withdraws today's sessions for this habit and rolls the
            page counters back, so the library never keeps pages that were
@@ -3846,6 +4077,7 @@ function HabitRow({
   linkedBook,
   streak = 0,
   onToggle,
+  onToggleTiny,
   onEdit,
   onDelete,
   onNudge,
@@ -3863,6 +4095,15 @@ function HabitRow({
   const handle = () => {
     if (!habit.done) fireBurst();
     onToggle();
+  };
+
+  /* The same payout as the full tick, deliberately. A completion that
+     animates less than the one beside it is a completion that reads as
+     worth less, and the whole point of the floor is that taking it is not a
+     defeat. */
+  const handleTiny = () => {
+    if (!habit.done) fireBurst();
+    onToggleTiny();
   };
 
   const edge = over
@@ -3950,6 +4191,28 @@ function HabitRow({
           style={habit.core ? { filter: `drop-shadow(0 0 5px ${T.accent}AA)` } : undefined}
         />
       </button>
+      {/* The floor, reachable in one tap from the row it belongs to. Shown
+          only once a floor has actually been written: a second button on
+          twenty-two rows that names nothing is twenty-two dead buttons. */}
+      {!!habit.min && (habit.tiny || !habit.done) && (
+        <button
+          onClick={handleTiny}
+          title={habit.tiny ? `أُنجزت كنسخة صغيرة: ${habit.min}` : `نسخة صغيرة: ${habit.min}`}
+          aria-label={`${habit.tiny ? "إلغاء" : "إنجاز"} النسخة الصغيرة من ${habit.label}`}
+          aria-pressed={!!habit.tiny}
+          className={`shrink-0 rounded p-1 transition-all duration-200${
+            habit.tiny
+              ? ""
+              : " opacity-40 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          }`}
+          style={{ color: habit.tiny ? T.sky : "rgba(255,255,255,0.25)" }}
+        >
+          <Feather
+            size={13}
+            style={habit.tiny ? { filter: `drop-shadow(0 0 5px ${T.sky}AA)` } : undefined}
+          />
+        </button>
+      )}
       {/* The run you are protecting, where you are protecting it. Two days is
           not a streak yet, so it stays quiet until there is something to
           lose — a badge that reads «١» next to every habit is noise. */}
@@ -4955,9 +5218,11 @@ function RoutineModule({
   onOpenMirror,
   onOpenReflect,
   onOpenFix,
+  onOpenTomorrow,
   onOpenSettings,
   onGoGoals,
   reflected,
+  prepped,
 }) {
   const [editing, setEditing] = useState(null); // {id?, label, group}
   const [quotesOpen, setQuotesOpen] = useState(false);
@@ -4984,23 +5249,31 @@ function RoutineModule({
   const save = () => {
     const label = editing.label.trim();
     if (!label) return;
+    /* Through the one shape, so the add form and the migration cannot drift
+       into writing two different kinds of habit. */
+    const min = String(editing.min || "").trim();
     setState((s) => ({
       ...s,
       habits: editing.id
         ? s.habits.map((h) =>
             h.id === editing.id
-              ? { ...h, label, group: editing.group, book: editing.book || null }
+              ? habitShape({
+                  ...h,
+                  label,
+                  group: editing.group,
+                  book: editing.book || null,
+                  min,
+                })
               : h
           )
         : [
             ...s.habits,
-            {
-              id: uid(),
+            habitShape({
               label,
               group: editing.group,
-              done: false,
               book: editing.book || null,
-            },
+              min,
+            }),
           ],
     }));
     setEditing(null);
@@ -5231,12 +5504,14 @@ function RoutineModule({
                 }}
               />
               <span className="text-xl font-extrabold tabular-nums">{streak}</span>
-              <span className="text-[11px] text-white/35">يوم متتالٍ</span>
+              <span className="text-[11px] text-white/35">{countedWord(streak)}</span>
             </div>
             <Btn
               variant="default"
               size="sm"
-              onClick={() => setEditing({ label: "", group: "morning", book: null })}
+              onClick={() =>
+                setEditing({ label: "", group: "morning", book: null, min: "" })
+              }
             >
               <Plus size={14} strokeWidth={3} /> عادة جديدة
             </Btn>
@@ -5257,6 +5532,24 @@ function RoutineModule({
               }}
             >
               <MessageSquareQuote size={16} strokeWidth={2} />
+            </button>
+            {/* «اليوم» only invites it in the evening window, which is the
+                right default and the wrong only door — the three can be
+                chosen at any hour, and a prep already written has to be
+                re-readable. Lit once tomorrow has its three. */}
+            <button
+              onClick={onOpenTomorrow}
+              title="جهّز غدك"
+              aria-label="جهّز غدك"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+              style={{
+                borderColor: prepped ? `${T.violet}80` : `${T.violet}3D`,
+                background: prepped ? `${T.violet}24` : `${T.violet}0F`,
+                color: T.violet,
+                boxShadow: prepped ? `0 0 18px -6px ${T.violet}` : "none",
+              }}
+            >
+              <Sunrise size={16} strokeWidth={2} />
             </button>
             {/* Open for as long as today is today. A day missed because the
                 app was never opened is the one failure the app itself caused,
@@ -5411,6 +5704,7 @@ function RoutineModule({
                       onNudge={(dir) => nudge(h.id, dir)}
                       onToggleCore={() => toggleCore(h.id)}
                       onToggle={() => toggle(h.id)}
+                      onToggleTiny={() => toggle(h.id, true)}
                       onEdit={() =>
                         /* `book` has to be seeded here: the form writes
                            `book: editing.book || null` on save, so opening it
@@ -5421,6 +5715,7 @@ function RoutineModule({
                           label: h.label,
                           group: h.group,
                           book: h.book || null,
+                          min: h.min || "",
                         })
                       }
                       onDelete={() => remove(h.id)}
@@ -5500,6 +5795,34 @@ function RoutineModule({
                 placeholder="مثال: قراءة ١٠ صفحات"
               />
             </div>
+            {/* The floor. Written by him and nobody else — which smaller
+                version of «ساعة في النادي» he would still accept on a bad
+                day is not a question this app is in any position to answer,
+                the same reason the core five are asked for rather than
+                guessed. */}
+            <div>
+              <label
+                htmlFor="los-habit-min"
+                className="mb-1.5 flex items-center gap-1.5 text-xs text-white/45"
+              >
+                <Feather size={12} style={{ color: T.sky }} /> النسخة الصغيرة
+                <span style={{ color: T.faint }}>— اختياري</span>
+              </label>
+              <Field
+                id="los-habit-min"
+                value={editing.min || ""}
+                maxLength={HABIT_MIN_MAX}
+                onChange={(e) => setEditing((s) => ({ ...s, min: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+                placeholder="مثال: عشر دقائق مشي"
+              />
+              <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+                أصغر نسخة تقبلها في أسوأ يوم. تظهر كزرّ ثانٍ في صف العادة،
+                وتُحتسب منجزة بالكامل — وتُعلَّم في الأرشيف بأنك حملتها على
+                الحد الأدنى.
+              </p>
+            </div>
+
             <div>
               <label
                 htmlFor="los-habit-book"
@@ -5633,10 +5956,9 @@ function MatrixModule({ state, setState }) {
     if (!text) return;
     setState((s) => ({
       ...s,
-      tasks: [
-        ...s.tasks,
-        { id: uid(), text, quadrant: draftQ, today: false, done: false },
-      ],
+      /* Through the one shape, so the matrix's form and the evening prep's
+         cannot drift into writing two different kinds of task. */
+      tasks: [...s.tasks, taskShape({ text, quadrant: draftQ })],
     }));
     setDraft("");
   };
@@ -5648,7 +5970,9 @@ function MatrixModule({ state, setState }) {
     }));
 
   /* The cap is the whole point of the rule, so a fourth pick is refused
-     outright rather than quietly hidden — and it says why. */
+     outright rather than quietly hidden — and it says why. `capToday`
+     re-asserts it on the way out, because this is no longer the only door:
+     the evening prep promotes three of its own at the rollover. */
   const promote = (id) => {
     const t = state.tasks.find((x) => x.id === id);
     if (!t || t.today) return;
@@ -5656,7 +5980,10 @@ function MatrixModule({ state, setState }) {
       fireCapHit();
       return;
     }
-    patch(id, { today: true });
+    setState((s) => ({
+      ...s,
+      tasks: capToday(s.tasks.map((x) => (x.id === id ? { ...x, today: true } : x))),
+    }));
   };
 
   const toggleToday = (t) =>
@@ -8405,375 +8732,6 @@ function GoalsModule({ state, setState }) {
   );
 }
 
-/* ==================================================================== *
- *  MODULE — flexible income & side ventures
- * ==================================================================== */
-const money = (n) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    Math.round(n || 0),
-  );
-
-function FinanceModule({ state, setState }) {
-  const [label, setLabel] = useState("");
-  const [hours, setHours] = useState("");
-  const [amount, setAmount] = useState("");
-  const [venture, setVenture] = useState(null); // {id?, name, cost, revenue}
-
-  const income = state.income || [];
-  const ventures = state.ventures || [];
-
-  const since = (days) => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - (days - 1));
-    return income.filter((e) => new Date(e.date) >= d);
-  };
-  const week = since(7);
-  const month = since(30);
-  const sum = (list) => list.reduce((n, e) => n + (e.amount || 0), 0);
-  const hoursOf = (list) => list.reduce((n, e) => n + (e.hours || 0), 0);
-  const weekTotal = sum(week);
-  const monthTotal = sum(month);
-  const monthHours = hoursOf(month);
-  const rate = monthHours ? monthTotal / monthHours : 0;
-
-  const addIncome = () => {
-    const amt = parseFloat(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return;
-    const hrs = parseFloat(hours);
-    setState((s) => ({
-      ...s,
-      income: [
-        {
-          id: uid(),
-          date: dayKey(),
-          label: label.trim() || "عمل مرن",
-          hours: Number.isFinite(hrs) && hrs > 0 ? hrs : 0,
-          amount: amt,
-        },
-        ...(s.income || []),
-      ].slice(0, 500),
-    }));
-    setLabel("");
-    setHours("");
-    setAmount("");
-  };
-
-  const removeIncome = (id) =>
-    setState((s) => ({ ...s, income: s.income.filter((e) => e.id !== id) }));
-
-  const saveVenture = () => {
-    const name = venture.name.trim();
-    if (!name) return;
-    const cost = parseFloat(venture.cost) || 0;
-    const revenue = parseFloat(venture.revenue) || 0;
-    setState((s) => ({
-      ...s,
-      ventures: venture.id
-        ? s.ventures.map((v) =>
-            v.id === venture.id ? { ...v, name, cost, revenue } : v,
-          )
-        : [...(s.ventures || []), { id: uid(), name, cost, revenue }],
-    }));
-    setVenture(null);
-  };
-
-  const stats = [
-    { label: "هذا الأسبوع", value: weekTotal, tint: T.primary, icon: Coins },
-    { label: "آخر ٣٠ يومًا", value: monthTotal, tint: T.accent, icon: Wallet },
-    { label: "معدّل الساعة", value: rate, tint: T.sky, icon: TrendingUp },
-  ];
-
-  return (
-    <div className="space-y-7">
-      <Card className="p-6 sm:p-7">
-        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
-          الدخل والمشاريع
-        </h2>
-        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
-          سجّل ساعاتك ودخلك المرن، واحسب كلفة أي فكرة قبل أن تبدأها. الأرقام
-          بالريال.
-        </p>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {stats.map((s) => {
-          const Icon = s.icon;
-          return (
-            <Card key={s.label} className="p-5 sm:p-6">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border"
-                  style={{
-                    borderColor: `${s.tint}45`,
-                    background: `${s.tint}16`,
-                    color: s.tint,
-                  }}
-                >
-                  <Icon size={16} strokeWidth={1.9} />
-                </span>
-                <span className="text-[11.5px]" style={{ color: T.faint }}>
-                  {s.label}
-                </span>
-              </div>
-              <p
-                className="mt-3 text-2xl font-extrabold tabular-nums"
-                dir="ltr"
-                style={{ color: s.tint }}
-              >
-                {money(s.value)}
-              </p>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Card className="p-6 sm:p-7">
-        <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-          تسجيل دخل
-        </h3>
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Field
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="المصدر — مثال: توصيل"
-          />
-          <Field
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            inputMode="decimal"
-            placeholder="ساعات"
-            className="sm:max-w-[130px]"
-          />
-          <Field
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addIncome()}
-            inputMode="decimal"
-            placeholder="المبلغ"
-            className="sm:max-w-[150px]"
-          />
-          <Btn variant="default" onClick={addIncome} className="shrink-0">
-            <Plus size={15} strokeWidth={3} /> إضافة
-          </Btn>
-        </div>
-
-        <div className="mt-5 space-y-2">
-          {income.length === 0 ? (
-            <p
-              className="rounded-xl border border-dashed py-8 text-center text-[11.5px]"
-              style={{ borderColor: T.border, color: T.faint }}
-            >
-              لا دخل مسجّل بعد
-            </p>
-          ) : (
-            income.slice(0, 12).map((e) => (
-              <div
-                key={e.id}
-                className="group flex items-center gap-3 rounded-xl border px-4 py-2.5"
-                style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{e.label}</span>
-                {e.hours > 0 && (
-                  <span
-                    className="shrink-0 text-[10.5px] tabular-nums"
-                    dir="ltr"
-                    style={{ color: T.faint }}
-                  >
-                    {e.hours}h
-                  </span>
-                )}
-                <span
-                  className="shrink-0 text-[13px] font-extrabold tabular-nums"
-                  dir="ltr"
-                  style={{ color: T.primary }}
-                >
-                  {money(e.amount)}
-                </span>
-                <span className="shrink-0 text-[10px] tabular-nums" dir="ltr" style={{ color: T.faint }}>
-                  {e.date.slice(5)}
-                </span>
-                <button
-                  onClick={() => removeIncome(e.id)}
-                  aria-label={`حذف ${e.label}`}
-                  className="shrink-0 rounded p-1 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      <Card className="p-6 sm:p-7">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-              أفكار ومشاريع
-            </h3>
-            <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
-              الكلفة مقابل العائد المتوقّع — قبل أن تصرف ريالًا.
-            </p>
-          </div>
-          <Btn
-            variant="default"
-            size="sm"
-            onClick={() => setVenture({ name: "", cost: "", revenue: "" })}
-          >
-            <Plus size={14} strokeWidth={3} /> فكرة جديدة
-          </Btn>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {ventures.length === 0 ? (
-            <p
-              className="rounded-xl border border-dashed py-8 text-center text-[11.5px] lg:col-span-2"
-              style={{ borderColor: T.border, color: T.faint }}
-            >
-              لا أفكار مسجّلة بعد
-            </p>
-          ) : (
-            ventures.map((v) => {
-              const profit = (v.revenue || 0) - (v.cost || 0);
-              const good = profit >= 0;
-              return (
-                <div
-                  key={v.id}
-                  className="group rounded-2xl border p-4"
-                  style={{
-                    borderColor: good ? `${T.primary}3D` : `${T.danger}3D`,
-                    background: "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    <Lightbulb
-                      size={15}
-                      style={{ color: good ? T.primary : T.danger }}
-                      className="shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[14px] font-bold">
-                      {v.name}
-                    </span>
-                    <button
-                      onClick={() =>
-                        setVenture({
-                          id: v.id,
-                          name: v.name,
-                          cost: String(v.cost ?? ""),
-                          revenue: String(v.revenue ?? ""),
-                        })
-                      }
-                      aria-label={`تعديل ${v.name}`}
-                      className="shrink-0 rounded p-1 text-white/25 transition-all hover:text-white/70"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() =>
-                        setState((s) => ({
-                          ...s,
-                          ventures: s.ventures.filter((x) => x.id !== v.id),
-                        }))
-                      }
-                      aria-label={`حذف ${v.name}`}
-                      className="shrink-0 rounded p-1 text-white/25 transition-all hover:text-red-400"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    {[
-                      { k: "الكلفة", v: v.cost, tint: T.faint },
-                      { k: "العائد", v: v.revenue, tint: T.accent },
-                      { k: "الربح", v: profit, tint: good ? T.primary : T.danger },
-                    ].map((cell) => (
-                      <div
-                        key={cell.k}
-                        className="rounded-xl py-2"
-                        style={{ background: "rgba(255,255,255,0.04)" }}
-                      >
-                        <p className="text-[10px]" style={{ color: T.faint }}>
-                          {cell.k}
-                        </p>
-                        <p
-                          dir="ltr"
-                          className="mt-0.5 text-[14px] font-extrabold tabular-nums"
-                          style={{ color: cell.tint }}
-                        >
-                          {money(cell.v)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
-
-      <Modal
-        open={!!venture}
-        onClose={() => setVenture(null)}
-        title={venture?.id ? "تعديل الفكرة" : "فكرة جديدة"}
-        footer={
-          <>
-            <Btn variant="default" className="flex-1" onClick={saveVenture}>
-              حفظ
-            </Btn>
-            <Btn variant="outline" className="flex-1" onClick={() => setVenture(null)}>
-              إلغاء
-            </Btn>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="los-v-name" className="mb-1.5 block text-xs text-white/45">
-              اسم الفكرة
-            </label>
-            <Field
-              id="los-v-name"
-              autoFocus
-              value={venture?.name || ""}
-              onChange={(e) => setVenture((s) => ({ ...s, name: e.target.value }))}
-              placeholder="مثال: متجر إلكتروني صغير"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="los-v-cost" className="mb-1.5 block text-xs text-white/45">
-                الكلفة المتوقّعة
-              </label>
-              <Field
-                id="los-v-cost"
-                inputMode="decimal"
-                value={venture?.cost || ""}
-                onChange={(e) => setVenture((s) => ({ ...s, cost: e.target.value }))}
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label htmlFor="los-v-rev" className="mb-1.5 block text-xs text-white/45">
-                العائد المتوقّع
-              </label>
-              <Field
-                id="los-v-rev"
-                inputMode="decimal"
-                value={venture?.revenue || ""}
-                onChange={(e) => setVenture((s) => ({ ...s, revenue: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && saveVenture()}
-                placeholder="0"
-              />
-            </div>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
 /* --- image helpers --------------------------------------------------- */
 function resizeImage(file) {
   return new Promise((resolve) => {
@@ -9300,7 +9258,7 @@ function VaultModule({ state, setState }) {
           <div className="mt-2.5 grid grid-cols-4 gap-2 text-center">
             {[
               { n: todayPages, k: "اليوم", tint: goalPct >= 100 ? T.primary : T.sky },
-              { n: streak, k: "يوم متتالٍ", tint: T.ember },
+              { n: streak, k: countedWord(streak), tint: T.ember },
               { n: monthPages, k: "صفحة/الشهر", tint: T.accent },
               { n: monthFinished, k: "كتاب/الشهر", tint: T.primary },
             ].map((c) => (
@@ -14005,11 +13963,16 @@ function DayRollCall({ row, state }) {
        to today's routine — flagged, because that comparison is approximate. */
     const exact = Array.isArray(row.all);
     const ids = exact ? row.all : (state.habits || []).map((h) => h.id);
+    /* Which of the ticks were carried on the floor. A subset of `done`,
+       never a third state: the day counted it fully and so does this list —
+       it only says how. */
+    const tiny = new Set(Array.isArray(row.tiny) ? row.tiny : []);
     const items = ids.map((id) => ({
       id,
       label: live.get(id)?.label || "عادة لم تعد في روتينك",
       group: live.get(id)?.group || null,
       done: done.has(id),
+      tiny: done.has(id) && tiny.has(id),
     }));
     return {
       items,
@@ -14132,12 +14095,22 @@ function DayRollCall({ row, state }) {
                     {items.map((h) => (
                       <li key={h.id} className="flex items-start gap-2 text-[12px]">
                         {h.done ? (
-                          <Check
-                            size={12}
-                            strokeWidth={3.5}
-                            className="mt-0.5 shrink-0"
-                            style={{ color: T.primary }}
-                          />
+                          h.tiny ? (
+                            <Feather
+                              size={12}
+                              strokeWidth={2.6}
+                              className="mt-0.5 shrink-0"
+                              aria-label="أُنجزت كنسخة صغيرة"
+                              style={{ color: T.sky }}
+                            />
+                          ) : (
+                            <Check
+                              size={12}
+                              strokeWidth={3.5}
+                              className="mt-0.5 shrink-0"
+                              style={{ color: T.primary }}
+                            />
+                          )
                         ) : (
                           <X
                             size={12}
@@ -14146,7 +14119,14 @@ function DayRollCall({ row, state }) {
                             style={{ color: T.faint }}
                           />
                         )}
-                        <span style={{ color: h.done ? T.fg : T.faint }}>{h.label}</span>
+                        <span style={{ color: h.done ? T.fg : T.faint }}>
+                          {h.label}
+                          {h.tiny && (
+                            <span className="mr-1.5 text-[10px]" style={{ color: T.sky }}>
+                              نسخة صغيرة
+                            </span>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -17250,6 +17230,432 @@ function SettingsModal({
 }
 
 /* ==================================================================== *
+ *  وضع الرجوع — two days away, and no verdict waiting
+ *
+ *  Somebody opening this app after a week away is opening it for a verdict,
+ *  and the verdict a broken streak and a 0% ring deliver is «you failed, and
+ *  here is the number». That is the moment the app gets closed for a month,
+ *  and no amount of accurate arithmetic makes it a useful thing to say.
+ *
+ *  So on a day that follows two or more unrecorded ones, the first thing on
+ *  «اليوم» is the smallest possible surface: the core habits and the three
+ *  tasks, and nothing else. No streak, no percentage, no count of what was
+ *  missed — all of that is still one scroll away and none of it is the first
+ *  sentence. It owns nothing of its own: the habits are the same flat array
+ *  ticked through the same `useHabitTick`, and the three are the same
+ *  `TopThree` every other screen renders.
+ *
+ *  It closes, and stays closed for the rest of the day. A card that says
+ *  «نبدأ بأقل شي» and then reappears after every tick is the nagging it
+ *  exists to replace.
+ * ==================================================================== */
+function ComebackCard({ state, setState, days, onTick, onTickTiny, onClose }) {
+  /* The core when one is set, every habit when none is — the same roster
+     the score reads, so this card cannot show a different five from the
+     ring. Only what is still open: the point is the shortest list, and a
+     list of things already done is not a place to start. */
+  const open = scoredOf(state.habits || []).filter((h) => !h.done);
+  const shown = open.slice(0, CORE_CAP);
+
+  return (
+    <Card
+      className="p-6 sm:p-7"
+      style={{
+        borderColor: `${T.sky}59`,
+        backgroundColor: `${T.sky}0D`,
+        boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.15), 0 0 50px -20px ${T.sky}`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
+            style={{
+              borderColor: `${T.sky}4D`,
+              background: `linear-gradient(160deg, ${T.sky}33, ${T.sky}0F)`,
+              color: T.sky,
+            }}
+          >
+            <Sunrise size={20} strokeWidth={2.4} />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-extrabold" style={{ color: T.sky }}>
+              رجعت. نبدأ بأقل شي.
+            </h3>
+            {/* The days away are stated once, flatly, because they are a
+                fact he already knows and hiding them would be the app
+                pretending. What is never stated is a verdict about them. */}
+            <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+              {daysPhrase(days) || `${days} ${dayWord(days)}`} بلا تسجيل. لا شيء
+              يحتاج تعويضًا — اليوم وحده يكفي.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="إغلاق بطاقة الرجوع"
+          title="أرني الشاشة كاملة"
+          className="shrink-0 rounded-lg border p-1.5 text-white/30 transition-colors hover:text-white"
+          style={{ borderColor: T.border }}
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold" style={{ color: T.primaryLift }}>
+          <Star size={11} fill={T.accent} style={{ color: T.accent }} /> الأساسيات
+        </p>
+        {shown.length ? (
+          <div className="space-y-1.5">
+            {shown.map((h) => (
+              <TodayHabit
+                key={h.id}
+                habit={h}
+                book={bookForHabit(h, state.books)}
+                onToggle={() => onTick(h.id)}
+                onToggleTiny={() => onTickTiny(h.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p
+            className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
+            style={{ borderColor: T.border, color: T.faint }}
+          >
+            أساسياتك كلها تمّت اليوم. هذا كل المطلوب.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold" style={{ color: T.ctaLift }}>
+          <Zap size={11} /> ثلاث مهام، لا أكثر
+        </p>
+        <div className="-mx-1">
+          <TopThree state={state} setState={setState} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ==================================================================== *
+ *  جهّز غدك — the three picked the night before
+ *
+ *  A day's three tasks get chosen the night before or they get chosen at
+ *  ten in the morning by whatever shouted loudest. This is the screen that
+ *  asks for them, and it owns no store of its own: a pick is a task id out
+ *  of the same `state.tasks` the matrix edits, the first step is written
+ *  onto that task row, and the hour goes onto the calendar as a real entry
+ *  rather than a second copy of a time. `rollDay` then promotes exactly
+ *  those three and spends the prep — the arithmetic is `applyPrep` in
+ *  life-state.mjs, under test, and nothing here recomputes any of it.
+ * ==================================================================== */
+function TomorrowModal({ open, onClose, state, setState }) {
+  const arm = useUndo();
+  const [capHit, fireCapHit] = useBurst(2800);
+  const [draft, setDraft] = useState("");
+
+  /* Recomputed on every render rather than captured when the modal opened:
+     a window left open across 04:00 would otherwise be preparing a day that
+     has already started. */
+  const on = tomorrowKey();
+  const prep = prepShape(state.tomorrow);
+  const picks = prep.for === on ? prep.picks : [];
+  const byId = useMemo(
+    () => new Map((state.tasks || []).map((t) => [t.id, t])),
+    [state.tasks],
+  );
+  const rowsOf = picks.map((p) => ({ pick: p, task: byId.get(p.task) })).filter((r) => r.task);
+  const slots = [...Array(TOP_TASK_CAP)].map((_, i) => rowsOf[i] || null);
+  const full = rowsOf.length >= TOP_TASK_CAP;
+
+  const pool = (state.tasks || []).filter(
+    (t) => !t.done && !picks.some((p) => p.task === t.id),
+  );
+
+  /* The event a pick's hour lives in, looked up rather than remembered. */
+  const eventOf = (p) =>
+    p.event ? (state.events || []).find((e) => e.id === p.event) || null : null;
+
+  const pick = (id) => {
+    /* The cap is refused in `prepPickAdd` whatever this does; the screen's
+       job is only to say why. */
+    if (full) {
+      fireCapHit();
+      return;
+    }
+    setState((s) => ({ ...s, tomorrow: prepPickAdd(s.tomorrow, id, tomorrowKey()) }));
+  };
+
+  /* Written straight onto the task row, keystroke by keystroke. Held in
+     local state and committed on close was the other option and is worse:
+     a step typed and then dismissed with Escape is text the user wrote,
+     and this app does not lose that. */
+  const setStep = (id, text) =>
+    setState((s) => ({
+      ...s,
+      tasks: (s.tasks || []).map((t) =>
+        t.id === id ? { ...t, step: String(text).slice(0, STEP_MAX) } : t,
+      ),
+    }));
+
+  /* An hour is a calendar entry, not a field on the prep. Setting one
+     creates it, changing one moves it, clearing one deletes it — and the
+     pick only ever remembers which entry it is. */
+  const setTime = (p, raw) =>
+    setState((s) => {
+      const time = hhmm(raw);
+      const day = tomorrowKey();
+      const task = (s.tasks || []).find((t) => t.id === p.task);
+      let events = s.events || [];
+      let id = p.event;
+      if (!time) {
+        if (id) events = events.filter((e) => e.id !== id);
+        id = null;
+      } else if (id && events.some((e) => e.id === id)) {
+        /* Only the two fields this screen owns. A title he rewrote on the
+           calendar is his, and a repeat he set there stays set. */
+        events = events.map((e) => (e.id === id ? { ...e, date: day, time } : e));
+      } else {
+        const ev = eventShape({
+          date: day,
+          time,
+          kind: "note",
+          title: (task?.text || "").trim() || "مهمة الغد",
+          warn: 0,
+        });
+        events = [...events, ev];
+        id = ev.id;
+      }
+      return { ...s, events, tomorrow: prepPickEvent(s.tomorrow, p.task, id) };
+    });
+
+  /* Removing a pick deletes the calendar entry its hour created, so it is
+     armed like every other destructive button in this tree. The whole
+     arrays go in, never the rows. */
+  const drop = (p) => {
+    arm("أُزيلت من تجهيز الغد", {
+      events: state.events,
+      tomorrow: state.tomorrow,
+    });
+    setState((s) => ({
+      ...s,
+      events: p.event ? (s.events || []).filter((e) => e.id !== p.event) : s.events || [],
+      tomorrow: prepPickDrop(s.tomorrow, p.task),
+    }));
+  };
+
+  /* A task that does not exist yet. Without this, preparing tomorrow at
+     22:00 means going to the matrix first — and a screen that sends you
+     somewhere else to be used is a screen you stop opening. It lands in
+     «مهم غير عاجل» like every other undecided task, through the one shape. */
+  const addAndPick = () => {
+    const text = draft.trim();
+    if (!text) return;
+    if (full) {
+      fireCapHit();
+      return;
+    }
+    const t = taskShape({ text, quadrant: "q2" });
+    setState((s) => ({
+      ...s,
+      tasks: [...(s.tasks || []), t],
+      tomorrow: prepPickAdd(s.tomorrow, t.id, tomorrowKey()),
+    }));
+    setDraft("");
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      wide
+      title="جهّز غدك"
+      footer={
+        <Btn variant="default" className="flex-1" onClick={onClose}>
+          تمّ — نراه غدًا
+        </Btn>
+      }
+    >
+      <div className="space-y-5">
+        <p
+          className="rounded-xl border px-3.5 py-3 text-[11.5px] leading-relaxed"
+          style={{
+            borderColor: `${T.violet}3D`,
+            background: `${T.violet}12`,
+            color: T.muted,
+          }}
+        >
+          ثلاث مهام لـ{" "}
+          <span className="font-extrabold" style={{ color: T.violet }}>
+            {arDate(on)}
+          </span>
+          . اكتب لكل واحدة أول خطوة — الخطوة هي ما يتحرّك، لا العنوان. ما
+          تختاره الليلة يصبح «أهم ٣ مهام» حين يبدأ الغد.
+        </p>
+
+        <div className="space-y-3">
+          {slots.map((row, i) =>
+            row ? (
+              <div
+                key={row.pick.task}
+                className="rounded-2xl border p-3.5"
+                style={{ borderColor: `${T.cta}3D`, backgroundColor: `${T.cta}0A` }}
+              >
+                <div className="flex items-start gap-2.5">
+                  <span
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-extrabold tabular-nums"
+                    style={{ background: `${T.cta}26`, color: T.ctaLift }}
+                  >
+                    {i + 1}
+                  </span>
+                  <p className="min-w-0 flex-1 pt-1 text-[13px] font-bold leading-snug text-white/85">
+                    {row.task.text}
+                  </p>
+                  <button
+                    onClick={() => drop(row.pick)}
+                    aria-label={`أزل ${row.task.text} من تجهيز الغد`}
+                    title="أزل من غدك"
+                    className="shrink-0 rounded-lg border p-1.5 text-white/30 transition-colors hover:text-red-400"
+                    style={{ borderColor: T.border }}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_auto]">
+                  <div>
+                    <label
+                      htmlFor={`los-step-${row.task.id}`}
+                      className="mb-1.5 flex items-center gap-1.5 text-[11px] text-white/45"
+                    >
+                      <Footprints size={11} style={{ color: T.cta }} /> أول خطوة
+                    </label>
+                    <Field
+                      id={`los-step-${row.task.id}`}
+                      value={row.task.step || ""}
+                      maxLength={STEP_MAX}
+                      onChange={(e) => setStep(row.task.id, e.target.value)}
+                      placeholder="أصغر شيء يبدأ الحركة…"
+                    />
+                  </div>
+                  <div className="sm:w-36">
+                    <label
+                      htmlFor={`los-time-${row.task.id}`}
+                      className="mb-1.5 flex items-center gap-1.5 text-[11px] text-white/45"
+                    >
+                      <Clock size={11} style={{ color: T.violet }} /> وقت محدد
+                    </label>
+                    <TimeField
+                      id={`los-time-${row.task.id}`}
+                      value={eventOf(row.pick)?.time || ""}
+                      onChange={(v) => setTime(row.pick, v)}
+                    />
+                  </div>
+                </div>
+
+                {!!eventOf(row.pick) && (
+                  <p
+                    className="mt-2 flex items-center gap-1.5 text-[10.5px]"
+                    style={{ color: T.primary }}
+                  >
+                    <CalendarPlus size={11} /> موعد في التقويم{" "}
+                    <span dir="ltr" className="font-bold tabular-nums">
+                      {prettyTime(eventOf(row.pick).time)}
+                    </span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div
+                key={`slot-${i}`}
+                className="flex items-center gap-2.5 rounded-2xl border border-dashed px-3.5 py-4"
+                style={{ borderColor: T.border }}
+              >
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-extrabold tabular-nums"
+                  style={{ background: "rgba(255,255,255,0.06)", color: T.faint }}
+                >
+                  {i + 1}
+                </span>
+                <p className="text-[11.5px]" style={{ color: T.faint }}>
+                  اختر مهمة من الأسفل.
+                </p>
+              </div>
+            ),
+          )}
+        </div>
+
+        {full ? (
+          <p
+            className={`rounded-xl border px-3.5 py-2.5 text-center text-[11.5px] leading-relaxed${
+              capHit ? " los-pop" : ""
+            }`}
+            style={{
+              borderColor: `${T.accent}3D`,
+              background: `${T.accent}12`,
+              color: T.accent,
+            }}
+          >
+            ثلاث فقط — هذا هو الشرط. أزل واحدة قبل أن تضع غيرها.
+          </p>
+        ) : (
+          <div>
+            <p className="mb-2 text-[11px] font-bold" style={{ color: T.muted }}>
+              مهامك غير المنجزة
+            </p>
+            {pool.length ? (
+              <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto pl-1">
+                {pool.map((t) => {
+                  const q = QUADRANTS.find((x) => x.id === t.quadrant) || QUADRANTS[1];
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => pick(t.id)}
+                      className="flex max-w-full items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11.5px] transition-all duration-200 hover:-translate-y-0.5"
+                      style={{
+                        borderColor: `${q.tint}40`,
+                        backgroundColor: `${q.tint}12`,
+                        color: "rgba(255,255,255,0.8)",
+                      }}
+                    >
+                      <Plus size={11} strokeWidth={3} style={{ color: q.tint }} />
+                      <span className="truncate">{t.text}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p
+                className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
+                style={{ borderColor: T.border, color: T.faint }}
+              >
+                لا مهام غير منجزة. اكتب واحدة تحت.
+              </p>
+            )}
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Field
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addAndPick()}
+                placeholder="أو اكتب مهمة جديدة لغدٍ…"
+                aria-label="مهمة جديدة لغد"
+              />
+              <Btn variant="outline" onClick={addAndPick} disabled={!draft.trim()}>
+                <Plus size={14} strokeWidth={3} /> أضفها واخترها
+              </Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ==================================================================== *
  *  End-of-day reflection — only on a day that fell short
  * ==================================================================== */
 function ReflectionModal({ open, onClose, onSave, pct, value, fixValue }) {
@@ -17578,11 +17984,15 @@ export default function LifeOS() {
   const [settings, setSettings] = useState(false);
   const [editNav, setEditNav] = useState(false);
   const [reflect, setReflect] = useState(false);
+  const [tomorrow, setTomorrow] = useState(false);
   /* How often the evening prompt has shown today and when it may show
      again. Kept with the other per-viewer preferences, not in the archive:
      it is a reminder's snooze, not something written about the day. In
      memory only, a reload reset it and the prompt reappeared at once. */
   const [nag, setNagState] = useState(() => obj(readUI().reflect));
+  /* The comeback card, once it has been put away. Same shelf as the snooze
+     above and for the same reason. */
+  const [back, setBack] = useState(() => obj(readUI().back));
   const nagRef = useRef(nag);
   const setNag = useCallback((next) => {
     nagRef.current = next;
@@ -17786,12 +18196,12 @@ export default function LifeOS() {
     try {
       window.localStorage.setItem(
         UI_KEY,
-        JSON.stringify({ tab, collapsed, reflect: nag }),
+        JSON.stringify({ tab, collapsed, reflect: nag, back }),
       );
     } catch {
       /* per-viewer convenience only */
     }
-  }, [tab, collapsed, nag, leading]);
+  }, [tab, collapsed, nag, back, leading]);
 
   /* Through `disciplineOf`, never recomputed here — the archive row, the streak and
      the ring all read the same denominator or they will disagree about the
@@ -17806,6 +18216,16 @@ export default function LifeOS() {
     () => state.habits.filter((h) => h.done).map((h) => h.id),
     [state.habits],
   );
+  /* Which of them were carried on the floor rather than done whole. A subset
+     of `done` and never a replacement for it — the score, the streak and the
+     roll call all read `done`, and a tiny tick is a tick to every one of
+     them. This list only answers «how», which is the question a month read
+     back a year later actually needs. */
+  const tinyIds = useMemo(
+    () => state.habits.filter((h) => h.done && h.tiny).map((h) => h.id),
+    [state.habits],
+  );
+  const tinyCall = tinyIds.join(",");
   /* Keyed on the roll call itself, never on the score alone: unticking one
      habit and ticking another leaves the percentage identical, and a
      dependency on the number would quietly freeze the list behind it. */
@@ -17838,6 +18258,7 @@ export default function LifeOS() {
           date: today,
           pct: discipline,
           done: doneIds,
+          tiny: tinyIds,
           all: roster,
           holds: breakerDay.holds,
           falls: breakerDay.falls,
@@ -17850,8 +18271,10 @@ export default function LifeOS() {
     });
   }, [
     rollCall,
+    tinyCall,
     discipline,
     doneIds,
+    tinyIds,
     roster,
     breakerDay.holds,
     breakerDay.falls,
@@ -17871,6 +18294,24 @@ export default function LifeOS() {
   }, [discipline, state.dayBanked, state.streakBase]);
 
   const streak = state.streakBase + (state.dayBanked ? 1 : 0);
+
+  /* The run as the archive tells it — the days banked and, separately, the
+     days stepped over. `streakBase` is the same number read at the last
+     rollover; this is read live, so an edit to yesterday moves the tolerance
+     line in the same render it moves the count. */
+  const streakRun = useMemo(() => streakRunFrom(state.history), [state.history]);
+
+  /* How many days in a row went unrecorded before today. Zero on any
+     ordinary day, and on a brand-new profile. */
+  const away = useMemo(
+    () => comebackFrom(state.history, state.date),
+    [state.history, state.date],
+  );
+  /* Dismissed for the rest of the day, and written out with the other
+     per-viewer preferences by the effect below: it is a card being put
+     away, not something recorded about the day. In memory only, a reload
+     would put it straight back. */
+  const comeback = away >= COMEBACK_MIN && back.day !== state.date ? away : 0;
 
   const [quote, shuffleQuote] = useDailyQuote(state.quotes || []);
   const phase = useSkyPhase();
@@ -17892,6 +18333,9 @@ export default function LifeOS() {
      Polled because the app is often left open for days. */
   const todayEntry = (state.history || []).find((h) => h.date === dayKey());
   const alreadyReflected = !!(todayEntry?.distraction || todayEntry?.fix);
+  /* Whether tomorrow already has its three. Derived, like everything else
+     the shell hands down — the prep itself lives in one place. */
+  const prepped = prepReady(state.tomorrow, state.tasks, tomorrowKey()).length > 0;
   useEffect(() => {
     if (alreadyReflected) return;
     const check = () => {
@@ -18129,7 +18573,7 @@ export default function LifeOS() {
                       color: discipline >= STREAK_TARGET ? T.ember : "rgba(255,255,255,.25)",
                     }}
                   />
-                  {streak} يوم متتالٍ
+                  {streak} {countedWord(streak)}
                 </div>
               </div>
             )}
@@ -18216,6 +18660,9 @@ export default function LifeOS() {
                   streak={streak}
                   onGo={go}
                   onOpenSettings={() => setSettings(true)}
+                  onOpenTomorrow={() => setTomorrow(true)}
+                  comeback={comeback}
+                  onCloseComeback={() => setBack({ day: state.date })}
                 />
               )}
               {tab === "routine" && (
@@ -18232,10 +18679,12 @@ export default function LifeOS() {
                   diskStuck={diskStuck}
                   onOpenMirror={() => setMirror(true)}
                   onOpenReflect={() => setReflect(true)}
+                  onOpenTomorrow={() => setTomorrow(true)}
                   onOpenFix={() => setFixing(true)}
                   onOpenSettings={() => setSettings(true)}
                   onGoGoals={() => go("goals")}
                   reflected={alreadyReflected}
+                  prepped={prepped}
                 />
               )}
               {tab === "agenda" && (
@@ -18448,6 +18897,13 @@ export default function LifeOS() {
         setState={setState}
       />
 
+      <TomorrowModal
+        open={tomorrow}
+        onClose={() => setTomorrow(false)}
+        state={state}
+        setState={setState}
+      />
+
       <ReflectionModal
         open={reflect}
         onClose={() => setReflect(false)}
@@ -18464,10 +18920,13 @@ export default function LifeOS() {
         onSave={saveMirror}
       />
 
-      {/* streak-banked toast */}
+      {/* streak-banked toast. Centred with inset-x/mx-auto and never with
+          -translate-x-1/2: `.los-in` animates `transform` on this very
+          element, so a Tailwind translate utility is simply discarded and
+          the toast hangs off the edge of the screen. */}
       {streakToast !== null && (
         <div
-          className="los-in pointer-events-none fixed bottom-28 left-1/2 z-[70] -translate-x-1/2 flex items-center gap-3 rounded-2xl border px-6 py-4 shadow-2xl lg:bottom-8"
+          className="los-in pointer-events-none fixed inset-x-3 bottom-28 z-[70] flex items-center justify-center gap-3 rounded-2xl border px-6 py-4 shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(380px,92vw)] lg:bottom-8"
           style={{
             background: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
             borderColor: `${T.primary}70`,
@@ -18480,7 +18939,15 @@ export default function LifeOS() {
               اليوم محتسب في سلسلتك! 🔥
             </p>
             <p className="text-[11px] text-white/50">
-              <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.ember }}>{streakToast}</span> يوم متتالٍ
+              <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.ember }}>{streakToast}</span> {countedWord(streakToast)}
+            </p>
+            {/* Said out loud, for the same reason a gap is counted and never
+                averaged: a tolerance nobody can see is a number quietly
+                meaning less than it used to. */}
+            <p className="mt-0.5 text-[10.5px]" style={{ color: T.sky }}>
+              {streakRun.forgiven > 0
+                ? forgivenPhrase(streakRun.forgiven)
+                : "يوم واحد تحت الهدف لا يكسرها. يومان متتاليان يكسرانها."}
             </p>
           </div>
         </div>

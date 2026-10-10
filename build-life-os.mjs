@@ -49,10 +49,11 @@ const src = join(root, "LifeOS.jsx");
      Both are written out in full rather than one spread into the other: a
    test reads these two arrays and holds them against what the source
    actually imports, and it can only read literals. */
-const scanned = ["life-shared.jsx", "life-uni.jsx"];
+const scanned = ["life-shared.jsx", "life-uni.jsx", "life-finance.jsx"];
 const shipped = [
   "life-shared.jsx",
   "life-uni.jsx",
+  "life-finance.jsx",
   "prayer-times.mjs",
   "life-state.mjs",
   "life-storage.mjs",

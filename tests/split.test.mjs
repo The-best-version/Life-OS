@@ -52,6 +52,7 @@ const MODULES = [
   "life-storage.mjs",
   "life-shared.jsx",
   "life-uni.jsx",
+  "life-finance.jsx",
   "life-state-util.mjs",
   "life-state-habits.mjs",
   "life-state-tasks.mjs",
@@ -66,6 +67,8 @@ const CONSUMERS = [
   "LifeOS.jsx",
   "life-shared.jsx",
   "life-uni.jsx",
+  "life-finance.jsx",
+  "life-storage.mjs",
   "life-state.mjs",
   "life-state-habits.mjs",
   "life-state-tasks.mjs",
@@ -212,13 +215,61 @@ const arrayIn = (src, name) => {
   return [...m[1].matchAll(/["']([^"']+)["']/g)].map((x) => x[1]);
 };
 
+/* Every local file the app is actually made of, walked transitively from the
+   entry point. Deliberately NOT derived from CONSUMERS: that list is itself
+   hand-written, so reading it here would mean a file left off it is a file
+   left out of every check that follows — the omission would hide itself.
+   The imports are the one description of the source that cannot go stale. */
+const reachable = () => {
+  const seen = new Set(["LifeOS.jsx"]);
+  const queue = ["LifeOS.jsx"];
+  while (queue.length)
+    for (const m of read(queue.pop()).matchAll(/from\s*["']\.\/([^"']+)["']/g))
+      if (!seen.has(m[1])) {
+        seen.add(m[1]);
+        queue.push(m[1]);
+      }
+  return seen;
+};
+
 const localImports = () => {
-  const wanted = new Set();
-  for (const f of CONSUMERS)
-    for (const m of read(f).matchAll(/from\s*["']\.\/([^"']+)["']/g)) wanted.add(m[1]);
+  const wanted = reachable();
   wanted.delete("LifeOS.jsx"); // copied under its own name, as LifeOS.source.jsx
   return wanted;
 };
+
+/* --- the two lists this file is itself built from ----------------------
+ *  Everything above checks the source against MODULES and CONSUMERS. Those
+ *  two arrays are hand-written, and a new file missing from them is the one
+ *  failure in this whole scheme that announces nothing at all: the tests go
+ *  green, and the file is simply not guarded. The build catches a file left
+ *  out of `scanned` or `shipped`; nothing caught a file left out of here.
+ *  So the arrays are held against the imports too.
+ *    This found life-storage.mjs, which imports `uid` off life-state.mjs and
+ *  had never been on CONSUMERS — the module whose four missing names caused
+ *  the incident this file exists for, with its own imports unchecked.
+ * --------------------------------------------------------------------- */
+test("every module the source imports is guarded as a MODULE", () => {
+  const absent = [...localImports()].filter((f) => !MODULES.includes(f)).sort();
+  assert.deepEqual(
+    absent,
+    [],
+    "missing from MODULES, so nothing checks that the names these export are" +
+      " imported where they are used:\n  " + absent.join("\n  "),
+  );
+});
+
+test("every file that imports a local module is guarded as a CONSUMER", () => {
+  const absent = [...reachable()]
+    .filter((f) => /from\s*["']\.\//.test(read(f)) && !CONSUMERS.includes(f))
+    .sort();
+  assert.deepEqual(
+    absent,
+    [],
+    "missing from CONSUMERS, so nothing checks that these import every name" +
+      " they use:\n  " + absent.join("\n  "),
+  );
+});
 
 test("the build copies every local module the source imports", () => {
   const build = read("build-life-os.mjs");

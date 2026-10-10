@@ -54,6 +54,26 @@ import {
   remainingIn,
   uniPending,
   minsIn,
+  taskShape,
+  capToday,
+  STEP_MAX,
+  tomorrowKey,
+  prepShape,
+  prepPicks,
+  prepFull,
+  prepHas,
+  prepPickAdd,
+  prepPickDrop,
+  prepPickEvent,
+  prepReady,
+  applyPrep,
+  prepCarry,
+  habitShape,
+  HABIT_MIN_MAX,
+  streakRunFrom,
+  STREAK_FORGIVE,
+  comebackFrom,
+  COMEBACK_MIN,
 } from "../life-state.mjs";
 import { BLOCK_ANCHORS, blockAt } from "../prayer-times.mjs";
 
@@ -294,12 +314,46 @@ test("rollDay returns the same object when the day has not turned", () => {
   assert.equal(rollDay(today), today);
 });
 
-test("rollDay banks the streak only on a continued day", () => {
+test("rollDay reads the streak off the archive, never off the counter", () => {
+  /* The counter is gone: «+1 if yesterday banked, else 0» cannot forgive
+     anything, because it has no idea what the day before yesterday was. */
   const base = migrate(fixture("schema-20.json"));
-  const banked = rollDay({ ...base, date: yesterdayKey(), dayBanked: true, streakBase: 4 });
-  assert.equal(banked.streakBase, 5);
-  const dropped = rollDay({ ...base, date: yesterdayKey(), dayBanked: false, streakBase: 4 });
-  assert.equal(dropped.streakBase, 0);
+  const day = (n) => addDays(dayKey(), -n);
+  const hit = (n) => ({ date: day(n), pct: 95, done: [], all: ["x"] });
+  const miss = (n) => ({ date: day(n), pct: 10, done: [], all: ["x"] });
+
+  const run = rollDay({
+    ...base,
+    date: yesterdayKey(),
+    dayBanked: true,
+    streakBase: 0, // deliberately wrong — the rows are the authority
+    history: [hit(1), hit(2), hit(3), hit(4)],
+  });
+  assert.equal(run.streakBase, 4, "a stale counter was trusted over the rows");
+
+  /* Yesterday fell short; the four before it did not. One bad day is
+     stepped over and the run survives at the length it actually earned. */
+  const forgiven = rollDay({
+    ...base,
+    date: yesterdayKey(),
+    dayBanked: false,
+    streakBase: 99,
+    history: [miss(1), hit(2), hit(3), hit(4)],
+  });
+  assert.equal(forgiven.streakBase, 3);
+
+  /* Two in a row is not a bad day, it is a stop. */
+  const broken = rollDay({
+    ...base,
+    date: yesterdayKey(),
+    dayBanked: false,
+    streakBase: 99,
+    history: [miss(1), miss(2), hit(3), hit(4)],
+  });
+  assert.equal(broken.streakBase, 0);
+
+  /* Months away: fillGaps writes the unrecorded days and two of them in a
+     row end the run, however many banked days sit behind them. */
   const skipped = rollDay({ ...base, date: "2020-01-01", dayBanked: true, streakBase: 4 });
   assert.equal(skipped.streakBase, 0, "a gap of months cannot continue a streak");
 });
@@ -861,25 +915,13 @@ test("setDayDone refuses a date that is not one", () => {
   for (const d of [null, "", "x", "2026-02-31"]) assert.equal(setDayDone(h, d, [], []), h);
 });
 
-test("streakBaseFrom counts back from yesterday and stops at the first miss", () => {
+test("streakBaseFrom counts back from yesterday", () => {
   const day = (n) => addDays(dayKey(), -n);
   const hit = (n) => ({ date: day(n), pct: 90, done: [], all: [] });
   assert.equal(streakBaseFrom([hit(1), hit(2), hit(3)]), 3);
   /* Today is not part of the base — `dayBanked` adds it, and counting it
      twice is how a streak reads one day ahead of itself. */
   assert.equal(streakBaseFrom([{ date: dayKey(), pct: 100, done: [], all: [] }]), 0);
-  /* A short day breaks the run where it falls. */
-  assert.equal(
-    streakBaseFrom([hit(1), { date: day(2), pct: 40, done: [], all: [] }, hit(3)]),
-    1,
-  );
-});
-
-test("a day nobody recorded cannot be claimed as part of a run", () => {
-  const day = (n) => addDays(dayKey(), -n);
-  const hit = (n) => ({ date: day(n), pct: 95, done: [], all: [] });
-  assert.equal(streakBaseFrom([hit(1), { date: day(2), gap: true }, hit(3)]), 1);
-  assert.equal(streakBaseFrom([{ date: day(1), gap: true }, hit(2)]), 0);
 });
 
 test("the archive still carries no gap once it has been filled", () => {
@@ -887,4 +929,413 @@ test("the archive still carries no gap once it has been filled", () => {
   const once = fillGaps([{ date: "2026-10-01", pct: 1 }], "2026-10-01", "2026-10-04");
   const twice = fillGaps(once, "2026-10-01", "2026-10-04");
   assert.deepEqual(twice, once);
+});
+
+/* ===================================================================== *
+ *  جهّز غدك — the three chosen the night before
+ * ===================================================================== */
+
+const T3 = (n) => [...Array(n)].map((_, i) => ({ id: `t${i}`, text: `م${i}`, today: false }));
+const prepOf = (day, ...ids) => ({
+  for: day,
+  picks: ids.map((id) => ({ task: id, event: null })),
+});
+
+test("taskShape gives every task a step and invents no quadrant", () => {
+  const t = taskShape({ id: "a", text: "x" });
+  assert.equal(t.step, "");
+  assert.equal(t.quadrant, "q2");
+  assert.equal(t.today, false);
+  assert.equal(t.done, false);
+  /* A damaged payload must not throw on the way in. */
+  assert.equal(taskShape(null).text, "");
+  assert.equal(taskShape(undefined).step, "");
+  /* His own text is bounded, never dropped. */
+  assert.equal(taskShape({ step: "ب".repeat(400) }).step.length, STEP_MAX);
+});
+
+test("taskShape keeps the step the user typed, every load", () => {
+  const once = taskShape({ id: "a", step: "افتح الملزمة على الفصل الثالث" });
+  const twice = taskShape(once);
+  assert.deepEqual(twice, once);
+  assert.equal(twice.step, "افتح الملزمة على الفصل الثالث");
+});
+
+test("capToday refuses a fourth and keeps the first three in his order", () => {
+  const list = [
+    { id: "a", today: true },
+    { id: "b", today: false },
+    { id: "c", today: true },
+    { id: "d", today: true },
+    { id: "e", today: true },
+  ];
+  const out = capToday(list);
+  assert.deepEqual(
+    out.filter((t) => t.today).map((t) => t.id),
+    ["a", "c", "d"],
+  );
+  /* The flag comes off; the task never does. */
+  assert.equal(out.length, list.length);
+  assert.equal(out.filter((t) => t.today).length, TOP_TASK_CAP);
+  /* A list already inside the rule is handed back unchanged. */
+  const fine = [{ id: "a", today: true }, { id: "b", today: false }];
+  assert.deepEqual(capToday(fine), fine);
+});
+
+test("tomorrowKey is the day after the logical today", () => {
+  assert.equal(tomorrowKey(), addDays(dayKey(), 1));
+});
+
+test("prepShape cannot hold a fourth pick, a duplicate, or a hole", () => {
+  const p = prepShape({
+    for: tomorrowKey(),
+    picks: [
+      { task: "a" },
+      { task: "a" },
+      null,
+      { task: "" },
+      { task: "b", event: "e1" },
+      { task: "c" },
+      { task: "d" },
+    ],
+  });
+  assert.equal(p.picks.length, TOP_TASK_CAP);
+  assert.deepEqual(p.picks.map((x) => x.task), ["a", "b", "c"]);
+  assert.equal(p.picks[1].event, "e1");
+  assert.equal(p.picks[0].event, null);
+  /* A damaged or absent prep is an empty one, never a throw. */
+  assert.deepEqual(prepShape(null), { for: null, picks: [] });
+  assert.equal(prepShape({ for: "2026-02-31" }).for, null);
+});
+
+test("prepPickAdd refuses the fourth in the state, not on the screen", () => {
+  const day = tomorrowKey();
+  let p = prepPickAdd(null, "a", day);
+  p = prepPickAdd(p, "b", day);
+  p = prepPickAdd(p, "c", day);
+  assert.equal(prepFull(p), true);
+  assert.deepEqual(prepPickAdd(p, "d", day), p, "a fourth pick was accepted");
+  /* And the same task twice is one pick. */
+  assert.deepEqual(prepPickAdd(p, "a", day), p);
+  assert.equal(prepHas(p, "b"), true);
+  assert.equal(prepHas(p, "d"), false);
+  assert.equal(p.for, day);
+});
+
+test("prepPickDrop and prepPickEvent move one pick and nothing else", () => {
+  const day = tomorrowKey();
+  const p = prepOf(day, "a", "b", "c");
+  assert.deepEqual(prepPickDrop(p, "b").picks.map((x) => x.task), ["a", "c"]);
+  assert.equal(prepPickDrop(p, "zz").picks.length, 3);
+  const withEv = prepPickEvent(p, "b", "ev9");
+  assert.deepEqual(withEv.picks.map((x) => x.event), [null, "ev9", null]);
+  /* Clearing the time detaches the entry rather than storing an empty id. */
+  assert.equal(prepPickEvent(withEv, "b", "").picks[1].event, null);
+  assert.equal(prepPickEvent(withEv, "b", null).picks[1].event, null);
+  assert.equal(prepPicks(p).length, 3);
+});
+
+test("a prep is only ever applied to the day it was made for", () => {
+  const tasks = T3(4);
+  const day = "2026-10-08";
+  const prep = prepOf(day, "t1", "t3");
+  assert.deepEqual(prepReady(prep, tasks, day).map((x) => x.task), ["t1", "t3"]);
+  /* The day it was prepared for came and went; the three do not follow it. */
+  assert.deepEqual(prepReady(prep, tasks, "2026-10-09"), []);
+  assert.deepEqual(prepReady(prep, tasks, "2026-10-07"), []);
+  assert.deepEqual(prepReady(prep, tasks, "nope"), []);
+});
+
+test("applyPrep promotes exactly the prepared three", () => {
+  const day = "2026-10-08";
+  const tasks = [
+    { id: "t0", today: true },
+    { id: "t1", today: false },
+    { id: "t2", today: false },
+    { id: "t3", today: false },
+  ];
+  const out = applyPrep(tasks, prepOf(day, "t1", "t3"), day);
+  assert.deepEqual(out.filter((t) => t.today).map((t) => t.id), ["t1", "t3"]);
+  assert.equal(out.length, tasks.length, "a task was lost on the way through");
+});
+
+test("a task deleted after being picked is simply not promoted", () => {
+  const day = "2026-10-08";
+  const tasks = [{ id: "t1", today: false }, { id: "t2", today: false }];
+  const out = applyPrep(tasks, prepOf(day, "t1", "gone"), day);
+  assert.deepEqual(out.filter((t) => t.today).map((t) => t.id), ["t1"]);
+});
+
+test("nothing prepared leaves the flags exactly where they were", () => {
+  const tasks = [
+    { id: "a", today: true },
+    { id: "b", today: false },
+    { id: "c", today: true },
+  ];
+  /* The behaviour this app had before the screen existed, and the behaviour
+     it keeps for every day the screen is never opened. */
+  assert.deepEqual(applyPrep(tasks, null, "2026-10-08"), tasks);
+  assert.deepEqual(applyPrep(tasks, prepOf("2026-10-20", "b"), "2026-10-08"), tasks);
+  /* But the cap is still asserted on the way through. */
+  const four = [
+    { id: "a", today: true },
+    { id: "b", today: true },
+    { id: "c", today: true },
+    { id: "d", today: true },
+  ];
+  assert.equal(
+    applyPrep(four, null, "2026-10-08").filter((t) => t.today).length,
+    TOP_TASK_CAP,
+  );
+});
+
+test("a spent prep is cleared, a waiting one is kept", () => {
+  const prep = prepOf("2026-10-08", "a");
+  /* Read by applyPrep on the way into this same state — leaving it there
+     would re-promote its three at every rollover after it. */
+  assert.deepEqual(prepCarry(prep, "2026-10-08"), { for: null, picks: [] });
+  assert.deepEqual(prepCarry(prep, "2026-10-09"), { for: null, picks: [] });
+  assert.deepEqual(prepCarry(prep, "2026-10-07"), prep);
+  assert.deepEqual(prepCarry(null, "2026-10-07"), { for: null, picks: [] });
+});
+
+test("rollDay promotes last night's three and spends the prep", () => {
+  const s = {
+    ...freshState(),
+    date: addDays(dayKey(), -1),
+    tasks: [
+      { id: "p0", text: "صفر", today: true, done: true },
+      { id: "p1", text: "واحد", today: false, done: false, step: "افتح الملف" },
+      { id: "p2", text: "اثنان", today: false, done: false },
+      { id: "p3", text: "ثلاثة", today: false, done: false },
+    ],
+    tomorrow: prepOf(dayKey(), "p1", "p3"),
+  };
+  const next = rollDay(s);
+  assert.equal(next.date, dayKey());
+  assert.deepEqual(next.tasks.filter((t) => t.today).map((t) => t.id), ["p1", "p3"]);
+  /* The step he typed last night is still under the task this morning. */
+  assert.equal(next.tasks.find((t) => t.id === "p1").step, "افتح الملف");
+  /* Yesterday's done flags are cleared, as they always were. */
+  assert.equal(next.tasks.every((t) => !t.done), true);
+  /* And the prep is spent, so the day after does not inherit tonight. */
+  assert.deepEqual(next.tomorrow, { for: null, picks: [] });
+});
+
+test("a prep made for a day he slept through is dropped, not applied late", () => {
+  const s = {
+    ...freshState(),
+    date: addDays(dayKey(), -4),
+    tasks: [
+      { id: "a", today: true, done: false },
+      { id: "b", today: false, done: false },
+    ],
+    /* Prepared for the morning after the night he wrote it — three days ago. */
+    tomorrow: prepOf(addDays(dayKey(), -3), "b"),
+  };
+  const next = rollDay(s);
+  assert.deepEqual(next.tasks.filter((t) => t.today).map((t) => t.id), ["a"]);
+  assert.deepEqual(next.tomorrow, { for: null, picks: [] });
+});
+
+test("migrate repairs a payload carrying a fourth today-task", () => {
+  const raw = fixture("schema-20.json");
+  raw.tasks = raw.tasks.map((t) => ({ ...t, today: true }));
+  const out = migrate(raw);
+  assert.equal(out.tasks.length, raw.tasks.length, "a task was dropped, not demoted");
+  assert.equal(out.tasks.filter((t) => t.today).length, TOP_TASK_CAP);
+});
+
+test("picking for a new day does not inherit a stale day's three", () => {
+  /* A restored backup, or a window left open through the rollover, can hand
+     this a prep whose day is gone. Its three were chosen for a morning that
+     has passed, and carrying them into tomorrow unasked is the one thing a
+     screen called «جهّز غدك» must not do. */
+  const stale = prepOf("2026-10-02", "old1", "old2", "old3");
+  const out = prepPickAdd(stale, "fresh", "2026-10-09");
+  assert.equal(out.for, "2026-10-09");
+  assert.deepEqual(out.picks.map((x) => x.task), ["fresh"]);
+  /* And a full stale prep does not refuse the first pick of a new day. */
+  assert.equal(prepFull(stale), true);
+  assert.equal(prepPickAdd(stale, "fresh", "2026-10-09").picks.length, 1);
+});
+
+/* ===================================================================== *
+ *  السلسلة المتسامحة — one day is forgiven, two in a row are not
+ * ===================================================================== */
+
+const dayBack = (n) => addDays(dayKey(), -n);
+const hit = (n) => ({ date: dayBack(n), pct: 95, done: [], all: ["x"] });
+const miss = (n) => ({ date: dayBack(n), pct: 30, done: [], all: ["x"] });
+const gapOn = (n) => ({ date: dayBack(n), gap: true });
+
+test("one day under the target does not break the run", () => {
+  /* The day a run dies is never the day something was hard — it is the day
+     something was impossible. Ninety days going to zero over one fever is
+     what teaches people to stop looking at the number. */
+  assert.equal(streakBaseFrom([miss(1), hit(2), hit(3), hit(4)]), 3);
+  assert.equal(streakBaseFrom([hit(1), miss(2), hit(3), hit(4)]), 3);
+  assert.equal(streakBaseFrom([hit(1), hit(2), miss(3), hit(4)]), 3);
+});
+
+test("the forgiven day is not counted in the run either", () => {
+  /* Forgiven is not the same as counted. The number still means «days I
+     actually cleared the bar», or the softening has inflated it. */
+  const run = streakRunFrom([miss(1), hit(2), hit(3), hit(4)]);
+  assert.equal(run.days, 3);
+  assert.equal(run.forgiven, 1);
+  assert.equal(run.since, dayBack(4));
+});
+
+test("two days in a row under the target end it", () => {
+  /* One is the whole tolerance. Raising it is a decision about what the
+     number means, not a tuning knob — so the test names it. */
+  assert.equal(STREAK_FORGIVE, 1);
+  assert.equal(streakBaseFrom([miss(1), miss(2), hit(3), hit(4)]), 0);
+  assert.equal(streakBaseFrom([hit(1), miss(2), miss(3), hit(4)]), 1);
+  assert.equal(streakBaseFrom([hit(1), hit(2), miss(3), miss(4), hit(5)]), 2);
+});
+
+test("a miss at the near end is forgiven, a miss at the far end is not credited", () => {
+  /* Yesterday short, the run behind it intact: the run stands and yesterday
+     adds nothing. */
+  const near = streakRunFrom([miss(1), hit(2), hit(3)]);
+  assert.equal(near.days, 2);
+  assert.equal(near.forgiven, 1);
+  /* And the miss that ENDS the walk was never stepped over by anything, so
+     it is not reported as a tolerance that was used. */
+  const far = streakRunFrom([hit(1), hit(2), hit(3)]);
+  assert.equal(far.days, 3);
+  assert.equal(far.forgiven, 0, "a tolerance was claimed that nothing used");
+});
+
+test("a day nobody recorded is forgiven like any other miss, and never counted", () => {
+  /* A gap is a day he was away, and being away is exactly what the
+     tolerance is for — but it still cannot be claimed as part of a run. */
+  const run = streakRunFrom([gapOn(1), hit(2), hit(3)]);
+  assert.equal(run.days, 2);
+  assert.equal(run.forgiven, 1);
+  assert.equal(streakBaseFrom([hit(1), gapOn(2), hit(3)]), 2);
+  /* Two unrecorded days in a row are a stop, same as two short ones. */
+  assert.equal(streakBaseFrom([gapOn(1), gapOn(2), hit(3), hit(4)]), 0);
+  /* And a gap beside a short day is still two in a row. */
+  assert.equal(streakBaseFrom([miss(1), gapOn(2), hit(3)]), 0);
+});
+
+test("an empty archive is a run of nothing, not a crash", () => {
+  assert.equal(streakBaseFrom([]), 0);
+  assert.equal(streakBaseFrom(null), 0);
+  assert.deepEqual(streakRunFrom([]), { days: 0, forgiven: 0, since: null });
+});
+
+test("migrate recomputes the stored streak under the forgiving rule", () => {
+  /* The counter was computed under the old rule, where one short day ended
+     everything. Leaving it would leave the counter and the archive
+     disagreeing about the same run. */
+  const raw = fixture("schema-20.json");
+  const out = migrate({
+    ...raw,
+    schema: 24,
+    streakBase: 0,
+    history: [miss(1), hit(2), hit(3), hit(4)],
+  });
+  assert.equal(out.streakBase, 3);
+  /* A payload already on this schema keeps the number it brought. */
+  const kept = migrate({ ...out, streakBase: 7 });
+  assert.equal(kept.streakBase, 7);
+});
+
+/* ===================================================================== *
+ *  النسخة الصغيرة — the floor under a habit
+ * ===================================================================== */
+
+test("habitShape gives every habit a floor and nothing else changes", () => {
+  const h = habitShape({ id: "a", label: "نادي", group: "morning" });
+  assert.equal(h.min, "");
+  assert.equal(h.tiny, false);
+  assert.equal(h.core, false);
+  assert.equal(h.book, null);
+  assert.equal(habitShape(null).label, "");
+  assert.equal(habitShape({ min: "ع".repeat(300) }).min.length, HABIT_MIN_MAX);
+});
+
+test("a habit's group is kept exactly as written, never re-pointed", () => {
+  /* blockRank lands an unknown id last and groupOf renders it in the night
+     block; rewriting it here would move his habit on the strength of a
+     damaged payload. */
+  assert.equal(habitShape({ group: "evening" }).group, "evening");
+});
+
+test("tiny without done is not a state this app has", () => {
+  assert.equal(habitShape({ done: false, tiny: true }).tiny, false);
+  assert.equal(habitShape({ done: true, tiny: true }).tiny, true);
+});
+
+test("the floor survives every load, and the tiny mark does not survive the day", () => {
+  const raw = fixture("schema-20.json");
+  const first = raw.habits[0].id;
+  const out = migrate({
+    ...raw,
+    schema: 24,
+    habits: raw.habits.map((h) =>
+      h.id === first ? { ...h, min: "عشر دقائق مشي", done: true, tiny: true } : h,
+    ),
+  });
+  assert.equal(out.habits.find((h) => h.id === first).min, "عشر دقائق مشي");
+  assert.equal(out.habits.find((h) => h.id === first).tiny, true);
+  /* A new day unticks it and takes the mark with it: `tiny` is this day's
+     answer about this habit, not a property of the habit. */
+  const next = freshState(carryOf(out));
+  assert.equal(next.habits.find((h) => h.id === first).min, "عشر دقائق مشي");
+  assert.equal(next.habits.find((h) => h.id === first).tiny, false);
+  assert.equal(next.habits.find((h) => h.id === first).done, false);
+});
+
+test("a tiny tick is a tick as far as the score is concerned", () => {
+  /* It counts. A completion that pays out less than it costs is a
+     completion nobody takes. */
+  const habits = [
+    { id: "a", done: true, tiny: true, core: true },
+    { id: "b", done: true, tiny: false, core: true },
+    { id: "c", done: false, tiny: false, core: true },
+    { id: "d", done: false, tiny: false, core: true },
+  ];
+  assert.equal(disciplineOf(habits), 50);
+  assert.equal(pctOfRow({ all: ["a", "b", "c", "d"], done: ["a", "b"] }, habits), 50);
+});
+
+/* ===================================================================== *
+ *  وضع الرجوع — two days away, and no verdict waiting
+ * ===================================================================== */
+
+test("comebackFrom counts the unrecorded days immediately before today", () => {
+  const h = [hit(5), hit(4), gapOn(3), gapOn(2), gapOn(1)];
+  assert.equal(comebackFrom(h), 3);
+  assert.equal(comebackFrom([hit(3), hit(2), gapOn(1)]), 1);
+  assert.equal(comebackFrom([hit(3), gapOn(2), hit(1)]), 0);
+});
+
+test("a day that went to zero is not a day nobody recorded", () => {
+  /* The whole reason gap rows exist: an empty square cannot otherwise say
+     whether the day went to zero or was never opened. */
+  assert.equal(comebackFrom([hit(3), miss(2), miss(1)]), 0);
+  assert.equal(comebackFrom([hit(3), gapOn(2), miss(1)]), 0);
+});
+
+test("a missing row counts as unrecorded, a brand-new profile does not", () => {
+  /* Nothing written for yesterday at all is the same fact as a gap row. */
+  assert.equal(comebackFrom([hit(4), hit(3)]), 2);
+  /* But a profile that starts today has not been away — greeting a new user
+     with «رجعت» is nonsense, so the walk is floored at the first day he
+     ever recorded. */
+  assert.equal(comebackFrom([{ date: dayKey(), pct: 40, done: [], all: [] }]), 0);
+  assert.equal(comebackFrom([]), 0);
+  assert.equal(comebackFrom(null), 0);
+});
+
+test("the comeback threshold is two, and the walk is bounded", () => {
+  assert.ok(COMEBACK_MIN === 2);
+  /* A year of silence cannot walk a year of dates. */
+  const long = [{ date: "2020-01-01", pct: 90, done: [], all: [] }];
+  assert.ok(comebackFrom(long) <= GAP_REACH);
 });

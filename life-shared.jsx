@@ -509,6 +509,40 @@ export const courseWord = (n) => arCount(n, COURSE_FORMS);
 export const WEEK_FORMS = ["أسبوع", "أسبوعان", "أسابيع", "أسبوعًا"];
 export const weekWord = (n) => arCount(n, WEEK_FORMS);
 export const LECTURE_FORMS = ["محاضرة", "محاضرتان", "محاضرات", "محاضرة"];
+export const TASK_FORMS = ["مهمة", "مهمتان", "مهام", "مهمة"];
+export const taskWord = (n) => arCount(n, TASK_FORMS);
+/* Same rule `daysPhrase` follows, and for the same reason: Arabic's dual
+   already carries the number, so «٢ مهمتان» reads as a translation rather
+   than a sentence. The verb agrees too — one waits, two wait. */
+/* A banked day. The streak used to print «يوم متتالٍ» beside a live counter,
+   which is the exact mistake `arCount` exists to prevent — and «متتالٍ» is
+   now a second mistake, because one day under the target is stepped over
+   and the run is no longer literally consecutive. */
+export const COUNTED_FORMS = [
+  "يوم مُحتسَب",
+  "يومان مُحتسَبان",
+  "أيام مُحتسَبة",
+  "يومًا مُحتسَبًا",
+];
+export const countedWord = (n) => arCount(n, COUNTED_FORMS);
+
+/* The tolerance, said out loud. Phrased so the count is the subject and not
+   the object — «تجاوزنا يومين» needs the accusative and «يومان لم يكسراها»
+   does not, and a dual in the wrong case is the kind of thing that makes a
+   screen read as translated. */
+export const forgivenPhrase = (n) =>
+  n === 1
+    ? "ويومٌ واحد تحت الهدف لم يكسرها"
+    : n === 2
+      ? "ويومان تحت الهدف لم يكسراها"
+      : `و${n} ${arCount(n, DAY_FORMS)} تحت الهدف لم تكسرها`;
+
+export const tasksPhrase = (n) =>
+  Math.abs(n) === 1
+    ? "مهمة واحدة تنتظر"
+    : Math.abs(n) === 2
+      ? "مهمتان تنتظران"
+      : null;
 export const lectureWord = (n) => arCount(n, LECTURE_FORMS);
 
 /* Day keys are calendar squares, not instants, and every helper here parses
