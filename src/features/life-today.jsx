@@ -175,8 +175,8 @@ export function TodayModule({
    *   2) DayHeaderCard          — التاريخ والبلوك وحلقة الانضباط
    *   3) ReadingCue             — عبارة اليوم
    *   4) PrayerCard + WaterCard — مصفوفة عمودين
-   *   5) RemainingHabitsCard    — العادات المتبقية
-   *   6) TopThree               — مهام اليوم الثلاث
+   *   5) TopThree               — مهام اليوم الثلاث
+   *   6) RemainingHabitsCard    — العادات المتبقية
    *   7) TomorrowPrepCard       — في نافذة المساء وحدها
    *   8) LecturesCard + NearestDueCard — مصفوفة عمودين
    *
@@ -236,6 +236,11 @@ export function TodayModule({
         />
       </div>
 
+      {/* المهام الثلاث — نفس المكوّن المشترك لا نسخة منه، وهذه الشاشة
+          هي المكان الوحيد الذي تُعرض فيه. فوق العادات لأن الثلاث هي ما
+          يُحاسَب عليه اليوم، والعادات تجري تحتها. */}
+      <TopThree state={state} setState={setState} />
+
       <RemainingHabitsCard
         block={g}
         open={open}
@@ -246,10 +251,6 @@ export function TodayModule({
         onTick={tick}
         onGo={onGo}
       />
-
-      {/* المهام الثلاث — نفس المكوّن المشترك لا نسخة منه، وهذه الشاشة
-          هي المكان الوحيد الذي تُعرض فيه. */}
-      <TopThree state={state} setState={setState} />
 
       {/* يظهر في نافذة المساء وحدها. */}
       {evening && (
