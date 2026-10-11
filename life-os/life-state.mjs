@@ -825,6 +825,10 @@ export {
   hhmm,
   minsIn,
   clampNum,
+  daysBetween,
+  stamp,
+  daysTo,
+  daysUntil,
 } from "./life-state-util.mjs";
 
 export {
@@ -854,6 +858,21 @@ export {
   moodOf,
   urgeShape,
   badHabitShape,
+  HOUR_BANDS,
+  bandAt,
+  bandOf,
+  cleanDays,
+  bleedSaved,
+  bestRun,
+  MIRROR_MIN,
+  breakerEvents,
+  topShare,
+  weakSpots,
+  tagFallRate,
+  DANGER_MIN_HITS,
+  DANGER_MIN_SHARE,
+  dangerWatch,
+  breakerToday,
 } from "./life-state-habits.mjs";
 
 export {
@@ -900,6 +919,14 @@ export {
   SEED_GOALS,
   ADDED_GOALS,
   SEED_LINKS,
+  quarterOf,
+  pillarOf,
+  horizonOf,
+  goalPct,
+  goalEnd,
+  windowOf,
+  windowStand,
+  openingWindow,
 } from "./life-state-goals.mjs";
 
 export {
@@ -909,6 +936,10 @@ export {
   SEED_BOOKS,
   READING_QUOTES,
   SEED_READS,
+  bookForHabit,
+  sumPages,
+  readStreak,
+  pctOf,
 } from "./life-state-books.mjs";
 
 export {
@@ -919,6 +950,17 @@ export {
   REPEATS,
   WARN_CHOICES,
   eventShape,
+  kindOf,
+  repeatOf,
+  occurrences,
+  isEventDone,
+  byClock,
+  eventsIn,
+  UPCOMING_AHEAD,
+  UPCOMING_BACKLOG,
+  upcoming,
+  upcomingRows,
+  alertsOf,
 } from "./life-state-calendar.mjs";
 
 export {
@@ -963,4 +1005,16 @@ export {
   streakBaseFrom,
   COMEBACK_MIN,
   comebackFrom,
+  REFLECT_FROM_HOUR,
+  inReflectWindow,
+  REFLECT_SNOOZE_MS,
+  REFLECT_MAX_SHOWS,
+  historyIndex,
+  askedOn,
+  keptOn,
+  habitStreak,
+  habitBest,
+  habitTally,
+  habitStrip,
+  levelOf,
 } from "./life-state-streak.mjs";

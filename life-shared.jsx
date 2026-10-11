@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useContext, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Check, Star, Minus, Plus } from "lucide-react";
-import { uid, STREAK_TARGET, dayKey, keyToDate, hhmm, GRADES } from "./life-state.mjs";
+import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Bed, Undo2 } from "lucide-react";
+import { uid, STREAK_TARGET, hhmm, GRADES, daysUntil, minsIn, BLOCK_IDS, daysBetween } from "./life-state.mjs";
+import { fixHour, prayerTimes } from "./prayer-times.mjs";
 
 /* --- tokens --------------------------------------------------------- *
  *  "Vibrant Deep Slate" — an energetic canvas, not a void. Emerald is
@@ -73,6 +74,9 @@ export function usePrefersReducedMotion() {
   }, []);
   return reduced;
 }
+/* Fires a one-shot reward flag that auto-clears. Deliberately no
+   requestAnimationFrame here — it never runs in a hidden tab, which both
+   swallowed the reward and replayed it whenever the tab came back. */
 export function useBurst(ms = 640) {
   const [on, setOn] = useState(false);
   const timer = useRef(null);
@@ -469,7 +473,6 @@ export function ProgressRing({
 }
 
 
-
 export const DOW_AR = [
   "الأحد",
   "الإثنين",
@@ -549,27 +552,6 @@ export const tasksPhrase = (n) =>
       : null;
 export const lectureWord = (n) => arCount(n, LECTURE_FORMS);
 
-/* Day keys are calendar squares, not instants, and every helper here parses
-   them at LOCAL midnight. `new Date("2027-01-05")` is read as UTC and lands
-   on the 4th for anyone east of Greenwich — which is all of the Gulf, every
-   day of the year. */
-export const daysUntil = (ds, fromKey = dayKey()) => {
-  const a = keyToDate(fromKey);
-  const b = keyToDate(ds);
-  if (!a || !b) return null;
-  return Math.round((b - a) / 86400000);
-};
-
-/* "HH:MM" or nothing at all. A half-typed time is worse than no time: it
-   sorts wrongly and then renders as a lie, so anything that is not a real
-   clock reading is dropped on the way into state. */
-export const minsOf = (t) => {
-  const v = hhmm(t);
-  if (!v) return null;
-  const [h, m] = v.split(":").map(Number);
-  return h * 60 + m;
-};
-
 export const nowMins = (d = new Date()) => d.getHours() * 60 + d.getMinutes();
 
 /* 14:30 → «٢:٣٠ م». A 24-hour clock is what gets typed; a 12-hour one is
@@ -623,8 +605,8 @@ export function daySections(courses, dow, mins) {
   for (const c of courses || [])
     for (const s of c.slots || [])
       if (s.day === dow) {
-        const from = minsOf(s.from) ?? 0;
-        const to = minsOf(s.to) ?? from;
+        const from = minsIn(s.from) ?? 0;
+        const to = minsIn(s.to) ?? from;
         rows.push({
           course: c,
           slot: s,
@@ -691,6 +673,8 @@ export const safeUrl = (v) => {
   }
 };
 
+/* The relative day, in words. Arabic counts in threes, so the plural comes
+   from `dayWord` rather than from a bare "أيام". */
 export const whenWord = (on) => {
   const n = daysUntil(on);
   if (n === null) return "";
@@ -773,5 +757,286 @@ export function TimeField({ value, onChange, id, ...rest }) {
       style={{ colorScheme: "dark", textAlign: "left" }}
       {...rest}
     />
+  );
+}
+
+/* The years a goal may be filed under: the arc, plus the year you are
+   actually standing in when that is earlier than it. Planning 2027 from 2026
+   is the normal case right now, and the months before the arc opens are
+   exactly when the planning happens — a year with no tab is a year you cannot
+   write a goal in, and the three-month run-up would have nowhere to live.
+   From 2027 onward this is the arc and nothing else, so no goal's year ever
+   stops being selectable underneath it. */
+/* --- routine groups -------------------------------------------------- */
+/* The six blocks, drawn. `BLOCK_IDS` in life-state.mjs is the canonical
+   order — the one the day runs in and the one `remainingIn` ranks «فاتك»
+   against — and this only fastens the label, the icon and the tint onto
+   each id, exactly like `NAV_META` does for the tabs. A block added there
+   with no entry here renders nameless, which is a bug you see on the first
+   open rather than one that hides in a saved payload. */
+export const BLOCK_META = {
+  morning: { label: "الصباح", icon: Sunrise, tint: "#FFB020" },
+  afternoon: { label: "بعد الظهر", icon: Sun, tint: "#FF7A45" },
+  asr: { label: "بعد العصر", icon: Sunset, tint: "#FF4D8D" },
+  maghrib: { label: "بعد المغرب", icon: Moon, tint: "#9D5CFF" },
+  postisha: { label: "بعد العشاء", icon: MoonStar, tint: "#00C2FF" },
+  night: { label: "قبل النوم", icon: Bed, tint: "#5B8CFF" },
+};
+
+export const GROUPS = BLOCK_IDS.map((id) => ({ id, ...BLOCK_META[id] }));
+
+export const GROUP_BY_ID = new Map(GROUPS.map((g) => [g.id, g]));
+
+/* A habit whose block this build no longer has still has to render. The
+   night block is the honest place for it: last in the day, so nothing is
+   announced as missed on the strength of a damaged payload. */
+export const groupOf = (id) => GROUP_BY_ID.get(id) || GROUPS[GROUPS.length - 1];
+
+export const IMAGE_BUDGET = 900 * 1024; // characters of data URL
+
+export const IMAGE_STEPS = [
+  [1400, 0.78],
+  [1100, 0.72],
+  [900, 0.66],
+  [700, 0.6],
+  [520, 0.52],
+];
+
+/* A book cover is a portrait thumbnail, so its steps bound the height too
+   and start far smaller. It is the same walk and the same refusal — the
+   shelf used to have a resizer of its own that scaled once at a fixed
+   280×400 and had no `onerror` on the reader at all, so a file the browser
+   could not read left the promise pending for ever and the upload button
+   simply did nothing. One implementation, two step tables. */
+export const COVER_STEPS = [
+  [280, 0.78, 400],
+  [220, 0.7, 320],
+  [160, 0.62, 230],
+];
+
+export function shrinkImage(file, steps = IMAGE_STEPS) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("decode"));
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("canvas"));
+        let out = null;
+        for (const [maxW, quality, maxH] of steps) {
+          const scale = Math.min(
+            1,
+            maxW / img.width,
+            maxH ? maxH / img.height : 1,
+          );
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          try {
+            out = canvas.toDataURL("image/jpeg", quality);
+          } catch (e) {
+            return reject(e);
+          }
+          if (out.length <= IMAGE_BUDGET) return resolve(out);
+        }
+        /* Even the smallest step overshot — refuse rather than poison the
+           quota with something the next write cannot save alongside. */
+        reject(new Error("too-large"));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+
+export const CUP_FORMS = ["كوب", "كوبان", "أكواب", "كوبًا"];
+
+export const cupWord = (n) => arCount(n, CUP_FORMS);
+
+/* The six rows, in the order of the day. «الشروق» is not a prayer and is
+   marked so: it is the end of Fajr's window, which is why it is shown. */
+export const PRAYERS = [
+  { id: "fajr", label: "الفجر", icon: Sunrise, tint: "#5B8CFF" },
+  { id: "sunrise", label: "الشروق", icon: Sun, tint: "#FFB020", mark: true },
+  { id: "dhuhr", label: "الظهر", icon: Sun, tint: "#FF7A45" },
+  { id: "asr", label: "العصر", icon: Sunset, tint: "#FF4D8D" },
+  { id: "maghrib", label: "المغرب", icon: Moon, tint: "#9D5CFF" },
+  { id: "isha", label: "العشاء", icon: MoonStar, tint: "#00C2FF" },
+];
+
+/* Saudi first, because that is where this is lived. Coordinates are the city
+   centre and the offset is standard time — the Kingdom has no DST, so a
+   stored number is safe here in a way it would not be in Europe. */
+export const clockAt = (h) => {
+  if (h === null || !Number.isFinite(h)) return "—";
+  const total = Math.round(fixHour(h) * 60);
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(
+    total % 60,
+  ).padStart(2, "0")}`;
+};
+
+/* Which prayer is next, and how long until it. Isha is the last row of the
+   day, so after it the answer is tomorrow's Fajr — computed from tomorrow's
+   own date rather than reused, because a date boundary moves it by minutes.
+   «الشروق» is skipped: it is a window's end, not something you wait for. */
+export function nextPrayer(place, now = new Date()) {
+  const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  const today = prayerTimes(place, now);
+  for (const p of PRAYERS) {
+    if (p.mark) continue;
+    const t = today[p.id];
+    if (t === null || !Number.isFinite(t)) continue;
+    const at = fixHour(t) * 60;
+    if (at > mins) return { ...p, at, left: Math.round(at - mins) };
+  }
+  const tomorrow = new Date(now.getTime());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const t = prayerTimes(place, tomorrow).fajr;
+  if (t === null || !Number.isFinite(t)) return null;
+  const at = fixHour(t) * 60;
+  return { ...PRAYERS[0], at, left: Math.round(at + 1440 - mins), tomorrow: true };
+}
+
+/* «قبل ٣ أيام», but «اليوم» at zero — nobody says «قبل ٠ يومًا». */
+export function Since({ day }) {
+  const n = daysBetween(day);
+  if (n === 0) return "اليوم";
+  return (
+    <>
+      قبل{" "}
+      <span dir="ltr" className="tabular-nums">
+        {n}
+      </span>{" "}
+      {dayWord(n)}
+    </>
+  );
+}
+
+/* Advances on every open, and again on tap. Keying it to the day of the
+   month was the literal spec but meant the card never visibly moved within
+   a day — the cue is only motivating if it is actually new. The cursor
+   persists so consecutive opens walk the list instead of repeating. */
+export const QUOTE_KEY = "life-os-2027:quote";
+
+/* The library has its own cue, about reading rather than about the day.
+   Same walk-on-open behaviour as the daily one, its own cursor. */
+export const READ_KEY = "life-os-2027:read-quote";
+
+export function useDailyQuote(list, key = QUOTE_KEY) {
+  const total = list.length;
+  const [i, setI] = useState(() => {
+    let prev = -1;
+    try {
+      prev = parseInt(window.localStorage.getItem(key), 10);
+    } catch {
+      /* storage blocked — fall back to the day of the month */
+    }
+    const base = total || 1;
+    const next = Number.isFinite(prev)
+      ? (prev + 1) % base
+      : new Date().getDate() % base;
+    try {
+      window.localStorage.setItem(key, String(next));
+    } catch {
+      /* per-viewer convenience only */
+    }
+    return next;
+  });
+
+  const shuffle = useCallback(() => {
+    setI((cur) => {
+      const next = total ? (cur + 1) % total : 0;
+      try {
+        window.localStorage.setItem(key, String(next));
+      } catch {
+        /* per-viewer convenience only */
+      }
+      return next;
+    });
+  }, [total, key]);
+
+  /* The cursor can outrun the list once the user deletes a quote, so it is
+     wrapped at read time rather than trusted. */
+  const quote = total ? list[i % total] : null;
+  return [quote, shuffle];
+}
+
+/* --- the eight seconds after a delete --------------------------------- *
+ *  Every destructive button in this app was immediate and final, and three
+ *  of them sit a few pixels from a button that is not. A habit deleted by a
+ *  slip took its whole run with it, and the only route back was the import
+ *  box and whatever the disk happened to hold.
+ *
+ *  So a delete keeps the list it replaced for eight seconds. Not a diff and
+ *  not a reverse-patch: the whole array as it stood, put back wholesale,
+ *  which is the only way the row returns *in its own place* rather than at
+ *  the end. Eight seconds because that is long enough to read a toast and
+ *  reach it, and short enough that the snapshot is not quietly holding a
+ *  deleted book alive for the rest of the session.
+ *
+ *  A context rather than a prop, because the delete buttons are scattered
+ *  across sixteen modules and threading a callback to all of them is how a
+ *  new one quietly ships without an undo.
+ * ---------------------------------------------------------------------- */
+export const UNDO_MS = 8000;
+
+export const UndoBus = React.createContext(null);
+
+/* `arm(label, before)` — `before` is the slice of state to restore, e.g.
+   `{ habits: s.habits }`. Spread back over whatever the state is by then, so
+   an unrelated change made in those eight seconds is not undone with it. */
+export function useUndo() {
+  return useContext(UndoBus) || noUndo;
+}
+
+export const noUndo = () => {};
+
+export function UndoToast({ undo, onUndo, onDismiss }) {
+  /* The countdown is the toast's own, restarted whenever a new delete arms
+     it — keyed on the stamp so a second delete gets its own eight seconds
+     rather than inheriting the tail of the first. */
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(onDismiss, UNDO_MS);
+    return () => clearTimeout(t);
+  }, [undo, onDismiss]);
+
+  if (!undo) return null;
+  return (
+    <div
+      /* Above `BottomTabs` on a phone, and clear of the stray-copy and
+         disk-stopped bars that live at the same edge. Centred with
+         `inset-x`/`mx-auto`, never a translate: `.los-in` owns `transform`
+         on this element and a Tailwind translate utility would be discarded. */
+      className="los-in fixed inset-x-3 z-[88] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-2.5 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(420px,92vw)]"
+      style={{
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
+        backgroundColor: T.cardSolid,
+        backgroundImage: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
+        borderColor: `${T.accent}73`,
+        boxShadow: `0 0 50px -14px ${T.accent}`,
+      }}
+      role="status"
+    >
+      <p className="text-[12px] font-bold" style={{ color: T.fg }}>
+        {undo.label}
+      </p>
+      <Btn size="sm" className="shrink-0" onClick={onUndo}>
+        <Undo2 size={13} /> تراجع
+      </Btn>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="إخفاء"
+        className="shrink-0 rounded-lg p-1 transition-colors hover:bg-white/10"
+        style={{ color: T.faint }}
+      >
+        <X size={13} />
+      </button>
+    </div>
   );
 }

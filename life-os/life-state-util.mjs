@@ -71,9 +71,6 @@ export const addDays = (ds, n) => {
   return fmtDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
 };
 
-/* Signed, unlike `daysBetween`, which floors at zero for the streak
-   counters. A calendar needs the sign: «متأخر ٣ أيام» and «بعد ٣ أيام» are
-   opposite facts, and clamping collapses them into the same number. */
 export const hhmm = (v, fallback = "") => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
   if (!m) return fallback;
@@ -97,4 +94,52 @@ export const clampNum = (v, min, max, fallback) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+};
+
+/* Whole days between two day keys. Parsed at local midnight on purpose —
+   `new Date("2027-01-05")` is UTC, which rolls the count a day early for
+   anyone east of Greenwich. */
+export const daysBetween = (fromKey, toKey = dayKey()) => {
+  const a = new Date(`${fromKey}T00:00:00`);
+  const b = new Date(`${toKey}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+};
+
+/* One confrontation with the urge, win or lose. `kind` is the only field
+   that separates a relapse from a resisted craving, so both can be counted
+   on one scale — a screen that only records the losses makes the user look
+   weaker than he is, and he stops opening it. A log written before the tags
+   existed keeps `tag: ""` and is simply skipped by the breakdowns. */
+export const stamp = () => ({
+  at: dayKey(),
+  hour: new Date().getHours(),
+  dow: logicalNow().getDay(),
+});
+
+/* Days remaining, counted from calendar boundaries rather than the clock: on
+   the last day of a quarter you still have that whole day, so the floor of a
+   live window is 1. Negative means the window has closed. */
+export function daysTo(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  if (!Number.isFinite(y)) return null;
+  const end = new Date(y, m - 1, d);
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((end - midnight) / 86400000) + 1;
+}
+
+/* Day keys are calendar squares, not instants, and every helper here parses
+   them at LOCAL midnight. `new Date("2027-01-05")` is read as UTC and lands
+   on the 4th for anyone east of Greenwich — which is all of the Gulf, every
+   day of the year.
+
+   Signed, unlike `daysBetween`, which floors at zero for the streak
+   counters. A calendar needs the sign: «متأخر ٣ أيام» and «بعد ٣ أيام» are
+   opposite facts, and clamping collapses them into the same number. */
+export const daysUntil = (ds, fromKey = dayKey()) => {
+  const a = keyToDate(fromKey);
+  const b = keyToDate(ds);
+  if (!a || !b) return null;
+  return Math.round((b - a) / 86400000);
 };

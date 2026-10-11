@@ -1,5 +1,6 @@
-import { safeUrl, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, DAY_FORMS, dayWord, daysPhrase, MIN_FORMS, minWord, STEP_FORMS, stepWord, MEET_FORMS, meetWord, TIMES_FORMS, timesWord, FALL_FORMS, fallWord, HOUR_FORMS, hourWord, COURSE_FORMS, courseWord, WEEK_FORMS, weekWord, LECTURE_FORMS, lectureWord, TASK_FORMS, taskWord, tasksPhrase, forgivenPhrase, COUNTED_FORMS, countedWord, daysUntil, minsOf, nowMins, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, gradePoints, gradeFromPct, coursesIn, termOf, courseIn, courseName, daySections, nextSection, useMinuteClock } from "./life-shared.jsx";
-import { UNI_VIEWS, nearestGrade, GPA_BANDS, gpaBand, ABSENCE_LIMIT, uniKindOf, UNI_EXAM_KINDS, gpaNeeded, courseStanding, needFor, meetingsOf, absenceCapOf, ATTEND_BANDS, attendBand, gpaOf, uniDue, DAY_FROM, DAY_TO, spanPct, NumField, GradePicker, StatTile, CourseDesk, CourseCard, CourseModal, TermModal, UniTaskModal, UniTaskRow, WeekGrid, UniModule } from "./life-uni.jsx";
+import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, clockAt, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./life-shared.jsx";
+import { uniKindOf, uniDue, UniModule } from "./life-uni.jsx";
+import { TopThree, useHabitTick, ReadLogModal, TaskChip, ReflectionModal } from "./life-day.jsx";
 import { FinanceModule } from "./life-finance.jsx";
 import { PromptsModule, TacticalModule, PipelineModule, DeepWorkModule } from "./life-desks.jsx";
 import { DataHealth, RecoveryModal } from "./life-tools.jsx";
@@ -9,10 +10,9 @@ import React, {
   useEffect,
   useMemo,
   useCallback,
-  useContext,
   useRef,
 } from "react";
-import { createRoot, createPortal } from "react-dom";
+import { createRoot } from "react-dom";
 import {
   Menu,
   X,
@@ -36,10 +36,6 @@ import {
   Zap,
   Trash,
   Sunrise,
-  Sun,
-  Sunset,
-  Moon,
-  Bed,
   GripVertical,
   RotateCcw,
   TrendingUp,
@@ -55,7 +51,6 @@ import {
   Timer,
   Play,
   Pause,
-  Square,
   Download,
   Upload,
   Coins,
@@ -68,7 +63,6 @@ import {
   Copy,
   CheckCheck,
   ArrowLeft,
-  ArrowRight,
   ChevronUp,
   ChevronDown,
   MessageSquareQuote,
@@ -120,12 +114,10 @@ import {
   Minus,
   MapPin,
   Repeat,
-  Percent,
   Bell,
   CalendarClock,
   CalendarPlus,
   School,
-  BookMarked,
   AlarmClock,
   CircleDot,
   Hash,
@@ -137,15 +129,24 @@ import {
   Link2,
   Layers,
   TrendingDown,
-  Undo2,
   History,
   Archive,
-  GitCompare,
   Footprints,
   Feather,
 } from "lucide-react";
 
 import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
+
+/* --- persistence ------------------------------------------------------ */
+/* Every name this file reads off the storage module, and the list is checked
+   by a test rather than by eye. `api`, `UI_KEY`, `OPENED_KEY` and
+   `HANDOVER_KEY` were all left out of it once, and because each of their four
+   call sites sits inside the try/catch that storage code is required to have,
+   not one of them said a word: `pullDisk` threw on `api` before it could read
+   the disk, so a fresh profile booted on seed data at revision 0 and every
+   save after it was refused as a conflict. A missing import here is not a
+   crash, it is a feature that quietly stops existing. */
+import { saveAutoBackup, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE_KEY, served, strayCopy, syncLocal, readRev, writeRev, DISK_STUCK_MS, onSyncResult, postSync, syncOut, flushSync, adoptDisk, tabId, readLock, writeLock, dropLock, claimHandover, LEASE_BEAT, LEASE_STALE } from "./life-storage.mjs";
 
 /* The state itself — the day boundary, the seeds, the shapes, the migration
    and the discipline score — lives in ./life-state.mjs so that `node --test`
@@ -155,25 +156,18 @@ import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
    helper left behind is a ReferenceError at first render, which is a blank
    white page. */
 import {
-  addDays,
   APP_STAGES,
   appShape,
-  ARC,
   badHabitShape,
-  BLOCK_IDS,
   blockRank,
   bookShape,
   carryOf,
   clampGoal,
-  clampNum,
   coreOf,
   CORE_CAP,
   COST_TYPES,
   costType,
-  COURSE_TINTS,
-  courseShape,
   currentQuarter,
-  DAY_START_HOUR,
   dayKey,
   disciplineOf,
   EVENT_KINDS,
@@ -182,8 +176,6 @@ import {
   freshState,
   GOAL_YEARS,
   goalShape,
-  gradeOf,
-  GRADES,
   hhmm,
   HISTORY_CAP,
   HORIZONS,
@@ -191,13 +183,11 @@ import {
   isKey,
   keyToDate,
   logicalNow,
-  markShape,
   migrate,
   moodOf,
   MORE_IDS,
   NAV_IDS,
   navSplit,
-  northStarShape,
   obj,
   orderNavIds,
   parentHorizon,
@@ -214,12 +204,10 @@ import {
   rows,
   SCHEMA,
   setDayDone,
-  slotShape,
   sprintShape,
   scoredOf,
   streakBaseFrom,
   streakRunFrom,
-  STREAK_FORGIVE,
   habitShape,
   HABIT_MIN_MAX,
   comebackFrom,
@@ -227,29 +215,22 @@ import {
   TAB_BAR,
   storyShape,
   tagOf,
-  TERM_WEEKS_DEFAULT,
   TOP_TASK_CAP,
   taskShape,
   capToday,
   STEP_MAX,
   tomorrowKey,
   prepShape,
-  prepPicks,
-  prepFull,
-  prepHas,
   prepPickAdd,
   prepPickDrop,
   prepPickEvent,
   prepReady,
   STREAK_TARGET,
-  termShape,
   uid,
-  UNI_DAYS,
   UNI_TASK_KINDS,
   uniDayOf,
   uniPending,
   uniShape,
-  uniTaskShape,
   URGE_MOODS,
   URGE_TAGS,
   urgeShape,
@@ -258,6 +239,50 @@ import {
   WATER_GOAL_MAX,
   WORD_MAX,
   yesterdayKey,
+  daysBetween,
+  stamp,
+  daysTo,
+  bandAt,
+  bandOf,
+  cleanDays,
+  bleedSaved,
+  bestRun,
+  MIRROR_MIN,
+  breakerEvents,
+  weakSpots,
+  tagFallRate,
+  dangerWatch,
+  breakerToday,
+  inReflectWindow,
+  REFLECT_SNOOZE_MS,
+  REFLECT_MAX_SHOWS,
+  historyIndex,
+  habitStreak,
+  habitBest,
+  habitTally,
+  habitStrip,
+  levelOf,
+  bookForHabit,
+  sumPages,
+  readStreak,
+  pctOf,
+  quarterOf,
+  pillarOf,
+  horizonOf,
+  goalPct,
+  goalEnd,
+  windowOf,
+  windowStand,
+  openingWindow,
+  minsIn,
+  daysUntil,
+  kindOf,
+  repeatOf,
+  isEventDone,
+  eventsIn,
+  upcoming,
+  upcomingRows,
+  alertsOf,
 } from "./life-state.mjs";
 
 /* --- the icons, fastened on ------------------------------------------- *
@@ -336,7 +361,6 @@ fastenIcons(UNI_TASK_KINDS, {
  *  stays dependency-free and drops straight into any React app.
  * ==================================================================== */
 
-import { T, GLASS, useBurst, usePrefersReducedMotion, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing } from "./life-shared.jsx";
 
 /* The failure banner shouts; nothing ever said the quiet half. A tick that
    lands and is never confirmed looks exactly like one that was dropped, and
@@ -505,43 +529,11 @@ const nudgeInList = (ids, id, dir) => {
   return next;
 };
 
-const quarterOf = (id) => QUARTERS.find((q) => q.id === id) || QUARTERS[0];
 
-const pillarOf = (id) => PILLARS.find((p) => p.id === id) || PILLARS[5];
-
-const horizonOf = (id) => HORIZONS.find((h) => h.id === id) || HORIZONS[2];
 /* The horizon a goal's parent must belong to. The top of the chain has none,
    which is also how the editor knows to hide the parent picker. */
 const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
 
-/* The years a goal may be filed under: the arc, plus the year you are
-   actually standing in when that is earlier than it. Planning 2027 from 2026
-   is the normal case right now, and the months before the arc opens are
-   exactly when the planning happens — a year with no tab is a year you cannot
-   write a goal in, and the three-month run-up would have nowhere to live.
-   From 2027 onward this is the arc and nothing else, so no goal's year ever
-   stops being selectable underneath it. */
-/* --- routine groups -------------------------------------------------- */
-/* The six blocks, drawn. `BLOCK_IDS` in life-state.mjs is the canonical
-   order — the one the day runs in and the one `remainingIn` ranks «فاتك»
-   against — and this only fastens the label, the icon and the tint onto
-   each id, exactly like `NAV_META` does for the tabs. A block added there
-   with no entry here renders nameless, which is a bug you see on the first
-   open rather than one that hides in a saved payload. */
-const BLOCK_META = {
-  morning: { label: "الصباح", icon: Sunrise, tint: "#FFB020" },
-  afternoon: { label: "بعد الظهر", icon: Sun, tint: "#FF7A45" },
-  asr: { label: "بعد العصر", icon: Sunset, tint: "#FF4D8D" },
-  maghrib: { label: "بعد المغرب", icon: Moon, tint: "#9D5CFF" },
-  postisha: { label: "بعد العشاء", icon: MoonStar, tint: "#00C2FF" },
-  night: { label: "قبل النوم", icon: Bed, tint: "#5B8CFF" },
-};
-const GROUPS = BLOCK_IDS.map((id) => ({ id, ...BLOCK_META[id] }));
-const GROUP_BY_ID = new Map(GROUPS.map((g) => [g.id, g]));
-/* A habit whose block this build no longer has still has to render. The
-   night block is the honest place for it: last in the day, so nothing is
-   announced as missed on the strength of a damaged payload. */
-const groupOf = (id) => GROUP_BY_ID.get(id) || GROUPS[GROUPS.length - 1];
 
 /* --- Eisenhower quadrants -------------------------------------------- */
 const QUADRANTS = [
@@ -575,83 +567,6 @@ const QUADRANTS = [
   },
 ];
 
-const IMAGE_BUDGET = 900 * 1024; // characters of data URL
-const IMAGE_STEPS = [
-  [1400, 0.78],
-  [1100, 0.72],
-  [900, 0.66],
-  [700, 0.6],
-  [520, 0.52],
-];
-
-function shrinkImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("read"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("decode"));
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject(new Error("canvas"));
-        let out = null;
-        for (const [maxW, quality] of IMAGE_STEPS) {
-          const scale = Math.min(1, maxW / img.width);
-          canvas.width = Math.max(1, Math.round(img.width * scale));
-          canvas.height = Math.max(1, Math.round(img.height * scale));
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          try {
-            out = canvas.toDataURL("image/jpeg", quality);
-          } catch (e) {
-            return reject(e);
-          }
-          if (out.length <= IMAGE_BUDGET) return resolve(out);
-        }
-        /* Even the smallest step overshot — refuse rather than poison the
-           quota with something the next write cannot save alongside. */
-        reject(new Error("too-large"));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-/* The library has its own cue, about reading rather than about the day.
-   Same walk-on-open behaviour as the daily one, its own cursor. */
-/* --- persistence ------------------------------------------------------ */
-/* Every name this file reads off the storage module, and the list is checked
-   by a test rather than by eye. `api`, `UI_KEY`, `OPENED_KEY` and
-   `HANDOVER_KEY` were all left out of it once, and because each of their four
-   call sites sits inside the try/catch that storage code is required to have,
-   not one of them said a word: `pullDisk` threw on `api` before it could read
-   the disk, so a fresh profile booted on seed data at revision 0 and every
-   save after it was refused as a conflict. A missing import here is not a
-   crash, it is a feature that quietly stops existing. */
-import { saveAutoBackup, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE_KEY, primaryOrigin, served, strayCopy, syncLocal, readRev, writeRev, DISK_STUCK_MS, onSyncResult, postSync, syncOut, flushSync, adoptDisk, tabId, readLock, writeLock, dropLock, claimHandover, SYNC_DEBOUNCE, LEASE_BEAT, LEASE_STALE } from "./life-storage.mjs";
-/* --- the evening prompt's window -------------------------------------- *
- *  The day here does not end at midnight, it ends at DAY_START_HOUR — so
- *  its evening runs from 20:00 round past midnight to that hour. Testing
- *  the wall clock with `h >= 20` left 00:00–03:59 silent, which is exactly
- *  when someone reviewing «the day that just ended» is awake, and exactly
- *  the hours this app's own «السهر بعد منتصف الليل» assumes he is up for.
- *  Past midnight the prompt never came, and at 04:00 the day rolled over
- *  and took the question with it.
- * ---------------------------------------------------------------------- */
-const REFLECT_FROM_HOUR = 20;
-const inReflectWindow = (d = new Date()) => {
-  const h = d.getHours();
-  return h >= REFLECT_FROM_HOUR || h < DAY_START_HOUR;
-};
-/* «لاحقًا» is a button that says *later*, so it has to mean later. Three
-   showings an evening, an hour apart, then silence — a prompt that returns
-   forever is one you learn to dismiss without reading. */
-const REFLECT_SNOOZE_MS = 60 * 60 * 1000;
-const REFLECT_MAX_SHOWS = 3;
-
-const CUP_FORMS = ["كوب", "كوبان", "أكواب", "كوبًا"];
-const cupWord = (n) => arCount(n, CUP_FORMS);
 
 /* --- prayer times ----------------------------------------------------- *
  *  The maths moved to ./prayer-times.mjs, because the sync server fires the
@@ -660,49 +575,6 @@ const cupWord = (n) => arCount(n, CUP_FORMS);
  *  file — the split is in the source, not in what ships.
  * ---------------------------------------------------------------------- */
 
-/* The six rows, in the order of the day. «الشروق» is not a prayer and is
-   marked so: it is the end of Fajr's window, which is why it is shown. */
-const PRAYERS = [
-  { id: "fajr", label: "الفجر", icon: Sunrise, tint: "#5B8CFF" },
-  { id: "sunrise", label: "الشروق", icon: Sun, tint: "#FFB020", mark: true },
-  { id: "dhuhr", label: "الظهر", icon: Sun, tint: "#FF7A45" },
-  { id: "asr", label: "العصر", icon: Sunset, tint: "#FF4D8D" },
-  { id: "maghrib", label: "المغرب", icon: Moon, tint: "#9D5CFF" },
-  { id: "isha", label: "العشاء", icon: MoonStar, tint: "#00C2FF" },
-];
-
-/* Saudi first, because that is where this is lived. Coordinates are the city
-   centre and the offset is standard time — the Kingdom has no DST, so a
-   stored number is safe here in a way it would not be in Europe. */
-const clockAt = (h) => {
-  if (h === null || !Number.isFinite(h)) return "—";
-  const total = Math.round(fixHour(h) * 60);
-  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(
-    total % 60,
-  ).padStart(2, "0")}`;
-};
-
-/* Which prayer is next, and how long until it. Isha is the last row of the
-   day, so after it the answer is tomorrow's Fajr — computed from tomorrow's
-   own date rather than reused, because a date boundary moves it by minutes.
-   «الشروق» is skipped: it is a window's end, not something you wait for. */
-function nextPrayer(place, now = new Date()) {
-  const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  const today = prayerTimes(place, now);
-  for (const p of PRAYERS) {
-    if (p.mark) continue;
-    const t = today[p.id];
-    if (t === null || !Number.isFinite(t)) continue;
-    const at = fixHour(t) * 60;
-    if (at > mins) return { ...p, at, left: Math.round(at - mins) };
-  }
-  const tomorrow = new Date(now.getTime());
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const t = prayerTimes(place, tomorrow).fajr;
-  if (t === null || !Number.isFinite(t)) return null;
-  const at = fixHour(t) * 60;
-  return { ...PRAYERS[0], at, left: Math.round(at + 1440 - mins), tomorrow: true };
-}
 
 /* --- habit breaker ---------------------------------------------------- *
  *  The mirror image of a routine habit: a streak you defend rather than
@@ -717,17 +589,6 @@ const MILESTONES = [
 ];
 const MILESTONE_CAP = MILESTONES[MILESTONES.length - 1].d;
 
-const HOUR_BANDS = [
-  { id: "dawn", label: "من الفجر إلى الضحى", from: 4, to: 10 },
-  { id: "forenoon", label: "من الضحى إلى الظهر", from: 10, to: 14 },
-  { id: "afternoon", label: "من الظهر إلى المغرب", from: 14, to: 18 },
-  { id: "evening", label: "من المغرب إلى العشاء", from: 18, to: 21 },
-  { id: "night", label: "من العشاء إلى منتصف الليل", from: 21, to: 24 },
-  { id: "small", label: "بعد منتصف الليل", from: 0, to: 4 },
-];
-const bandAt = (h) =>
-  HOUR_BANDS.find((b) => h >= b.from && h < b.to) || HOUR_BANDS[0];
-const bandOf = (id) => HOUR_BANDS.find((b) => b.id === id) || null;
 
 /* Four templates, because the hardest part of this screen is the blank
    form: a user who cannot phrase his own habit writes "التسويف" and stops.
@@ -773,165 +634,6 @@ const BAD_PRESETS = [
 ];
 
 
-/* Whole days between two day keys. Parsed at local midnight on purpose —
-   `new Date("2027-01-05")` is UTC, which rolls the count a day early for
-   anyone east of Greenwich. */
-const daysBetween = (fromKey, toKey = dayKey()) => {
-  const a = new Date(`${fromKey}T00:00:00`);
-  const b = new Date(`${toKey}T00:00:00`);
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
-  return Math.max(0, Math.round((b - a) / 86400000));
-};
-
-/* One confrontation with the urge, win or lose. `kind` is the only field
-   that separates a relapse from a resisted craving, so both can be counted
-   on one scale — a screen that only records the losses makes the user look
-   weaker than he is, and he stops opening it. A log written before the tags
-   existed keeps `tag: ""` and is simply skipped by the breakdowns. */
-const stamp = () => ({
-  at: dayKey(),
-  hour: new Date().getHours(),
-  dow: logicalNow().getDay(),
-});
-
-
-/* «قبل ٣ أيام», but «اليوم» at zero — nobody says «قبل ٠ يومًا». */
-function Since({ day }) {
-  const n = daysBetween(day);
-  if (n === 0) return "اليوم";
-  return (
-    <>
-      قبل{" "}
-      <span dir="ltr" className="tabular-nums">
-        {n}
-      </span>{" "}
-      {dayWord(n)}
-    </>
-  );
-}
-
-const cleanDays = (b) => daysBetween(b.startDate);
-const bleedSaved = (b) => cleanDays(b) * (b.costPerDay || 0);
-/* The longest run ever, not just the current one — a relapse log carries the
-   days it cost, so the record survives the reset that ended it. */
-const bestRun = (b) =>
-  Math.max(cleanDays(b), ...(b.logs || []).map((l) => l.days || 0), 0);
-
-/* --- diagnosis -------------------------------------------------------- *
- *  Everything the mirror claims is counted here and nowhere else, so the
- *  card can never drift from the numbers behind it. Each breakdown counts
- *  on its *own* denominator — an entry with a mood but no tag must not
- *  deflate the tag percentages, or the first few logs read as noise.
- * ---------------------------------------------------------------------- */
-const MIRROR_MIN = 4;
-
-const breakerEvents = (list) =>
-  (list || []).flatMap((h) => [
-    ...(h.logs || []).map((l) => ({ ...l, kind: "fall", habit: h.title })),
-    ...(h.urges || []).map((u) => ({ ...u, kind: "hold", habit: h.title })),
-  ]);
-
-/* The commonest value of one field, with the share it holds. Returns null
-   rather than a zeroed row when nothing carries the field — "٠٪ من
-   مواجهاتك" is a claim about data that does not exist. */
-const topShare = (rows, pick) => {
-  const tally = new Map();
-  rows.forEach((r) => {
-    const v = pick(r);
-    if (v === null || v === undefined || v === "") return;
-    tally.set(v, (tally.get(v) || 0) + 1);
-  });
-  if (!tally.size) return null;
-  const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]);
-  const total = sorted.reduce((n, [, c]) => n + c, 0);
-  return {
-    value: sorted[0][0],
-    count: sorted[0][1],
-    total,
-    pct: Math.round((sorted[0][1] / total) * 100),
-    rows: sorted.map(([value, count]) => ({
-      value,
-      count,
-      pct: Math.round((count / total) * 100),
-    })),
-  };
-};
-
-function weakSpots(list) {
-  const all = breakerEvents(list);
-  const falls = all.filter((e) => e.kind === "fall");
-  const holds = all.filter((e) => e.kind === "hold");
-  const runs = falls.map((f) => Number(f.days) || 0);
-
-  /* A trend wants two halves to compare, and halves of fewer than four runs
-     are one bad week against another. Below that it is simply not claimed —
-     an app that tells you you are "تتحسّن" off two data points teaches you
-     to distrust it. */
-  let trend = null;
-  if (runs.length >= 4) {
-    const half = Math.floor(runs.length / 2);
-    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
-    const early = mean(runs.slice(0, half));
-    const late = mean(runs.slice(half));
-    if (late - early >= 1) trend = { dir: "up", early, late };
-    else if (early - late >= 1) trend = { dir: "down", early, late };
-    else trend = { dir: "flat", early, late };
-  }
-
-  return {
-    total: all.length,
-    falls: falls.length,
-    holds: holds.length,
-    ready: all.length >= MIRROR_MIN,
-    hold: all.length ? Math.round((holds.length / all.length) * 100) : 0,
-    avgRun: runs.length ? runs.reduce((a, b) => a + b, 0) / runs.length : 0,
-    trend,
-    tag: topShare(all, (e) => e.tag),
-    /* The tag that most often *wins* — separate from the commonest tag on
-       purpose. A trigger you meet ten times and survive nine is not your
-       weak point; the one you meet three times and lose three is. */
-    fatal: topShare(falls, (e) => e.tag),
-    band: topShare(all, (e) =>
-      Number.isFinite(e.hour) ? bandAt(e.hour).id : null,
-    ),
-    dow: topShare(all, (e) => (Number.isFinite(e.dow) ? e.dow : null)),
-    mood: topShare(all, (e) => e.mood),
-  };
-}
-
-/* How often a single tag ends in a fall. Printed beside the tag's bar, it
-   turns a frequency list into a danger list. */
-const tagFallRate = (rows, id) => {
-  const met = rows.filter((e) => e.tag === id);
-  if (!met.length) return null;
-  const lost = met.filter((e) => e.kind === "fall").length;
-  return { met: met.length, lost, pct: Math.round((lost / met.length) * 100) };
-};
-
-/* --- the guard -------------------------------------------------------- *
- *  A diagnosis nobody acts on is trivia. The mirror already knows which
- *  band of the day takes the user down; this turns that into a warning that
- *  arrives *before* the hour does, which is the only moment it can help.
- * ---------------------------------------------------------------------- */
-const DANGER_MIN_HITS = 2;
-const DANGER_MIN_SHARE = 35;
-
-/* The band only counts as *the* danger hour when it holds a real share of
-   the confrontations. A band that leads by one event out of nine is a
-   coincidence, and a warning that fires on a coincidence is a warning the
-   user learns to scroll past. */
-function dangerWatch(list) {
-  const w = weakSpots(list);
-  if (!w.ready || !w.band) return null;
-  if (w.band.count < DANGER_MIN_HITS || w.band.pct < DANGER_MIN_SHARE) return null;
-  const share = w.fatal || w.tag;
-  return {
-    band: bandOf(w.band.value),
-    pct: w.band.pct,
-    tag: share ? tagOf(share.value) : null,
-  };
-}
-
 /* The current band, re-checked once a minute and again whenever the tab is
    looked at. A background tab throttles its intervals hard, and the guard
    that matters most is the one already waiting when the user comes back. */
@@ -951,189 +653,6 @@ function useHourBand() {
   return id;
 }
 
-/* Today's confrontations, for the archive row. Counted from the one place
-   they live, so the calendar can never claim a day the breaker disagrees
-   with. */
-const breakerToday = (list, day = dayKey()) => {
-  const rows = breakerEvents(list).filter((e) => e.at === day);
-  return {
-    holds: rows.filter((e) => e.kind === "hold").length,
-    falls: rows.filter((e) => e.kind === "fall").length,
-  };
-};
-
-
-/* The book a reading habit points at right now, or null. */
-function bookForHabit(habit, books) {
-  if (!habit?.book) return null;
-  if (habit.book === READ_ACTIVE)
-    return books.find((b) => b.status === "reading") || null;
-  return books.find((b) => b.id === habit.book) || null;
-}
-
-/* `(log || [])` like every other list reader here. These two were the only
-   ones that assumed an array outright, which made them the only two that
-   could take the render down over a field the data layer had not filled. */
-const sumPages = (log) =>
-  rows(log).reduce((n, r) => n + (Number.isFinite(r.pages) ? r.pages : 0), 0);
-
-/* Days in a row, counting back from today, on which the goal was met. A
-   streak that ended yesterday still counts today — the day is not over. */
-function readStreak(log, goal) {
-  /* Through `rows`, not just `|| []`: it also drops a hole, so one bad
-     entry cannot throw on `r.date` halfway through the walk. The local
-     name avoids shadowing the helper itself. */
-  const list = rows(log);
-  if (!list.length || goal <= 0) return 0;
-  const byDay = new Map();
-  for (const r of list)
-    byDay.set(r.date, (byDay.get(r.date) || 0) + (r.pages || 0));
-
-  const d = logicalNow();
-  if ((byDay.get(dayKey(d)) || 0) < goal) d.setDate(d.getDate() - 1);
-
-  let n = 0;
-  for (;;) {
-    if ((byDay.get(dayKey(d)) || 0) < goal) return n;
-    n += 1;
-    d.setDate(d.getDate() - 1);
-  }
-}
-
-/* --- the habit ledger ------------------------------------------------- *
- *  Every figure here is derived from `history` and nothing is stored twice.
- *  The archive already writes, per day, which habit ids were ticked (`done`)
- *  and which were on the roster at all (`all`) — which is exactly enough to
- *  answer «ما العادة التي أصمد عليها؟» without a second ledger that could
- *  drift out of step with the first.
- *
- *  `all` is what makes the answers honest. A habit added in November was not
- *  "missed" every day of October: it was not asked. A day whose row predates
- *  the roster is unknown, not a miss, and renders as a gap.
- * ---------------------------------------------------------------------- */
-const historyIndex = (history) => {
-  const by = new Map();
-  for (const h of rows(history))
-    if (typeof h.date === "string" && Array.isArray(h.done)) by.set(h.date, h);
-  return by;
-};
-
-/* Was this habit on the roster that day? A row written before the roster was
-   archived has no `all`, so it can only say "there was a day here". */
-const askedOn = (row, id) =>
-  !row ? false : Array.isArray(row.all) ? row.all.includes(id) : true;
-const keptOn = (row, id) => !!row && row.done.includes(id);
-
-/* Days in a row, walking back from today. A run that ended yesterday still
-   stands today — the day is not over, and zeroing it at 00:00 would punish
-   someone who ticks his night habits at eleven. Bounded by HISTORY_CAP: the
-   walk stops at the first day with no row at all. */
-function habitStreak(by, id) {
-  const d = logicalNow();
-  if (!keptOn(by.get(dayKey(d)), id)) d.setDate(d.getDate() - 1);
-  let n = 0;
-  for (;;) {
-    if (!keptOn(by.get(dayKey(d)), id)) return n;
-    n += 1;
-    d.setDate(d.getDate() - 1);
-  }
-}
-
-/* The longest run ever recorded, which outlives the streak that ended it.
-   Walks the archive in date order and only treats two rows as consecutive
-   when their dates genuinely are — a gap in the archive breaks the run
-   rather than silently joining across it. */
-function habitBest(by, id) {
-  const days = [...by.keys()].filter((k) => keptOn(by.get(k), id)).sort();
-  let best = 0;
-  let run = 0;
-  let prev = null;
-  for (const k of days) {
-    const [y, m, d] = k.split("-").map(Number);
-    const t = new Date(y, m - 1, d).getTime();
-    run = prev !== null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1;
-    if (run > best) best = run;
-    prev = t;
-  }
-  return best;
-}
-
-/* Kept out of asked, over a window of days — `0` means the whole archive.
-   The denominator counts only days the habit was actually on the roster. */
-function habitTally(by, id, win = 0) {
-  let kept = 0;
-  let asked = 0;
-  for (const [k, row] of by) {
-    if (win && daysBetween(k) >= win) continue;
-    if (!askedOn(row, id)) continue;
-    asked += 1;
-    if (keptOn(row, id)) kept += 1;
-  }
-  return { kept, asked, pct: asked ? Math.round((kept / asked) * 100) : 0 };
-}
-
-/* The last `n` days as a strip, oldest first, for the dot grid. Three states
-   and they are not interchangeable: kept, asked-and-missed, and never asked
-   — drawing the third as a miss is the lie this whole file exists to avoid. */
-function habitStrip(by, id, n = 30) {
-  const out = [];
-  const d = logicalNow();
-  d.setDate(d.getDate() - (n - 1));
-  for (let i = 0; i < n; i += 1) {
-    const key = dayKey(d);
-    const row = by.get(key);
-    out.push({
-      key,
-      state: !askedOn(row, id) ? "off" : keptOn(row, id) ? "kept" : "missed",
-    });
-    d.setDate(d.getDate() + 1);
-  }
-  return out;
-}
-
-function goalPct(goal, all, depth = 0) {
-  if (goal.done) return 100;
-  if (goal.target > 0)
-    return Math.min(100, Math.round((goal.current / goal.target) * 100));
-  if (goal.steps.length)
-    return Math.round(
-      (goal.steps.filter((s) => s.done).length / goal.steps.length) * 100,
-    );
-  if (depth < HORIZONS.length) {
-    const kids = all.filter((g) => g.parent === goal.id);
-    if (kids.length)
-      return Math.round(
-        kids.reduce((n, k) => n + goalPct(k, all, depth + 1), 0) / kids.length,
-      );
-  }
-  return 0;
-}
-
-/* The last day a goal has. Its own deadline when it set one, otherwise the
-   end of the window it lives in — a 90-day goal expires with its quarter and
-   a yearly one with its December, whether or not anyone typed a date. */
-function goalEnd(goal) {
-  if (goal.deadline) return goal.deadline;
-  if (goal.horizon === "quarter") {
-    const qi = QUARTERS.findIndex((q) => q.id === goal.quarter);
-    const y = goal.year || GOAL_YEARS[0];
-    return fmtDay(new Date(y, (qi < 0 ? 0 : qi) * 3 + 3, 0));
-  }
-  if (goal.horizon === "year") return `${goal.year}-12-31`;
-  return `${GOAL_YEARS[GOAL_YEARS.length - 1]}-12-31`;
-}
-
-/* Days remaining, counted from calendar boundaries rather than the clock: on
-   the last day of a quarter you still have that whole day, so the floor of a
-   live window is 1. Negative means the window has closed. */
-function daysTo(key) {
-  const [y, m, d] = key.split("-").map(Number);
-  if (!Number.isFinite(y)) return null;
-  const end = new Date(y, m - 1, d);
-  const now = new Date();
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((end - midnight) / 86400000) + 1;
-}
 
 /* --- the countdown ---------------------------------------------------- *
  *  A horizon with no clock on it is a wish. These two functions are the only
@@ -1141,73 +660,6 @@ function daysTo(key) {
  *  strip can never disagree about how much of it is left.
  * ---------------------------------------------------------------------- */
 
-/* The first and last day of a horizon's window, as date keys. */
-function windowOf(horizon, year = GOAL_YEARS[0], quarter = "q1") {
-  /* The arc, not GOAL_YEARS: the run-up year is a place to file goals, not a
-     fourth year of a three-year horizon. */
-  if (horizon === "h3") return [`${ARC[0]}-01-01`, `${ARC[ARC.length - 1]}-12-31`];
-  if (horizon === "year") return [`${year}-01-01`, `${year}-12-31`];
-  const qi = Math.max(0, QUARTERS.findIndex((q) => q.id === quarter));
-  return [fmtDay(new Date(year, qi * 3, 1)), fmtDay(new Date(year, qi * 3 + 3, 0))];
-}
-
-/* Where today stands inside that window. `left` counts the day you are
-   standing in — on the last day of a quarter you still have that whole day,
-   which is why a live window never reads zero. A window that has not opened
-   yet reports its full length rather than a negative one: «لم يبدأ» is a
-   different answer from «بقي يوم», and collapsing them is how a planner ends
-   up telling you to hurry in a quarter that starts in March. */
-function windowStand(from, to) {
-  const total = Math.max(1, daysBetween(from, to) + 1);
-  /* `daysTo` counts the day you are standing in, which is what «بقي» wants
-     and what «يبدأ بعد» does not: a window opening tomorrow starts in one
-     day, not two. The inclusive day comes back off for the start only. */
-  const untilStart = daysTo(from) === null ? null : daysTo(from) - 1;
-  const left = daysTo(to);
-  /* A window that has not opened still reports the days to its *end*, because
-     that is what «كم بقي» asks. Reporting its full span instead answered a
-     question nobody had and printed «يبدأ بعد ٩٠ يومًا» three times over,
-     which is a countdown that counts nothing. The start is said underneath,
-     as a note, and the elapsed bar stays empty until the day arrives. */
-  if (untilStart !== null && untilStart > 0)
-    return {
-      state: "soon",
-      total,
-      left: left === null ? total : Math.max(0, left),
-      gone: 0,
-      pct: 0,
-      until: untilStart,
-    };
-  if (left === null || left <= 0)
-    return { state: "done", total, left: 0, gone: total, pct: 100 };
-  return {
-    state: "live",
-    total,
-    left,
-    gone: total - left,
-    pct: Math.round(((total - left) / total) * 100),
-  };
-}
-
-/* Which 90-day window the goals screen should open on: the one you are
-   standing in, unless nothing is filed there yet — in which case the earliest
-   window that does have goals. A planner that greets you with an empty
-   quarter while your whole year is written one tab over has made you do its
-   job, and the run-up months before the arc opens are exactly when that
-   happens. */
-function openingWindow(goals) {
-  const here = new Date().getFullYear();
-  const live = GOAL_YEARS.includes(here)
-    ? { year: here, quarter: currentQuarter() }
-    : { year: GOAL_YEARS[0], quarter: QUARTERS[0].id };
-  const list = rows(goals).map(goalShape).filter((g) => g.horizon === "quarter");
-  if (!list.length) return live;
-  if (list.some((g) => g.year === live.year && g.quarter === live.quarter))
-    return live;
-  const rank = (g) => g.year * 10 + QUARTERS.findIndex((q) => q.id === g.quarter);
-  const first = list.reduce((a, b) => (rank(b) < rank(a) ? b : a));
-  return { year: first.year, quarter: first.quarter };
-}
 
 /* The seed, written as the tree it actually is so the links between the three
    horizons are real rather than implied. `kids` is flattened away on build —
@@ -2070,169 +1522,6 @@ const sprintPitch = (sp) =>
  * ==================================================================== */
 
 
-
-const kindOf = (id) =>
-  EVENT_KINDS.find((k) => k.id === id) || EVENT_KINDS[EVENT_KINDS.length - 1];
-
-const repeatOf = (id) => REPEATS.find((r) => r.id === id) || REPEATS[0];
-
-/* How many days before the square itself the entry starts warning. Zero
-   means it only speaks on the day — which for an exam is far too late. */
-function occurrences(ev, fromKey, toKey) {
-  const start = keyToDate(ev.date);
-  const from = keyToDate(fromKey);
-  const to = keyToDate(toKey);
-  if (!start || !from || !to || to < from) return [];
-  const stop = ev.until ? keyToDate(ev.until) : null;
-  const last = stop && stop < to ? stop : to;
-  if (last < from || last < start) return [];
-  const out = [];
-  const at = (y, m, d) => new Date(y, m, d);
-
-  if (ev.repeat === "weekly") {
-    let x = start;
-    if (x < from) {
-      const weeks = Math.ceil((from - x) / (7 * 86400000));
-      x = at(start.getFullYear(), start.getMonth(), start.getDate() + weeks * 7);
-    }
-    for (; x <= last; x = at(x.getFullYear(), x.getMonth(), x.getDate() + 7))
-      out.push(fmtDay(x));
-    return out;
-  }
-
-  if (ev.repeat === "monthly") {
-    const dom = start.getDate();
-    let y = from > start ? from.getFullYear() : start.getFullYear();
-    let m = from > start ? from.getMonth() : start.getMonth();
-    for (;;) {
-      if (at(y, m, 1) > last) break;
-      const dim = at(y, m + 1, 0).getDate();
-      if (dom <= dim) {
-        const d = at(y, m, dom);
-        if (d >= from && d >= start && d <= last) out.push(fmtDay(d));
-      }
-      m += 1;
-      if (m > 11) {
-        m = 0;
-        y += 1;
-      }
-    }
-    return out;
-  }
-
-  if (ev.repeat === "yearly") {
-    const mo = start.getMonth();
-    const dom = start.getDate();
-    for (let y = from.getFullYear(); y <= last.getFullYear(); y++) {
-      if (dom > at(y, mo + 1, 0).getDate()) continue; // 29 Feb, common year
-      const d = at(y, mo, dom);
-      if (d >= from && d >= start && d <= last) out.push(fmtDay(d));
-    }
-    return out;
-  }
-
-  if (start >= from && start <= last) out.push(ev.date);
-  return out;
-}
-
-const isEventDone = (ev, on) => (ev.doneOn || []).includes(on);
-
-/* Timed entries first in clock order, then the day's untimed reminders.
-   Sorting "" as a time would float them all to dawn. */
-const byClock = (a, b) => {
-  const x = minsOf(a.ev.time);
-  const y = minsOf(b.ev.time);
-  if (x === null && y === null) return 0;
-  if (x === null) return 1;
-  if (y === null) return -1;
-  return x - y;
-};
-
-/* date key → the occurrences landing on it, across one window. */
-function eventsIn(list, fromKey, toKey) {
-  const map = new Map();
-  for (const ev of list || [])
-    for (const on of occurrences(ev, fromKey, toKey)) {
-      const row = map.get(on);
-      if (row) row.push({ ev, on });
-      else map.set(on, [{ ev, on }]);
-    }
-  for (const row of map.values()) row.sort(byClock);
-  return map;
-}
-
-/* What is coming, flattened and ordered — including anything still unticked
-   behind today, because an overdue entry that scrolls out of sight is an
-   entry the calendar failed to carry. A ticked past occurrence is done and
-   drops out.
-
-   The backlog runs a year and a half rather than two months: a one-off
-   deadline from last spring that was never ticked used to fall out of the
-   window and then existed nowhere on the screen — still counted in «كل
-   المواعيد», still absent from every list. Silence is the one thing an
-   overdue entry must not get. */
-const UPCOMING_AHEAD = 365;
-const UPCOMING_BACKLOG = 540;
-
-function upcoming(list, days = UPCOMING_AHEAD, backlog = UPCOMING_BACKLOG) {
-  const today = dayKey();
-  const from = addDays(today, -backlog);
-  const to = addDays(today, days);
-  const out = [];
-  for (const ev of list || [])
-    for (const on of occurrences(ev, from, to)) {
-      if (on < today && isEventDone(ev, on)) continue;
-      out.push({ ev, on });
-    }
-  out.sort((a, b) => (a.on === b.on ? byClock(a, b) : a.on < b.on ? -1 : 1));
-  return out;
-}
-
-/* The same list, one row per entry instead of one per occurrence.
- *
- *  A weekly class expanded over a year is fifty rows that say the same
- *  thing, and they bury every other entry — the list stops being a list of
- *  what is coming and becomes a printout of one repetition. So a repeating
- *  entry shows the occurrence that actually needs attention (the oldest
- *  overdue one if it has any, otherwise the next) and carries a count of
- *  the rest. Nothing is hidden: every occurrence is still on the grid, and
- *  this is the summary view of it.
- */
-function upcomingRows(list) {
-  const rows = upcoming(list);
-  const seen = new Map();
-  for (const r of rows) {
-    const at = seen.get(r.ev.id);
-    if (at) at.more += 1;
-    else seen.set(r.ev.id, { ...r, more: 0 });
-  }
-  /* `rows` is already in date order and the first hit per entry is kept,
-     so each survivor is that entry's earliest pending occurrence. */
-  return [...seen.values()].sort((a, b) =>
-    a.on === b.on ? byClock(a, b) : a.on < b.on ? -1 : 1,
-  );
-}
-
-/* The entries whose warning window is open today and that are not ticked.
-   `warn` is days-before, so an exam set to warn at seven starts speaking a
-   week out and keeps speaking until the day itself has passed. */
-function alertsOf(list) {
-  const today = dayKey();
-  const rows = [];
-  for (const ev of list || []) {
-    if (!ev.warn) continue;
-    for (const on of occurrences(ev, today, addDays(today, ev.warn))) {
-      if (isEventDone(ev, on)) continue;
-      rows.push({ ev, on, left: daysUntil(on) });
-    }
-  }
-  rows.sort((a, b) => a.left - b.left);
-  return rows;
-}
-
-/* The relative day, in words. Arabic counts in threes, so the plural comes
-   from `dayWord` rather than from a bare "أيام". */
-
 /* ==================================================================== *
  *  UNIVERSITY — a desk, not a folder of reminders
  *
@@ -2442,203 +1731,6 @@ function useWriteLease() {
  * ==================================================================== */
 
 
-/* Advances on every open, and again on tap. Keying it to the day of the
-   month was the literal spec but meant the card never visibly moved within
-   a day — the cue is only motivating if it is actually new. The cursor
-   persists so consecutive opens walk the list instead of repeating. */
-const QUOTE_KEY = "life-os-2027:quote";
-const READ_KEY = "life-os-2027:read-quote";
-
-function useDailyQuote(list, key = QUOTE_KEY) {
-  const total = list.length;
-  const [i, setI] = useState(() => {
-    let prev = -1;
-    try {
-      prev = parseInt(window.localStorage.getItem(key), 10);
-    } catch {
-      /* storage blocked — fall back to the day of the month */
-    }
-    const base = total || 1;
-    const next = Number.isFinite(prev)
-      ? (prev + 1) % base
-      : new Date().getDate() % base;
-    try {
-      window.localStorage.setItem(key, String(next));
-    } catch {
-      /* per-viewer convenience only */
-    }
-    return next;
-  });
-
-  const shuffle = useCallback(() => {
-    setI((cur) => {
-      const next = total ? (cur + 1) % total : 0;
-      try {
-        window.localStorage.setItem(key, String(next));
-      } catch {
-        /* per-viewer convenience only */
-      }
-      return next;
-    });
-  }, [total, key]);
-
-  /* The cursor can outrun the list once the user deletes a quote, so it is
-     wrapped at read time rather than trusted. */
-  const quote = total ? list[i % total] : null;
-  return [quote, shuffle];
-}
-
-/* Fires a one-shot reward flag that auto-clears. Deliberately no
-   requestAnimationFrame here — it never runs in a hidden tab, which both
-   swallowed the reward and replayed it whenever the tab came back. */
-
-/* ==================================================================== *
- *  The 80/20 hook — exactly three non-negotiables a day
- * ==================================================================== */
-function TopThree({ state, setState }) {
-  const arm = useUndo();
-  const picked = state.tasks.filter((t) => t.today);
-  const done = picked.filter((t) => t.done).length;
-  const slots = [...Array(TOP_TASK_CAP)].map((_, i) => picked[i] || null);
-  const full = picked.length >= TOP_TASK_CAP;
-
-  const patch = (id, next) =>
-    setState((s) => ({
-      ...s,
-      tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...next } : t)),
-    }));
-
-  return (
-    <Card
-      className="p-6 sm:p-7"
-      style={{
-        borderColor: done === TOP_TASK_CAP ? `${T.primary}70` : `${T.cta}59`,
-        boxShadow:
-          done === TOP_TASK_CAP
-            ? `inset 0 1px 0 0 rgba(255,255,255,0.15), 0 0 46px -18px ${T.primary}`
-            : `inset 0 1px 0 0 rgba(255,255,255,0.15), 0 0 46px -20px ${T.cta}`,
-      }}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
-            style={{
-              borderColor: `${T.cta}59`,
-              background: `linear-gradient(160deg, ${T.cta}3D, ${T.cta}0F)`,
-              color: T.ctaLift,
-            }}
-          >
-            <Zap size={20} strokeWidth={2.4} />
-          </span>
-          <div>
-            <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-              أهم ٣ مهام اليوم
-            </h3>
-            <p className="text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-              ثلاث فقط. لو أنجزتها وحدها، كان اليوم ناجحًا.
-            </p>
-          </div>
-        </div>
-        <Badge tint={done === TOP_TASK_CAP ? T.primary : T.cta}>
-          <span dir="ltr" className="tabular-nums">
-            {done}/{TOP_TASK_CAP}
-          </span>
-          {" منجزة"}
-        </Badge>
-      </div>
-
-      <div className="mt-5 space-y-2.5">
-        {slots.map((task, i) =>
-          task ? (
-            <div key={task.id} className="flex items-center gap-2.5">
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-extrabold tabular-nums"
-                style={{
-                  background: task.done ? `${T.primary}26` : `${T.cta}26`,
-                  color: task.done ? T.primary : T.ctaLift,
-                }}
-              >
-                {i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <TaskChip
-                  task={task}
-                  onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
-                  onToggleDone={() => patch(task.id, { done: !task.done })}
-                  onToggleToday={() => patch(task.id, { today: false })}
-                  onDelete={() => {
-                    arm("حُذفت المهمة", { tasks: state.tasks });
-                    setState((s) => ({
-                      ...s,
-                      tasks: s.tasks.filter((t) => t.id !== task.id),
-                    }));
-                  }}
-                />
-                {/* The step he wrote the night before, under the task it
-                    belongs to. A task is a sentence; this is the thing a
-                    body can start, and it is the only reason the prep
-                    screen is worth opening twice. */}
-                {!!task.step && (
-                  <p
-                    className="mt-1 flex items-start gap-1.5 pr-2 text-[11px] leading-relaxed"
-                    style={{ color: task.done ? T.faint : T.muted }}
-                  >
-                    <Footprints
-                      size={11}
-                      className="mt-[3px] shrink-0"
-                      style={{ color: task.done ? T.faint : T.cta }}
-                    />
-                    <span
-                      style={
-                        task.done
-                          ? {
-                              textDecorationLine: "line-through",
-                              textDecorationColor: `${T.primary}80`,
-                            }
-                          : undefined
-                      }
-                    >
-                      {task.step}
-                    </span>
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div key={`slot-${i}`} className="flex items-center gap-2.5">
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-extrabold tabular-nums"
-                style={{ background: "rgba(255,255,255,0.06)", color: T.faint }}
-              >
-                {i + 1}
-              </span>
-              <p
-                className="flex-1 rounded-xl border border-dashed py-3 text-center text-[11.5px]"
-                style={{ borderColor: T.border, color: T.faint }}
-              >
-                اختر مهمة من مصفوفة المهام
-              </p>
-            </div>
-          ),
-        )}
-      </div>
-
-      {full && (
-        <p
-          className="mt-4 rounded-xl border px-3.5 py-2.5 text-center text-[11.5px] leading-relaxed"
-          style={{
-            borderColor: `${T.accent}3D`,
-            background: `${T.accent}12`,
-            color: T.accent,
-          }}
-        >
-          القائمة مكتملة. أنجِز واحدة قبل أن تضيف غيرها — هذا هو الشرط.
-        </p>
-      )}
-    </Card>
-  );
-}
 
 /* ==================================================================== *
  *  MODULE 0 — اليوم
@@ -2968,7 +2060,7 @@ function TodayModule({
     }
     out.sort((a, b) =>
       a.on === b.on
-        ? (minsOf(a.time) ?? 1441) - (minsOf(b.time) ?? 1441)
+        ? (minsIn(a.time) ?? 1441) - (minsIn(b.time) ?? 1441)
         : a.on < b.on
           ? -1
           : 1,
@@ -3471,301 +2563,8 @@ function nudgeHabit(habits, id, dir) {
   return habits;
 }
 
-/* --- the eight seconds after a delete --------------------------------- *
- *  Every destructive button in this app was immediate and final, and three
- *  of them sit a few pixels from a button that is not. A habit deleted by a
- *  slip took its whole run with it, and the only route back was the import
- *  box and whatever the disk happened to hold.
- *
- *  So a delete keeps the list it replaced for eight seconds. Not a diff and
- *  not a reverse-patch: the whole array as it stood, put back wholesale,
- *  which is the only way the row returns *in its own place* rather than at
- *  the end. Eight seconds because that is long enough to read a toast and
- *  reach it, and short enough that the snapshot is not quietly holding a
- *  deleted book alive for the rest of the session.
- *
- *  A context rather than a prop, because the delete buttons are scattered
- *  across sixteen modules and threading a callback to all of them is how a
- *  new one quietly ships without an undo.
- * ---------------------------------------------------------------------- */
-const UNDO_MS = 8000;
-const UndoBus = React.createContext(null);
 
-/* `arm(label, before)` — `before` is the slice of state to restore, e.g.
-   `{ habits: s.habits }`. Spread back over whatever the state is by then, so
-   an unrelated change made in those eight seconds is not undone with it. */
-function useUndo() {
-  return useContext(UndoBus) || noUndo;
-}
-const noUndo = () => {};
 
-function UndoToast({ undo, onUndo, onDismiss }) {
-  /* The countdown is the toast's own, restarted whenever a new delete arms
-     it — keyed on the stamp so a second delete gets its own eight seconds
-     rather than inheriting the tail of the first. */
-  useEffect(() => {
-    if (!undo) return;
-    const t = setTimeout(onDismiss, UNDO_MS);
-    return () => clearTimeout(t);
-  }, [undo, onDismiss]);
-
-  if (!undo) return null;
-  return (
-    <div
-      /* Above `BottomTabs` on a phone, and clear of the stray-copy and
-         disk-stopped bars that live at the same edge. Centred with
-         `inset-x`/`mx-auto`, never a translate: `.los-in` owns `transform`
-         on this element and a Tailwind translate utility would be discarded. */
-      className="los-in fixed inset-x-3 z-[88] flex flex-wrap items-center justify-center gap-3 rounded-2xl border px-4 py-2.5 text-center shadow-2xl sm:inset-x-0 sm:mx-auto sm:w-[min(420px,92vw)]"
-      style={{
-        bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
-        backgroundColor: T.cardSolid,
-        backgroundImage: `linear-gradient(135deg, ${T.bgLift}, ${T.bgDeep})`,
-        borderColor: `${T.accent}73`,
-        boxShadow: `0 0 50px -14px ${T.accent}`,
-      }}
-      role="status"
-    >
-      <p className="text-[12px] font-bold" style={{ color: T.fg }}>
-        {undo.label}
-      </p>
-      <Btn size="sm" className="shrink-0" onClick={onUndo}>
-        <Undo2 size={13} /> تراجع
-      </Btn>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="إخفاء"
-        className="shrink-0 rounded-lg p-1 transition-colors hover:bg-white/10"
-        style={{ color: T.faint }}
-      >
-        <X size={13} />
-      </button>
-    </div>
-  );
-}
-
-/* --- ticking a habit -------------------------------------------------- *
- *  Two screens tick the same habits — the routine, where the blocks are
- *  managed, and «اليوم», where what is still open is answered — and the tick
- *  is not a boolean flip. A linked habit opens the reading log after the
- *  tick has landed, and unticking withdraws today's sessions for it and
- *  rolls the book's page counter back. A second copy of that in a second
- *  screen is two copies of the library's arithmetic, and the day the two
- *  disagree the shelf keeps pages the user undid.
- * ---------------------------------------------------------------------- */
-function useHabitTick(state, setState) {
-  const [logging, setLogging] = useState(null); // habit awaiting a page count
-  const arm = useUndo();
-
-  /* `tiny` is the second way in, not a second hook: «نسخة صغيرة» lands here
-     like every other tick, so the reading withdrawal, the undo and the
-     reward are one implementation and cannot drift into two. */
-  const toggle = useCallback(
-    (id, tiny = false) => {
-      const habit = state.habits.find((h) => h.id === id);
-      const turningOn = habit && !habit.done;
-
-      /* An untick is a deletion in everything but name: it withdraws today's
-         reading sessions for the habit and rolls the book's page counter
-         back, and a mis-tapped row on a phone can cost an evening's pages.
-         Only the untick is armed — a tick that went in by mistake is undone
-         by tapping it again, which is the same gesture. */
-      if (habit && !turningOn) {
-        arm("أُزيل التأشير", {
-          habits: state.habits,
-          reading: state.reading,
-          books: state.books,
-        });
-      }
-
-      setState((s) => {
-        const next = {
-          ...s,
-          habits: s.habits.map((h) =>
-            h.id === id
-              ? /* The mark rides with the tick and leaves with it. A habit
-                   unticked is not «done the small way», it is not done —
-                   and a `tiny` left behind on an unticked row is a mark the
-                   archive would read back as a day that was carried. */
-                { ...h, done: !h.done, tiny: !h.done ? !!tiny : false }
-              : h,
-          ),
-        };
-        /* Unticking withdraws today's sessions for this habit and rolls the
-           page counters back, so the library never keeps pages that were
-           undone in the routine. */
-        if (habit && habit.book && !turningOn) {
-          const today = dayKey();
-          const dropped = (s.reading || []).filter(
-            (r) => r.habitId === id && r.date === today,
-          );
-          if (dropped.length) {
-            const back = new Map();
-            for (const r of dropped)
-              back.set(r.bookId, (back.get(r.bookId) || 0) + r.pages);
-            next.reading = (s.reading || []).filter(
-              (r) => !(r.habitId === id && r.date === today),
-            );
-            next.books = s.books.map((b) => {
-              const n = back.get(b.id);
-              if (!n) return b;
-              const at = parseInt(b.page, 10);
-              if (!Number.isFinite(at)) return b;
-              return { ...b, page: String(Math.max(0, at - n)) };
-            });
-          }
-        }
-        return next;
-      });
-
-      /* Ask only after the tick has landed, so the reward animation plays
-         and a skipped prompt still leaves the habit done. */
-      if (habit?.book && turningOn) setLogging(habit);
-    },
-    [state.habits, state.reading, state.books, setState, arm],
-  );
-
-  const logRead = useCallback(
-    (pages) => {
-      const habit = logging;
-      if (!habit) return;
-      setState((s) => {
-        const book = bookForHabit(habit, s.books);
-        if (!book) return s;
-        const total = parseInt(book.pages, 10);
-        const at = parseInt(book.page, 10);
-        const base = Number.isFinite(at) ? at : 0;
-        const next = Number.isFinite(total) && total > 0
-          ? Math.min(total, base + pages)
-          : base + pages;
-        return {
-          ...s,
-          reading: [
-            ...(s.reading || []),
-            { id: uid(), date: dayKey(), bookId: book.id, habitId: habit.id, pages },
-          ],
-          books: s.books.map((b) =>
-            b.id === book.id ? { ...b, page: String(next) } : b,
-          ),
-        };
-      });
-      setLogging(null);
-    },
-    [logging, setState],
-  );
-
-  const closeLog = useCallback(() => setLogging(null), []);
-  return { toggle, logging, closeLog, logRead };
-}
-
-/* Asked right after a reading habit is ticked. Deliberately skippable: the
-   habit is already done and animated by the time this opens, so refusing to
-   type a number must never undo the completion. */
-function ReadLogModal({ open, book, onClose, onLog }) {
-  const [pages, setPages] = useState("");
-
-  useEffect(() => {
-    if (open) setPages("");
-  }, [open, book?.id]);
-
-  if (!open) return null;
-
-  const commit = (n) => {
-    const v = parseInt(n, 10);
-    if (!Number.isFinite(v) || v <= 0) return;
-    onLog(v);
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={book ? "كم صفحة قرأت؟" : "لا كتاب نشط"}
-      footer={
-        book ? (
-          <>
-            <Btn
-              variant="default"
-              className="flex-1"
-              onClick={() => commit(pages)}
-            >
-              سجّل
-            </Btn>
-            <Btn variant="outline" className="flex-1" onClick={onClose}>
-              تخطّي
-            </Btn>
-          </>
-        ) : (
-          <Btn variant="outline" className="flex-1" onClick={onClose}>
-            حسنًا
-          </Btn>
-        )
-      }
-    >
-      {book ? (
-        <div className="space-y-4">
-          <p className="text-[12.5px] leading-relaxed" style={{ color: T.muted }}>
-            من <span style={{ color: T.accent }}>«{book.title}»</span>
-            {pctOf(book) !== null && (
-              <>
-                {" "}
-                — أنت عند الصفحة{" "}
-                <span dir="ltr" className="tabular-nums">
-                  {book.page}
-                </span>
-              </>
-            )}
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {[10, 20, 30, 50].map((n) => (
-              <button
-                key={n}
-                onClick={() => setPages(String(n))}
-                className="rounded-xl border px-4 py-2 text-xs font-bold tabular-nums transition-all duration-200 hover:scale-105"
-                dir="ltr"
-                style={{
-                  borderColor:
-                    pages === String(n) ? `${T.cta}80` : T.border,
-                  background: pages === String(n) ? `${T.cta}1F` : "transparent",
-                  color: pages === String(n) ? T.ctaLift : T.muted,
-                }}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-
-          <div>
-            <label
-              htmlFor="los-read-pages"
-              className="mb-1.5 block text-xs text-white/45"
-            >
-              أو اكتب العدد
-            </label>
-            <Field
-              id="los-read-pages"
-              value={pages}
-              autoFocus
-              inputMode="numeric"
-              onChange={(e) => setPages(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && commit(pages)}
-              placeholder="عدد الصفحات"
-              className="tabular-nums"
-            />
-          </div>
-        </div>
-      ) : (
-        <p className="text-[12.5px] leading-relaxed" style={{ color: T.muted }}>
-          هذه العادة مربوطة بالكتاب الذي تقرأه الآن، ولا كتاب موسوم بـ«أقرأه
-          الآن» في مكتبتك. علّم كتابًا بهذه الحالة، أو اربط العادة بكتاب بعينه
-          من تعديل العادة.
-        </p>
-      )}
-    </Modal>
-  );
-}
 
 function HabitRow({
   habit,
@@ -5582,62 +4381,6 @@ function RoutineModule({
   );
 }
 
-/* ==================================================================== *
- *  MODULE 2 — Eisenhower matrix
- * ==================================================================== */
-function TaskChip({ task, onToggleToday, onToggleDone, onDelete, onDragStart }) {
-  const [burst, fireBurst] = useBurst(700);
-
-  const handleDone = () => {
-    if (!task.done) fireBurst();
-    onToggleDone();
-  };
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      className={`group flex items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-200 hover:border-white/25${burst ? " los-reward" : ""}`}
-      style={{
-        borderColor: burst ? T.primary : task.done ? `${T.primary}55` : T.border,
-        background: burst
-          ? `${T.primary}2E`
-          : task.done
-          ? `${T.primary}14`
-          : "rgba(255,255,255,0.04)",
-        cursor: "grab",
-      }}
-    >
-      <GripVertical
-        size={13}
-        className="shrink-0 text-white/15 transition-colors group-hover:text-white/35"
-      />
-      <Checkbox
-        checked={task.done}
-        onToggle={handleDone}
-        label={task.text}
-        size="sm"
-      />
-      <button
-        onClick={onToggleToday}
-        aria-pressed={task.today}
-        aria-label="إضافة إلى مهام اليوم"
-        title="مهام اليوم"
-        className="shrink-0 rounded p-1 transition-colors"
-        style={{ color: task.today ? T.accent : "rgba(255,255,255,0.15)" }}
-      >
-        <Target size={14} strokeWidth={task.today ? 2.6 : 2} />
-      </button>
-      <button
-        onClick={onDelete}
-        aria-label={`حذف ${task.text}`}
-        className="shrink-0 rounded p-1 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      >
-        <Trash2 size={13} />
-      </button>
-    </div>
-  );
-}
 
 function MatrixModule({ state, setState }) {
   const [draft, setDraft] = useState("");
@@ -7585,40 +6328,6 @@ function GoalsModule({ state, setState }) {
   );
 }
 
-/* --- image helpers --------------------------------------------------- */
-function resizeImage(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX_W = 280, MAX_H = 400;
-        const scale = Math.min(MAX_W / img.width, MAX_H / img.height, 1);
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.78));
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-/* ==================================================================== *
- *  MODULE 3 — Book vault
- * ==================================================================== */
-/* Reading progress, or null when either number is missing — the card and
-   the desk both ask this rather than each parsing the fields itself. */
-function pctOf(b) {
-  const total = parseInt(b.pages, 10);
-  const at = parseInt(b.page, 10);
-  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(at)) return null;
-  return Math.max(0, Math.min(100, Math.round((at / total) * 100)));
-}
-
 const BOOK_STATUS = {
   planned: { label: "أنوي قراءته", tint: "#A855F7" },
   reading: { label: "أقرأه الآن", tint: "#3B82F6" },
@@ -8466,7 +7175,7 @@ function VaultModule({ state, setState }) {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     try {
-                      const data = await resizeImage(file);
+                      const data = await shrinkImage(file, COVER_STEPS);
                       setEditing((s) => ({ ...s, cover: data }));
                     } catch {/* ignore */ }
                   }}
@@ -12792,8 +11501,6 @@ function CareerModule({ state, setState }) {
 }
 
 
-const levelOf = (pct) =>
-  pct >= 90 ? 4 : pct >= 70 ? 3 : pct >= 45 ? 2 : pct > 0 ? 1 : 0;
 const LEVEL_BG = [
   "rgba(255,255,255,0.04)",
   "rgba(16,185,129,0.42)",
@@ -15866,91 +14573,6 @@ function TomorrowModal({ open, onClose, state, setState }) {
   );
 }
 
-/* ==================================================================== *
- *  End-of-day reflection — only on a day that fell short
- * ==================================================================== */
-function ReflectionModal({ open, onClose, onSave, pct, value, fixValue }) {
-  const [distraction, setDistraction] = useState("");
-  const [fix, setFix] = useState("");
-
-  /* Seeded from the archive each time it opens. Without this, opening it a
-     second time showed two empty boxes and saving overwrote what was
-     already written with nothing — a reflection silently erased by the act
-     of going back to read it. */
-  useEffect(() => {
-    if (!open) return;
-    setDistraction(value || "");
-    setFix(fixValue || "");
-  }, [open, value, fixValue]);
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="وقفة آخر اليوم"
-      footer={
-        <>
-          <Btn
-            variant="default"
-            className="flex-1"
-            onClick={() => onSave(distraction.trim(), fix.trim())}
-          >
-            احفظ
-          </Btn>
-          <Btn variant="outline" className="flex-1" onClick={onClose}>
-            لاحقًا
-          </Btn>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <p
-          className="rounded-xl border px-3.5 py-3 text-[11.5px] leading-relaxed"
-          style={{
-            borderColor: `${T.cta}3D`,
-            background: `${T.cta}12`,
-            color: T.ctaLift,
-          }}
-        >
-          أغلقت اليوم على{" "}
-          <span dir="ltr" className="font-extrabold tabular-nums">
-            {pct}%
-          </span>
-          . لا لوم — لكن لا تمرّ عليه دون أن تعرف السبب.
-        </p>
-        <div>
-          <label htmlFor="los-r-d" className="mb-1.5 block text-xs text-white/45">
-            ما الذي شتّتني اليوم؟
-          </label>
-          <Field
-            id="los-r-d"
-            as="textarea"
-            rows={3}
-            autoFocus
-            value={distraction}
-            onChange={(e) => setDistraction(e.target.value)}
-            className="resize-none"
-            placeholder="اكتبه بصراحة…"
-          />
-        </div>
-        <div>
-          <label htmlFor="los-r-f" className="mb-1.5 block text-xs text-white/45">
-            كيف أتجنّبه غدًا؟
-          </label>
-          <Field
-            id="los-r-f"
-            as="textarea"
-            rows={3}
-            value={fix}
-            onChange={(e) => setFix(e.target.value)}
-            className="resize-none"
-            placeholder="إجراء واحد محدّد…"
-          />
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 /* ==================================================================== *
  *  ROOT

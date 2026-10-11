@@ -3,7 +3,7 @@
  *  list — one about reading, walked by the same `useDailyQuote` the general
  *  cue card uses, under its own key so the two cursors never fight.
  * --------------------------------------------------------------------- */
-import { uid, obj } from "./life-state-util.mjs";
+import { uid, obj, rows, logicalNow, dayKey } from "./life-state-util.mjs";
 
 export const READ_ACTIVE = "active";
 export const READ_GOAL_DEFAULT = 20;
@@ -93,3 +93,52 @@ export const READING_QUOTES = [
 ];
 
 export const SEED_READS = () => READING_QUOTES.map((q) => ({ id: uid(), ...q }));
+
+/* The book a reading habit points at right now, or null. */
+export function bookForHabit(habit, books) {
+  if (!habit?.book) return null;
+  if (habit.book === READ_ACTIVE)
+    return books.find((b) => b.status === "reading") || null;
+  return books.find((b) => b.id === habit.book) || null;
+}
+
+/* `(log || [])` like every other list reader here. These two were the only
+   ones that assumed an array outright, which made them the only two that
+   could take the render down over a field the data layer had not filled. */
+export const sumPages = (log) =>
+  rows(log).reduce((n, r) => n + (Number.isFinite(r.pages) ? r.pages : 0), 0);
+
+/* Days in a row, counting back from today, on which the goal was met. A
+   streak that ended yesterday still counts today — the day is not over. */
+export function readStreak(log, goal) {
+  /* Through `rows`, not just `|| []`: it also drops a hole, so one bad
+     entry cannot throw on `r.date` halfway through the walk. The local
+     name avoids shadowing the helper itself. */
+  const list = rows(log);
+  if (!list.length || goal <= 0) return 0;
+  const byDay = new Map();
+  for (const r of list)
+    byDay.set(r.date, (byDay.get(r.date) || 0) + (r.pages || 0));
+
+  const d = logicalNow();
+  if ((byDay.get(dayKey(d)) || 0) < goal) d.setDate(d.getDate() - 1);
+
+  let n = 0;
+  for (;;) {
+    if ((byDay.get(dayKey(d)) || 0) < goal) return n;
+    n += 1;
+    d.setDate(d.getDate() - 1);
+  }
+}
+
+/* ==================================================================== *
+ *  MODULE 3 — Book vault
+ * ==================================================================== */
+/* Reading progress, or null when either number is missing — the card and
+   the desk both ask this rather than each parsing the fields itself. */
+export function pctOf(b) {
+  const total = parseInt(b.pages, 10);
+  const at = parseInt(b.page, 10);
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(at)) return null;
+  return Math.max(0, Math.min(100, Math.round((at / total) * 100)));
+}

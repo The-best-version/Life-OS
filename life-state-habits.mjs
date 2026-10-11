@@ -6,7 +6,7 @@
  *  domain: the seeded reading habit is wired to the active book from the
  *  moment it is created.
  * --------------------------------------------------------------------- */
-import { uid, obj, rows, dayKey } from "./life-state-util.mjs";
+import { uid, obj, rows, dayKey, daysBetween } from "./life-state-util.mjs";
 import { READ_ACTIVE } from "./life-state-books.mjs";
 
 /* --- the core --------------------------------------------------------- *
@@ -369,3 +369,153 @@ export const SEED_HABITS = [
   { id: uid(), label: "تدوين", group: "night", done: false },
   { id: uid(), label: "أذكار النوم", group: "night", done: false },
 ];
+
+export const HOUR_BANDS = [
+  { id: "dawn", label: "من الفجر إلى الضحى", from: 4, to: 10 },
+  { id: "forenoon", label: "من الضحى إلى الظهر", from: 10, to: 14 },
+  { id: "afternoon", label: "من الظهر إلى المغرب", from: 14, to: 18 },
+  { id: "evening", label: "من المغرب إلى العشاء", from: 18, to: 21 },
+  { id: "night", label: "من العشاء إلى منتصف الليل", from: 21, to: 24 },
+  { id: "small", label: "بعد منتصف الليل", from: 0, to: 4 },
+];
+
+export const bandAt = (h) =>
+  HOUR_BANDS.find((b) => h >= b.from && h < b.to) || HOUR_BANDS[0];
+
+export const bandOf = (id) => HOUR_BANDS.find((b) => b.id === id) || null;
+
+export const cleanDays = (b) => daysBetween(b.startDate);
+
+export const bleedSaved = (b) => cleanDays(b) * (b.costPerDay || 0);
+
+/* The longest run ever, not just the current one — a relapse log carries the
+   days it cost, so the record survives the reset that ended it. */
+export const bestRun = (b) =>
+  Math.max(cleanDays(b), ...(b.logs || []).map((l) => l.days || 0), 0);
+
+/* --- diagnosis -------------------------------------------------------- *
+ *  Everything the mirror claims is counted here and nowhere else, so the
+ *  card can never drift from the numbers behind it. Each breakdown counts
+ *  on its *own* denominator — an entry with a mood but no tag must not
+ *  deflate the tag percentages, or the first few logs read as noise.
+ * ---------------------------------------------------------------------- */
+export const MIRROR_MIN = 4;
+
+export const breakerEvents = (list) =>
+  (list || []).flatMap((h) => [
+    ...(h.logs || []).map((l) => ({ ...l, kind: "fall", habit: h.title })),
+    ...(h.urges || []).map((u) => ({ ...u, kind: "hold", habit: h.title })),
+  ]);
+
+/* The commonest value of one field, with the share it holds. Returns null
+   rather than a zeroed row when nothing carries the field — "٠٪ من
+   مواجهاتك" is a claim about data that does not exist. */
+export const topShare = (rows, pick) => {
+  const tally = new Map();
+  rows.forEach((r) => {
+    const v = pick(r);
+    if (v === null || v === undefined || v === "") return;
+    tally.set(v, (tally.get(v) || 0) + 1);
+  });
+  if (!tally.size) return null;
+  const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((n, [, c]) => n + c, 0);
+  return {
+    value: sorted[0][0],
+    count: sorted[0][1],
+    total,
+    pct: Math.round((sorted[0][1] / total) * 100),
+    rows: sorted.map(([value, count]) => ({
+      value,
+      count,
+      pct: Math.round((count / total) * 100),
+    })),
+  };
+};
+
+export function weakSpots(list) {
+  const all = breakerEvents(list);
+  const falls = all.filter((e) => e.kind === "fall");
+  const holds = all.filter((e) => e.kind === "hold");
+  const runs = falls.map((f) => Number(f.days) || 0);
+
+  /* A trend wants two halves to compare, and halves of fewer than four runs
+     are one bad week against another. Below that it is simply not claimed —
+     an app that tells you you are "تتحسّن" off two data points teaches you
+     to distrust it. */
+  let trend = null;
+  if (runs.length >= 4) {
+    const half = Math.floor(runs.length / 2);
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
+    const early = mean(runs.slice(0, half));
+    const late = mean(runs.slice(half));
+    if (late - early >= 1) trend = { dir: "up", early, late };
+    else if (early - late >= 1) trend = { dir: "down", early, late };
+    else trend = { dir: "flat", early, late };
+  }
+
+  return {
+    total: all.length,
+    falls: falls.length,
+    holds: holds.length,
+    ready: all.length >= MIRROR_MIN,
+    hold: all.length ? Math.round((holds.length / all.length) * 100) : 0,
+    avgRun: runs.length ? runs.reduce((a, b) => a + b, 0) / runs.length : 0,
+    trend,
+    tag: topShare(all, (e) => e.tag),
+    /* The tag that most often *wins* — separate from the commonest tag on
+       purpose. A trigger you meet ten times and survive nine is not your
+       weak point; the one you meet three times and lose three is. */
+    fatal: topShare(falls, (e) => e.tag),
+    band: topShare(all, (e) =>
+      Number.isFinite(e.hour) ? bandAt(e.hour).id : null,
+    ),
+    dow: topShare(all, (e) => (Number.isFinite(e.dow) ? e.dow : null)),
+    mood: topShare(all, (e) => e.mood),
+  };
+}
+
+/* How often a single tag ends in a fall. Printed beside the tag's bar, it
+   turns a frequency list into a danger list. */
+export const tagFallRate = (rows, id) => {
+  const met = rows.filter((e) => e.tag === id);
+  if (!met.length) return null;
+  const lost = met.filter((e) => e.kind === "fall").length;
+  return { met: met.length, lost, pct: Math.round((lost / met.length) * 100) };
+};
+
+/* --- the guard -------------------------------------------------------- *
+ *  A diagnosis nobody acts on is trivia. The mirror already knows which
+ *  band of the day takes the user down; this turns that into a warning that
+ *  arrives *before* the hour does, which is the only moment it can help.
+ * ---------------------------------------------------------------------- */
+export const DANGER_MIN_HITS = 2;
+
+export const DANGER_MIN_SHARE = 35;
+
+/* The band only counts as *the* danger hour when it holds a real share of
+   the confrontations. A band that leads by one event out of nine is a
+   coincidence, and a warning that fires on a coincidence is a warning the
+   user learns to scroll past. */
+export function dangerWatch(list) {
+  const w = weakSpots(list);
+  if (!w.ready || !w.band) return null;
+  if (w.band.count < DANGER_MIN_HITS || w.band.pct < DANGER_MIN_SHARE) return null;
+  const share = w.fatal || w.tag;
+  return {
+    band: bandOf(w.band.value),
+    pct: w.band.pct,
+    tag: share ? tagOf(share.value) : null,
+  };
+}
+
+/* Today's confrontations, for the archive row. Counted from the one place
+   they live, so the calendar can never claim a day the breaker disagrees
+   with. */
+export const breakerToday = (list, day = dayKey()) => {
+  const rows = breakerEvents(list).filter((e) => e.at === day);
+  return {
+    holds: rows.filter((e) => e.kind === "hold").length,
+    falls: rows.filter((e) => e.kind === "fall").length,
+  };
+};

@@ -5,7 +5,7 @@
  *  migration all go through it — and `GOAL_TREE` is the seed the whole vault
  *  starts from.
  * --------------------------------------------------------------------- */
-import { uid, obj, rows } from "./life-state-util.mjs";
+import { uid, obj, rows, fmtDay, daysBetween, daysTo } from "./life-state-util.mjs";
 
 /* --- 90-day chunks ---------------------------------------------------- *
  *  A year is too big to act on. Four 90-day blocks are not, and the vault
@@ -325,3 +325,109 @@ export const SEED_LINKS = (() => {
       for (const q of year.kids || []) map.set(q.text, year.text);
   return map;
 })();
+
+export const quarterOf = (id) => QUARTERS.find((q) => q.id === id) || QUARTERS[0];
+
+export const pillarOf = (id) => PILLARS.find((p) => p.id === id) || PILLARS[5];
+
+export const horizonOf = (id) => HORIZONS.find((h) => h.id === id) || HORIZONS[2];
+
+export function goalPct(goal, all, depth = 0) {
+  if (goal.done) return 100;
+  if (goal.target > 0)
+    return Math.min(100, Math.round((goal.current / goal.target) * 100));
+  if (goal.steps.length)
+    return Math.round(
+      (goal.steps.filter((s) => s.done).length / goal.steps.length) * 100,
+    );
+  if (depth < HORIZONS.length) {
+    const kids = all.filter((g) => g.parent === goal.id);
+    if (kids.length)
+      return Math.round(
+        kids.reduce((n, k) => n + goalPct(k, all, depth + 1), 0) / kids.length,
+      );
+  }
+  return 0;
+}
+
+/* The last day a goal has. Its own deadline when it set one, otherwise the
+   end of the window it lives in — a 90-day goal expires with its quarter and
+   a yearly one with its December, whether or not anyone typed a date. */
+export function goalEnd(goal) {
+  if (goal.deadline) return goal.deadline;
+  if (goal.horizon === "quarter") {
+    const qi = QUARTERS.findIndex((q) => q.id === goal.quarter);
+    const y = goal.year || GOAL_YEARS[0];
+    return fmtDay(new Date(y, (qi < 0 ? 0 : qi) * 3 + 3, 0));
+  }
+  if (goal.horizon === "year") return `${goal.year}-12-31`;
+  return `${GOAL_YEARS[GOAL_YEARS.length - 1]}-12-31`;
+}
+
+/* The first and last day of a horizon's window, as date keys. */
+export function windowOf(horizon, year = GOAL_YEARS[0], quarter = "q1") {
+  /* The arc, not GOAL_YEARS: the run-up year is a place to file goals, not a
+     fourth year of a three-year horizon. */
+  if (horizon === "h3") return [`${ARC[0]}-01-01`, `${ARC[ARC.length - 1]}-12-31`];
+  if (horizon === "year") return [`${year}-01-01`, `${year}-12-31`];
+  const qi = Math.max(0, QUARTERS.findIndex((q) => q.id === quarter));
+  return [fmtDay(new Date(year, qi * 3, 1)), fmtDay(new Date(year, qi * 3 + 3, 0))];
+}
+
+/* Where today stands inside that window. `left` counts the day you are
+   standing in — on the last day of a quarter you still have that whole day,
+   which is why a live window never reads zero. A window that has not opened
+   yet reports its full length rather than a negative one: «لم يبدأ» is a
+   different answer from «بقي يوم», and collapsing them is how a planner ends
+   up telling you to hurry in a quarter that starts in March. */
+export function windowStand(from, to) {
+  const total = Math.max(1, daysBetween(from, to) + 1);
+  /* `daysTo` counts the day you are standing in, which is what «بقي» wants
+     and what «يبدأ بعد» does not: a window opening tomorrow starts in one
+     day, not two. The inclusive day comes back off for the start only. */
+  const untilStart = daysTo(from) === null ? null : daysTo(from) - 1;
+  const left = daysTo(to);
+  /* A window that has not opened still reports the days to its *end*, because
+     that is what «كم بقي» asks. Reporting its full span instead answered a
+     question nobody had and printed «يبدأ بعد ٩٠ يومًا» three times over,
+     which is a countdown that counts nothing. The start is said underneath,
+     as a note, and the elapsed bar stays empty until the day arrives. */
+  if (untilStart !== null && untilStart > 0)
+    return {
+      state: "soon",
+      total,
+      left: left === null ? total : Math.max(0, left),
+      gone: 0,
+      pct: 0,
+      until: untilStart,
+    };
+  if (left === null || left <= 0)
+    return { state: "done", total, left: 0, gone: total, pct: 100 };
+  return {
+    state: "live",
+    total,
+    left,
+    gone: total - left,
+    pct: Math.round(((total - left) / total) * 100),
+  };
+}
+
+/* Which 90-day window the goals screen should open on: the one you are
+   standing in, unless nothing is filed there yet — in which case the earliest
+   window that does have goals. A planner that greets you with an empty
+   quarter while your whole year is written one tab over has made you do its
+   job, and the run-up months before the arc opens are exactly when that
+   happens. */
+export function openingWindow(goals) {
+  const here = new Date().getFullYear();
+  const live = GOAL_YEARS.includes(here)
+    ? { year: here, quarter: currentQuarter() }
+    : { year: GOAL_YEARS[0], quarter: QUARTERS[0].id };
+  const list = rows(goals).map(goalShape).filter((g) => g.horizon === "quarter");
+  if (!list.length) return live;
+  if (list.some((g) => g.year === live.year && g.quarter === live.quarter))
+    return live;
+  const rank = (g) => g.year * 10 + QUARTERS.findIndex((q) => q.id === g.quarter);
+  const first = list.reduce((a, b) => (rank(b) < rank(a) ? b : a));
+  return { year: first.year, quarter: first.quarter };
+}

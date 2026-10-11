@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
-import { Percent, UserSearch, Sparkles, Gauge, TrendingUp, Award, ExternalLink, Minus, GraduationCap, Presentation, Plus, X, ClipboardCheck, BookOpen, Clock, Settings, AlertTriangle, CalendarDays, ChevronRight, ChevronLeft, Trash2, Check, Pencil, FileText, Rocket, RotateCcw, Hash, ClipboardList, ShieldCheck, BookMarked, AlarmClock, MapPin, Users, CircleDot, SquarePen, School, CheckCheck, Calculator, Crosshair, Milestone, BadgeCheck, Hourglass, Flag, BarChart3 } from "lucide-react";
-import { useBurst, safeUrl, whenWord, NumStep, DateField, TimeField, T, Card, Btn, Field, Badge, Modal, Checkbox, DOW_AR, arCount, DAY_FORMS, dayWord, daysPhrase, MIN_FORMS, minWord, STEP_FORMS, stepWord, MEET_FORMS, meetWord, TIMES_FORMS, timesWord, FALL_FORMS, fallWord, HOUR_FORMS, hourWord, COURSE_FORMS, courseWord, WEEK_FORMS, weekWord, LECTURE_FORMS, lectureWord, daysUntil, minsOf, nowMins, prettyTime, AR_MONTHS, arDate, gradePoints, gradeFromPct, coursesIn, termOf, courseIn, courseName, daySections, nextSection, useMinuteClock } from "./life-shared.jsx";
-import { uid, TERM_WEEKS_DEFAULT, termShape, courseShape, uniTaskShape, UNI_TASK_KINDS, dayKey, clampNum, gradeOf, UNI_DAYS, uniDayOf, COURSE_TINTS, uniShape , GRADES, slotShape, markShape, isKey } from "./life-state.mjs";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Percent, UserSearch, Sparkles, Gauge, TrendingUp, Award, ExternalLink, Minus, Plus, X, ClipboardCheck, Clock, AlertTriangle, CalendarDays, Trash2, Check, Pencil, Hash, ClipboardList, ShieldCheck, BookMarked, AlarmClock, MapPin, Users, CircleDot, SquarePen, School, CheckCheck, Calculator, Crosshair, Milestone, BadgeCheck, Hourglass, Flag, BarChart3 } from "lucide-react";
+import { useBurst, safeUrl, whenWord, NumStep, DateField, TimeField, T, Card, Btn, Field, Badge, Modal, Checkbox, DOW_AR, minWord, timesWord, hourWord, courseWord, weekWord, lectureWord, prettyTime, arDate, gradePoints, gradeFromPct, coursesIn, termOf, courseIn, courseName, daySections, nextSection, useMinuteClock } from "./life-shared.jsx";
+import { TERM_WEEKS_DEFAULT, termShape, courseShape, uniTaskShape, UNI_TASK_KINDS, dayKey, clampNum, gradeOf, UNI_DAYS, uniDayOf, COURSE_TINTS, uniShape, GRADES, slotShape, markShape, isKey, minsIn, daysUntil } from "./life-state.mjs";
 
 /* ==================================================================== *
  *  MODULE — the university desk
@@ -166,7 +166,7 @@ export function uniDue(uni, fromKey, toKey) {
     else map.set(t.due, [t]);
   }
   for (const row of map.values())
-    row.sort((a, b) => (minsOf(a.time) ?? 1441) - (minsOf(b.time) ?? 1441));
+    row.sort((a, b) => (minsIn(a.time) ?? 1441) - (minsIn(b.time) ?? 1441));
   return map;
 }
 
@@ -470,7 +470,7 @@ export function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) 
                    the week grid and quietly halves the meeting count behind
                    the absence limit. Flagged where it is typed, not left to
                    be discovered on the timetable. */
-                const bad = (minsOf(s.to) ?? 0) <= (minsOf(s.from) ?? 0);
+                const bad = (minsIn(s.to) ?? 0) <= (minsIn(s.from) ?? 0);
                 return (
                 <div
                   key={s.id}
