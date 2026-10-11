@@ -32,7 +32,6 @@ export function TodayModule({
      has to be checked against another one. */
   const block = blockAt(place, now);
   const g = groupOf(block?.id);
-  const BlockIcon = g.icon;
 
   const { toggle, logging, closeLog, logRead } = useHabitTick(state, setState);
 
@@ -164,10 +163,22 @@ export function TodayModule({
       .filter((r) => r.task);
   }, [state.tomorrow, state.tasks, state.events, tomorrowOn]);
 
+  /* ==================================================================== *
+   * ★ ترتيب صفحة «اليوم» — عدّله من هنا ★
+   *
+   * كل سطر أدناه بطاقة واحدة. لتحريك بطاقة للأعلى أو للأسفل انقل سطرها،
+   * ولإخفائها احذفه أو علّق عليه — لا شيء آخر يحتاج تعديلًا، لأن أيًّا من
+   * هذه المكوّنات لا يعرف من فوقه ولا من تحته.
+   *
+   * تعريفات المكوّنات نفسها أسفل هذا الملف، وكلّها مُصدَّرة: يمكنك نقل
+   * أيٍّ منها إلى شاشة أخرى باستيرادها هناك.
+   *
+   * `space-y-5` هي المسافة بين البطاقات — غيّر الرقم وحده لتوسيعها.
+   * ==================================================================== */
   return (
     <div className="space-y-5">
-      {/* First on the screen, above the ring and the score, because what it
-          replaces is the first sentence the app says after a week away. */}
+      {/* الرجوع بعد انقطاع. يسبق كل شيء لأنه يحلّ محلّ أول جملة يقولها
+          التطبيق لمن غاب أسبوعًا. */}
       {comeback > 0 && (
         <ComebackCard
           state={state}
@@ -179,412 +190,61 @@ export function TodayModule({
         />
       )}
 
-      {/* Where the day is, in one card: the date, the open block, the next
-          prayer and the one score the day is judged by. */}
-      <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 lg:flex-row lg:justify-between">
-        <div className="min-w-0 text-center lg:text-right">
-          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
-            اليوم
-          </h2>
-          <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
-            <CalendarDays size={13} /> {dateLabel}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
-            <span
-              className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] font-extrabold"
-              style={{
-                borderColor: `${g.tint}3D`,
-                backgroundColor: `${g.tint}14`,
-                color: g.tint,
-              }}
-            >
-              <BlockIcon size={14} /> {g.label}
-            </span>
-            {next && (
-              <button
-                onClick={onOpenSettings}
-                title="تغيير المدينة"
-                className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] transition-colors hover:bg-white/[0.06]"
-                style={{ borderColor: `${T.violet}3D`, backgroundColor: `${T.violet}12` }}
-              >
-                <MoonStar size={14} style={{ color: T.violet }} />
-                <span style={{ color: T.muted }}>
-                  {next.tomorrow ? "فجر غدٍ" : next.label}
-                </span>
-                <span
-                  dir="ltr"
-                  className="font-extrabold tabular-nums"
-                  style={{ color: T.cta }}
-                >
-                  {clockAt(next.at / 60)}
-                </span>
-                <span className="text-[10.5px]" style={{ color: T.faint }}>
-                  {next.left >= 60
-                    ? `بعد ${Math.floor(next.left / 60)} س ${next.left % 60} د`
-                    : `بعد ${next.left} د`}
-                </span>
-              </button>
-            )}
-            {/* Hidden while the comeback card is up. A zero beside a flame
-                is a verdict, and the one thing someone opening this after a
-                week away must not be handed first is a verdict. It is back
-                the moment the card is closed. */}
-            {comeback === 0 && (
-              <span
-                className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
-                style={{ borderColor: T.border }}
-              >
-                <Flame size={14} style={{ color: streak > 0 ? T.ember : T.faint }} />
-                <span className="font-extrabold tabular-nums">{streak}</span>
-                <span className="text-[10.5px]" style={{ color: T.faint }}>
-                  {countedWord(streak)}
-                </span>
-              </span>
-            )}
-          </div>
-          <p className="mt-3 max-w-md text-xs leading-relaxed text-white/35">
-            <span dir="ltr" className="font-extrabold tabular-nums">
-              {doneCount} / {habits.length}
-            </span>{" "}
-            عادة اليوم. ما في هذه الشاشة هو ما تبقّى من يومك — والتفاصيل في
-            شاشاتها.
-          </p>
-        </div>
-        <ProgressRing value={discipline} size={150} />
-      </Card>
+      {/* التاريخ والبلوك المفتوح والصلاة القادمة وحلقة الانضباط. */}
+      <DayHeaderCard
+        dateLabel={dateLabel}
+        block={g}
+        next={next}
+        streak={streak}
+        showStreak={comeback === 0}
+        doneCount={doneCount}
+        total={habits.length}
+        discipline={discipline}
+        onOpenSettings={onOpenSettings}
+      />
 
-      {/* The three. The same component the routine screen shows, not a copy
-          of it: the cap is the rule, and one rule cannot have two
-          renderings. */}
-      <TopThree state={state} setState={setState} />
-
-      {/* Tomorrow, asked for in the evening and nowhere else. Read-only
-          here like everything on this screen — the picks, the steps and the
-          hours all live where they already lived, and the card only says
-          what is prepared and opens the screen that prepares it. */}
-      {evening && (
-        <Card
-          className="p-5 sm:p-6"
-          style={{
-            borderColor: `${T.violet}59`,
-            backgroundColor: `${T.violet}0D`,
-          }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border"
-                style={{
-                  borderColor: `${T.violet}4D`,
-                  background: `linear-gradient(160deg, ${T.violet}33, ${T.violet}0F)`,
-                  color: T.violet,
-                }}
-              >
-                <Sunrise size={18} strokeWidth={2.4} />
-              </span>
-              <div>
-                <h3 className="text-[15px] font-extrabold" style={{ color: T.violet }}>
-                  {prepared.length ? "غدك مجهّز" : "جهّز غدك"}
-                </h3>
-                {/* The count, never the word «ثلاث» — two picks announced as
-                    three is the screen lying about the one number it
-                    exists to carry. */}
-                <p className="mt-0.5 text-[11px] leading-relaxed" style={{ color: T.faint }}>
-                  {!prepared.length ? (
-                    "اختر ثلاثًا الآن، وابدأ الغد بلا مساومة"
-                  ) : tasksPhrase(prepared.length) ? (
-                    <>
-                      {tasksPhrase(prepared.length)} {arDate(tomorrowOn)}
-                    </>
-                  ) : (
-                    <>
-                      <span dir="ltr" className="font-bold tabular-nums">
-                        {prepared.length}
-                      </span>{" "}
-                      {taskWord(prepared.length)} تنتظر {arDate(tomorrowOn)}
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-            <Btn variant={prepared.length ? "outline" : "default"} size="sm" onClick={onOpenTomorrow}>
-              {prepared.length ? "عدّل" : "ابدأ"} <ArrowLeft size={13} />
-            </Btn>
-          </div>
-
-          {prepared.length > 0 && (
-            <div className="mt-4 space-y-1.5">
-              {prepared.map((r, i) => (
-                <div
-                  key={r.task.id}
-                  className="flex items-start gap-2.5 rounded-xl border px-3 py-2"
-                  style={{ borderColor: T.border }}
-                >
-                  <span
-                    className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-extrabold tabular-nums"
-                    style={{ background: `${T.violet}26`, color: T.violet }}
-                  >
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] font-bold text-white/80">
-                      {r.task.text}
-                    </p>
-                    {!!r.task.step && (
-                      <p
-                        className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-relaxed"
-                        style={{ color: T.faint }}
-                      >
-                        <Footprints size={10} className="mt-[3px] shrink-0" />
-                        <span>{r.task.step}</span>
-                      </p>
-                    )}
-                  </div>
-                  {!!r.at && (
-                    <span
-                      dir="ltr"
-                      className="mt-0.5 shrink-0 text-[11px] font-extrabold tabular-nums"
-                      style={{ color: T.violet }}
-                    >
-                      {prettyTime(r.at)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* What is still open, the block in front of you first. */}
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <h3
-            className="flex items-center gap-2 text-[15px] font-extrabold"
-            style={{ color: T.primaryLift }}
-          >
-            <ListChecks size={16} /> العادات المتبقية
-          </h3>
-          <div className="flex items-center gap-2">
-            <Badge tint={allDone ? T.primary : T.cta}>
-              <span dir="ltr" className="tabular-nums">
-                {habits.length - doneCount}
-              </span>
-              {" متبقية"}
-            </Badge>
-            <Btn variant="ghost" size="sm" onClick={() => onGo("routine")}>
-              الروتين <ArrowLeft size={13} />
-            </Btn>
-          </div>
-        </div>
-
-        {allDone ? (
-          <p
-            className="mt-4 rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
-            style={{
-              borderColor: `${T.primary}3D`,
-              backgroundColor: `${T.primary}12`,
-              color: T.primaryLift,
-            }}
-          >
-            كل عادات اليوم تمّت. أغلق الشاشة واذهب — لا شيء ينتظرك هنا.
-          </p>
-        ) : (
-          <div className="mt-4 space-y-4">
-            <div>
-              <p className="mb-2 text-[11px] font-bold" style={{ color: g.tint }}>
-                {g.label} — الآن
-              </p>
-              {open.here.length ? (
-                <div className="space-y-1.5">
-                  {open.here.map((h) => (
-                    <TodayHabit
-                      key={h.id}
-                      habit={h}
-                      book={bookForHabit(h, state.books)}
-                      onToggle={() => tick(h.id)}
-                      onToggleTiny={() => tick(h.id, true)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p
-                  className="rounded-xl border border-dashed px-3 py-3 text-center text-[11.5px]"
-                  style={{ borderColor: T.border, color: T.faint }}
-                >
-                  لا شيء متبقٍّ في هذا البلوك.
-                </p>
-              )}
-            </div>
-
-            {/* Behind him, not hidden. A habit whose block has closed is
-                still tickable — the day is not over until 04:00 — and a
-                screen that drops it is a screen that quietly lowers the
-                score without saying so. */}
-            {missed.length > 0 && (
-              <div>
-                <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
-                  فاتك في بلوكات مضت —{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {missed.length}
-                  </span>
-                </p>
-                <div className="space-y-1.5">
-                  {missed.slice(0, 5).map((h) => (
-                    <TodayHabit
-                      key={h.id}
-                      habit={h}
-                      book={bookForHabit(h, state.books)}
-                      onToggle={() => tick(h.id)}
-                      onToggleTiny={() => tick(h.id, true)}
-                      late
-                    />
-                  ))}
-                </div>
-                {missed.length > 5 && (
-                  <button
-                    onClick={() => onGo("routine")}
-                    className="mt-2 w-full rounded-xl border border-dashed py-2 text-[11.5px] transition-colors hover:bg-white/[0.06]"
-                    style={{ borderColor: T.border, color: T.muted }}
-                  >
-                    وبقي{" "}
-                    <span dir="ltr" className="tabular-nums">
-                      {missed.length - 5}
-                    </span>{" "}
-                    — افتح الروتين
-                  </button>
-                )}
-              </div>
-            )}
-
-            {open.later.length > 0 && (
-              <p className="text-[11px]" style={{ color: T.faint }}>
-                وأمامك{" "}
-                <span dir="ltr" className="tabular-nums">
-                  {open.later.length}
-                </span>{" "}
-                عادة في بلوكات لم تبدأ بعد.
-              </p>
-            )}
-          </div>
-        )}
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* The timetable, for one day only. */}
-        <Card className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3
-                className="flex items-center gap-2 text-[15px] font-extrabold"
-                style={{ color: T.sky }}
-              >
-                <School size={16} /> محاضرات اليوم
-              </h3>
-              <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
-                {uniDayOf(dow)?.label || "نهاية الأسبوع"}
-              </p>
-            </div>
-            <Btn variant="ghost" size="sm" onClick={() => onGo("uni")}>
-              الجامعة <ArrowLeft size={13} />
-            </Btn>
-          </div>
-
-          <div className="mt-4 space-y-1.5">
-            {sections.length ? (
-              sections.map((r) => (
-                <TodayLine
-                  key={r.slot.id}
-                  tint={r.course.tint}
-                  icon={GraduationCap}
-                  title={courseName(r.course)}
-                  sub={[r.slot.room, r.course.instructor].filter(Boolean).join(" · ")}
-                  time={`${prettyTime(r.slot.from)} – ${prettyTime(r.slot.to)}`}
-                  when={r.now ? "الآن" : r.to <= mins ? "انتهت" : ""}
-                  now={r.now}
-                />
-              ))
-            ) : (
-              <>
-                <p
-                  className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
-                  style={{ borderColor: T.border, color: T.faint }}
-                >
-                  لا محاضرات اليوم.
-                </p>
-                {ahead && (
-                  <TodayLine
-                    tint={ahead.course.tint}
-                    icon={CalendarClock}
-                    title={courseName(ahead.course)}
-                    sub={`القادمة · ${uniDayOf(ahead.slot.day)?.label || ""}`}
-                    time={prettyTime(ahead.slot.from)}
-                    when={ahead.inDays === 1 ? "غدًا" : ahead.inDays === 0 ? "اليوم" : ""}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        </Card>
-
-        {/* The nearest thing with a date on it. */}
-        <Card className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3
-                className="flex items-center gap-2 text-[15px] font-extrabold"
-                style={{ color: T.rose }}
-              >
-                <AlarmClock size={16} /> أقرب اختبار أو تسليم
-              </h3>
-              <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
-                من الجامعة والتقويم معًا
-              </p>
-            </div>
-            <Btn variant="ghost" size="sm" onClick={() => onGo("agenda")}>
-              التقويم <ArrowLeft size={13} />
-            </Btn>
-          </div>
-
-          <div className="mt-4 space-y-1.5">
-            {nearest.length ? (
-              nearest.map((r) => {
-                const left = daysUntil(r.on);
-                return (
-                  <button
-                    key={r.key}
-                    onClick={() => onGo(r.go)}
-                    className="block w-full text-right"
-                  >
-                    <TodayLine
-                      tint={r.tint}
-                      icon={ClipboardList}
-                      title={r.title}
-                      sub={r.sub}
-                      time={r.time ? prettyTime(r.time) : ""}
-                      when={whenWord(r.on)}
-                      hot={left !== null && left <= 1}
-                    />
-                  </button>
-                );
-              })
-            ) : (
-              <p
-                className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
-                style={{ borderColor: T.border, color: T.faint }}
-              >
-                لا تسليمات ولا اختبارات مسجّلة.
-              </p>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* عبارة من الكتب — تُقرأ هنا لأن هذه هي الشاشة التي يُفتح عليها
-          اليوم. مكوّن مستقل في life-shared.jsx: انقله إلى أي صفحة
-          بنسخ هذا السطر وحده. */}
+      {/* عبارة من الكتب — أعلى الصفحة مباشرة تحت شريط التاريخ، فتكون أول
+          ما تقع عليه العين. انقل هذا السطر فوق DayHeaderCard ليصير أول
+          شيء على الإطلاق. */}
       <ReadingCue list={state.reads} />
 
+      {/* المهام الثلاث — نفس المكوّن الذي يعرضه الروتين لا نسخة منه. */}
+      <TopThree state={state} setState={setState} />
+
+      {/* يظهر في نافذة المساء وحدها. */}
+      {evening && (
+        <TomorrowPrepCard
+          prepared={prepared}
+          on={tomorrowOn}
+          onOpen={onOpenTomorrow}
+        />
+      )}
+
+      <RemainingHabitsCard
+        block={g}
+        open={open}
+        missed={missed}
+        books={state.books}
+        remaining={habits.length - doneCount}
+        allDone={allDone}
+        onTick={tick}
+        onGo={onGo}
+      />
+
+      {/* بطاقتان جنبًا إلى جنب على الشاشات العريضة. أخرج أيّ سطر منهما من
+          هذا الـ div ليصير بعرض الصفحة كاملًا. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <LecturesCard
+          dow={dow}
+          sections={sections}
+          ahead={ahead}
+          mins={mins}
+          onGo={onGo}
+        />
+        <NearestDueCard items={nearest} onGo={onGo} />
+      </div>
+
+      {/* نافذة تسجيل القراءة — ليست بطاقة، لا تنقلها بين الكتل. */}
       <ReadLogModal
         open={!!logging}
         book={logging ? bookForHabit(logging, state.books) : null}
@@ -911,3 +571,439 @@ function ComebackCard({ state, setState, days, onTick, onTickTiny, onClose }) {
    that is still there. */
 const REWARD_HOLD = 1100;
 
+/* ==================================================================== *
+ * كتل صفحة «اليوم»
+ *
+ * كل بطاقة في الصفحة مكوّن مستقلّ هنا، والصفحة نفسها أعلاه
+ * مجرّد قائمة بها. ولا واحد من هذه المكوّنات يملك حالة: كلّها
+ * تستقبل ما تعرضه وتعرضه — وهذا هو سبب كون نقل سطر واحد كافيًا
+ * لإعادة ترتيب الشاشة.
+ * ==================================================================== */
+
+/* شريط اليوم: التاريخ، البلوك المفتوح، الصلاة القادمة، والحلقة. */
+export function DayHeaderCard({
+  dateLabel,
+  block,
+  next,
+  streak,
+  showStreak,
+  doneCount,
+  total,
+  discipline,
+  onOpenSettings,
+}) {
+  const Icon = block.icon;
+  return (
+    <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 lg:flex-row lg:justify-between">
+      <div className="min-w-0 text-center lg:text-right">
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+          اليوم
+        </h2>
+        <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
+          <CalendarDays size={13} /> {dateLabel}
+        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
+          <span
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] font-extrabold"
+            style={{
+              borderColor: `${block.tint}3D`,
+              backgroundColor: `${block.tint}14`,
+              color: block.tint,
+            }}
+          >
+            <Icon size={14} /> {block.label}
+          </span>
+          {next && (
+            <button
+              onClick={onOpenSettings}
+              title="تغيير المدينة"
+              className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] transition-colors hover:bg-white/[0.06]"
+              style={{ borderColor: `${T.violet}3D`, backgroundColor: `${T.violet}12` }}
+            >
+              <MoonStar size={14} style={{ color: T.violet }} />
+              <span style={{ color: T.muted }}>
+                {next.tomorrow ? "فجر غدٍ" : next.label}
+              </span>
+              <span
+                dir="ltr"
+                className="font-extrabold tabular-nums"
+                style={{ color: T.cta }}
+              >
+                {clockAt(next.at / 60)}
+              </span>
+              <span className="text-[10.5px]" style={{ color: T.faint }}>
+                {next.left >= 60
+                  ? `بعد ${Math.floor(next.left / 60)} س ${next.left % 60} د`
+                  : `بعد ${next.left} د`}
+              </span>
+            </button>
+          )}
+          {/* Hidden while the comeback card is up. A zero beside a flame
+              is a verdict, and the one thing someone opening this after a
+              week away must not be handed first is a verdict. It is back
+              the moment the card is closed. */}
+          {showStreak && (
+            <span
+              className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
+              style={{ borderColor: T.border }}
+            >
+              <Flame size={14} style={{ color: streak > 0 ? T.ember : T.faint }} />
+              <span className="font-extrabold tabular-nums">{streak}</span>
+              <span className="text-[10.5px]" style={{ color: T.faint }}>
+                {countedWord(streak)}
+              </span>
+            </span>
+          )}
+        </div>
+        <p className="mt-3 max-w-md text-xs leading-relaxed text-white/35">
+          <span dir="ltr" className="font-extrabold tabular-nums">
+            {doneCount} / {total}
+          </span>{" "}
+          عادة اليوم. ما في هذه الشاشة هو ما تبقّى من يومك — والتفاصيل في
+          شاشاتها.
+        </p>
+      </div>
+      <ProgressRing value={discipline} size={150} />
+    </Card>
+  );
+}
+
+/* جهّز غدك — بطاقة تقرأ ولا تكتب. */
+export function TomorrowPrepCard({ prepared, on, onOpen }) {
+  return (
+    <Card
+      className="p-5 sm:p-6"
+      style={{
+        borderColor: `${T.violet}59`,
+        backgroundColor: `${T.violet}0D`,
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border"
+            style={{
+              borderColor: `${T.violet}4D`,
+              background: `linear-gradient(160deg, ${T.violet}33, ${T.violet}0F)`,
+              color: T.violet,
+            }}
+          >
+            <Sunrise size={18} strokeWidth={2.4} />
+          </span>
+          <div>
+            <h3 className="text-[15px] font-extrabold" style={{ color: T.violet }}>
+              {prepared.length ? "غدك مجهّز" : "جهّز غدك"}
+            </h3>
+            {/* The count, never the word «ثلاث» — two picks announced as
+                three is the screen lying about the one number it
+                exists to carry. */}
+            <p className="mt-0.5 text-[11px] leading-relaxed" style={{ color: T.faint }}>
+              {!prepared.length ? (
+                "اختر ثلاثًا الآن، وابدأ الغد بلا مساومة"
+              ) : tasksPhrase(prepared.length) ? (
+                <>
+                  {tasksPhrase(prepared.length)} {arDate(on)}
+                </>
+              ) : (
+                <>
+                  <span dir="ltr" className="font-bold tabular-nums">
+                    {prepared.length}
+                  </span>{" "}
+                  {taskWord(prepared.length)} تنتظر {arDate(on)}
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+        <Btn variant={prepared.length ? "outline" : "default"} size="sm" onClick={onOpen}>
+          {prepared.length ? "عدّل" : "ابدأ"} <ArrowLeft size={13} />
+        </Btn>
+      </div>
+
+      {prepared.length > 0 && (
+        <div className="mt-4 space-y-1.5">
+          {prepared.map((r, i) => (
+            <div
+              key={r.task.id}
+              className="flex items-start gap-2.5 rounded-xl border px-3 py-2"
+              style={{ borderColor: T.border }}
+            >
+              <span
+                className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-extrabold tabular-nums"
+                style={{ background: `${T.violet}26`, color: T.violet }}
+              >
+                {i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12.5px] font-bold text-white/80">
+                  {r.task.text}
+                </p>
+                {!!r.task.step && (
+                  <p
+                    className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-relaxed"
+                    style={{ color: T.faint }}
+                  >
+                    <Footprints size={10} className="mt-[3px] shrink-0" />
+                    <span>{r.task.step}</span>
+                  </p>
+                )}
+              </div>
+              {!!r.at && (
+                <span
+                  dir="ltr"
+                  className="mt-0.5 shrink-0 text-[11px] font-extrabold tabular-nums"
+                  style={{ color: T.violet }}
+                >
+                  {prettyTime(r.at)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* العادات المتبقية، البلوك الذي أمامك أوّلًا. */
+export function RemainingHabitsCard({
+  block,
+  open,
+  missed,
+  books,
+  remaining,
+  allDone,
+  onTick,
+  onGo,
+}) {
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <h3
+          className="flex items-center gap-2 text-[15px] font-extrabold"
+          style={{ color: T.primaryLift }}
+        >
+          <ListChecks size={16} /> العادات المتبقية
+        </h3>
+        <div className="flex items-center gap-2">
+          <Badge tint={allDone ? T.primary : T.cta}>
+            <span dir="ltr" className="tabular-nums">
+              {remaining}
+            </span>
+            {" متبقية"}
+          </Badge>
+          <Btn variant="ghost" size="sm" onClick={() => onGo("routine")}>
+            الروتين <ArrowLeft size={13} />
+          </Btn>
+        </div>
+      </div>
+
+      {allDone ? (
+        <p
+          className="mt-4 rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
+          style={{
+            borderColor: `${T.primary}3D`,
+            backgroundColor: `${T.primary}12`,
+            color: T.primaryLift,
+          }}
+        >
+          كل عادات اليوم تمّت. أغلق الشاشة واذهب — لا شيء ينتظرك هنا.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <div>
+            <p className="mb-2 text-[11px] font-bold" style={{ color: block.tint }}>
+              {block.label} — الآن
+            </p>
+            {open.here.length ? (
+              <div className="space-y-1.5">
+                {open.here.map((h) => (
+                  <TodayHabit
+                    key={h.id}
+                    habit={h}
+                    book={bookForHabit(h, books)}
+                    onToggle={() => onTick(h.id)}
+                    onToggleTiny={() => onTick(h.id, true)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p
+                className="rounded-xl border border-dashed px-3 py-3 text-center text-[11.5px]"
+                style={{ borderColor: T.border, color: T.faint }}
+              >
+                لا شيء متبقٍّ في هذا البلوك.
+              </p>
+            )}
+          </div>
+
+          {/* Behind him, not hidden. A habit whose block has closed is
+              still tickable — the day is not over until 04:00 — and a
+              screen that drops it is a screen that quietly lowers the
+              score without saying so. */}
+          {missed.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
+                فاتك في بلوكات مضت —{" "}
+                <span dir="ltr" className="tabular-nums">
+                  {missed.length}
+                </span>
+              </p>
+              <div className="space-y-1.5">
+                {missed.slice(0, 5).map((h) => (
+                  <TodayHabit
+                    key={h.id}
+                    habit={h}
+                    book={bookForHabit(h, books)}
+                    onToggle={() => onTick(h.id)}
+                    onToggleTiny={() => onTick(h.id, true)}
+                    late
+                  />
+                ))}
+              </div>
+              {missed.length > 5 && (
+                <button
+                  onClick={() => onGo("routine")}
+                  className="mt-2 w-full rounded-xl border border-dashed py-2 text-[11.5px] transition-colors hover:bg-white/[0.06]"
+                  style={{ borderColor: T.border, color: T.muted }}
+                >
+                  وبقي{" "}
+                  <span dir="ltr" className="tabular-nums">
+                    {missed.length - 5}
+                  </span>{" "}
+                  — افتح الروتين
+                </button>
+              )}
+            </div>
+          )}
+
+          {open.later.length > 0 && (
+            <p className="text-[11px]" style={{ color: T.faint }}>
+              وأمامك{" "}
+              <span dir="ltr" className="tabular-nums">
+                {open.later.length}
+              </span>{" "}
+              عادة في بلوكات لم تبدأ بعد.
+            </p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* جدول اليوم من مكتب الجامعة. */
+export function LecturesCard({ dow, sections, ahead, mins, onGo }) {
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3
+            className="flex items-center gap-2 text-[15px] font-extrabold"
+            style={{ color: T.sky }}
+          >
+            <School size={16} /> محاضرات اليوم
+          </h3>
+          <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
+            {uniDayOf(dow)?.label || "نهاية الأسبوع"}
+          </p>
+        </div>
+        <Btn variant="ghost" size="sm" onClick={() => onGo("uni")}>
+          الجامعة <ArrowLeft size={13} />
+        </Btn>
+      </div>
+
+      <div className="mt-4 space-y-1.5">
+        {sections.length ? (
+          sections.map((r) => (
+            <TodayLine
+              key={r.slot.id}
+              tint={r.course.tint}
+              icon={GraduationCap}
+              title={courseName(r.course)}
+              sub={[r.slot.room, r.course.instructor].filter(Boolean).join(" · ")}
+              time={`${prettyTime(r.slot.from)} – ${prettyTime(r.slot.to)}`}
+              when={r.now ? "الآن" : r.to <= mins ? "انتهت" : ""}
+              now={r.now}
+            />
+          ))
+        ) : (
+          <>
+            <p
+              className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
+              style={{ borderColor: T.border, color: T.faint }}
+            >
+              لا محاضرات اليوم.
+            </p>
+            {ahead && (
+              <TodayLine
+                tint={ahead.course.tint}
+                icon={CalendarClock}
+                title={courseName(ahead.course)}
+                sub={`القادمة · ${uniDayOf(ahead.slot.day)?.label || ""}`}
+                time={prettyTime(ahead.slot.from)}
+                when={ahead.inDays === 1 ? "غدًا" : ahead.inDays === 0 ? "اليوم" : ""}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/* أقرب اختبار أو تسليم — من الجامعة والتقويم معًا. */
+export function NearestDueCard({ items, onGo }) {
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3
+            className="flex items-center gap-2 text-[15px] font-extrabold"
+            style={{ color: T.rose }}
+          >
+            <AlarmClock size={16} /> أقرب اختبار أو تسليم
+          </h3>
+          <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
+            من الجامعة والتقويم معًا
+          </p>
+        </div>
+        <Btn variant="ghost" size="sm" onClick={() => onGo("agenda")}>
+          التقويم <ArrowLeft size={13} />
+        </Btn>
+      </div>
+
+      <div className="mt-4 space-y-1.5">
+        {items.length ? (
+          items.map((r) => {
+            const left = daysUntil(r.on);
+            return (
+              <button
+                key={r.key}
+                onClick={() => onGo(r.go)}
+                className="block w-full text-right"
+              >
+                <TodayLine
+                  tint={r.tint}
+                  icon={ClipboardList}
+                  title={r.title}
+                  sub={r.sub}
+                  time={r.time ? prettyTime(r.time) : ""}
+                  when={whenWord(r.on)}
+                  hot={left !== null && left <= 1}
+                />
+              </button>
+            );
+          })
+        ) : (
+          <p
+            className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
+            style={{ borderColor: T.border, color: T.faint }}
+          >
+            لا تسليمات ولا اختبارات مسجّلة.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
