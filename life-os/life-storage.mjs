@@ -15,7 +15,7 @@ export const STORAGE_KEY = "life-os-2027:v3";
  *  the write path can actually be exercised without going anywhere near the
  *  live origin. Nothing in the shipped build sets it.
  * ---------------------------------------------------------------------- */
-const LOCAL_HOST = "http://127.0.0.1:47615";
+export const LOCAL_HOST = "http://127.0.0.1:47615";
 export function primaryOrigin() {
   try {
     const override = window.LIFE_OS_PRIMARY;

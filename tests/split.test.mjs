@@ -47,6 +47,15 @@ const read = (f) => readFileSync(join(root, f), "utf8");
    (life-state-streak.mjs reads `disciplineOf` off life-state-habits.mjs),
    consumers of this same split in their own right. */
 const MODULES = [
+  "life-settings.jsx",
+  "life-nav.jsx",
+  "life-matrix.jsx",
+  "life-today.jsx",
+  "life-routine.jsx",
+  "life-analytics.jsx",
+  "life-agenda.jsx",
+  "life-vault.jsx",
+  "life-goals.jsx",
   "life-state.mjs",
   "life-breaker.jsx",
   "prayer-times.mjs",
@@ -68,6 +77,15 @@ const MODULES = [
   "life-state-streak.mjs",
 ];
 const CONSUMERS = [
+  "life-settings.jsx",
+  "life-nav.jsx",
+  "life-matrix.jsx",
+  "life-today.jsx",
+  "life-routine.jsx",
+  "life-analytics.jsx",
+  "life-agenda.jsx",
+  "life-vault.jsx",
+  "life-goals.jsx",
   "LifeOS.jsx",
   "life-breaker.jsx",
   "life-shared.jsx",
@@ -392,3 +410,68 @@ test("the recovery path seeds the revision counter from the disk copy", async ()
     g.fetch = prevFetch;
   }
 });
+
+/* --- a helper that moved, and the file that still calls it -------------
+   The two checks above only know about names a module *exports*. That is
+   the whole surface they can see, and it has a hole in it exactly the size
+   of this bug: carve a helper into another file, forget to export it, and
+   the file it came from still calls it. esbuild bundles that as a bare
+   global reference and says nothing, the tests above have no export to
+   match it against, and the screen throws on open.
+
+   `horizonClock`, `clockLabel` and `HorizonRow` all moved to life-goals.jsx
+   while life-routine.jsx went on calling them, and nothing caught it but
+   the blank screen.
+
+   So: for every pair of our files, a name declared at the top level of one
+   and used by another that neither declares nor imports it. Scoped to our
+   own declarations on purpose — that is what makes it free of the false
+   positives a general free-variable scan drowns in (every lowercase JSX
+   tag, every destructured `setX`). */
+const topLevelDecls = (src) => {
+  const names = new Set();
+  for (const m of src.matchAll(
+    /^(?:export\s+)?(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm,
+  ))
+    names.add(m[1]);
+  return names;
+};
+
+const ALL_FILES = [...new Set([...MODULES, ...CONSUMERS])];
+const DECLARED_IN = new Map(ALL_FILES.map((f) => [f, topLevelDecls(read(f))]));
+
+for (const file of ALL_FILES) {
+  test(`${file} does not call a helper that lives in another file unimported`, () => {
+    const src = read(file);
+    const body = strip(src);
+    const imported = importsOf(src);
+    /* Everything this file binds, not only at the top level: a local
+       `const rows = ...` inside a function shadows the `rows` another
+       module happens to export, and reporting that would be noise. */
+    const mine = declaredIn(body);
+    const used = usedIn(body);
+
+    /* `{ money: Wallet }` is a key, not a reference to anything, and this
+       project's icon and tint tables are full of keys that collide with
+       helper names elsewhere. A name counts as used only where it appears
+       somewhere that is not immediately followed by a colon. */
+    const reallyUsed = (name) =>
+      new RegExp(`(?<![.\\w$])${name}(?!\\s*:)(?![\\w$])`).test(body);
+
+    const missing = [];
+    for (const [other, names] of DECLARED_IN) {
+      if (other === file) continue;
+      for (const name of names)
+        if (used.has(name) && !imported.has(name) && !mine.has(name) && reallyUsed(name))
+          missing.push(`${name} — declared at the top level of ${other}`);
+    }
+
+    assert.deepEqual(
+      [...new Set(missing)].sort(),
+      [],
+      `${file} uses these and neither declares nor imports them. Each one is` +
+        ` a ReferenceError the moment the screen renders: ` +
+        [...new Set(missing)].sort().join(" · "),
+    );
+  });
+}
