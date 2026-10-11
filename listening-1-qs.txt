@@ -1,0 +1,38 @@
+const question = [
+  {
+    questions: "I have been living in Dammam ......... three years now.",
+    answer: [
+      {text:"for",correct:true},
+      {text:"in",correct:false},
+      {text:"since",correct:false},
+      {text:"during",correct:false}
+    ]
+  },
+  {
+    questions:"I felt asleep while I ........... for the project.",
+    answer:[
+      {text:"have studied",correct:false},
+      {text:"has studied",correct:false},
+      {text:"studied",correct:false},
+      {text:"was studying",correct:true}
+    ]
+  },
+  {
+    questions:"If Bob is late for work one more time, he ................ his job.",
+    answer:[
+      {text:"lose",correct:false},
+      {text:"would lose",correct:false},
+      {text:"will lose",correct:true},
+      {text:"lost",correct:false}
+    ]
+  },
+  {
+    questions:"In which sentence is all CAPITALIZATION correct?",
+    answer:[
+      {text:"My School Year begins on Saturday in late August",correct:false},
+      {text:"My school year begins on Saturday in late August",correct:true},
+      {text:"My School year begins on Saturday in late august",correct:false},
+      {text:"My school year begins on Saturday in late august",correct:false}
+    ]
+  }
+];

@@ -1,0 +1,703 @@
+
+<style>
+   
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@200;300;400;500;600;700;800;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700;1,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400..800&display=swap');
+  
+
+   
+*, *::before, *::after{
+  margin: 0;
+  padding: 0;
+  box-sizing:border-box;
+}
+   
+   
+   
+#PopularPosts1,
+  #footer, 
+  .page header,
+  #comments,
+  .post-share-buttons,
+  h3.post-title, 
+  .bg-photo-container,
+  .bg-photo-overlay,
+  .centered-top-container,
+  .collapsed-header .centered-top-placeholder {
+  	display: none;
+  }
+   
+   
+  .post-body {
+  	color: #000;
+    margin: 0;
+  }
+  
+  .post-body img { height: unset; }
+  
+  .post-body h3 { color: #000; }
+  
+  footer h3 { color: #fff; }
+  
+  .Blog .blog-posts .post-outer-container .post-outer {
+   	padding-bottom: 0; 
+  }
+  
+  .Blog .blog-posts .post-outer-container,
+  .centered-bottom { 
+  	padding: 0;
+  }
+  
+  .page_body .widget {
+  	margin-bottom: 0;
+  }
+  
+  .page_body .centered {
+  	padding: 0;
+    max-width: unset;
+  }
+  
+  @media screen and (max-width: 800px) {
+    div.widget.Blog .blog-posts .post-outer-container {
+    	padding: 0;
+    }
+  }
+   
+
+  
+  
+   
+   
+   
+   div.page,
+div.page_body,
+div.centered {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+   
+   
+   
+   
+  
+
+:root{
+  --background-color-dark: #0f0f0f;
+  --background-color: #fcfcfc;
+  --item-background-color-dark: #151515;
+  --item-background-color: rgba(215, 227, 245, 0.6) ; /*#fcfcfc; #f8f9fa*/
+  --secondary-item-background-color:#24415f; 
+  --button-color: #24415f;
+  
+  --yellow-highlight: #fad378;
+
+  --item-hover-background: rgba(255, 255, 255, 0.479);
+  
+  /*--item-border: 1px solid rgb(70, 70, 70) ;*/
+
+  --font-secondary-color : white;
+
+  --main-page-item-width: 60%;
+  --main-page-item-padding: 25px 40px;
+  --transition: all 0.5s ease;
+  
+
+  --font-family: "Baloo Bhaijaan 2", sans-serif;
+  --secondary-font-family: "Baloo Bhaijaan 2", sans-serif;
+}
+   
+   
+   
+   
+body{
+   margin: 0;
+   overflow-x:hidden;
+   display: block;
+}
+   
+      
+   
+.flex{
+   display:flex
+}
+
+   
+   
+.logo{
+   margin:1.5rem;
+   font-size:16px
+ 
+}
+   
+   
+.blue-logo{   
+     font-family: var(--secondary-font-family);
+     font-weight: 700;
+     background:var(--yellow-highlight);
+     padding:0px 5px;
+}
+   
+  
+   
+   
+   
+   .page-header{
+     align-items:center;
+     justify-content: space-between;
+     font-weight:700;
+     
+    
+   }
+   
+   .primary-navigation{
+     list-style:none;
+     padding:0;
+     margin:0;
+     
+   }
+   
+   .primary-navigation li a{
+     color: var(--secondary-item-background-color);
+     font-size: 18px;
+   }
+   
+   .mobile-nav-toggle{
+   
+     display:none;
+   }
+   
+   
+   .level-test-btn{
+    background-color: var(--button-color);
+    border-radius: 50px;
+    padding:10px;
+   
+   }
+     .level-test-btn {
+        text-align: center
+   }
+   li.level-test-btn a 
+   {color:white}
+   
+   
+   
+   
+   
+   @media(max-width:35em){
+  
+     .primary-navigation{
+       
+       position:fixed;
+       z-index:1000;
+       inset: 0 40% 0 0;
+       gap:2em;
+       background: #f8f9fa;
+       flex-direction:column;
+       padding: min(30vh, 10rem) 2rem;
+       
+       transform: translateX(-100%);
+       transition: transform 350ms ease-in;
+       
+     }
+     
+      .primary-navigation li a{
+     font-size: 20px;
+   }
+     
+     .primary-navigation[data-visible="true"] {
+     
+       transform: translateX(0%)
+     }
+     
+     .mobile-nav-toggle{
+    
+       display:block;
+       position:absolute;
+       z-index: 9999;
+       width: 2rem;
+       height:2rem;
+       top: 2rem;
+       left:2rem;
+       display:flex;
+       align-items:center;
+       justify-content:center;
+       background:none;
+       border:none;
+       
+     }
+     
+    
+   }
+   
+   
+    @media (min-width:35em) and (max-width:65em){
+     
+      .primary-navigation{
+       
+       position:fixed;
+       z-index:1000;
+       inset: 0 60% 0 0;
+       gap:2em;
+       background: #f8f9fa;
+       align-items:center;
+       justify-content:center;
+       flex-direction:column;
+       padding: min(30vh, 10rem) 2rem;
+       
+       transform: translateX(-100%);
+       transition: transform 350ms ease-in;
+     }
+     
+      .primary-navigation li a{
+     font-size: 20px;
+   }
+     
+     .primary-navigation[data-visible="true"] {
+     
+       transform: translateX(0%)
+     }
+     
+     .mobile-nav-toggle{
+    
+       display:block;
+       position:absolute;
+       z-index: 9999;
+       width: 2rem;
+       height:2rem;
+       top: 2rem;
+       left:5rem;
+       display:flex;
+       align-items:center;
+       justify-content:center;
+       background:none;
+       border:none;
+       
+     }
+    
+     
+   }
+   
+   
+   
+    @media (min-width:35em){
+   
+      .primary-navigation{
+        align-items:center;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        gap:4em;
+        
+      } 
+      
+      .page-header{
+      
+        width: 90%;
+        margin:0 auto;
+        padding:0rem 2rem
+        
+        
+        
+      }
+      
+   }
+
+   
+   
+   
+   
+.custom-main{
+  min-height:100vh;
+  font-family: var(--font-family);
+  display:flex;
+  padding: 20px;
+  flex-direction: column;
+  gap: 14px;
+  position:relative;
+  justify-content:space-between;
+}
+   
+  .custom-container{
+    min-height:60vh;
+    padding: 20px 0px;
+  
+  }  
+   
+   
+.custom-footer{
+    height:15vh;
+    display:flex;
+    flex-direction: column;
+    align-items:center;
+    justify-content:space-between;
+    padding: 0, 0, 50px, 0;
+   gap:10px;
+  }
+  
+  
+   .custom-footer a{
+      color: var(--secondary-item-background-color);
+ 
+   }
+   
+.custom-footer i{
+     font-size:18px;
+ 
+   }
+   
+   .custom-footer a i{
+      color: var(--secondary-item-background-color);
+ 
+   }
+   
+   .custom-footer ul{
+     list-style:none;
+   display:flex;
+     justify-content:center;
+     align-items:center;
+     gap:20px
+     
+   }
+   
+  .footer-links{
+  display:flex;
+  flex-wrap: wrap;
+  align-items:center;
+    justify-content: center;
+  }
+  
+  .footer-links a{
+  white-space:nowrap
+  }
+   
+   
+      
+   @media (max-width:480px){
+      .footer-links a:nth-child(4){
+        flex-basis: 100%;
+        text-align:center;
+  }
+     
+   
+   }
+   
+   .sections{
+     display: flex;
+     flex-direction: column;
+     gap: 20px;
+   }
+   
+    .sections h3{
+    line-height:150%;
+   font-size: 20px;
+    text-align: center;}
+  
+   
+   .one-section a{
+     background: var(--item-background-color);
+     padding: 25px;
+     display:flex;
+     justify-content: space-between;
+     gap:10px;
+     align-items:center;
+     border-radius: 24px;
+     color: #24415f;
+     font-size:18px;
+    
+   }
+   
+   
+   .one-section p{
+    font-weight: 600;
+   
+   } 
+   
+     @media (min-width:55em){
+   
+     .sections{
+      width:60%;
+       margin: 0 auto;
+     }
+     
+      
+   .one-section a{
+   font-size:22px
+   }
+      
+   }
+  
+  
+  
+  
+  
+  .pagination {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 2rem 0;
+}
+ 
+.page-num {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: whitesmoke;
+  border: 1px solid #222;  color: #38b6ff;
+  font-size: 16px;
+  font-weight: bold;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+  color: black;
+
+}
+ 
+.page-num:visited {
+  color: black;
+}   
+  
+.page-num:hover {
+     background: #222;
+  color: #fff;
+}
+ 
+.page-num.active {
+     background: #222;
+  color: #fff;
+}
+    
+ 
+  
+  </style>
+
+
+
+
+
+      
+  
+    
+    
+
+  
+    
+   <div class="custom-main">
+      
+      <div class="page-header flex">
+    
+          <p class="logo"> اختبار ستيب 
+      
+            <span class="blue-logo">بدون تعقيد </span>
+        
+        
+          </p>
+    
+    <button aria-controls="primary-navigation" class="mobile-nav-toggle"><i class="fa-solid fa-bars"></i></button>
+    
+    <nav>
+      <ul class="primary-navigation flex" data-visible="false" id="primary-navigation">
+        <li class="active">
+          <a href="https://stepenglishtest.blogspot.com/">
+            الرئيسية
+          </a>
+        </li>
+        <li class="active">
+          <a href="https://stepenglishtest.blogspot.com/p/blog-page_24.html">
+            الشرح والتدريبات
+          </a>
+        </li>
+       <li class="active">
+          <a href="https://stepenglishtest.blogspot.com/p/page-under-construction.html">
+            الملفات
+          </a>
+        </li>
+        
+        <li class="level-test-btn">
+          <a href="https://stepenglishtest.blogspot.com/p/english-level-test-for-step.html">
+            اختبار تحديد المستوى
+          </a>
+        </li>
+      </ul>
+    </nav>
+  
+
+  </div>
+     
+
+     
+    
+   
+     
+     <div class="custom-container">
+       
+       <div class="sections">
+         
+          <h3>تنبيه: قد تكون بعض الأسئلة مشابهة لصيغة الأسئلة في الاختبار لكن التسجيلات مؤلفة للتدريب وليست من اختبار ستيب الفعلي لذلك لا تتوقع سماعها في الاختبار واعتمد على فهمك وليس على حفظ التسجيل او الاجابات.</h3>
+         
+         <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-1.html">
+             <p>تسجيل الامتحان</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+        
+     
+        <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-2.html">
+             <p>تسجيل وقت ومكان الإجتماع</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+        
+         <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-3.html">
+             <p>تسجيل الفيفا</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+
+         <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-4.html">
+             <p>تسجيل الامتحان القادم</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+         
+         
+         <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-5.html">
+             <p>تسجيل الكوكا كولا</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+         
+         
+          <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-6.html">
+             <p>تسجيل ميزان الحرارة</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+         
+         <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-7.html">
+             <p>تسجيل السفر والسياحة</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+         
+          <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-8.html">
+             <p>تسجيل عن الاخطبوط</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+      
+         
+          <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-9.html">
+             <p>تسجيل عن موضوع البحث</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+         
+         
+          
+          <div class="one-section">
+           <a href="https://stepenglishtest.blogspot.com/p/listening-10.html">
+             <p>تسجيل عن طعام الرياضيين</p>
+             <i class="fa-solid fa-arrow-left"></i>
+           </a>
+         </div>
+         
+         
+       </div>
+       
+       <div class="pagination">
+  <a class="page-num active" href="https://stepenglishtest.blogspot.com/p/listening-practice.html">1</a>
+  <a class="page-num" href="https://stepenglishtest.blogspot.com/p/listening-practice-2.html">2</a>
+  <a class="page-num" href="https://stepenglishtest.blogspot.com/p/listening-practice-3.html">3</a>
+  <!--<a href="YOUR_URL_4" class="page-num">4</a>
+  <a href="YOUR_URL_5" class="page-num">5</a>-->
+</div>
+ 
+     </div>
+     
+     
+     
+     
+      
+    <div class="custom-footer">
+             
+             
+  <div class="footer-links">
+      <a href="https://stepenglishtest.blogspot.com/p/about-us.html" style="margin: 0 10px; text-decoration: none;">من نحن</a> 
+    <a href="https://stepenglishtest.blogspot.com/p/contact-us.html" style="margin: 0 10px;  text-decoration: none;">اتصل بنا</a> 
+    <a href="https://stepenglishtest.blogspot.com/p/privacy-policy.html" style="margin: 0 10px;  text-decoration: none;">سياسة الخصوصية</a>
+    <a href="https://stepenglishtest.blogspot.com/p/terms-and-conditions.html" style="margin: 0 10px; text-decoration: none;">الشروط والأحكام</a>
+  </div>
+            
+        <div class="footer-socials">
+       <ul>
+       <li><a href="https://t.me/STEPEnglishTest" target="_blank"><i class="fa-brands fa-telegram"></i></a></li>
+      <li> <a href="https://www.tiktok.com/@stepenglishtest" target="_blank"><i class="fa-brands fa-tiktok"></i></a></li>
+      <li> <a href="https://www.youtube.com/@StepEnglishTest" target="_blank"><i class="fa-brands fa-youtube"></i></a></li>
+         <li> <a href="https://x.com/stepenglishtest" target="_blank"><i class="fa-brands fa-x-twitter"></i></a></li>
+      </ul>
+     </div>       
+             
+             
+             
+  <div style="color: #666;">جميع الحقوق محفوظة &copy; <span id="year"></span></div>
+       
+      
+
+  <script>
+    // Dynamic current year
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</div>
+       
+       
+       
+     </div> 
+
+
+        
+<script>
+      
+const primaryNav = document.querySelector(".primary-navigation");
+const navToggle = document.querySelector(".mobile-nav-toggle");
+  
+  navToggle.addEventListener("click", ()=> {
+  
+    const visibility = primaryNav.getAttribute("data-visible");
+    
+  if (visibility === "false") {
+  
+    primaryNav.setAttribute("data-visible", true)
+  }
+    else if (visibility === "true"){
+    
+      primaryNav.setAttribute("data-visible", false)
+    }
+  });
+  
+  
+  
+</script>
+    
+    
+
+
+
+
+
+
+</div>
+<div class='post-bottom'>
