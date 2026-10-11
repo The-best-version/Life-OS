@@ -364,7 +364,6 @@ const SCREENS = {
       onOpenReflect={c.openReflect}
       onOpenTomorrow={c.openTomorrow}
       onOpenFix={c.openFix}
-      onOpenSettings={c.openSettings}
       onGoGoals={c.goGoals}
       reflected={c.reflected}
       prepped={c.prepped}

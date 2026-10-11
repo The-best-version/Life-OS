@@ -1,9 +1,8 @@
 import { HorizonRow, clockLabel, horizonClock } from "./life-goals.jsx";
-import { ReadLogModal, TopThree, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, Field, GLASS, GROUPS, Modal, PRAYERS, ProgressRing, T, arDate, clockAt, countedWord, cupWord, dayWord, groupOf, nextPrayer, shrinkImage, useBurst, useMinuteClock, useUndo } from "../components/life-shared.jsx";
-import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, clampGoal, coreOf, currentQuarter, goalShape, habitShape, habitStreak, historyIndex, isGap, pctOfRow, placeShape, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
-import { fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Droplets, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MapPin, MessageSquareQuote, MoonStar, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
+import { ReadLogModal, useHabitTick } from "../components/life-day.jsx";
+import { Badge, Btn, Card, Checkbox, Field, GLASS, GROUPS, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
+import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, currentQuarter, goalShape, habitShape, habitStreak, historyIndex, isGap, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MessageSquareQuote, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export function RoutineModule({
@@ -21,7 +20,6 @@ export function RoutineModule({
   onOpenReflect,
   onOpenFix,
   onOpenTomorrow,
-  onOpenSettings,
   onGoGoals,
   reflected,
   prepped,
@@ -387,25 +385,6 @@ export function RoutineModule({
         </div>
         <ProgressRing value={discipline} size={176} />
       </Card>
-
-      <TopThree state={state} setState={setState} />
-
-      {/* The prayers the six blocks below are anchored to, and the one meter
-          that is not a habit. Side by side because they answer the same
-          question — «أين أنا من يومي الآن؟» — from two directions. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <PrayerCard place={state.place} onOpenSettings={onOpenSettings} />
-        <WaterCard
-          count={state.water}
-          goal={clampGoal(state.waterGoal)}
-          onSet={(n) =>
-            setState((s) => ({
-              ...s,
-              water: Math.max(0, Math.min(clampGoal(s.waterGoal), n)),
-            }))
-          }
-        />
-      </div>
 
       {/* The habits below are what spend the days this counts, so the two sit
           together — a countdown on a screen of its own is a number you visit,
@@ -1544,110 +1523,6 @@ const GONE_BLOCK = {
 };
 
 
-/* --- prayer times ----------------------------------------------------- *
- *  The six blocks of this routine are anchored to the prayers, so the times
- *  they are anchored to are shown beside them. Computed locally and never
- *  fetched — see `prayerTimes` for why that is not an optimisation but a
- *  requirement. Re-read once a minute, so the "next" marker and the counter
- *  move while the app sits open rather than waiting for a reload.
- * ---------------------------------------------------------------------- */
-function PrayerCard({ place, onOpenSettings }) {
-  useMinuteClock(); // the whole card is a function of the clock
-  const now = new Date();
-  const p = placeShape(place);
-  /* Recomputed on every minute tick rather than memoised: it is a dozen trig
-     calls, and a cache keyed on "the place and the day" would need the day
-     in its own dependency list — which is the clock again, by a longer road. */
-  const times = prayerTimes(p, now);
-  const next = nextPrayer(p, now);
-  const mins = now.getHours() * 60 + now.getMinutes();
-
-  return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3
-            className="flex items-center gap-2 text-[15px] font-extrabold"
-            style={{ color: T.violet }}
-          >
-            <MoonStar size={16} /> أوقات الصلاة
-          </h3>
-          <button
-            onClick={onOpenSettings}
-            className="mt-1 inline-flex items-center gap-1 text-[10.5px] transition-colors hover:text-white/70"
-            style={{ color: T.faint }}
-            title="تغيير المدينة"
-          >
-            <MapPin size={10} /> {p.label}
-            {p.asr === 2 && " · حنفي"}
-          </button>
-        </div>
-        {next && (
-          <div className="shrink-0 text-left">
-            <p className="text-[10px]" style={{ color: T.faint }}>
-              {next.tomorrow ? "فجر غدٍ بعد" : `${next.label} بعد`}
-            </p>
-            <p
-              dir="ltr"
-              className="text-[15px] font-extrabold tabular-nums"
-              style={{ color: T.cta }}
-            >
-              {next.left >= 60
-                ? `${Math.floor(next.left / 60)}:${String(next.left % 60).padStart(2, "0")}`
-                : `${next.left} د`}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-        {PRAYERS.map((row) => {
-          const t = times[row.id];
-          const at = t === null || !Number.isFinite(t) ? null : fixHour(t) * 60;
-          const on = !row.mark && next && next.id === row.id && !next.tomorrow;
-          /* Passed, so it is behind you — dimmed rather than hidden, because
-             «هل صليت العصر؟» is answered by seeing that it has gone by. */
-          const past = at !== null && at <= mins;
-          const Icon = row.icon;
-          return (
-            <div
-              key={row.id}
-              className="rounded-xl border px-2 py-2.5 text-center transition-all duration-300"
-              style={{
-                borderColor: on ? `${T.cta}80` : `${row.tint}2E`,
-                background: on ? `${T.cta}1F` : `${row.tint}0D`,
-                boxShadow: on ? `0 0 20px -8px ${T.cta}` : "none",
-                opacity: past && !on ? 0.45 : 1,
-              }}
-            >
-              <Icon
-                size={13}
-                className="mx-auto"
-                style={{ color: on ? T.cta : row.tint }}
-              />
-              <p
-                dir="ltr"
-                className="mt-1 text-[13.5px] font-extrabold tabular-nums"
-                style={{ color: on ? T.ctaLift : row.tint }}
-              >
-                {clockAt(t)}
-              </p>
-              <p className="truncate text-[9.5px]" style={{ color: on ? T.ctaLift : T.faint }}>
-                {row.label}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-[10px] leading-relaxed" style={{ color: T.faint }}>
-        محسوبة على طريقة أم القرى محليًّا — تعمل بلا إنترنت، ولا تُحمّل من أي
-        خدمة.
-      </p>
-    </Card>
-  );
-}
-
-
 /* The failure banner shouts; nothing ever said the quiet half. A tick that
    lands and is never confirmed looks exactly like one that was dropped, and
    this app is the kind a person leaves open for days and trusts blindly.
@@ -1715,115 +1590,6 @@ export function SaveStamp({ at, diskAt, diskStuck }) {
             )
           : null}
     </span>
-  );
-}
-
-
-/* --- water ------------------------------------------------------------ *
- *  A cup per glass, tapped to fill up to that point. Tapping the glass that
- *  is already the last full one takes it back off instead of doing nothing —
- *  a tracker you cannot correct is one you stop trusting after the first
- *  mis-tap. The count is per-day and resets with the rollover.
- * ---------------------------------------------------------------------- */
-function WaterCard({ count, goal, onSet }) {
-  const [burst, fireBurst] = useBurst(700);
-  const n = Math.min(goal, Math.max(0, count || 0));
-  const pct = goal ? Math.round((n / goal) * 100) : 0;
-  const full = n >= goal;
-
-  const tap = (i) => {
-    const to = n === i ? i - 1 : i;
-    if (to > n && to >= goal) fireBurst();
-    onSet(to);
-  };
-
-  return (
-    <Card className={`p-5 sm:p-6${burst ? " los-reward" : ""}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3
-          className="flex items-center gap-2 text-[15px] font-extrabold"
-          style={{ color: full ? T.primary : T.sky }}
-        >
-          <Droplets size={16} /> شرب الماء
-        </h3>
-        <span
-          dir="ltr"
-          className="shrink-0 rounded-lg px-2 py-0.5 text-[11.5px] font-extrabold tabular-nums"
-          style={{
-            background: full ? `${T.primary}1A` : "rgba(255,255,255,0.05)",
-            color: full ? T.primary : T.muted,
-          }}
-        >
-          {n} / {goal}
-        </span>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {Array.from({ length: goal }, (_, i) => {
-          const on = i < n;
-          return (
-            <button
-              key={i}
-              onClick={() => tap(i + 1)}
-              aria-label={`كوب ${i + 1}`}
-              aria-pressed={on}
-              title={`كوب ${i + 1}`}
-              className="relative h-10 w-7 overflow-hidden rounded-b-lg rounded-t-sm border transition-all duration-200 hover:scale-110 active:scale-95"
-              style={{
-                borderColor: on ? `${T.sky}99` : T.border,
-                background: "rgba(255,255,255,0.03)",
-                boxShadow: on ? `0 0 14px -6px ${T.sky}` : "none",
-              }}
-            >
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-0 transition-all duration-500"
-                style={{
-                  height: on ? "78%" : "0%",
-                  backgroundImage: `linear-gradient(180deg, ${T.sky}CC, ${T.indigo}E6)`,
-                }}
-              />
-            </button>
-          );
-        })}
-      </div>
-
-      <div
-        className="mt-4 h-1.5 w-full overflow-hidden rounded-full"
-        style={{ background: "rgba(255,255,255,0.07)" }}
-      >
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${pct}%`,
-            backgroundImage: full
-              ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
-              : `linear-gradient(90deg, ${T.sky}, ${T.indigo})`,
-            boxShadow: pct ? `0 0 12px ${full ? T.primary : T.sky}99` : "none",
-          }}
-        />
-      </div>
-      <p
-        className="mt-2.5 text-[10.5px] leading-relaxed"
-        style={{ color: full ? T.primary : T.faint }}
-      >
-        {full ? (
-          "بلغت هدفك اليوم 💧"
-        ) : (
-          <>
-            بقي{" "}
-            <span dir="ltr" className="tabular-nums">
-              {goal - n}
-            </span>{" "}
-            {cupWord(goal - n)}
-            {/* Only once there is something to undo. Offering the way back
-                before the first cup is filled is an instruction with nothing
-                to act on. */}
-            {n > 0 && " — اضغط الكوب الممتلئ الأخير للتراجع."}
-          </>
-        )}
-      </p>
-    </Card>
   );
 }
 
