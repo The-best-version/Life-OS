@@ -125,7 +125,7 @@ export function GoalsModule({ state, setState }) {
   const desk = deskId ? byId.get(deskId) : null;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
         <div className="min-w-0">
           <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">

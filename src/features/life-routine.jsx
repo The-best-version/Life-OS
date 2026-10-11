@@ -140,7 +140,7 @@ export function RoutineModule({
       : { color: "rgba(255,255,255,0.22)", glow: "none", animate: false };
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <CueImageCard
         src={state.cueImage}
         onChange={(dataUrl) => setState((s) => ({ ...s, cueImage: dataUrl }))}

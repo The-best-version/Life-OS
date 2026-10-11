@@ -161,7 +161,7 @@ export function AgendaModule({ state, setState, onGo }) {
   const pickedDue = picked ? dueByDate.get(picked) || [] : [];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:justify-between sm:p-7">
         <div className="min-w-0">
           <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">

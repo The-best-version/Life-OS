@@ -82,7 +82,7 @@ export function VaultModule({ state, setState }) {
   const goalPct = goal > 0 ? Math.min(100, Math.round((todayPages / goal) * 100)) : 0;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <Card className="p-6 sm:p-7">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

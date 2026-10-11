@@ -97,7 +97,7 @@ export function FinanceModule({ state, setState }) {
   ];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <Card className="p-6 sm:p-7">
         <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
           الدخل والمشاريع

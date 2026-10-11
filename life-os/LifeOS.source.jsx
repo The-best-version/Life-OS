@@ -1615,7 +1615,7 @@ export default function LifeOS() {
             </span>
           </div>
 
-          <div className="mx-auto w-full max-w-6xl px-5 pb-36 pt-7 sm:px-7 lg:px-10 lg:pb-20 lg:pt-12">
+          <div className="mx-auto w-full max-w-6xl px-5 pb-36 pt-8 sm:px-7 lg:px-12 lg:pb-24 lg:pt-12">
             {/* Outside the keyed wrapper on purpose: the warning belongs to
                 the hour, not to the tab, and re-animating it on every tab
                 change would turn it into decoration. */}
