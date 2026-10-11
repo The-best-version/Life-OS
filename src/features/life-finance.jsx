@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Plus, Pencil, Trash2, TrendingUp, Wallet, Coins, Lightbulb } from "lucide-react";
-import { T, Card, Btn, Field, Modal } from "../components/life-shared.jsx";
+import { T, Card, Btn, Field, Modal, useUndo } from "../components/life-shared.jsx";
 import { uid, dayKey } from "../state/life-state.mjs";
 
 /* ==================================================================== *
@@ -30,6 +30,10 @@ export function FinanceModule({ state, setState }) {
   const [hours, setHours] = useState("");
   const [amount, setAmount] = useState("");
   const [venture, setVenture] = useState(null); // {id?, name, cost, revenue}
+  /* Both deletes below reach the toast through here. The bus lives in
+     life-shared.jsx precisely so this module can: a delete carved out of
+     LifeOS.jsx must not lose its undo on the way out, and these two did. */
+  const arm = useUndo();
 
   const income = state.income || [];
   const ventures = state.ventures || [];
@@ -71,8 +75,17 @@ export function FinanceModule({ state, setState }) {
     setAmount("");
   };
 
-  const removeIncome = (id) =>
+  /* The whole list as it stood, never the row: an entry put back at the end
+     is an entry on the wrong date, and these are read newest-first. */
+  const removeIncome = (id) => {
+    arm("حُذف سجلّ الدخل", { income });
     setState((s) => ({ ...s, income: s.income.filter((e) => e.id !== id) }));
+  };
+
+  const removeVenture = (id) => {
+    arm("حُذف المشروع", { ventures });
+    setState((s) => ({ ...s, ventures: s.ventures.filter((v) => v.id !== id) }));
+  };
 
   const saveVenture = () => {
     const name = venture.name.trim();
@@ -282,12 +295,7 @@ export function FinanceModule({ state, setState }) {
                       <Pencil size={13} />
                     </button>
                     <button
-                      onClick={() =>
-                        setState((s) => ({
-                          ...s,
-                          ventures: s.ventures.filter((x) => x.id !== v.id),
-                        }))
-                      }
+                      onClick={() => removeVenture(v.id)}
                       aria-label={`حذف ${v.name}`}
                       className="shrink-0 rounded p-1 text-white/25 transition-all hover:text-red-400"
                     >
