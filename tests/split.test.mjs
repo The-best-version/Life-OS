@@ -48,6 +48,7 @@ const read = (f) => readFileSync(join(root, f), "utf8");
    consumers of this same split in their own right. */
 const MODULES = [
   "life-state.mjs",
+  "life-breaker.jsx",
   "prayer-times.mjs",
   "life-storage.mjs",
   "life-shared.jsx",
@@ -68,6 +69,7 @@ const MODULES = [
 ];
 const CONSUMERS = [
   "LifeOS.jsx",
+  "life-breaker.jsx",
   "life-shared.jsx",
   "life-uni.jsx",
   "life-finance.jsx",
@@ -132,13 +134,43 @@ function importsOf(src) {
    regex literal does not have to carry one. */
 const BQ = String.fromCharCode(96);
 const TEMPLATE = new RegExp(BQ + "(?:[^" + BQ + "\\\\]|\\\\.)*" + BQ, "g");
+
+/* A template literal is not a string: `${meetWord(n)} مسجّلة` is prose
+   *and* a call, and blanking the whole thing hides the call. This kept one
+   name out of this check completely — `meetWord` was used only inside
+   interpolations in the code carved out to life-breaker.jsx, so it was
+   never counted as used, never reported as unimported, and the screen threw
+   a ReferenceError on open with the tests green and the build clean. Which
+   is the precise failure this file exists to prevent.
+
+   So the literal text goes and the interpolations stay. Brace-matched
+   rather than regexed, because `${x ? {a: 1} : null}` closes twice. */
+const interpolations = (tpl) => {
+  const out = [];
+  let i = 0;
+  for (;;) {
+    const open = tpl.indexOf("${", i);
+    if (open === -1) break;
+    let depth = 1;
+    let k = open + 2;
+    while (k < tpl.length && depth > 0) {
+      if (tpl[k] === "{") depth++;
+      else if (tpl[k] === "}") depth--;
+      k++;
+    }
+    out.push(tpl.slice(open + 2, k - 1));
+    i = k;
+  }
+  return " " + out.join(" ") + " ";
+};
+
 const strip = (src) =>
   src
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
-    .replace(TEMPLATE, BQ + BQ);
+    .replace(TEMPLATE, interpolations);
 
 function declaredIn(body) {
   const names = new Set();
