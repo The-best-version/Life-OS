@@ -1,7 +1,7 @@
 /**
  * Builds LifeOS.jsx into the one self-contained page the shortcut opens.
  *
- *   node build-life-os.mjs
+ *   node scripts/build-life-os.mjs
  *
  * Output: life-os/index.html, plus life-os/LifeOS.source.jsx — the source
  * copied beside the build so the two can never drift apart. Until this
@@ -31,7 +31,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)));
+/* This file lives in scripts/, so the project root is one level up. Every
+   path below hangs off it — src/, life-os/, tests/ and iron-log/node_modules
+   — and resolving it from the script's own folder instead would point the
+   whole build at scripts/ and fail on the entry point. */
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = join(root, "src");
 const src = join(srcDir, "LifeOS.jsx");
 /* Every local module the app is made of. The bundle's entry point is still

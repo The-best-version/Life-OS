@@ -46,7 +46,7 @@ before(async () => {
   mkdirSync(data, { recursive: true });
   child = spawn(
     process.execPath,
-    [join(root, "local-sync-server.js"), "--port", String(PORT), "--data-dir", data, "--quiet"],
+    [join(root, "services", "local-sync-server.js"), "--port", String(PORT), "--data-dir", data, "--quiet"],
     { cwd: root, stdio: "ignore" },
   );
   /* Poll rather than sleep: the port is either listening or it is not, and a

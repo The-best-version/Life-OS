@@ -1,7 +1,12 @@
 const fs = require('fs');
+const path = require('path');
+// Paths are resolved from this file's place in scripts/step/, never typed out:
+// the project moved once and every hardcoded 'e:/claude code/...' in here
+// broke silently, writing nothing and reporting success.
+const ROOT = path.join(__dirname, '..', '..');
 
-const html = fs.readFileSync('e:/claude code/step-arena.html', 'utf8');
-const bank = fs.readFileSync('e:/claude code/bank-grammar.js', 'utf8');
+const html = fs.readFileSync(path.join(ROOT, 'apps/step-arena/step-arena.html'), 'utf8');
+const bank = fs.readFileSync(path.join(ROOT, 'apps/step-arena/bank-grammar.js'), 'utf8');
 
 const quizMatch = html.match(/const QUIZ = (\[[\s\S]*?\]);/);
 const extracted = `

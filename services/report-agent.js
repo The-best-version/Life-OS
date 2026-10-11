@@ -37,13 +37,29 @@ const flag = (name, fallback) => {
 };
 const QUIET = argv.includes("--quiet");
 
-const ROOT = path.resolve(flag("root", __dirname));
+/* This file lives in services/; the sources it reads and the graphify-out it
+   writes sit one level up. --root still overrides, which is what the
+   pre-commit hook passes. */
+const ROOT = path.resolve(flag("root", path.join(__dirname, "..")));
 const OUT = path.resolve(flag("out", path.join(ROOT, "graphify-out")));
 const DATA = path.resolve(flag("data", path.join(OUT, "data")));
 
 const SRC = {
-  lifeos: path.join(ROOT, "LifeOS.jsx"),
-  step: path.join(ROOT, "step-arena.html"),
+  lifeos: path.join(ROOT, "src", "LifeOS.jsx"),
+  /* The constants this agent reads out of the app — PILLARS, SEED_HABITS,
+     SEED_GOALS, STREAK_TARGET, GROUPS — left LifeOS.jsx when the state was
+     split into src/state/ and the shared primitives into src/components/.
+     Scanning the entry point alone therefore found nothing and the static
+     chart quietly fell back to empty arrays, which is why these files are
+     named: evalConsts slices declarations by name, so handing it the
+     concatenation of all of them is the same job over a wider text. */
+  lifeosConsts: [
+    path.join(ROOT, "src", "state", "life-state.mjs"),
+    path.join(ROOT, "src", "state", "life-state-habits.mjs"),
+    path.join(ROOT, "src", "state", "life-state-goals.mjs"),
+    path.join(ROOT, "src", "components", "life-shared.jsx"),
+  ],
+  step: path.join(ROOT, "apps", "step-arena", "step-arena.html"),
   gymSeed: path.join(ROOT, "iron-log", "src", "lib", "seed.ts"),
   gymTypes: path.join(ROOT, "iron-log", "src", "lib", "types.ts"),
 };
@@ -925,7 +941,7 @@ function chartStep(d) {
 
 function extractLifeOS() {
   const snap = snapshot([/life[-_]?os/i, /^lifeos/i]);
-  const src = read(SRC.lifeos);
+  const src = [SRC.lifeos, ...SRC.lifeosConsts].map(read).filter(Boolean).join("\n");
   const statics = evalConsts(src, [
     "PILLARS",
     "GROUPS",
@@ -1396,7 +1412,7 @@ function render() {
 
 /** --watch: regenerate whenever a source file or a snapshot changes. */
 function watch() {
-  const targets = [SRC.lifeos, SRC.step, SRC.gymSeed, SRC.gymTypes, DATA];
+  const targets = [SRC.lifeos, ...SRC.lifeosConsts, SRC.step, SRC.gymSeed, SRC.gymTypes, DATA];
   let timer = null;
   const kick = () => {
     clearTimeout(timer);

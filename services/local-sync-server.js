@@ -37,7 +37,11 @@ const HOST = "127.0.0.1";
 const MAX_BODY = 8 * 1024 * 1024;
 const QUIET = process.argv.includes("--quiet");
 
-const ROOT = __dirname;
+/* This file lives in services/, and everything it reaches for — life-os/,
+   graphify-out/ and backups/ — sits beside that folder, not inside it. The
+   root is therefore one level up; reading it off __dirname would serve an
+   empty directory and write the year into services/graphify-out. */
+const ROOT = path.join(__dirname, "..");
 const DATA = path.resolve(ROOT, flag("data-dir", path.join("graphify-out", "data")));
 /* The snapshots follow the data. A test run writing its hourly snapshots into
    the live backups/auto would be exactly the kind of mess the test exists to
@@ -965,7 +969,12 @@ async function armToday() {
 
   let blockTimes;
   try {
-    ({ blockTimes } = await import("./src/utils/prayer-times.mjs"));
+    /* Relative to this file, which lives in services/ — so one level up and
+       into src/. A dynamic import resolves against the module's own URL and
+       not against ROOT, and the catch below swallows a miss: point this at
+       the wrong folder and the serving half carries on perfectly while every
+       prayer reminder stops arriving, with nothing in any log. */
+    ({ blockTimes } = await import("../src/utils/prayer-times.mjs"));
   } catch {
     return; // the maths is missing; the serving half carries on regardless
   }

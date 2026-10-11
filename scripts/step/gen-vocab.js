@@ -1,4 +1,9 @@
 const fs = require('fs');
+const path = require('path');
+// Paths are resolved from this file's place in scripts/step/, never typed out:
+// the project moved once and every hardcoded 'e:/claude code/...' in here
+// broke silently, writing nothing and reporting success.
+const ROOT = path.join(__dirname, '..', '..');
 
 const words = [
   { w: "Abolish", t: "verb", ar: "يلغي / يبطل", en: "To officially end a law, system, or institution", eg: "The government decided to abolish the tax.", sa: "Syn: Eliminate / Ant: Establish" },
@@ -117,7 +122,7 @@ const mappedWords = words.map((w, i) => {
 
 const content = '// Vocabulary Bank - Batch 1 (100 words)\nwindow.STEP_BANK_VOCAB = ' + JSON.stringify(mappedWords, null, 2) + ';\n';
 
-fs.writeFileSync('e:/claude code/bank-vocab.js', content, 'utf8');
+fs.writeFileSync(path.join(ROOT, 'apps/step-arena/bank-vocab.js'), content, 'utf8');
 console.log('Successfully wrote 100 words to bank-vocab.js');
 
 // Duplicate check

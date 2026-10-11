@@ -292,7 +292,7 @@ for (const file of CONSUMERS) {
    life-uni.jsx, thirty-odd classes short. */
 const arrayIn = (src, name) => {
   const m = src.match(new RegExp("const\\s+" + name + "\\s*=\\s*\\[([^\\]]*)\\]"));
-  assert.ok(m, `build-life-os.mjs no longer declares a \`${name}\` array`);
+  assert.ok(m, `scripts/build-life-os.mjs no longer declares a \`${name}\` array`);
   return [...m[1].matchAll(/["']([^"']+)["']/g)].map((x) => x[1]);
 };
 
@@ -358,7 +358,7 @@ test("every file that imports a local module is guarded as a CONSUMER", () => {
 });
 
 test("the build copies every local module the source imports", () => {
-  const build = readRoot("build-life-os.mjs");
+  const build = readRoot("scripts/build-life-os.mjs");
   const shipped = new Set(arrayIn(build, "shipped"));
   const absent = [...localImports()].filter((f) => !shipped.has(f)).sort();
   assert.deepEqual(
@@ -370,7 +370,7 @@ test("the build copies every local module the source imports", () => {
 });
 
 test("the Tailwind scan reads every file that can hold a class name", () => {
-  const build = readRoot("build-life-os.mjs");
+  const build = readRoot("scripts/build-life-os.mjs");
   const scanned = new Set(arrayIn(build, "scanned"));
   const absent = [...localImports()]
     .filter((f) => f.endsWith(".jsx") && !scanned.has(f))

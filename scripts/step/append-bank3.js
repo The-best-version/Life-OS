@@ -1,5 +1,10 @@
 const fs = require('fs');
-const bankPath = 'e:/claude code/bank-grammar.js';
+const path = require('path');
+// Paths are resolved from this file's place in scripts/step/, never typed out:
+// the project moved once and every hardcoded 'e:/claude code/...' in here
+// broke silently, writing nothing and reporting success.
+const ROOT = path.join(__dirname, '..', '..');
+const bankPath = path.join(ROOT, 'apps/step-arena/bank-grammar.js');
 let bank = fs.readFileSync(bankPath, 'utf8');
 
 const newQs = [

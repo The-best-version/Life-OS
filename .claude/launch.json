@@ -11,7 +11,7 @@
       "name": "life-os-test",
       "runtimeExecutable": "node",
       "runtimeArgs": [
-        "local-sync-server.js",
+        "services/local-sync-server.js",
         "--port",
         "47699",
         "--data-dir",

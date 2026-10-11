@@ -1,6 +1,11 @@
 const fs = require('fs');
+const path = require('path');
+// Paths are resolved from this file's place in scripts/step/, never typed out:
+// the project moved once and every hardcoded 'e:/claude code/...' in here
+// broke silently, writing nothing and reporting success.
+const ROOT = path.join(__dirname, '..', '..');
 
-const file = 'e:/claude code/step-arena.html';
+const file = path.join(ROOT, 'apps/step-arena/step-arena.html');
 let html = fs.readFileSync(file, 'utf8');
 
 const vocabVaultCode = `    /* ═══ Vocabulary Vault (SM-2 Spaced Repetition) ═══ */

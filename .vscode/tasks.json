@@ -1,0 +1,50 @@
+{
+  // كل مهمة هنا تنادي سكريبت في package.json ولا تكرّر أمره — أمر واحد
+  // في مكان واحد، فلا يتفرّع ما تشغّله لوحة المهام عمّا تشغّله الطرفية.
+  //   Ctrl+Shift+B      → بناء 2027 Life OS
+  //   Ctrl+Shift+P → Tasks: Run Task → البقية
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "بناء 2027 Life OS",
+      "detail": "يشغّل الاختبارات ثم يبني life-os/index.html",
+      "type": "npm",
+      "script": "build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "فتح 2027 Life OS في Chrome",
+      "detail": "بناء، ثم تشغيل الخادم إن كان متوقفاً، ثم فتح التطبيق المثبّت",
+      "type": "npm",
+      "script": "dev",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "الاختبارات",
+      "type": "npm",
+      "script": "test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "خادم تجريبي (منفذ 47699)",
+      "detail": "نسخة مؤقتة ببيانات منفصلة — لا تلمس حالتك الحقيقية",
+      "type": "npm",
+      "script": "serve:test",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "تحديث الرسوم البيانية",
+      "type": "npm",
+      "script": "report",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    }
+  ]
+}

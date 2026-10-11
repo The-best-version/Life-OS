@@ -1,0 +1,40 @@
+{
+  // ——— لماذا هذا الملف موجود ———————————————————————————————
+  // الجذر يحتوي iron-log/node_modules (785 ميغابايت، 15,101 ملف) ونسخاً
+  // كاملة من المستودع داخل .claude/worktrees، ومجلد cache للرسوم البيانية.
+  // بدون هذه الاستثناءات يفتح VS Code مراقِب ملفات على كل واحد منها، وهذا
+  // هو سبب التعليق — لا السيرفرات. أي مجلد يُضاف هنا يختفي من المراقبة
+  // والبحث، ولا يختفي من القرص.
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/.next-verify/**": true,
+    "**/.claude/worktrees/**": true,
+    "**/graphify-out/cache/**": true,
+    "**/backups/**": true,
+    "**/life-os-test-data/**": true,
+    "**/life-os/archive/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.claude/worktrees": true,
+    "**/graphify-out/cache": true,
+    "**/graphify-out/data": true,
+    "**/backups": true,
+    "**/life-os-test-data": true,
+    // life-os/ هو ناتج البناء: البحث فيه يعطي نتيجتين لكل سطر مصدر.
+    "life-os/**": true,
+    "archive/**": true
+  },
+  "files.exclude": {
+    "**/.netlify": true
+  },
+  "files.associations": {
+    "*.mjs": "javascript"
+  },
+  "javascript.preferences.importModuleSpecifierEnding": "js",
+  "editor.formatOnSave": false
+}

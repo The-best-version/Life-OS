@@ -317,7 +317,35 @@
 <g><rect x="498" y="464" width="450" height="200" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="498" y="464" width="450" height="200" rx="18" fill="url(#sheen)"/></g>
 <text x="928" y="494" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الركائز الستّ</text>
 <text x="928" y="513" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">نسبة الأهداف المنجَزة في كل ركيزة</text>
-
-<text x="32" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-10-11 18:59</text>
+<polygon points="723.0,562.0 710.9,569.0 710.9,583.0 723.0,590.0 735.1,583.0 735.1,569.0" fill="none" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.55"/>
+<polygon points="723.0,548.0 698.8,562.0 698.8,590.0 723.0,604.0 747.2,590.0 747.2,562.0" fill="none" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.55"/>
+<polygon points="723.0,534.0 686.6,555.0 686.6,597.0 723.0,618.0 759.4,597.0 759.4,555.0" fill="none" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.55"/>
+<polygon points="723.0,520.0 674.5,548.0 674.5,604.0 723.0,632.0 771.5,604.0 771.5,548.0" fill="none" stroke="rgba(255,225,210,0.18)" stroke-opacity="1"/>
+<line x1="723" y1="576" x2="723.0" y2="520.0" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.5"/>
+<line x1="723" y1="576" x2="674.5" y2="548.0" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.5"/>
+<line x1="723" y1="576" x2="674.5" y2="604.0" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.5"/>
+<line x1="723" y1="576" x2="723.0" y2="632.0" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.5"/>
+<line x1="723" y1="576" x2="771.5" y2="604.0" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.5"/>
+<line x1="723" y1="576" x2="771.5" y2="548.0" stroke="rgba(255,225,210,0.18)" stroke-opacity="0.5"/>
+<polygon points="723.0,574.3 721.5,575.2 721.5,576.8 723.0,577.7 724.5,576.8 724.5,575.2" fill="#FF5722" fill-opacity="0.22" stroke="#FF5722" stroke-width="2"/>
+<circle cx="723.0" cy="574.3" r="4" fill="#9D5CFF" stroke="#1B1418" stroke-width="1.5"/>
+<text x="723.0" y="507.2" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">الإيماني</text>
+<text x="723.0" y="521.2" fill="#9D5CFF" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">0%</text>
+<circle cx="721.5" cy="575.2" r="4" fill="#FF7A45" stroke="#1B1418" stroke-width="1.5"/>
+<text x="660.0" y="543.6" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الصحي</text>
+<text x="660.0" y="557.6" fill="#FF7A45" font-size="10.5" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0%</text>
+<circle cx="721.5" cy="576.8" r="4" fill="#00C2FF" stroke="#1B1418" stroke-width="1.5"/>
+<text x="660.0" y="616.4" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">المهني</text>
+<text x="660.0" y="630.4" fill="#00C2FF" font-size="10.5" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0%</text>
+<circle cx="723.0" cy="577.7" r="4" fill="#FFB020" stroke="#1B1418" stroke-width="1.5"/>
+<text x="723.0" y="652.8" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">المالي</text>
+<text x="723.0" y="666.8" fill="#FFB020" font-size="10.5" font-weight="700" text-anchor="middle" style="direction:ltr;unicode-bidi:isolate">0%</text>
+<circle cx="724.5" cy="576.8" r="4" fill="#FF4D8D" stroke="#1B1418" stroke-width="1.5"/>
+<text x="786.0" y="616.4" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="end" style="direction:rtl;unicode-bidi:isolate">الاجتماعي</text>
+<text x="786.0" y="630.4" fill="#FF4D8D" font-size="10.5" font-weight="700" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">0%</text>
+<circle cx="724.5" cy="575.2" r="4" fill="#5B8CFF" stroke="#1B1418" stroke-width="1.5"/>
+<text x="786.0" y="543.6" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="end" style="direction:rtl;unicode-bidi:isolate">الشخصي</text>
+<text x="786.0" y="557.6" fill="#5B8CFF" font-size="10.5" font-weight="700" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">0%</text>
+<text x="32" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-10-11 19:25</text>
 <text x="948" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">report-agent · للقراءة فقط</text>
 </svg>

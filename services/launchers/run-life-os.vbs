@@ -23,13 +23,17 @@ Const CHROME = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 ' which is the whole reason this file still exists.
 Const APPID = "hbagjjmjdegoabokdhefbamhpknhehmb"
 
-Dim sh, fso, root, i
+' This launcher sits in services/launchers/, so the server it starts is one
+' folder up. Reading the script's own folder — which is what this did while
+' everything lived in the project root — would look for the server inside
+' launchers/ and then report that the server could not be started.
+Dim sh, fso, svc, i
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
-root = fso.GetParentFolderName(WScript.ScriptFullName)
+svc = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
 
 If Not Up() Then
-  sh.Run """" & NODE & """ """ & root & "\local-sync-server.js"" --quiet", 0, False
+  sh.Run """" & NODE & """ """ & svc & "\local-sync-server.js"" --quiet", 0, False
   ' Ten seconds, a quarter at a time. Node starts in well under one; the
   ' rest of the budget is for a cold disk after a reboot.
   For i = 1 To 40
@@ -41,7 +45,7 @@ End If
 If Not Up() Then
   MsgBox "تعذّر تشغيل خادم الحفظ المحلي." & vbCrLf & vbCrLf & _
          "افتح موجّه الأوامر ونفّذ:" & vbCrLf & _
-         "node """ & root & "\local-sync-server.js""", 48, "2027 Life OS"
+         "node """ & svc & "\local-sync-server.js""", 48, "2027 Life OS"
   WScript.Quit 1
 End If
 
