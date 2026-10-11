@@ -112,43 +112,45 @@ Five rendering traps this UI has already hit:
 
 ## Project layout
 
+**The source lives under `src/`**, grouped the way a React project usually is — `features/` for the screens, `components/` for the primitives two or more of them share, `layouts/` for the navigation and the ground, `state/` for the payload, `utils/` for the save path and the prayer maths. The filenames keep their `life-` prefix on purpose: the folder supplies the grouping, and renaming on top of it would make every filename named in this document stale on the same day. `src/` is also what separates the app from the other things in this directory — `step-arena.html`, the vocabulary banks, the report agent — which is half of why the tree was hard to read.
+
 | Path | What it is |
 |---|---|
-| `LifeOS.jsx` | **The shell, and only the shell** — under 2,000 lines now, down from 12,892. The state, the day rollover, the save path and its bars, the write lease, the archive row, and the switch that picks the screen. Still the entry point: everything below is imported from here. |
-| `life-today.jsx` | «اليوم» — the landing screen, `ComebackCard`, `REWARD_HOLD`. It owns nothing; every figure on it is derived. |
-| `life-routine.jsx` | The six prayer-anchored blocks: the habits, the water, the roll call, «عدّل أمس», the mirror, the drag helpers and `SaveStamp`. The biggest screen in the app. |
-| `life-goals.jsx` | The goals vault — six pillars, the 2027 tree, the goal desk, and the horizon clocks. Exports `HorizonRow`/`horizonClock`/`clockLabel` because the routine renders the same countdown strip; they stay in the view layer because `horizonClock` returns a colour. |
-| `life-breaker.jsx` | كاسر العادات — bad habits, the urge modal, the relapse sheet, the weakness mirror, and the cost estimator that argues for stopping one. Nothing outside it reaches in but `BreakerModule`. |
-| `life-vault.jsx` | The shelf and `BookDesk` — the summary, the points with their pages, and the one takeaway. |
-| `life-agenda.jsx` | The calendar: the month, the day sheet, the event editor. Reads the university desk's due dates beside its own. |
-| `life-analytics.jsx` | The monthly tracker, the consistency windows and `DayRollCall` — exported, because «عدّل أمس» shows the same list. |
-| `life-matrix.jsx` | The Eisenhower quadrants and `TomorrowModal` (جهّز غدك), which is reached from two places on purpose. |
-| `life-nav.jsx` | The navigation: `NAV_META`, the grouped sidebar, the phone bar, the order editor and `NowStamp`. Declaration order matters here — `NAV` is built at module load out of `NAV_META`. |
-| `life-settings.jsx` | Settings, export and import. The import refuses a payload that is not shaped like this app's state before touching anything. |
-| `life-shared.jsx` | The primitives every screen uses: `T`, `GLASS`, `Card`, `Btn`, `Field`, `Badge`, `Modal`, `Checkbox`, `ProgressRing`, `useBurst`, the Arabic plural/date helpers, and the small surfaces every screen shares — the six block tints (`GROUPS`/`groupOf`), the prayer rows and `nextPrayer`, `Since`, `shrinkImage`, `useDailyQuote`, and the undo bus (`UndoBus`/`useUndo`/`UndoToast`). Imported by everything. |
-| `life-day.jsx` | The pieces two screens render: `useHabitTick`, `ReadLogModal`, `TopThree` with its `TaskChip`, and `ReflectionModal`. It exists because «اليوم» and the routine both show them, and whichever file had held them would have been imported by the other while importing back — the one shape the cut is not allowed to take. It imports nothing from the screens above it. |
-| `life-uni.jsx` | The university desk — courses, terms, marks, attendance, the week grid. The one module large enough to be worth its own file. |
-| `life-finance.jsx` | The income screen — flexible earnings, the hourly rate, and the cost-against-return of an idea. Carved out of `LifeOS.jsx` first because it was the only module that used nothing defined outside itself: the seam crosses it in one place, `FinanceModule`. |
-| `life-desks.jsx` | The four smaller desks: the prompt vault, the tactical review, the pipeline board and the deep-work timer. |
-| `life-tools.jsx` | The two data tools: `DataHealth` and the recovery centre (`RecoveryModal`). |
-| `life-styles.jsx` | The ground: `SkyBackdrop`, `useSkyPhase`, `AppStyles`, and the stray-copy bar. |
-| `life-storage.mjs` | The save path: `STORAGE_KEY`, `api`, `served`/`strayCopy`, the revision counter, `syncOut`/`flushSync`/`postSync`, `adoptDisk`, and the window lease. Browser-free in the sense the tests need: it reads `window` but takes no React and no icons, so a test can stub `window` and load it. |
+| `src/LifeOS.jsx` | **The shell, and only the shell** — under 2,000 lines now, down from 12,892. The state, the day rollover, the save path and its bars, the write lease, the archive row, and the switch that picks the screen. Still the entry point: everything below is imported from here. |
+| `src/features/life-today.jsx` | «اليوم» — the landing screen, `ComebackCard`, `REWARD_HOLD`. It owns nothing; every figure on it is derived. |
+| `src/features/life-routine.jsx` | The six prayer-anchored blocks: the habits, the water, the roll call, «عدّل أمس», the mirror, the drag helpers and `SaveStamp`. The biggest screen in the app. |
+| `src/features/life-goals.jsx` | The goals vault — six pillars, the 2027 tree, the goal desk, and the horizon clocks. Exports `HorizonRow`/`horizonClock`/`clockLabel` because the routine renders the same countdown strip; they stay in the view layer because `horizonClock` returns a colour. |
+| `src/features/life-breaker.jsx` | كاسر العادات — bad habits, the urge modal, the relapse sheet, the weakness mirror, and the cost estimator that argues for stopping one. Nothing outside it reaches in but `BreakerModule`. |
+| `src/features/life-vault.jsx` | The shelf and `BookDesk` — the summary, the points with their pages, and the one takeaway. |
+| `src/features/life-agenda.jsx` | The calendar: the month, the day sheet, the event editor. Reads the university desk's due dates beside its own. |
+| `src/features/life-analytics.jsx` | The monthly tracker, the consistency windows and `DayRollCall` — exported, because «عدّل أمس» shows the same list. |
+| `src/features/life-matrix.jsx` | The Eisenhower quadrants and `TomorrowModal` (جهّز غدك), which is reached from two places on purpose. |
+| `src/layouts/life-nav.jsx` | The navigation: `NAV_META`, the grouped sidebar, the phone bar, the order editor and `NowStamp`. Declaration order matters here — `NAV` is built at module load out of `NAV_META`. |
+| `src/features/life-settings.jsx` | Settings, export and import. The import refuses a payload that is not shaped like this app's state before touching anything. |
+| `src/components/life-shared.jsx` | The primitives every screen uses: `T`, `GLASS`, `Card`, `Btn`, `Field`, `Badge`, `Modal`, `Checkbox`, `ProgressRing`, `useBurst`, the Arabic plural/date helpers, and the small surfaces every screen shares — the six block tints (`GROUPS`/`groupOf`), the prayer rows and `nextPrayer`, `Since`, `shrinkImage`, `useDailyQuote`, and the undo bus (`UndoBus`/`useUndo`/`UndoToast`). Imported by everything. |
+| `src/components/life-day.jsx` | The pieces two screens render: `useHabitTick`, `ReadLogModal`, `TopThree` with its `TaskChip`, and `ReflectionModal`. It exists because «اليوم» and the routine both show them, and whichever file had held them would have been imported by the other while importing back — the one shape the cut is not allowed to take. It imports nothing from the screens above it. |
+| `src/features/life-uni.jsx` | The university desk — courses, terms, marks, attendance, the week grid. The one module large enough to be worth its own file. |
+| `src/features/life-finance.jsx` | The income screen — flexible earnings, the hourly rate, and the cost-against-return of an idea. Carved out of `LifeOS.jsx` first because it was the only module that used nothing defined outside itself: the seam crosses it in one place, `FinanceModule`. |
+| `src/features/life-desks.jsx` | The four smaller desks: the prompt vault, the tactical review, the pipeline board and the deep-work timer. |
+| `src/features/life-tools.jsx` | The two data tools: `DataHealth` and the recovery centre (`RecoveryModal`). |
+| `src/layouts/life-styles.jsx` | The ground: `SkyBackdrop`, `useSkyPhase`, `AppStyles`, and the stray-copy bar. |
+| `src/utils/life-storage.mjs` | The save path: `STORAGE_KEY`, `api`, `served`/`strayCopy`, the revision counter, `syncOut`/`flushSync`/`postSync`, `adoptDisk`, and the window lease. Browser-free in the sense the tests need: it reads `window` but takes no React and no icons, so a test can stub `window` and load it. |
 | `build-life-os.mjs` | The build. `node build-life-os.mjs` — the only way the site is produced. |
 | `life-os/index.html` | Built site, served at `http://127.0.0.1:47615/`. |
 | `life-os/LifeOS.source.jsx` | Copy of the source, written by the build. Never edited by hand. |
-| `life-os/*.jsx`, `life-os/*.mjs` | The other eighteen source files, copied beside it by the build for the same reason. All twenty together are a source that actually builds. |
+| `life-os/features/`, `life-os/components/`, `life-os/layouts/`, `life-os/state/`, `life-os/utils/` | The other twenty-eight source files, copied beside `LifeOS.source.jsx` by the build in the same folders they have in `src/` — so the published copy is a source that can actually be built, imports and all. |
 | `life-os/sw.js` | Service worker. Caches the shell so the app opens with the server down. |
-| `prayer-times.mjs` | The solar maths. Imported by the app and by the server — one source. |
-| `life-state.mjs` | The core and the barrel: day boundary, `SCHEMA`, nav order, the general cue quotes, `migrate`, `freshState`, `carryOf`, `rollDay` — plus a re-export of everything the 9 files below export, so every other file still imports from here alone. Browser-free, React-free, the only thing the tests can load whole. |
-| `life-state-util.mjs` | The dependency-free day/date helpers every domain file below is built on: `uid`, `dayKey`, `hhmm`, `obj`, `rows`, and the rest. Nothing here imports from anything else in the split. |
-| `life-state-habits.mjs` | The habit list, water, and the accountability mirror (urges, bad habits). `habitShape`, `SEED_HABITS`, `disciplineOf`, `BLOCK_IDS`. |
-| `life-state-tasks.mjs` | The matrix's tasks and جهّز غدك. `taskShape`, `SEED_TASKS`, `capToday`, `prepShape` and the rest of the evening prep. |
-| `life-state-goals.mjs` | The goals vault: pillars, quarters, horizons, the 2027 tree. `goalShape`, `GOAL_TREE`, `SEED_GOALS`. |
-| `life-state-books.mjs` | The shelf and its reading cues. `bookShape`, `SEED_BOOKS`, `READING_QUOTES`. |
-| `life-state-calendar.mjs` | Prayer-time places and the calendar's events. `placeShape`, `eventShape`, `EVENT_KINDS`. |
-| `life-state-uni.mjs` | The university desk's state layer — courses, terms, marks, the week grid — distinct from `life-uni.jsx`, which is its UI. |
+| `src/utils/prayer-times.mjs` | The solar maths. Imported by the app and by the server — one source. |
+| `src/state/life-state.mjs` | The core and the barrel: day boundary, `SCHEMA`, nav order, the general cue quotes, `migrate`, `freshState`, `carryOf`, `rollDay` — plus a re-export of everything the 9 files below export, so every other file still imports from here alone. Browser-free, React-free, the only thing the tests can load whole. |
+| `src/state/life-state-util.mjs` | The dependency-free day/date helpers every domain file below is built on: `uid`, `dayKey`, `hhmm`, `obj`, `rows`, and the rest. Nothing here imports from anything else in the split. |
+| `src/state/life-state-habits.mjs` | The habit list, water, and the accountability mirror (urges, bad habits). `habitShape`, `SEED_HABITS`, `disciplineOf`, `BLOCK_IDS`. |
+| `src/state/life-state-tasks.mjs` | The matrix's tasks and جهّز غدك. `taskShape`, `SEED_TASKS`, `capToday`, `prepShape` and the rest of the evening prep. |
+| `src/state/life-state-goals.mjs` | The goals vault: pillars, quarters, horizons, the 2027 tree. `goalShape`, `GOAL_TREE`, `SEED_GOALS`. |
+| `src/state/life-state-books.mjs` | The shelf and its reading cues. `bookShape`, `SEED_BOOKS`, `READING_QUOTES`. |
+| `src/state/life-state-calendar.mjs` | Prayer-time places and the calendar's events. `placeShape`, `eventShape`, `EVENT_KINDS`. |
+| `src/state/life-state-uni.mjs` | The university desk's state layer — courses, terms, marks, the week grid — distinct from `life-uni.jsx`, which is its UI. |
 | `life-state-career.mjs` | The prompt library, the pipeline board, the application tracker. `careerShape`, `SEED_PIPELINE`. |
-| `life-state-streak.mjs` | History, gaps, the streak and the comeback. `fillGaps`, `pctOfRow`, `streakRunFrom` — the one domain file that reads another (`disciplineOf`, off `life-state-habits.mjs`). |
+| `src/state/life-state-streak.mjs` | History, gaps, the streak and the comeback. `fillGaps`, `pctOfRow`, `streakRunFrom` — the one domain file that reads another (`disciplineOf`, off `life-state-habits.mjs`). |
 | `tests/` | `node --test tests/*.test.mjs`. Run by the build before it builds. |
 | `tests/split.test.mjs` | Holds the seams between the source files: every name used is imported, every name imported is exported, every file is scanned and copied by the build. |
 | `tests/fixtures/` | Real backups, schema 19 and 20. Never replace with invented objects. |
@@ -168,11 +170,11 @@ Five rendering traps this UI has already hit:
 node build-life-os.mjs
 ```
 
-It runs `node --test tests/*.test.mjs` first and stops if anything fails, then bundles `LifeOS.jsx` with esbuild, generates the exact Tailwind CSS by **scanning every `.jsx` source, not just the entry point**, and inlines both into `life-os/index.html` — then copies every local module into `life-os/` beside `LifeOS.source.jsx`, so the build and the source it claims to be cannot drift. Run it after **every** change to any of the twenty; editing `index.html` by hand is editing a build artefact.
+It runs `node --test tests/*.test.mjs` first and stops if anything fails, then bundles `src/LifeOS.jsx` with esbuild, generates the exact Tailwind CSS by **scanning every `.jsx` source, not just the entry point**, and inlines both into `life-os/index.html` — then copies every local module into `life-os/` beside `LifeOS.source.jsx`, so the build and the source it claims to be cannot drift. Run it after **every** change to anything under `src/`; editing `index.html` by hand is editing a build artefact.
 
 **esbuild follows the imports; the other two steps follow nothing.** The Tailwind scan and the published source copy are handed exactly the files `scanned` and `shipped` name in `build-life-os.mjs`, so a new split file has to be added to both by hand — and a test holds both arrays against what the source actually imports, because neither failure mode announces itself. Missing from `scanned`, a class used only in that file is dropped from the CSS and the screen renders unstyled with nothing in any log; that is how the university desk shipped, thirty classes short. Missing from `shipped`, the published source is one that cannot be built; that is how `life-storage.mjs` shipped, leaving a copy with no save path at all.
 
-There is no `node_modules` beside `LifeOS.jsx` and no `package.json`. esbuild and tailwindcss are imported straight out of `iron-log/node_modules`, and `lucide-react` resolves there through esbuild's `nodePaths` — nothing is installed and nothing is fetched. React is **not** bundled: it loads as UMD 18.3.1 from cdnjs and the bundle reaches it through shims that read `window.React`. Bundling the React 19 that sits in `iron-log` beside a page loading 18.3.1 would give the app two Reacts and one of them would own the hooks.
+There is no `node_modules` beside `src/` and no `package.json`. esbuild and tailwindcss are imported straight out of `iron-log/node_modules`, and `lucide-react` resolves there through esbuild's `nodePaths` — nothing is installed and nothing is fetched. React is **not** bundled: it loads as UMD 18.3.1 from cdnjs and the bundle reaches it through shims that read `window.React`. Bundling the React 19 that sits in `iron-log` beside a page loading 18.3.1 would give the app two Reacts and one of them would own the hooks.
 
 Three things that have bitten this build before:
 

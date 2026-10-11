@@ -1,20 +1,20 @@
-import { BreakerModule } from "./life-breaker.jsx";
-import { GoalsModule } from "./life-goals.jsx";
-import { VaultModule } from "./life-vault.jsx";
-import { AgendaModule } from "./life-agenda.jsx";
-import { AnalyticsModule, DayRollCall } from "./life-analytics.jsx";
-import { RoutineModule, SaveStamp, MirrorModal, EditYesterdayModal } from "./life-routine.jsx";
-import { TodayModule } from "./life-today.jsx";
-import { MatrixModule, TomorrowModal } from "./life-matrix.jsx";
-import { NavGroups, NavMore, NavOrderEditor, BottomTabs, NowStamp, splitNav, NAV } from "./life-nav.jsx";
-import { SettingsModal } from "./life-settings.jsx";
-import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, clockAt, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./life-shared.jsx";
-import { uniKindOf, uniDue, UniModule } from "./life-uni.jsx";
-import { TopThree, useHabitTick, ReadLogModal, TaskChip, ReflectionModal } from "./life-day.jsx";
-import { FinanceModule } from "./life-finance.jsx";
-import { DeepWorkModule } from "./life-desks.jsx";
-import { DataHealth, RecoveryModal } from "./life-tools.jsx";
-import { SkyBackdrop, useSkyPhase, AppStyles, SecondWindow } from "./life-styles.jsx";
+import { BreakerModule } from "./features/life-breaker.jsx";
+import { GoalsModule } from "./features/life-goals.jsx";
+import { VaultModule } from "./features/life-vault.jsx";
+import { AgendaModule } from "./features/life-agenda.jsx";
+import { AnalyticsModule, DayRollCall } from "./features/life-analytics.jsx";
+import { RoutineModule, SaveStamp, MirrorModal, EditYesterdayModal } from "./features/life-routine.jsx";
+import { TodayModule } from "./features/life-today.jsx";
+import { MatrixModule, TomorrowModal } from "./features/life-matrix.jsx";
+import { NavGroups, NavMore, NavOrderEditor, BottomTabs, NowStamp, splitNav, NAV } from "./layouts/life-nav.jsx";
+import { SettingsModal } from "./features/life-settings.jsx";
+import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, clockAt, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./components/life-shared.jsx";
+import { uniKindOf, uniDue, UniModule } from "./features/life-uni.jsx";
+import { TopThree, useHabitTick, ReadLogModal, TaskChip, ReflectionModal } from "./components/life-day.jsx";
+import { FinanceModule } from "./features/life-finance.jsx";
+import { DeepWorkModule } from "./features/life-desks.jsx";
+import { DataHealth, RecoveryModal } from "./features/life-tools.jsx";
+import { SkyBackdrop, useSkyPhase, AppStyles, SecondWindow } from "./layouts/life-styles.jsx";
 import React, {
   useState,
   useEffect,
@@ -142,7 +142,7 @@ import {
   Feather,
 } from "lucide-react";
 
-import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
+import { blockAt, fixHour, prayerTimes } from "./utils/prayer-times.mjs";
 
 /* --- persistence ------------------------------------------------------ */
 /* Every name this file reads off the storage module, and the list is checked
@@ -153,7 +153,7 @@ import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
    the disk, so a fresh profile booted on seed data at revision 0 and every
    save after it was refused as a conflict. A missing import here is not a
    crash, it is a feature that quietly stops existing. */
-import { LOCAL_HOST, dropDeadBackups, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE_KEY, served, strayCopy, syncLocal, readRev, writeRev, DISK_STUCK_MS, onSyncResult, postSync, syncOut, flushSync, adoptDisk, tabId, readLock, writeLock, dropLock, claimHandover, LEASE_BEAT, LEASE_STALE } from "./life-storage.mjs";
+import { LOCAL_HOST, dropDeadBackups, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE_KEY, served, strayCopy, syncLocal, readRev, writeRev, DISK_STUCK_MS, onSyncResult, postSync, syncOut, flushSync, adoptDisk, tabId, readLock, writeLock, dropLock, claimHandover, LEASE_BEAT, LEASE_STALE } from "./utils/life-storage.mjs";
 
 /* The state itself — the day boundary, the seeds, the shapes, the migration
    and the discipline score — lives in ./life-state.mjs so that `node --test`
@@ -289,7 +289,7 @@ import {
   upcoming,
   upcomingRows,
   alertsOf,
-} from "./life-state.mjs";
+} from "./state/life-state.mjs";
 
 /* ==================================================================== *
  *  2027 LIFE OS — the shell

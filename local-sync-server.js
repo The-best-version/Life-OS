@@ -965,7 +965,7 @@ async function armToday() {
 
   let blockTimes;
   try {
-    ({ blockTimes } = await import("./prayer-times.mjs"));
+    ({ blockTimes } = await import("./src/utils/prayer-times.mjs"));
   } catch {
     return; // the maths is missing; the serving half carries on regardless
   }

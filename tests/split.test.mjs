@@ -33,7 +33,32 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (f) => readFileSync(join(root, f), "utf8");
+/* The source lives under src/ now, grouped into features, components,
+   layouts, state and utils. Every name in MODULES and CONSUMERS below is a
+   path relative to that, so a file that moves between folders fails here
+   loudly instead of being silently skipped. */
+const srcDir = join(root, "src");
+const read = (f) => readFileSync(join(srcDir, f), "utf8");
+/* The build script is not source — it sits beside src/, not inside it. */
+const readRoot = (f) => readFileSync(join(root, f), "utf8");
+
+/* A relative specifier, resolved to a path relative to src/. Imports read
+   "../state/life-state.mjs" from a feature and "./life-shared.jsx" from a
+   sibling, and every check below needs the one canonical spelling — the key
+   MODULES and CONSUMERS are written in. Posix throughout: these are import
+   specifiers, not filesystem paths. */
+const resolveSpec = (fromFile, spec) => {
+  const dir = fromFile.includes("/") ? fromFile.slice(0, fromFile.lastIndexOf("/")) : "";
+  const parts = (dir ? dir.split("/") : []).concat(spec.split("/"));
+  const out = [];
+  for (const part of parts) {
+    if (part === "." || part === "") continue;
+    if (part === "..") out.pop();
+    else out.push(part);
+  }
+  return out.join("/");
+};
+const LOCAL_SPEC = /from\s*["'](\.[^"']+)["']/g;
 
 /* The modules that export into the tree, and the files that consume them.
    life-shared.jsx and life-uni.jsx are on both lists: they import from each
@@ -47,63 +72,63 @@ const read = (f) => readFileSync(join(root, f), "utf8");
    (life-state-streak.mjs reads `disciplineOf` off life-state-habits.mjs),
    consumers of this same split in their own right. */
 const MODULES = [
-  "life-settings.jsx",
-  "life-nav.jsx",
-  "life-matrix.jsx",
-  "life-today.jsx",
-  "life-routine.jsx",
-  "life-analytics.jsx",
-  "life-agenda.jsx",
-  "life-vault.jsx",
-  "life-goals.jsx",
-  "life-state.mjs",
-  "life-breaker.jsx",
-  "prayer-times.mjs",
-  "life-storage.mjs",
-  "life-shared.jsx",
-  "life-uni.jsx",
-  "life-finance.jsx",
-  "life-desks.jsx",
-  "life-tools.jsx",
-  "life-styles.jsx",
-  "life-day.jsx",
-  "life-state-util.mjs",
-  "life-state-habits.mjs",
-  "life-state-tasks.mjs",
-  "life-state-goals.mjs",
-  "life-state-books.mjs",
-  "life-state-calendar.mjs",
-  "life-state-uni.mjs",
-  "life-state-streak.mjs",
+  "features/life-settings.jsx",
+  "layouts/life-nav.jsx",
+  "features/life-matrix.jsx",
+  "features/life-today.jsx",
+  "features/life-routine.jsx",
+  "features/life-analytics.jsx",
+  "features/life-agenda.jsx",
+  "features/life-vault.jsx",
+  "features/life-goals.jsx",
+  "state/life-state.mjs",
+  "features/life-breaker.jsx",
+  "utils/prayer-times.mjs",
+  "utils/life-storage.mjs",
+  "components/life-shared.jsx",
+  "features/life-uni.jsx",
+  "features/life-finance.jsx",
+  "features/life-desks.jsx",
+  "features/life-tools.jsx",
+  "layouts/life-styles.jsx",
+  "components/life-day.jsx",
+  "state/life-state-util.mjs",
+  "state/life-state-habits.mjs",
+  "state/life-state-tasks.mjs",
+  "state/life-state-goals.mjs",
+  "state/life-state-books.mjs",
+  "state/life-state-calendar.mjs",
+  "state/life-state-uni.mjs",
+  "state/life-state-streak.mjs",
 ];
 const CONSUMERS = [
-  "life-settings.jsx",
-  "life-nav.jsx",
-  "life-matrix.jsx",
-  "life-today.jsx",
-  "life-routine.jsx",
-  "life-analytics.jsx",
-  "life-agenda.jsx",
-  "life-vault.jsx",
-  "life-goals.jsx",
+  "features/life-settings.jsx",
+  "layouts/life-nav.jsx",
+  "features/life-matrix.jsx",
+  "features/life-today.jsx",
+  "features/life-routine.jsx",
+  "features/life-analytics.jsx",
+  "features/life-agenda.jsx",
+  "features/life-vault.jsx",
+  "features/life-goals.jsx",
   "LifeOS.jsx",
-  "life-breaker.jsx",
-  "life-shared.jsx",
-  "life-uni.jsx",
-  "life-finance.jsx",
-  "life-desks.jsx",
-  "life-tools.jsx",
-  "life-styles.jsx",
-  "life-day.jsx",
-  "life-storage.mjs",
-  "life-state.mjs",
-  "life-state-habits.mjs",
-  "life-state-tasks.mjs",
-  "life-state-goals.mjs",
-  "life-state-books.mjs",
-  "life-state-calendar.mjs",
-  "life-state-uni.mjs",
-  "life-state-streak.mjs",
+  "features/life-breaker.jsx",
+  "components/life-shared.jsx",
+  "features/life-uni.jsx",
+  "features/life-finance.jsx",
+  "features/life-desks.jsx",
+  "features/life-tools.jsx",
+  "layouts/life-styles.jsx",
+  "components/life-day.jsx",
+  "utils/life-storage.mjs",
+  "state/life-state.mjs",
+  "state/life-state-habits.mjs",
+  "state/life-state-tasks.mjs",
+  "state/life-state-goals.mjs",
+  "state/life-state-books.mjs",
+  "state/life-state-calendar.mjs",
+  "state/life-state-uni.mjs",
+  "state/life-state-streak.mjs",
 ];
 
 function exportsOf(src) {
@@ -242,8 +267,8 @@ for (const file of CONSUMERS) {
   test(`${file} imports nothing a split module does not export`, () => {
     const src = read(file);
     const bad = [];
-    for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+)["']/g)) {
-      const mod = m[2];
+    for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'](\.[^"']+)["']/g)) {
+      const mod = resolveSpec(file, m[2]);
       const names = EXPORTED.get(mod);
       if (!names) continue; // react, lucide-react, anything not ours
       for (const part of m[1].split(",")) {
@@ -280,11 +305,16 @@ const reachable = () => {
   const seen = new Set(["LifeOS.jsx"]);
   const queue = ["LifeOS.jsx"];
   while (queue.length)
-    for (const m of read(queue.pop()).matchAll(/from\s*["']\.\/([^"']+)["']/g))
-      if (!seen.has(m[1])) {
-        seen.add(m[1]);
-        queue.push(m[1]);
+  {
+    const from = queue.pop();
+    for (const m of read(from).matchAll(LOCAL_SPEC)) {
+      const target = resolveSpec(from, m[1]);
+      if (!seen.has(target)) {
+        seen.add(target);
+        queue.push(target);
       }
+    }
+  }
   return seen;
 };
 
@@ -317,7 +347,7 @@ test("every module the source imports is guarded as a MODULE", () => {
 
 test("every file that imports a local module is guarded as a CONSUMER", () => {
   const absent = [...reachable()]
-    .filter((f) => /from\s*["']\.\//.test(read(f)) && !CONSUMERS.includes(f))
+    .filter((f) => /from\s*["']\./.test(read(f)) && !CONSUMERS.includes(f))
     .sort();
   assert.deepEqual(
     absent,
@@ -328,7 +358,7 @@ test("every file that imports a local module is guarded as a CONSUMER", () => {
 });
 
 test("the build copies every local module the source imports", () => {
-  const build = read("build-life-os.mjs");
+  const build = readRoot("build-life-os.mjs");
   const shipped = new Set(arrayIn(build, "shipped"));
   const absent = [...localImports()].filter((f) => !shipped.has(f)).sort();
   assert.deepEqual(
@@ -340,7 +370,7 @@ test("the build copies every local module the source imports", () => {
 });
 
 test("the Tailwind scan reads every file that can hold a class name", () => {
-  const build = read("build-life-os.mjs");
+  const build = readRoot("build-life-os.mjs");
   const scanned = new Set(arrayIn(build, "scanned"));
   const absent = [...localImports()]
     .filter((f) => f.endsWith(".jsx") && !scanned.has(f))
@@ -381,7 +411,7 @@ test("the recovery path seeds the revision counter from the disk copy", async ()
   g.location = { origin: "http://127.0.0.1:47615", protocol: "http:", hostname: "127.0.0.1" };
 
   try {
-    const { adoptDisk, served, api, readRev, STORAGE_KEY } = await import("../life-storage.mjs");
+    const { adoptDisk, served, api, readRev, STORAGE_KEY } = await import("../src/utils/life-storage.mjs");
 
     /* The seam the whole write path hangs off: served() true means this copy
        writes, and api() goes same-origin. If `api` is not reachable from the

@@ -32,7 +32,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)));
-const src = join(root, "LifeOS.jsx");
+const srcDir = join(root, "src");
+const src = join(srcDir, "LifeOS.jsx");
 /* Every local module the app is made of. The bundle's entry point is still
    just `src` — esbuild follows the imports on its own — but the other two
    things done with these files follow nothing: they are handed exactly what
@@ -50,55 +51,55 @@ const src = join(root, "LifeOS.jsx");
    test reads these two arrays and holds them against what the source
    actually imports, and it can only read literals. */
 const scanned = [
-  "life-settings.jsx",
-  "life-nav.jsx",
-  "life-matrix.jsx",
-  "life-today.jsx",
-  "life-routine.jsx",
-  "life-analytics.jsx",
-  "life-agenda.jsx",
-  "life-vault.jsx",
-  "life-goals.jsx",
-  "life-shared.jsx",
-  "life-breaker.jsx",
-  "life-day.jsx",
-  "life-uni.jsx",
-  "life-finance.jsx",
-  "life-desks.jsx",
-  "life-tools.jsx",
-  "life-styles.jsx",
+  "features/life-settings.jsx",
+  "layouts/life-nav.jsx",
+  "features/life-matrix.jsx",
+  "features/life-today.jsx",
+  "features/life-routine.jsx",
+  "features/life-analytics.jsx",
+  "features/life-agenda.jsx",
+  "features/life-vault.jsx",
+  "features/life-goals.jsx",
+  "components/life-shared.jsx",
+  "features/life-breaker.jsx",
+  "components/life-day.jsx",
+  "features/life-uni.jsx",
+  "features/life-finance.jsx",
+  "features/life-desks.jsx",
+  "features/life-tools.jsx",
+  "layouts/life-styles.jsx",
 ];
 const shipped = [
-  "life-settings.jsx",
-  "life-nav.jsx",
-  "life-matrix.jsx",
-  "life-today.jsx",
-  "life-routine.jsx",
-  "life-analytics.jsx",
-  "life-agenda.jsx",
-  "life-vault.jsx",
-  "life-goals.jsx",
-  "life-shared.jsx",
-  "life-breaker.jsx",
-  "life-day.jsx",
-  "life-uni.jsx",
-  "life-finance.jsx",
-  "life-desks.jsx",
-  "life-tools.jsx",
-  "life-styles.jsx",
-  "prayer-times.mjs",
-  "life-state.mjs",
-  "life-storage.mjs",
-  "life-state-util.mjs",
-  "life-state-habits.mjs",
-  "life-state-tasks.mjs",
-  "life-state-goals.mjs",
-  "life-state-books.mjs",
-  "life-state-calendar.mjs",
-  "life-state-uni.mjs",
-  "life-state-streak.mjs",
+  "features/life-settings.jsx",
+  "layouts/life-nav.jsx",
+  "features/life-matrix.jsx",
+  "features/life-today.jsx",
+  "features/life-routine.jsx",
+  "features/life-analytics.jsx",
+  "features/life-agenda.jsx",
+  "features/life-vault.jsx",
+  "features/life-goals.jsx",
+  "components/life-shared.jsx",
+  "features/life-breaker.jsx",
+  "components/life-day.jsx",
+  "features/life-uni.jsx",
+  "features/life-finance.jsx",
+  "features/life-desks.jsx",
+  "features/life-tools.jsx",
+  "layouts/life-styles.jsx",
+  "utils/prayer-times.mjs",
+  "state/life-state.mjs",
+  "utils/life-storage.mjs",
+  "state/life-state-util.mjs",
+  "state/life-state-habits.mjs",
+  "state/life-state-tasks.mjs",
+  "state/life-state-goals.mjs",
+  "state/life-state-books.mjs",
+  "state/life-state-calendar.mjs",
+  "state/life-state-uni.mjs",
+  "state/life-state-streak.mjs",
 ];
-const splitSrc = scanned.map((f) => join(root, f));
+const splitSrc = scanned.map((f) => join(srcDir, f));
 const site = join(root, "life-os");
 const modules = join(root, "iron-log", "node_modules");
 const work = mkdtempSync(join(tmpdir(), "life-os-build-"));
@@ -257,7 +258,13 @@ try {
   mkdirSync(site, { recursive: true });
   writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
   copyFileSync(src, join(site, "LifeOS.source.jsx"));
-  for (const f of shipped) copyFileSync(join(root, f), join(site, f));
+  /* The folders come with them: the published copy has to be a source that
+     actually builds, and LifeOS.source.jsx imports "./features/…". */
+  for (const f of shipped) {
+    const to = join(site, f);
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(join(srcDir, f), to);
+  }
 
   const kb = (n) => (n / 1024).toFixed(0) + " KB";
   console.log(`\nlife-os/index.html          css ${kb(css.length)}   js ${kb(js.length)}`);

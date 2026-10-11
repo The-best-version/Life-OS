@@ -76,8 +76,8 @@ import {
   STREAK_FORGIVE,
   comebackFrom,
   COMEBACK_MIN,
-} from "../life-state.mjs";
-import { BLOCK_ANCHORS, blockAt } from "../prayer-times.mjs";
+} from "../src/state/life-state.mjs";
+import { BLOCK_ANCHORS, blockAt } from "../src/utils/prayer-times.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => JSON.parse(readFileSync(join(here, "fixtures", name), "utf8"));
