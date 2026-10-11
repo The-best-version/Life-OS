@@ -40,9 +40,9 @@ const read = (f) => readFileSync(join(root, f), "utf8");
    other's side of the split as well as from the state.
 
    life-state.mjs is itself split by domain now — life-state-util.mjs holds
-   the dependency-free helpers every domain file is built on, eight domain
+   the dependency-free helpers every domain file is built on, seven domain
    files sit on top of it, and life-state.mjs is a thin core plus a barrel
-   that re-exports all eight so no outside consumer's imports change. That
+   that re-exports all seven so no outside consumer's imports change. That
    makes life-state.mjs, and the one domain file that reads a sibling
    (life-state-streak.mjs reads `disciplineOf` off life-state-habits.mjs),
    consumers of this same split in their own right. */
@@ -64,7 +64,6 @@ const MODULES = [
   "life-state-books.mjs",
   "life-state-calendar.mjs",
   "life-state-uni.mjs",
-  "life-state-career.mjs",
   "life-state-streak.mjs",
 ];
 const CONSUMERS = [
@@ -84,7 +83,6 @@ const CONSUMERS = [
   "life-state-books.mjs",
   "life-state-calendar.mjs",
   "life-state-uni.mjs",
-  "life-state-career.mjs",
   "life-state-streak.mjs",
 ];
 

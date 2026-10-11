@@ -2,7 +2,7 @@ import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbo
 import { uniKindOf, uniDue, UniModule } from "./life-uni.jsx";
 import { TopThree, useHabitTick, ReadLogModal, TaskChip, ReflectionModal } from "./life-day.jsx";
 import { FinanceModule } from "./life-finance.jsx";
-import { PromptsModule, TacticalModule, PipelineModule, DeepWorkModule } from "./life-desks.jsx";
+import { DeepWorkModule } from "./life-desks.jsx";
 import { DataHealth, RecoveryModal } from "./life-tools.jsx";
 import { SkyBackdrop, useSkyPhase, AppStyles, SecondWindow } from "./life-styles.jsx";
 import React, {
@@ -56,9 +56,6 @@ import {
   Coins,
   Lightbulb,
   NotebookPen,
-  Bot,
-  Swords,
-  Kanban,
   ScanFace,
   Copy,
   CheckCheck,
@@ -146,7 +143,7 @@ import { blockAt, fixHour, prayerTimes } from "./prayer-times.mjs";
    the disk, so a fresh profile booted on seed data at revision 0 and every
    save after it was refused as a conflict. A missing import here is not a
    crash, it is a feature that quietly stops existing. */
-import { saveAutoBackup, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE_KEY, served, strayCopy, syncLocal, readRev, writeRev, DISK_STUCK_MS, onSyncResult, postSync, syncOut, flushSync, adoptDisk, tabId, readLock, writeLock, dropLock, claimHandover, LEASE_BEAT, LEASE_STALE } from "./life-storage.mjs";
+import { dropDeadBackups, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE_KEY, served, strayCopy, syncLocal, readRev, writeRev, DISK_STUCK_MS, onSyncResult, postSync, syncOut, flushSync, adoptDisk, tabId, readLock, writeLock, dropLock, claimHandover, LEASE_BEAT, LEASE_STALE } from "./life-storage.mjs";
 
 /* The state itself — the day boundary, the seeds, the shapes, the migration
    and the discipline score — lives in ./life-state.mjs so that `node --test`
@@ -156,8 +153,6 @@ import { saveAutoBackup, api, REV_KEY, UI_KEY, OPENED_KEY, HANDOVER_KEY, STORAGE
    helper left behind is a ReferenceError at first render, which is a blank
    white page. */
 import {
-  APP_STAGES,
-  appShape,
   badHabitShape,
   blockRank,
   bookShape,
@@ -188,6 +183,8 @@ import {
   MORE_IDS,
   NAV_IDS,
   navSplit,
+  NAV_GROUPS,
+  GROUP_OF_TAB,
   obj,
   orderNavIds,
   parentHorizon,
@@ -204,7 +201,6 @@ import {
   rows,
   SCHEMA,
   setDayDone,
-  sprintShape,
   scoredOf,
   streakBaseFrom,
   streakRunFrom,
@@ -213,7 +209,6 @@ import {
   comebackFrom,
   COMEBACK_MIN,
   TAB_BAR,
-  storyShape,
   tagOf,
   TOP_TASK_CAP,
   taskShape,
@@ -478,14 +473,10 @@ const NAV_META = {
   routine: { label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
   agenda: { label: "التقويم", short: "التقويم", icon: CalendarDays },
   uni: { label: "الجامعة", short: "الجامعة", icon: GraduationCap },
-  career: { label: "مسار التوظيف", short: "التوظيف", icon: Briefcase },
   matrix: { label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
   deep: { label: "العمل العميق", short: "التركيز", icon: Timer },
   goals: { label: "أهدافي على ثلاث سنوات", short: "الأهداف", icon: Flag },
-  pipeline: { label: "خط سير المشاريع", short: "المسار", icon: Kanban },
-  tactical: { label: "المراجعة التكتيكية", short: "التكتيك", icon: Swords },
   finance: { label: "الدخل والمشاريع", short: "الدخل", icon: Wallet },
-  prompts: { label: "خزنة الأوامر", short: "الأوامر", icon: Bot },
   vault: { label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
   analytics: { label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
   breaker: { label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
@@ -493,6 +484,7 @@ const NAV_META = {
 };
 const NAV = NAV_IDS.map((id) => ({ id, ...NAV_META[id] }));
 const NAV_BY_ID = new Map(NAV.map((n) => [n.id, n]));
+
 
 /* The saved order, resolved to tabs. `orderNavIds` does the hard part —
    dropping an id this build no longer has, appending a tab the saved order
@@ -666,851 +658,6 @@ function useHourBand() {
    nothing downstream of here knows about nesting; a goal only ever knows the
    one id above it, which is what keeps a reparent from having to rewrite a
    subtree. */
-/* ==================================================================== *
- *  CAREER — the 90-day employability masterplan
- *
- *  A diploma does not get hired; a routine does. Thirteen weeks in three
- *  phases, five missions a week, written for a business administration
- *  graduate specifically — not generic job-hunting advice.
- *
- *  Nothing here is a free-text to-do list. The schedule is generated from
- *  a start date, the company sprints are locked into order, and the two
- *  daily lists are *derived from the date* rather than reset by a rollover:
- *  a tick is stored against its own day in `career.log`, so the morning
- *  checklist is empty at dawn whether or not the app was reopened, and a
- *  streak can be counted backwards without trusting a stored counter.
- * ==================================================================== */
-const CAREER_DAYS = 90;
-const SKILL_TARGET = 2; // 30-minute blocks a day to bank the streak
-const BLOCK_MIN = 30;
-const FOLLOWUP_DAYS = 5; // an application untouched this long is overdue
-const APPS_PER_MONTH = 20; // one a day on weekdays — what the morning routine asks
-const CAREER_LOG_CAP = 400;
-const STREAK_CEIL = 14; // where a streak stops earning more readiness
-
-const CAREER_PHASES = [
-  {
-    id: "base",
-    label: "التأسيس",
-    span: "الأسابيع ١–٤",
-    weeks: [1, 2, 3, 4],
-    tint: T.sky,
-    icon: GraduationCap,
-    aim: "تسجيلات تعمل وحدها، وملف يمرّ أنظمة الفرز",
-  },
-  {
-    id: "arm",
-    label: "التسليح",
-    span: "الأسابيع ٥–٩",
-    weeks: [5, 6, 7, 8, 9],
-    tint: T.violet,
-    icon: Zap,
-    aim: "مهارات تُدفع عليها رواتب، ومعرض أعمال يُثبتها",
-  },
-  {
-    id: "strike",
-    label: "الهجوم",
-    span: "الأسابيع ١٠–١٣",
-    weeks: [10, 11, 12, 13],
-    tint: T.cta,
-    icon: Crosshair,
-    aim: "اختراق الشركات مباشرة، ثم المقابلة فالتفاوض",
-  },
-];
-
-const CAREER_WEEKS = [
-  {
-    w: 1,
-    phase: "base",
-    title: "السيرة التي تمرّ الفرز",
-    aim: "ملف واحد، صفحة واحدة، يقرأه النظام قبل الإنسان",
-    missions: [
-      "أنهِ «الأرضية» كاملة في تبويب العدّة: طاقات، تمهير، جدارة، دروب — قبل أي شيء آخر",
-      "أعد كتابة السيرة في صفحة واحدة: بلا جداول ولا أعمدة ولا صورة — أنظمة الفرز تقرأها نصًّا",
-      "استخرج ١٥ كلمة مفتاحية من خمسة إعلانات إدارية حقيقية، وازرعها في السيرة بصياغتها نفسها",
-      "حوّل كل مهمة في السيرة إلى نتيجة برقم: «نظّمت أرشيف ٢٠٠ ملف» لا «مسؤول عن الأرشفة»",
-      "اكتب سطر العنوان المهني تحت اسمك: «أخصائي إداري — تشغيل، تنسيق، تقارير»",
-      "مرّر السيرة على فاحص توافق ATS مجاني، وسجّل النسبة ثم أصلح أدنى ثلاث ملاحظات",
-    ],
-  },
-  {
-    w: 2,
-    phase: "base",
-    title: "واجهة لينكدإن",
-    aim: "أن يجدك مسؤول التوظيف قبل أن تطرق بابه",
-    missions: [
-      "صورة مهنية بخلفية محيّدة، وبانر يحمل تخصّصك لا منظرًا عامًّا",
-      "عنوان الملف أربع كلمات مفتاحية يبحث بها الموظِّف — لا «باحث عن عمل»",
-      "اكتب «نبذة» في خمسة أسطر: من أنا، ماذا أُجيد، ما الدور الذي أبحث عنه",
-      "فعّل «منفتح للعمل» واضبط المسمّيات الخمسة والمدينة ونوع الدوام",
-      "اطلب ثلاث توصيات مكتوبة: مشرف التدريب، أستاذ، زميل مشروع",
-    ],
-  },
-  {
-    w: 3,
-    phase: "base",
-    title: "سبرنت إكسل — عشر ساعات",
-    aim: "المهارة الأولى التي تُسأل عنها في كل مقابلة إدارية",
-    missions: [
-      "‏XLOOKUP و VLOOKUP على جدول بيانات حقيقي لا على مثال من درس",
-      "الجداول المحورية: استخرج ثلاثة تقارير مختلفة من ملف واحد",
-      "التنسيق الشرطي والتحقق من صحة البيانات على نموذج إدخال",
-      "ابنِ لوحة متابعة في ورقة واحدة: أربعة مؤشّرات ورسمان",
-      "احصل على شهادة إكسل مجانية واحدة وأضفها إلى الملف والسيرة",
-    ],
-  },
-  {
-    w: 4,
-    phase: "base",
-    title: "خريطة السوق",
-    aim: "قائمة أهداف مكتوبة بدل التقديم العشوائي",
-    missions: [
-      "اسرد أربعين شركة هدف في ثلاث طبقات: كبرى، متوسطة، ناشئة",
-      "حدّد خمسة مسمّيات واقعية لحديث تخرّج: منسّق إداري، مساعد تنفيذي، أخصائي عمليات، منسّق مشتريات، منسّق موارد بشرية",
-      "اعرف نطاق الراتب الحقيقي لكل مسمّى — رقمك في التفاوض يبدأ من هنا",
-      "راجع إعلانات تمهير المفتوحة هذا الأسبوع وقدّم على كل مطابق — القبول على السرعة",
-      "اصنع ملف متابعة التقديمات، وابدأه بثلاثة تقديمات مطابقة",
-    ],
-  },
-  {
-    w: 5,
-    phase: "arm",
-    title: "أساسيات أنظمة ERP",
-    aim: "الفرق بين «يعرف إكسل» و«يعرف يشتغل على نظام»",
-    missions: [
-      "افهم دورة الشراء كاملة: طلب، أمر شراء، استلام، فاتورة، سداد",
-      "تعلّم مصطلحات SAP وأوراكل الإدارية: مركز التكلفة، أمر الشراء، الحركة المخزنية",
-      "جرّب نظامًا تجريبيًّا أو نسخة مجانية، وسجّل عشر حركات بنفسك",
-      "اكتب صفحة واحدة: كيف يتدفّق مستند واحد من الطلب إلى السداد",
-      "أضف «أساسيات ERP» إلى السيرة بوصف دقيق لا بمبالغة",
-    ],
-  },
-  {
-    w: 6,
-    phase: "arm",
-    title: "الموارد البشرية والعمليات",
-    aim: "لغة الإدارة من داخلها",
-    missions: [
-      "اقرأ نظام العمل السعودي: ساعات العمل، الإجازات، نهاية الخدمة",
-      "افهم دورة التوظيف كما يراها الموظِّف — وستكتب طلبك بعدها بشكل مختلف",
-      "تعلّم مؤشّرات الأداء الإدارية: دوران الموظفين، زمن الدورة، الالتزام بالموعد",
-      "ارسم خريطة إجراء واحد (Process Map) لعملية إدارية تعرفها",
-      "اكتب سياسة من صفحة واحدة لإجراء متكرّر — ضعها في معرض أعمالك",
-    ],
-  },
-  {
-    w: 7,
-    phase: "arm",
-    title: "معرض أعمال الظلّ",
-    aim: "لا أحد يوظّف وعودًا؛ الناس توظّف مخرجات",
-    missions: [
-      "ابنِ لوحة متابعة مشتريات أو مخزون من بيانات مُفترضة واقعية",
-      "اكتب تقريرًا إداريًّا شهريًّا من صفحتين بالأرقام والتوصية",
-      "اصنع نموذج متابعة طلبات داخلية قابلًا للاستخدام فعلًا",
-      "ارفع المخرجات الثلاثة في مجلّد سحابي واحد برابط مباشر",
-      "اربط الرابط في لينكدإن والسيرة تحت «معرض أعمال»",
-    ],
-  },
-  {
-    w: 8,
-    phase: "arm",
-    title: "التقارير ولوحات المتابعة",
-    aim: "أن تُقرأ أرقامك في دقيقة",
-    missions: [
-      "تعلّم أساسيات Power BI أو Looker Studio: مصدر، علاقة، مرئية",
-      "حوّل أحد تقاريرك إلى لوحة تفاعلية من صفحة واحدة",
-      "اضبط قاعدة الرسم: رسم واحد، فكرة واحدة، عنوان يقول الخلاصة",
-      "اكتب ملخّصًا تنفيذيًّا من خمسة أسطر لكل لوحة",
-      "اعرض اللوحة على شخص غير مختص، وأصلح ما لم يفهمه في ثلاثين ثانية",
-    ],
-  },
-  {
-    w: 9,
-    phase: "arm",
-    title: "بنك قصص المقابلة",
-    aim: "السبب الأول لرفض حديثي التخرّج: لا قصص، فقط صفات",
-    missions: [
-      "افتح «أسئلة المقابلة وفخاخها» في العدّة، واكتب كل قصّة وأنت تنظر إلى السؤال الذي ستُستخدَم فيه",
-      "اكتب ست قصص بصيغة STAR: الموقف، المهمة، الإجراء، النتيجة برقم",
-      "جهّز جواب «حدّثني عن نفسك» في تسعين ثانية واحفظ هيكله لا نصّه",
-      "جهّز جواب «لماذا نحن؟» مربوطًا بشيء حقيقي عن الشركة",
-      "جهّز جواب نقطة الضعف: ضعف حقيقي + ما تفعله حياله الآن",
-      "سجّل نفسك بالفيديو مرّتين، واحذف من إجاباتك كل كلمة لا تضيف",
-    ],
-  },
-  {
-    w: 10,
-    phase: "strike",
-    title: "الهجوم المباشر",
-    aim: "الوظائف المعلنة أصعب طريق؛ الطريق الأقصر رسالة مكتوبة بعناية",
-    missions: [
-      "افتح أول هجوم شركة من سبعة أيام في هذا التطبيق",
-      "أرسل خمس رسائل نقطة ألم هذا الأسبوع — خمسًا مخصّصة لا خمسين منسوخة",
-      "تابع كل رسالة بعد خمسة أيام برسالة واحدة قصيرة لا أكثر",
-      "سجّل كل إرسال في لوحة التقديمات بتاريخه",
-      "راجع ما لم يُرَدّ عليه، وبدّل جملة واحدة في القالب ثم أعد التجربة",
-    ],
-  },
-  {
-    w: 11,
-    phase: "strike",
-    title: "الشبكة البشرية",
-    aim: "أكثر من نصف التعيينات تمرّ بإنسان يعرفك",
-    missions: [
-      "اطلب ثلاث مقابلات معرفية (١٥ دقيقة) من موظفين في أدوارك المستهدفة",
-      "اسأل في كل مقابلة: ما الذي يصعب في دورك؟ ومن أنجح من رأيت فيه؟",
-      "اطلب تزكية داخلية واحدة بوضوح وبلا إحراج",
-      "احضر لقاءً أو ملتقى مهنيًّا واحدًا، واخرج بثلاث جهات اتصال",
-      "اشكر كل من ساعدك برسالة قصيرة — الشبكة تُبنى بالمتابعة",
-    ],
-  },
-  {
-    w: 12,
-    phase: "strike",
-    title: "المقابلات الحقيقية",
-    aim: "التحويل: من مُرشّح إلى مُختار",
-    missions: [
-      "أجرِ مقابلتين تجريبيتين مع شخص يصحّح لك بصراحة",
-      "ابحث عن كل مقابلة: المنتج، العميل، آخر خبر، اسم من يقابلك",
-      "جهّز ثلاثة أسئلة تسألها أنت — السؤال الجيّد يقلب الكرسي",
-      "أرسل رسالة شكر في أربع وعشرين ساعة، تُذكّر بنقطة واحدة قلتها",
-      "أرسل رسالة الشكر من بنك الرسائل خلال أربع وعشرين ساعة — يُرسلها أقلّ من ربع المتقدّمين",
-      "بعد كل مقابلة اكتب: ما نجح، ما تعثّر، وما ستغيّره في التالية",
-    ],
-  },
-  {
-    w: 13,
-    phase: "strike",
-    title: "العرض والتفاوض",
-    aim: "الراتب الأول يحدّد سقف السنوات العشر القادمة",
-    missions: [
-      "لا تذكر رقمًا أولًا؛ وإذا أُلزمت فاذكر نطاقًا مبنيًّا على بحث الأسبوع الرابع",
-      "احسب الحزمة كاملة: الأساس، البدلات، التأمين، التدريب، مسار الترقية",
-      "اطلب أربعًا وعشرين ساعة قبل القبول — دائمًا",
-      "فاوض على بند واحد غير الراتب إذا أُغلق الراتب: تدريب، لقب، مرونة",
-      "اطلب العرض مكتوبًا قبل أي تأكيد نهائي",
-    ],
-  },
-];
-
-const CAREER_WEEK_COUNT = CAREER_WEEKS.length;
-const MISSION_TOTAL = CAREER_WEEKS.reduce((n, w) => n + w.missions.length, 0);
-const weekOf = (w) => CAREER_WEEKS.find((x) => x.w === w) || CAREER_WEEKS[0];
-const phaseOf = (id) => CAREER_PHASES.find((p) => p.id === id) || CAREER_PHASES[0];
-const missionKey = (w, i) => `${w}:${i}`;
-
-/* The seven days are fixed and run in order: research before portfolio,
-   portfolio before the pitch. A sprint whose owner jumps to day 7 is just
-   another cold message, which is the thing this is meant to replace. */
-const SPRINT_DAYS = [
-  {
-    d: 1,
-    label: "البحث العميق",
-    icon: Search,
-    tint: T.sky,
-    task: "اقرأ أخبار الشركة وصفحة وظائفها وحسابها المهني، واكتب ثلاث نقاط ألم تشغيلية أو إدارية محتملة.",
-    out: "ثلاث نقاط ألم مكتوبة",
-  },
-  {
-    d: 2,
-    label: "معرض الظلّ",
-    icon: FileSpreadsheet,
-    tint: T.violet,
-    task: "ابنِ مخرجًا واحدًا يعالج أقوى نقطة ألم: نموذج متابعة، تقرير، أو خريطة إجراء — باسمهم وببياناتهم المعلنة.",
-    out: "ملف واحد جاهز للإرسال",
-  },
-  {
-    d: 3,
-    label: "خريطة الهيكل",
-    icon: UserSearch,
-    tint: T.indigo,
-    task: "اعثر على مسؤول التوظيف، ومدير الإدارة المعنيّة، وموظّف واحد في مستواك. سجّل الأسماء والمسمّيات.",
-    out: "ثلاثة أسماء بمسمّياتها",
-  },
-  {
-    d: 4,
-    label: "القيمة أولًا ①",
-    icon: Handshake,
-    tint: T.primary,
-    task: "علّق تعليقًا مهنيًّا واحدًا يضيف فكرة على منشور لهم. لا مدح، ولا طلب وظيفة.",
-    out: "تعليق يُقرأ ويُتذكّر",
-  },
-  {
-    d: 5,
-    label: "القيمة أولًا ②",
-    icon: Users,
-    tint: T.primary,
-    task: "أرسل طلب تواصل مخصّصًا لموظّف واحد في سطرين: من أنت، ولماذا دوره يهمّك. بلا أي طلب.",
-    out: "طلب تواصل مخصّص",
-  },
-  {
-    d: 6,
-    label: "القيمة أولًا ③",
-    icon: Megaphone,
-    tint: T.primary,
-    task: "انشر من عندك شيئًا يلمس مجالهم — ملاحظة أو مخرج صغير — حتى يرى اسمك في سياق العمل لا في سياق الطلب.",
-    out: "منشور واحد من عندك",
-  },
-  {
-    d: 7,
-    label: "رسالة نقطة الألم",
-    icon: Send,
-    tint: T.cta,
-    task: "أرسل الرسالة ومعها المخرج: النقطة، الحلّ، ثم طلب عشر دقائق. لا سيرة ملحقة في الرسالة الأولى.",
-    out: "الرسالة مُرسلة ومسجّلة",
-  },
-];
-
-/* Six blocks of half an hour. Two a day is the bar — a bar that can be met
-   on a bad day is the only kind that survives ninety of them. */
-const SKILL_BLOCKS = [
-  {
-    id: "excel",
-    label: "إكسل: الجداول المحورية",
-    hint: "على ملف حقيقي، لا على فيديو",
-    icon: FileSpreadsheet,
-    tint: T.primary,
-  },
-  {
-    id: "erp",
-    label: "أساسيات ERP / SAP",
-    hint: "دورة الشراء والمخزون",
-    icon: Database,
-    tint: T.sky,
-  },
-  {
-    id: "report",
-    label: "كتابة التقارير والمراسلات",
-    hint: "تقرير من صفحة بالأرقام",
-    icon: FileText,
-    tint: T.violet,
-  },
-  {
-    id: "english",
-    label: "الإنجليزية المهنية",
-    hint: "مفردات المقابلة ونطقها",
-    icon: Languages,
-    tint: T.indigo,
-  },
-  {
-    id: "finance",
-    label: "المحاسبة للإداريين",
-    hint: "ميزانية، تدفّق نقدي، مركز تكلفة",
-    icon: Calculator,
-    tint: T.accent,
-  },
-  {
-    id: "present",
-    label: "العرض والتقديم",
-    hint: "شريحة واحدة، فكرة واحدة",
-    icon: Presentation,
-    tint: T.rose,
-  },
-];
-
-/* The morning routine, written as instructions rather than as reminders.
- *
- *  The first version of this list was six bare imperatives — "send one
- *  connection request", "review the sector news" — and it was read, fairly,
- *  as six commands with no method: no where, no how long, no words to send.
- *  A checklist a person cannot execute without first inventing the method
- *  is not a checklist, it is a guilt generator. So every step now carries
- *  the four things that make it executable at 7am without thinking:
- *
- *    min    — how long it takes, so the whole run has a known price (45m)
- *    where  — the exact place it happens, named
- *    how    — the actual moves, in order
- *    script — the words, ready to copy, with [brackets] where you fill in
- *
- *  `core` marks the four steps that put you in front of an employer. The
- *  streak counts those four and only those four: dressing well is a good
- *  opener, but it must never be allowed to stand in for an application. */
-const AM_CORE = new Set(["apply", "follow", "connect", "polish"]);
-const AM_TARGET = AM_CORE.size;
-
-const AM_ROUTINE = [
-  {
-    id: "dress",
-    label: "البس كأنك ذاهب إلى العمل",
-    min: 5,
-    icon: Briefcase,
-    tint: T.primary,
-    where: "في بيتك، قبل فتح الجوال",
-    how: [
-      "ملابس العمل لا ملابس النوم — الدماغ يصدّق ما يراه في المرآة.",
-      "اجلس على طاولة لا على السرير؛ المكان يحدّد جودة الساعة القادمة.",
-      "ضع الجوال على الوضع الصامت حتى تنتهي الخطوات الخمس الباقية.",
-    ],
-    script: "",
-  },
-  {
-    id: "news",
-    label: "افتح الرادار: عشر دقائق في أخبار القطاع",
-    min: 10,
-    icon: Radar,
-    tint: T.sky,
-    where: "لينكدإن + «أخبار الأعمال السعودية» في قوقل نيوز",
-    how: [
-      "تابع على لينكدإن ١٥ شركة من قائمة الأربعين، فتصير أخبارهم تصلك بلا بحث.",
-      "اقرأ العناوين فقط، وافتح خبرين لا أكثر.",
-      "اكتب سطرًا واحدًا في «نقاط الألم» لأي شركة ظهر لها خبر: توسّع، فرع جديد، تمويل، مشكلة.",
-      "هذا السطر هو مادة رسالتك اليوم — بلا رادار تكتب رسائل عامة، وبرادار تكتب رسالة لا تُهمَل.",
-    ],
-    script: "",
-  },
-  {
-    id: "apply",
-    label: "قدّم على وظيفة واحدة مطابقة — واحدة لا عشر",
-    min: 15,
-    icon: Send,
-    tint: T.cta,
-    where: "جدارات وطاقات للتوظيف، جدارة للحكومي، لينكدإن وبيت.كوم للخاص",
-    how: [
-      "اختر إعلانًا نُشر خلال ٧٢ ساعة — ما قبلها غالبًا امتلأ بمئات الطلبات.",
-      "استخرج خمس كلمات من نص الإعلان نفسه، وازرعها في السيرة بصياغتها حرفيًّا قبل الإرسال.",
-      "احفظ النسخة باسم الشركة. نسخة واحدة تُرسل للجميع تعني رفضًا من أنظمة الفرز قبل أن يراها إنسان.",
-      "أرفق سطرين لا صفحة في خانة الرسالة — القالب جاهز تحت.",
-      "سجّله فورًا في «التقديمات»، وإلا ضاع موعد المتابعة.",
-    ],
-    script: `السلام عليكم،
-
-قرأت إعلانكم عن [المسمّى]، وأرى فيه ثلاث مسؤوليات أعمل عليها فعلًا: [١]، [٢]، [٣].
-خريج إدارة أعمال، وأعددت [مخرج حقيقي: لوحة متابعة / تقرير / خريطة إجراء] يشبه ما يُطلب في الدور، ورابطه في السيرة.
-
-شاكرًا لوقتكم،
-[اسمك] — [جوالك]`,
-  },
-  {
-    id: "follow",
-    label: "تابع تقديمًا واحدًا عمره خمسة أيام",
-    min: 5,
-    icon: Mail,
-    tint: T.accent,
-    where: "تبويب «التقديمات» في هذا التطبيق — رادار المتابعة يختار لك",
-    how: [
-      "افتح رادار المتابعة وخذ الاسم الأول فيه. لا تختر بمزاجك، خذ الأقدم.",
-      "رسالة واحدة قصيرة لا رسالتين، وفي نفس سلسلة البريد لا في رسالة جديدة.",
-      "أضف شيئًا جديدًا في المتابعة — مخرجًا أو سطر قيمة — لا تذكيرًا مجرّدًا.",
-      "اضغط «تابعت اليوم» ليعاد ضبط العدّاد.",
-    ],
-    script: `السلام عليكم [الاسم]،
-
-أتابع طلبي على وظيفة [المسمّى] المُرسل في [التاريخ].
-أضفت منذ ذلك الحين [مخرجًا / شهادة / مهارة] يخصّ الدور مباشرة، وهو تحت تصرّفكم.
-
-وإن كان الدور قد أُغلق، يسعدني أن أبقى في قائمتكم لأي دور إداري قادم.
-
-شاكرًا لكم،
-[اسمك]`,
-  },
-  {
-    id: "connect",
-    label: "أرسل طلب تواصل واحدًا برسالة مخصّصة",
-    min: 5,
-    icon: Users,
-    tint: T.violet,
-    where: "لينكدإن — موظّف في دورك المستهدف، لا مدير تنفيذي",
-    how: [
-      "ابحث بالمسمّى + اسم الشركة، واختر من هو في مستواك أو أعلى بدرجة — هؤلاء يردّون.",
-      "اضغط «تواصل» ثم «إضافة ملاحظة». الطلب بلا ملاحظة يُقبل ويُنسى.",
-      "الملاحظة أقل من ٣٠٠ حرف وبلا أي طلب وظيفة — الطلب في الرسالة الأولى يحرق الباب.",
-      "بعد القبول بثلاثة أيام، أرسل سؤال المقابلة المعرفية من بنك القوالب.",
-    ],
-    script: `السلام عليكم [الاسم]،
-
-لفتني دورك في [الشركة]، وأنا خريج إدارة أعمال أبني مساري نحو [المسمّى المستهدف].
-أتابع ما تنشره عن [مجال محدّد]، وأحببت أن أكون ضمن شبكتك.
-
-شكرًا لك.`,
-  },
-  {
-    id: "polish",
-    label: "حسّن سطرًا واحدًا في السيرة أو لينكدإن",
-    min: 5,
-    icon: FileText,
-    tint: T.indigo,
-    where: "ملف السيرة + ملفك على لينكدإن",
-    how: [
-      "سطر واحد في اليوم فقط — ستّون سطرًا في الفصل، وملف يُعاد كتابته بالكامل بلا جلسة واحدة شاقّة.",
-      "حوّل مهمّة إلى نتيجة برقم: «نظّمت أرشيف ٢٠٠ ملف وقلّلت زمن الاستخراج من ١٠ دقائق إلى دقيقتين».",
-      "أو اسحب كلمة مفتاحية من إعلان اليوم وازرعها بصياغتها.",
-      "أو احذف سطرًا لا يقول شيئًا — الحذف تحسين أيضًا.",
-    ],
-    script: `[فعل بصيغة الماضي] [ماذا] [لمن/أين] — [النتيجة برقم أو بنسبة].
-
-مثال: «أعددت تقرير مشتريات شهريًّا لثلاثة أقسام، فانخفض التأخير في أوامر الشراء من ٨ أيام إلى ٣.»`,
-  },
-];
-
-const AM_MINUTES = AM_ROUTINE.reduce((n, s) => n + s.min, 0);
-
-/* ---- The Saudi ground floor -----------------------------------------
- *  The plan used to open on "rewrite your CV", which is the right second
- *  move and the wrong first one. For a Saudi business-administration
- *  graduate the first contract most often arrives through a government
- *  employment programme rather than a job board — and those programmes all
- *  need a registration that costs a single evening and then sits there
- *  working for months. Nothing else in this app pays back as much for as
- *  little, so it is a one-time checklist that goes green before week one
- *  is worth starting.
- *
- *  `link` is a hostname, not a deep path: ministry portals reorganise, and
- *  a dead deep link is worse than a name the user can search. */
-const SAUDI_SETUP = [
-  {
-    id: "taqat",
-    label: "سجّل في طاقات — بوابة هدف الوطنية",
-    link: "taqat.sa",
-    icon: Building2,
-    tint: T.sky,
-    why: "البوابة التي تُبنى عليها بقيّة البرامج. بلا حساب فيها لا تظهر لك تمهير ولا الدعم ولا المسارات.",
-    how: [
-      "سجّل بالنفاذ الوطني الموحّد — نفس حساب أبشر.",
-      "أكمل الملف ١٠٠٪: الشهادة، التخصّص، المدينة، المسمّيات التي تقبلها.",
-      "فعّل التنبيهات، فالإعلانات تُغلق بسرعة.",
-    ],
-  },
-  {
-    id: "tamheer",
-    label: "قدّم على تمهير — تدريب منتهٍ بالتوظيف",
-    link: "hrdf.org.sa",
-    icon: GraduationCap,
-    tint: T.cta,
-    why: "أقصر طريق إلى أول عقد لخريج إدارة: أشهر داخل جهة حقيقية بمكافأة شهرية، وكثير من المتدرّبين يُثبَّتون. وحتى لو لم تُثبَّت، خرجت بخبرة مكتوبة تنهي سؤال «ليست لديك خبرة».",
-    how: [
-      "ادخل منصّة هدف ثم برنامج تمهير، وتحقّق من شروط التخرّج والمدّة.",
-      "اختر الجهات حسب القطاع لا حسب القرب فقط.",
-      "قدّم على كل إعلان مطابق — المنافسة على السرعة لا على المعدّل وحده.",
-      "أعد الزيارة كل أسبوعين؛ الإعلانات تتجدّد ولا تُشعرك.",
-    ],
-  },
-  {
-    id: "jadara",
-    label: "جهّز ملفك للوظائف الحكومية",
-    link: "my.gov.sa · جدارة",
-    icon: ClipboardCheck,
-    tint: T.indigo,
-    why: "التوظيف الحكومي يفتح في مواعيد محدّدة ويُغلق سريعًا. الجاهزية المسبقة هي الفرق بين أن تقدّم وأن تقرأ عن إعلان انتهى.",
-    how: [
-      "جهّز رقم الهوية ورقم الشهادة والمعدّل في ملف واحد قبل أن تبدأ.",
-      "دقّق إدخال المعدّل والتخصّص — خطأ هنا يُسقط الطلب آليًّا بلا إشعار.",
-      "ضع تذكيرًا شهريًّا للتحقّق من إعلان جديد.",
-    ],
-  },
-  {
-    id: "doroob",
-    label: "ابدأ مسارًا في دروب — تدريب مجاني بشهادة",
-    link: "doroob.sa",
-    icon: BookOpenCheck,
-    tint: T.violet,
-    why: "شهادات معتمدة ومجانية بالعربية تملأ فراغ «المهارات» في السيرة خلال أسابيع، ويعرفها الموظِّف السعودي.",
-    how: [
-      "ابدأ بالمهارات الأساسية ثم مسارًا إداريًّا أو ماليًّا.",
-      "أنهِ شهادة كل أسبوعين، وأضفها فورًا للسيرة وللينكدإن.",
-      "احفظ ملفات الشهادات في نفس مجلّد معرض الأعمال.",
-    ],
-  },
-  {
-    id: "linkedin",
-    label: "أكمل لينكدإن إلى ١٠٠٪ وفعّل «منفتح للعمل»",
-    link: "linkedin.com",
-    icon: Users,
-    tint: T.primary,
-    why: "أكثر من نصف التعيينات في القطاع الخاص تمرّ بإنسان. الملف الناقص لا يظهر في بحث الموظِّفين أصلًا.",
-    how: [
-      "صورة بخلفية محيّدة، وعنوان من أربع كلمات مفتاحية لا «باحث عن عمل».",
-      "فعّل «منفتح للعمل» واضبط خمسة مسمّيات والمدينة ونوع الدوام.",
-      "اطلب ثلاث توصيات مكتوبة: مشرف التدريب، أستاذ، زميل مشروع.",
-    ],
-  },
-  {
-    id: "boards",
-    label: "فعّل منصّتي توظيف خاصّتين لا عشرًا",
-    link: "bayt.com · wadhefa.com",
-    icon: Search,
-    tint: T.accent,
-    why: "القطاع الخاص ينشر خارج المنصّات الحكومية. حسابان يكفيان؛ العشرة تشتّت ولا تزيد الفرص.",
-    how: [
-      "ارفع السيرة بصيغة PDF نصّيّة لا صورة ممسوحة.",
-      "اضبط تنبيهًا يوميًّا لثلاثة مسمّيات في مدينتك.",
-      "راجع التنبيه في دقائق الرادار الصباحية لا طوال اليوم.",
-    ],
-  },
-  {
-    id: "portfolio",
-    label: "افتح مجلّد معرض الأعمال برابط واحد",
-    link: "Google Drive · OneDrive",
-    icon: FileSpreadsheet,
-    tint: T.rose,
-    why: "الشهادة يملكها كل منافس، والمخرج لا يملكه إلا من صنعه. الرابط هو ما يحوّل سيرتك من ادّعاء إلى دليل.",
-    how: [
-      "مجلّد واحد، وصلاحية «أي شخص لديه الرابط يطّلع».",
-      "ثلاثة ملفات تكفي للبداية: لوحة متابعة، تقرير من صفحتين، خريطة إجراء.",
-      "ضع الرابط في السيرة وفي لينكدإن تحت «معرض أعمال».",
-    ],
-  },
-  {
-    id: "cv",
-    label: "ثبّت نسخة السيرة الأساسية بصيغة تمرّ الفرز",
-    link: "ملف واحد تُشتقّ منه البقيّة",
-    icon: FileText,
-    tint: T.indigo,
-    why: "كل تقديم ينسخ من هذه النسخة ويعدّل فيها خمس كلمات. بلا نسخة أساسية ستعيد البناء من الصفر كل مرّة، وستتوقّف بعد أسبوع.",
-    how: [
-      "صفحة واحدة، بلا جداول ولا أعمدة ولا صورة — أنظمة الفرز تقرأ النص فقط.",
-      "عناوين قياسية: الخبرة، التعليم، المهارات، الشهادات.",
-      "مرّرها على فاحص توافق ATS مجاني وأصلح أدنى ثلاث ملاحظات.",
-    ],
-  },
-];
-
-const SETUP_TOTAL = SAUDI_SETUP.length;
-
-/* ---- The words ------------------------------------------------------
- *  Every point in this hunt where a person freezes is a point where they
- *  do not know what to write. Nine of them, written out, with [brackets]
- *  to fill — and each kept short enough to edit in a minute, because a
- *  template that still reads as a template after it is sent does more
- *  damage than sending nothing at all. */
-const TEMPLATES = [
-  {
-    id: "cover",
-    label: "رسالة التغطية القصيرة",
-    when: "مع كل تقديم — سطران لا صفحة",
-    icon: Send,
-    tint: T.cta,
-    body: "السلام عليكم،\n\nقرأت إعلانكم عن [المسمّى]، وأرى فيه ثلاث مسؤوليات أعمل عليها فعلًا: [١]، [٢]، [٣].\nخريج إدارة أعمال، وأعددت [مخرجًا حقيقيًّا] يشبه ما يُطلب في الدور، ورابطه في السيرة.\n\nشاكرًا لوقتكم،\n[اسمك] — [جوالك]",
-  },
-  {
-    id: "followup",
-    label: "متابعة بعد التقديم",
-    when: "بعد خمسة أيام من الإرسال، مرّة واحدة",
-    icon: Mail,
-    tint: T.accent,
-    body: "السلام عليكم [الاسم]،\n\nأتابع طلبي على وظيفة [المسمّى] المُرسل في [التاريخ].\nأضفت منذ ذلك الحين [مخرجًا / شهادة / مهارة] يخصّ الدور مباشرة، وهو تحت تصرّفكم.\n\nوإن كان الدور قد أُغلق، يسعدني أن أبقى في قائمتكم لأي دور إداري قادم.\n\nشاكرًا لكم،\n[اسمك]",
-  },
-  {
-    id: "connect",
-    label: "طلب تواصل على لينكدإن",
-    when: "أقل من ٣٠٠ حرف، وبلا أي طلب وظيفة",
-    icon: Users,
-    tint: T.violet,
-    body: "السلام عليكم [الاسم]،\n\nلفتني دورك في [الشركة]، وأنا خريج إدارة أعمال أبني مساري نحو [المسمّى المستهدف].\nأتابع ما تنشره عن [مجال محدّد]، وأحببت أن أكون ضمن شبكتك.\n\nشكرًا لك.",
-  },
-  {
-    id: "coffee",
-    label: "طلب مقابلة معرفية",
-    when: "بعد قبول طلب التواصل بثلاثة أيام",
-    icon: MessageSquare,
-    tint: T.sky,
-    body: "السلام عليكم [الاسم]،\n\nشكرًا على القبول. أنا في بداية مساري الإداري، وأحاول أن أفهم الدور من داخله لا من إعلانات الوظائف.\nهل تتيح لك ظروفك خمس عشرة دقيقة هذا الأسبوع؟ ثلاثة أسئلة فقط:\nما الذي يصعب فعلًا في دورك؟ وما المهارة التي تمنّيت لو أتقنتها قبل أن تبدأ؟ وما الذي يميّز من نجح عندكم؟\n\nولن أطلب منك وظيفة — أطلب رأيك فقط.\n\n[اسمك]",
-  },
-  {
-    id: "referral",
-    label: "طلب تزكية داخلية",
-    when: "بعد محادثة حقيقية، لا مع غريب",
-    icon: Handshake,
-    tint: T.primary,
-    body: "السلام عليكم [الاسم]،\n\nشكرًا على وقتك الأسبوع الماضي، وقد غيّر ما ذكرته عن [شيء محدّد] فهمي للدور.\nرأيت أن [الشركة] أعلنت عن [المسمّى]، وأظنّني مطابقًا لـ[سببين محدّدين].\n\nهل تتيح لك الأنظمة تزكيتي داخليًّا؟ وإن كان في الطلب أي حرج فتجاوزه بلا تردّد — تواصلنا أهمّ عندي.\n\nالسيرة مرفقة، ورابط أعمالي: [الرابط].\n\n[اسمك]",
-  },
-  {
-    id: "thanks",
-    label: "شكر بعد المقابلة",
-    when: "خلال أربع وعشرين ساعة — يُرسله أقلّ من الربع",
-    icon: BadgeCheck,
-    tint: T.primary,
-    body: "السلام عليكم [الاسم]،\n\nشكرًا على وقتك اليوم. بقي في ذهني ما ذكرته عن [نقطة حقيقية من المقابلة].\nفكّرت فيها بعد اللقاء، وأرى أن [فكرتك أنت في سطرين] قد تساعد — وإن أحببتم، أرسل تصوّرًا من صفحة واحدة.\n\nمتحمّس للدور، وفي انتظار ما تستقرّون عليه.\n\n[اسمك]",
-  },
-  {
-    id: "silent",
-    label: "متابعة بعد المقابلة بلا ردّ",
-    when: "بعد سبعة أيام من الموعد الذي وُعدت به",
-    icon: Phone,
-    tint: T.sky,
-    body: "السلام عليكم [الاسم]،\n\nأتابع مقابلة [المسمّى] يوم [التاريخ]. أعلم أن القرارات تأخذ وقتها ولا أريد أن أستعجلكم.\nأودّ فقط أن أعرف إن كان المسار ما زال مفتوحًا حتى أرتّب بقيّة ارتباطاتي.\n\nوشاكرًا لك في الحالين.\n\n[اسمك]",
-  },
-  {
-    id: "salary",
-    label: "الردّ على سؤال الراتب",
-    when: "حين يُطلب رقمك قبل أن يُعرض عليك شيء",
-    icon: HandCoins,
-    tint: T.accent,
-    body: "سؤال مهمّ، وأفضّل أن أفهم نطاق المسؤوليات أولًا حتى يكون الرقم عادلًا للطرفين.\n\nوإن كان لا بدّ من رقم الآن: بحثي عن هذا الدور في [المدينة] يضع النطاق بين [أدنى] و[أعلى] ريال شهريًّا، وأنا مرتاح داخله حسب الحزمة كاملة.\n\nفما النطاق المعتمد لديكم لهذه الدرجة؟",
-  },
-  {
-    id: "offer",
-    label: "طلب مهلة على العرض",
-    when: "دائمًا — القبول الفوري يُضعف موقفك ولا يسرّع شيئًا",
-    icon: Award,
-    tint: T.rose,
-    body: "شكرًا جزيلًا، وسعيد بثقتكم.\n\nهل أستلم العرض مكتوبًا بتفاصيل الحزمة: الأساس، البدلات، التأمين، أيام الإجازة، ومسار الترقية؟\nوأرجو مهلة أربع وعشرين ساعة لأراجعه مراجعة تليق بقرار كهذا، وأعود لكم غدًا بإجابة واضحة.\n\n[اسمك]",
-  },
-];
-
-/* The eight questions that decide a fresh graduate's interview, each with
-   the trap it hides. They sit beside the story bank so the six STAR
-   stories get written against real questions instead of in a vacuum. */
-const INTERVIEW_QS = [
-  {
-    q: "حدّثني عن نفسك",
-    trap: "سرد السيرة من الولادة. المطلوب تسعون ثانية: من أنت الآن، ماذا تُجيد بدليل، أي دور تريد ولماذا هم.",
-  },
-  {
-    q: "لماذا نحن تحديدًا؟",
-    trap: "«شركة رائدة ولها سمعة طيّبة» تعني أنك لم تبحث. اذكر شيئًا حدث عندهم هذا العام وصِله بما تريد تعلّمه.",
-  },
-  {
-    q: "ما أكبر نقطة ضعف فيك؟",
-    trap: "«أنا مثاليّ في عملي» إجابة محروقة. ضعف حقيقي لا يقتل الدور، ثم ما تفعله حياله الآن بالتحديد.",
-  },
-  {
-    q: "ليست لديك خبرة — لماذا نوظّفك؟",
-    trap: "لا تعتذر ولا تدافع. انقل الحديث إلى مخرج صنعته: «أعددت هذا، وهو أقرب ما يكون لما يُطلب في الدور».",
-  },
-  {
-    q: "حدّثني عن موقف عملت فيه تحت ضغط",
-    trap: "صفات بلا قصّة. اسحب قصّة جاهزة من بنك القصص، وأنهِها برقم.",
-  },
-  {
-    q: "خلاف مع زميل أو مشرف — كيف تصرّفت؟",
-    trap: "«لم يحدث لي خلاف» يُقرأ تهرّبًا. اذكر خلافًا مهنيًّا، وركّز على ما فعلتَ أنت لا على خطأ الآخر.",
-  },
-  {
-    q: "أين ترى نفسك بعد خمس سنوات؟",
-    trap: "طموح معلّق في الهواء، أو طموح يتجاوز الشركة نفسها. اربطه بمسار موجود عندهم فعلًا.",
-  },
-  {
-    q: "هل لديك أسئلة لنا؟",
-    trap: "«لا، كل شيء واضح» أسوأ إجابة في المقابلة كلها. ثلاثة أسئلة جاهزة دائمًا: كيف يبدو النجاح في أول تسعين يومًا؟ ما أصعب ما في الدور؟ مع من سأعمل يوميًّا؟",
-  },
-];
-
-const OPEN_STAGES = new Set(["sent", "touch", "screen", "intv"]);
-const stageOf = (id) => APP_STAGES.find((s) => s.id === id) || APP_STAGES[0];
-
-/* One place each career row's fields are written — add form, migration and
-   import all pass through here, so the shape cannot drift between them. */
-const careerDayNo = (c) =>
-  c.startedAt ? Math.min(CAREER_DAYS, daysBetween(c.startedAt) + 1) : 0;
-const careerWeekNo = (c) =>
-  c.startedAt
-    ? Math.min(CAREER_WEEK_COUNT, Math.floor(daysBetween(c.startedAt) / 7) + 1)
-    : 1;
-
-const missionsIn = (missions, weeks) =>
-  weeks.reduce(
-    (n, w) => n + weekOf(w).missions.filter((_, i) => missions[missionKey(w, i)]).length,
-    0,
-  );
-const missionCount = (weeks) =>
-  weeks.reduce((n, w) => n + weekOf(w).missions.length, 0);
-
-/* Today's row in the career log. Read by date, never by a reset — which is
-   what makes the two daily lists correct at 00:01 without any rollover. */
-const careerToday = (log) => (log || []).find((e) => e.date === dayKey()) || {};
-
-/* Merged like a history row: the day carries both daily lists, so writing
-   one must never drop the other. */
-function toggleDaily(log, field, id) {
-  const today = dayKey();
-  const prev = (log || []).find((e) => e.date === today);
-  const rest = (log || []).filter((e) => e.date !== today);
-  const have = prev?.[field] || [];
-  return [
-    ...rest,
-    {
-      ...prev,
-      date: today,
-      [field]: have.includes(id) ? have.filter((x) => x !== id) : [...have, id],
-    },
-  ].slice(-CAREER_LOG_CAP);
-}
-
-/* Days in a row that cleared `need`. A run whose last qualifying day was
-   yesterday still counts today — the day is not over, and zeroing it at
-   dawn would punish someone who studies in the evening. */
-function dailyStreak(log, field, need, only) {
-  const count = (e) =>
-    only ? (e[field] || []).filter((id) => only.has(id)).length : (e[field] || []).length;
-  const met = new Set((log || []).filter((e) => count(e) >= need).map((e) => e.date));
-  if (!met.size) return 0;
-  const d = logicalNow();
-  if (!met.has(dayKey(d))) d.setDate(d.getDate() - 1);
-  let n = 0;
-  while (met.has(dayKey(d))) {
-    n += 1;
-    d.setDate(d.getDate() - 1);
-  }
-  return n;
-}
-
-const setupDone = (c) => SAUDI_SETUP.filter((x) => (c.setup || {})[x.id]).length;
-const amCoreDone = (am) => (am || []).filter((id) => AM_CORE.has(id)).length;
-
-const sprintDone = (sp) => SPRINT_DAYS.filter((d) => sp.days[d.d]).length;
-/* Locked in order: a day opens when every day before it is ticked. */
-const sprintOpenDay = (sp) => {
-  for (const d of SPRINT_DAYS) if (!sp.days[d.d]) return d.d;
-  return 0;
-};
-const needsFollowUp = (a) =>
-  OPEN_STAGES.has(a.stage) && daysBetween(a.touchedAt || a.sentAt) >= FOLLOWUP_DAYS;
-
-/* The composite: six measures of whether this week actually moved you
-   closer to a contract. Plan progress is scored against the weeks you have
-   *reached*, not against all ninety days — otherwise day three reads 2%
-   however perfectly it went, and a score nobody can move is a score nobody
-   looks at. */
-const READINESS = [
-  { id: "setup", label: "المنصّات والبرامج", max: 15, tint: T.sky },
-  { id: "plan", label: "خطة التسعين يومًا", max: 25, tint: T.cta },
-  { id: "apps", label: "تقديمات ٣٠ يومًا", max: 20, tint: T.indigo },
-  { id: "skill", label: "سلسلة الحصص", max: 15, tint: T.primary },
-  { id: "am", label: "روتين الصباح", max: 10, tint: T.accent },
-  { id: "sprint", label: "هجمات الشركات", max: 8, tint: T.violet },
-  { id: "story", label: "بنك القصص", max: 7, tint: T.rose },
-];
-
-function readiness(c) {
-  const live = careerWeekNo(c);
-  const reached = CAREER_WEEKS.filter((w) => w.w <= live).map((w) => w.w);
-  const planTotal = missionCount(reached);
-  const share = (hit, cap) => Math.min(1, cap ? hit / cap : 0);
-
-  const sent30 = (c.apps || []).filter((a) => daysBetween(a.sentAt) <= 30).length;
-  const attacks = (c.sprints || []).reduce((n, s) => n + sprintDone(s), 0);
-
-  const parts = {
-    setup: share(setupDone(c), SETUP_TOTAL),
-    plan: c.startedAt ? share(missionsIn(c.missions, reached), planTotal) : 0,
-    skill: share(dailyStreak(c.log, "skills", SKILL_TARGET), STREAK_CEIL),
-    apps: share(sent30, APPS_PER_MONTH),
-    am: share(dailyStreak(c.log, "am", AM_TARGET, AM_CORE), STREAK_CEIL),
-    sprint: share(attacks, SPRINT_DAYS.length * 2),
-    story: share((c.stories || []).length, 6),
-  };
-
-  const rows = READINESS.map((r) => ({
-    ...r,
-    got: Math.round(parts[r.id] * r.max),
-  }));
-  return { rows, total: rows.reduce((n, r) => n + r.got, 0) };
-}
-
-/* The day-7 message, assembled from what the sprint already knows. A blank
-   field leaves its bracket in place so the gap is obvious before sending. */
-const sprintPitch = (sp) =>
-  [
-    `السلام عليكم ${sp.contact || ""}،`.replace(/ ،$/, "،"),
-    "",
-    `لاحظت أن ${sp.company || "[الشركة]"} ${sp.pain || "[نقطة الألم]"}.`,
-    `أعددت ${sp.solution || "[المخرج]"} على بياناتكم المعلنة، وهو بين يديكم بلا أي التزام.`,
-    "",
-    `أنا خريج إدارة أعمال، وأبحث عن دور ${sp.role || "إداري"} أُكمل فيه هذا العمل من داخل الفريق.`,
-    "المخرج مرفق — وإن رأيتم فيه قيمة، يسعدني لقاء عشر دقائق.",
-    "",
-    "شاكرًا لوقتكم،",
-  ].join("\n");
 
 /* ==================================================================== *
  *  CALENDAR — the months and the years
@@ -9430,2075 +8577,6 @@ function GraphModule() {
 /* ==================================================================== *
  *  MODULE 4 — Analytics
  * ==================================================================== */
-/* ==================================================================== *
- *  MODULE — the 90-day employability masterplan
- *
- *  Four views, because four different time horizons live here: what must
- *  happen in the next hour, this week, against one company, and across the
- *  whole hunt. They are deliberately not one scrolling page — the daily
- *  view has to be openable and finishable before breakfast.
- * ==================================================================== */
-const CAREER_VIEWS = [
-  { id: "today", label: "اليوم", icon: Sunrise },
-  { id: "kit", label: "العدّة", icon: Briefcase },
-  { id: "plan", label: "الخطة", icon: CalendarDays },
-  { id: "war", label: "الشركات", icon: Crosshair },
-  { id: "track", label: "التقديمات", icon: ClipboardList },
-];
-
-function ReadinessCard({ career, onStart }) {
-  const { rows, total } = useMemo(() => readiness(career), [career]);
-  const day = careerDayNo(career);
-  const week = careerWeekNo(career);
-  const left = career.startedAt ? Math.max(0, CAREER_DAYS - day) : CAREER_DAYS;
-
-  return (
-    <Card className="p-6 sm:p-7">
-      {/* The ring sits beside the headline rather than after the breakdown:
-          on a phone the column stacks, and a score six bars down the page is
-          a score nobody sees. */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Gauge size={16} style={{ color: T.cta }} />
-            <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
-              خطة التوظيف في ٩٠ يومًا
-            </h2>
-          </div>
-          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
-            الشهادة لا توظّف، الروتين يوظّف. ثلاث عشرة أسبوعًا في ثلاث مراحل،
-            وخمس مهام كل أسبوع مكتوبة لخريج إدارة أعمال تحديدًا.
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2.5">
-            {career.startedAt ? (
-              <>
-                <Badge tint={T.cta}>
-                  اليوم{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {day}
-                  </span>{" "}
-                  من{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {CAREER_DAYS}
-                  </span>
-                </Badge>
-                <Badge tint={T.accent}>
-                  الأسبوع{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {week}
-                  </span>{" "}
-                  · {phaseOf(weekOf(week).phase).label}
-                </Badge>
-                <Badge tint={left > 0 ? T.sky : T.primary}>
-                  {left > 0 ? (
-                    <>
-                      بقي{" "}
-                      <span dir="ltr" className="tabular-nums">
-                        {left}
-                      </span>{" "}
-                      {dayWord(left)}
-                    </>
-                  ) : (
-                    "انتهت التسعون"
-                  )}
-                </Badge>
-              </>
-            ) : (
-              <Btn variant="default" size="sm" onClick={onStart}>
-                <Rocket size={14} strokeWidth={2.6} /> ابدأ العدّ من اليوم
-              </Btn>
-            )}
-          </div>
-        </div>
-
-        <div className="self-center">
-          <ProgressRing
-            value={total}
-            size={178}
-            stroke={13}
-            label="مؤشر الجهوزية"
-            fullLabel="جاهز للتوظيف"
-          />
-        </div>
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((r) => {
-          const pct = Math.round((r.got / r.max) * 100);
-          return (
-            <div
-              key={r.id}
-              className="rounded-xl border px-3.5 py-2.5"
-              style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-[11.5px] font-bold" style={{ color: T.muted }}>
-                  {r.label}
-                </span>
-                <span
-                  dir="ltr"
-                  className="shrink-0 text-[11px] font-extrabold tabular-nums"
-                  style={{ color: r.tint }}
-                >
-                  {r.got}/{r.max}
-                </span>
-              </div>
-              <div
-                className="mt-2 h-1.5 overflow-hidden rounded-full"
-                style={{ background: "rgba(255,255,255,0.07)" }}
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${pct}%`,
-                    background: `linear-gradient(90deg, ${r.tint}, ${r.tint}99)`,
-                    boxShadow: pct > 0 ? `0 0 10px ${r.tint}80` : "none",
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-/* One timer for all six blocks on purpose: a time-blocker that lets two run
-   at once is a stopwatch collection, not a block. */
-function SkillBlock({ block, done, live, left, onPick, onToggle, reward }) {
-  const Icon = block.icon;
-  const mm = String(Math.floor(left / 60)).padStart(2, "0");
-  const ss = String(left % 60).padStart(2, "0");
-  const pct = ((BLOCK_MIN * 60 - left) / (BLOCK_MIN * 60)) * 100;
-
-  return (
-    <div
-      className={`overflow-hidden rounded-2xl border transition-all duration-300${
-        reward ? " los-reward" : ""
-      }`}
-      style={{
-        borderColor: done ? `${T.primary}59` : live ? `${T.cta}70` : T.border,
-        background: done
-          ? `${T.primary}12`
-          : live
-          ? `${T.cta}12`
-          : "rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="flex items-center gap-3 px-3.5 py-3">
-        <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
-          style={{
-            borderColor: `${block.tint}45`,
-            background: `${block.tint}18`,
-            color: block.tint,
-          }}
-        >
-          <Icon size={17} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p
-            className="truncate text-[13px] font-extrabold"
-            style={{
-              color: done ? T.primary : T.fg,
-              textDecoration: done ? "line-through" : "none",
-            }}
-          >
-            {block.label}
-          </p>
-          <p className="truncate text-[10.5px]" style={{ color: T.faint }}>
-            {live ? (
-              <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.ctaLift }}>
-                {mm}:{ss}
-              </span>
-            ) : (
-              block.hint
-            )}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Btn
-            variant={live ? "outline" : "ghost"}
-            size="icon"
-            onClick={onPick}
-            title={live ? "إيقاف الحصّة" : "ابدأ ٣٠ دقيقة"}
-            aria-label={live ? "إيقاف الحصّة" : "ابدأ ٣٠ دقيقة"}
-            style={{
-              borderColor: live ? `${T.accent}59` : T.border,
-              color: live ? T.accent : T.muted,
-            }}
-          >
-            {live ? <Pause size={14} /> : <Play size={14} />}
-          </Btn>
-          {/* Checkbox grows to fill its label; with no label it needs a box
-              of its own or it collapses next to the play button. */}
-          <div className="flex w-8 justify-end">
-            <Checkbox checked={!!done} onToggle={onToggle} tint={T.primary} size="sm" />
-          </div>
-        </div>
-      </div>
-      {live && (
-        <div className="h-1" style={{ background: "rgba(255,255,255,0.07)" }}>
-          <div
-            className="h-full transition-all duration-300"
-            style={{
-              width: `${pct}%`,
-              background: `linear-gradient(90deg, ${T.cta}, ${T.accent})`,
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* A block of ready-to-send text with one button. Clipboard access can be
-   refused outright, so the text stays selectable on screen and the button
-   simply reports what happened instead of failing silently. */
-function CopyBox({ text, tint = T.cta, label = "انسخ النص" }) {
-  const [copied, fireCopied] = useBurst(1800);
-  const [failed, fireFailed] = useBurst(2600);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      fireCopied();
-    } catch {
-      fireFailed();
-    }
-  };
-
-  return (
-    <div
-      className="rounded-xl border p-3"
-      style={{ borderColor: `${tint}33`, background: `${tint}0D` }}
-    >
-      <pre
-        className="whitespace-pre-wrap break-words font-[inherit] text-[11.5px] leading-relaxed"
-        style={{ color: T.muted }}
-      >
-        {text}
-      </pre>
-      <div className="mt-2.5 flex items-center gap-2">
-        <Btn
-          variant={copied ? "success" : "outline"}
-          size="sm"
-          onClick={copy}
-          style={copied ? undefined : { borderColor: `${tint}4D`, color: tint }}
-        >
-          {copied ? <CheckCheck size={12} /> : <Copy size={12} />}
-          {copied ? "نُسخ" : label}
-        </Btn>
-        {failed && (
-          <span className="text-[10px]" style={{ color: T.faint }}>
-            النسخ محجوب — حدّد النص ثم انسخه يدويًّا
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ---- One morning step ------------------------------------------------
-   Collapsed it is a checkbox with a clock; opened it is the whole method.
-   The method is deliberately *not* always visible: six expanded steps is a
-   wall of text at 7am, and a wall of text is skipped the same way a bare
-   imperative is. */
-function AmStep({ step, n, on, open, onOpen, onToggle }) {
-  const Icon = step.icon;
-  const core = AM_CORE.has(step.id);
-
-  return (
-    <div
-      className="rounded-xl border transition-all duration-300"
-      style={{
-        borderColor: on ? `${T.primary}4D` : T.border,
-        background: on ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="flex items-center gap-3 px-3.5 py-2.5">
-        <span
-          dir="ltr"
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[11px] font-extrabold tabular-nums"
-          style={{
-            borderColor: `${step.tint}45`,
-            background: `${step.tint}18`,
-            color: step.tint,
-          }}
-        >
-          {n}
-        </span>
-        <Icon size={15} className="hidden shrink-0 sm:block" style={{ color: step.tint }} />
-        <Checkbox
-          checked={on}
-          onToggle={onToggle}
-          label={step.label}
-          tint={T.primary}
-          size="sm"
-        />
-        <span className="shrink-0 text-[10px] font-bold" style={{ color: T.faint }}>
-          <span dir="ltr" className="tabular-nums">
-            {step.min}
-          </span>{" "}
-          {minWord(step.min)}
-        </span>
-        {/* The core mark stays visible at every width: it is the only thing
-            that tells the four streak-bearing steps apart from the two that
-            merely warm you up. */}
-        {core && (
-          <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: T.cta }}
-            title="خطوة أساسية — تحفظ السلسلة"
-          />
-        )}
-        <button
-          onClick={onOpen}
-          aria-expanded={open}
-          aria-label={open ? `أغلق شرح: ${step.label}` : `كيف أنفّذ: ${step.label}`}
-          className="shrink-0 rounded-lg border p-1.5 transition-all duration-200 hover:brightness-125"
-          style={{
-            borderColor: open ? `${step.tint}4D` : T.border,
-            color: open ? step.tint : T.faint,
-            background: open ? `${step.tint}14` : "transparent",
-          }}
-        >
-          <ChevronDown
-            size={13}
-            style={{
-              transform: open ? "rotate(180deg)" : "none",
-              transition: "transform .25s",
-            }}
-          />
-        </button>
-      </div>
-
-      {open && (
-        <div
-          className="los-in space-y-3 border-t px-3.5 pb-3.5 pt-3"
-          style={{ borderColor: T.border }}
-        >
-          <p className="flex items-start gap-1.5 text-[11px]" style={{ color: step.tint }}>
-            <Milestone size={12} className="mt-0.5 shrink-0" />
-            <span style={{ color: T.muted }}>{step.where}</span>
-          </p>
-          <ol className="space-y-1.5">
-            {step.how.map((line, i) => (
-              <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
-                <span
-                  dir="ltr"
-                  className="mt-[3px] shrink-0 text-[10px] font-extrabold tabular-nums"
-                  style={{ color: step.tint }}
-                >
-                  {i + 1}.
-                </span>
-                <span style={{ color: T.muted }}>{line}</span>
-              </li>
-            ))}
-          </ol>
-          {step.script && <CopyBox text={step.script} tint={step.tint} />}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CareerToday({ state, setState, onGo }) {
-  const career = state.career;
-  const today = careerToday(career.log);
-  const skills = today.skills || [];
-  const am = today.am || [];
-
-  const [pick, setPick] = useState(null); // block id holding the timer
-  const [openStep, setOpenStep] = useState(null); // the one expanded method
-  const [endAt, setEndAt] = useState(null);
-  const [left, setLeft] = useState(BLOCK_MIN * 60);
-  const [rang, setRang] = useState(false);
-  const [reward, fireReward] = useBurst(900);
-
-  /* Target timestamp, not a decrementing counter: a background tab throttles
-     intervals hard and a counted-down half hour silently loses minutes. */
-  useEffect(() => {
-    if (endAt === null) return;
-    const tick = () => setLeft(Math.max(0, Math.round((endAt - Date.now()) / 1000)));
-    tick();
-    const id = setInterval(tick, 250);
-    return () => clearInterval(id);
-  }, [endAt]);
-
-  const mark = useCallback(
-    (id) =>
-      setState((s) => ({
-        ...s,
-        career: { ...s.career, log: toggleDaily(s.career.log, "skills", id) },
-      })),
-    [setState],
-  );
-
-  /* A finished block is also a half hour of focused work, so it lands in the
-     same session log the deep-work screen and the analytics read. One place
-     counts minutes in this app, and this is it. */
-  useEffect(() => {
-    if (endAt === null || left > 0 || rang) return;
-    setRang(true);
-    setEndAt(null);
-    fireReward();
-    setState((s) => {
-      const have = careerToday(s.career.log).skills || [];
-      return {
-        ...s,
-        sessions: [
-          ...(s.sessions || []),
-          { id: uid(), date: dayKey(), minutes: BLOCK_MIN, taskId: null },
-        ].slice(-400),
-        career: {
-          ...s.career,
-          log: have.includes(pick)
-            ? s.career.log
-            : toggleDaily(s.career.log, "skills", pick),
-        },
-      };
-    });
-  }, [endAt, left, rang, pick, setState, fireReward]);
-
-  const choose = (id) => {
-    if (pick === id && endAt !== null) {
-      setLeft(Math.max(0, Math.round((endAt - Date.now()) / 1000)));
-      setEndAt(null);
-      return;
-    }
-    const fresh = pick === id ? left || BLOCK_MIN * 60 : BLOCK_MIN * 60;
-    setPick(id);
-    setRang(false);
-    setLeft(fresh);
-    setEndAt(Date.now() + fresh * 1000);
-  };
-
-  const toggleAm = (id) =>
-    setState((s) => ({
-      ...s,
-      career: { ...s.career, log: toggleDaily(s.career.log, "am", id) },
-    }));
-
-  const skillStreak = dailyStreak(career.log, "skills", SKILL_TARGET);
-  const amStreak = dailyStreak(career.log, "am", AM_TARGET, AM_CORE);
-  const coreDone = amCoreDone(am);
-  const amPct = Math.round((am.length / AM_ROUTINE.length) * 100);
-  const leftMin = AM_ROUTINE.filter((x) => !am.includes(x.id)).reduce((n, x) => n + x.min, 0);
-  const hit = skills.length >= SKILL_TARGET;
-
-  const setupLeft = SETUP_TOTAL - setupDone(career);
-
-  return (
-    <div className="space-y-5">
-      {setupLeft > 0 && (
-        <Card
-          className="p-5 sm:p-6"
-          style={{ borderColor: `${T.sky}59`, boxShadow: `0 18px 44px -28px ${T.sky}` }}
-        >
-          <h3
-            className="flex items-center gap-2 text-[15px] font-extrabold"
-            style={{ color: T.sky }}
-          >
-            <Building2 size={16} /> ابدأ من الأرضية
-          </h3>
-          <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
-            بقيت{" "}
-            <span dir="ltr" className="tabular-nums font-bold">
-              {setupLeft}
-            </span>{" "}
-            {stepWord(setupLeft)} من التسجيلات التي تُنجَز مرّة
-            وتعمل شهورًا — تمهير وطاقات ودروب وغيرها. أمسية واحدة هنا تساوي
-            أسبوعًا من التقديم العشوائي.
-          </p>
-          <Btn
-            variant="default"
-            size="sm"
-            className="mt-3.5"
-            onClick={() => onGo && onGo("kit")}
-          >
-            <Briefcase size={13} /> افتح العدّة
-          </Btn>
-        </Card>
-      )}
-
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Sunrise size={17} style={{ color: T.accent }} />
-            <h3 className="text-[17px] font-extrabold" style={{ color: T.accent }}>
-              روتين الصباح التنفيذي
-            </h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge tint={amPct === 100 ? T.primary : T.accent}>
-              <span dir="ltr" className="tabular-nums">
-                {am.length}/{AM_ROUTINE.length}
-              </span>
-            </Badge>
-            {amStreak > 0 && (
-              <Badge tint={T.ember}>
-                <Flame size={10} />
-                <span dir="ltr" className="tabular-nums">
-                  {amStreak}
-                </span>{" "}
-                {dayWord(amStreak)}
-              </Badge>
-            )}
-          </div>
-        </div>
-        <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-          ست خطوات في{" "}
-          <span dir="ltr" className="tabular-nums">
-            {AM_MINUTES}
-          </span>{" "}
-          {minWord(AM_MINUTES)}، تُنفَّذ بالترتيب قبل أن يأخذ اليوم رأيه فيك. اضغط السهم في أي
-          خطوة لترى أين تُنفَّذ وكيف، ومعها نصّ جاهز للنسخ.
-        </p>
-
-        {/* The contract, said out loud: four specific steps carry the streak,
-            and which four is not left to be guessed from a number. */}
-        <div
-          className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border px-3.5 py-2.5 text-[11px]"
-          style={{ borderColor: `${T.cta}2E`, background: `${T.cta}0A` }}
-        >
-          <span className="flex items-center gap-1.5" style={{ color: T.muted }}>
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: T.cta }} />
-            الخطوات الأساسية الأربع (تقديم، متابعة، تواصل، تحسين) هي ما يحفظ
-            السلسلة — والباقي يهيّئك لها.
-          </span>
-          <span className="flex items-center gap-1.5 font-bold" style={{ color: coreDone >= AM_TARGET ? T.primary : T.ctaLift }}>
-            <Flame size={11} />
-            <span dir="ltr" className="tabular-nums">
-              {coreDone}/{AM_TARGET}
-            </span>
-            {coreDone >= AM_TARGET ? "السلسلة محفوظة اليوم" : "لحفظ اليوم"}
-          </span>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          {AM_ROUTINE.map((item, i) => (
-            <AmStep
-              key={item.id}
-              step={item}
-              n={i + 1}
-              on={am.includes(item.id)}
-              open={openStep === item.id}
-              onOpen={() => setOpenStep((x) => (x === item.id ? null : item.id))}
-              onToggle={() => toggleAm(item.id)}
-            />
-          ))}
-        </div>
-
-        <p className="mt-3 text-[11px]" style={{ color: T.faint }}>
-          {am.length === AM_ROUTINE.length ? (
-            "انتهى الروتين. ما تبقّى من اليوم ربح صافٍ."
-          ) : (
-            <>
-              المتبقّي{" "}
-              <span dir="ltr" className="tabular-nums">
-                {leftMin}
-              </span>{" "}
-              {minWord(leftMin)}.
-            </>
-          )}
-        </p>
-      </Card>
-
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Clock size={17} style={{ color: T.cta }} />
-            <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-              حصص المهارات — نصف ساعة لكل حصّة
-            </h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge tint={hit ? T.primary : T.cta}>
-              <span dir="ltr" className="tabular-nums">
-                {skills.length}/{SKILL_TARGET}
-              </span>{" "}
-              اليوم
-            </Badge>
-            {skillStreak > 0 && (
-              <Badge tint={T.ember}>
-                <Flame size={10} />
-                <span dir="ltr" className="tabular-nums">
-                  {skillStreak}
-                </span>{" "}
-                {dayWord(skillStreak)}
-              </Badge>
-            )}
-          </div>
-        </div>
-        <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
-          حصّتان في اليوم تحفظان السلسلة. الحصّة المكتملة تُسجَّل في العمل العميق
-          تلقائيًّا.
-        </p>
-
-        <div className="mt-4 grid grid-cols-1 gap-2.5 xl:grid-cols-2">
-          {SKILL_BLOCKS.map((b) => (
-            <SkillBlock
-              key={b.id}
-              block={b}
-              done={skills.includes(b.id)}
-              live={pick === b.id && endAt !== null}
-              left={pick === b.id ? left : BLOCK_MIN * 60}
-              reward={reward && pick === b.id}
-              onPick={() => choose(b.id)}
-              onToggle={() => mark(b.id)}
-            />
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function CareerPlan({ state, setState }) {
-  const career = state.career;
-  const live = careerWeekNo(career);
-  const [week, setWeek] = useState(live);
-  const data = weekOf(week);
-  const phase = phaseOf(data.phase);
-  const missions = career.missions || {};
-
-  const toggle = (i) =>
-    setState((s) => {
-      const k = missionKey(week, i);
-      const next = { ...(s.career.missions || {}) };
-      if (next[k]) delete next[k];
-      else next[k] = true;
-      return { ...s, career: { ...s.career, missions: next } };
-    });
-
-  const doneHere = data.missions.filter((_, i) => missions[missionKey(week, i)]).length;
-  const allDone = missionsIn(missions, CAREER_WEEKS.map((w) => w.w));
-
-  return (
-    <div className="space-y-5">
-      {/* phases — the completion percentage of each is the whole point */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {CAREER_PHASES.map((p) => {
-          const hit = missionsIn(missions, p.weeks);
-          const total = missionCount(p.weeks);
-          const pct = total ? Math.round((hit / total) * 100) : 0;
-          const here = p.id === data.phase;
-          const Icon = p.icon;
-          return (
-            <Card
-              key={p.id}
-              className="p-4 transition-all duration-300"
-              style={{
-                borderColor: here ? `${p.tint}70` : "rgba(255,225,210,0.18)",
-                boxShadow: here ? `0 14px 36px -22px ${p.tint}` : undefined,
-              }}
-            >
-              <div className="flex items-center gap-2.5">
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
-                  style={{
-                    borderColor: `${p.tint}45`,
-                    background: `${p.tint}18`,
-                    color: p.tint,
-                  }}
-                >
-                  <Icon size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-extrabold" style={{ color: p.tint }}>
-                    {p.label}
-                  </p>
-                  <p className="truncate text-[10px]" style={{ color: T.faint }}>
-                    {p.span}
-                  </p>
-                </div>
-                <span
-                  dir="ltr"
-                  className="shrink-0 text-[15px] font-extrabold tabular-nums"
-                  style={{ color: pct === 100 ? T.primary : p.tint }}
-                >
-                  {pct}%
-                </span>
-              </div>
-              <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: T.muted }}>
-                {p.aim}
-              </p>
-              <div
-                className="mt-3 h-1.5 overflow-hidden rounded-full"
-                style={{ background: "rgba(255,255,255,0.07)" }}
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${pct}%`,
-                    background: `linear-gradient(90deg, ${pct === 100 ? T.primary : p.tint}, ${
-                      pct === 100 ? T.primaryLift : p.tint
-                    }99)`,
-                    boxShadow: pct > 0 ? `0 0 10px ${pct === 100 ? T.primary : p.tint}80` : "none",
-                  }}
-                />
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* week strip */}
-      <Card className="p-4 sm:p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: T.faint }}>
-            <Milestone size={12} /> الأسابيع الثلاثة عشر
-          </p>
-          <Badge tint={T.cta}>
-            <span dir="ltr" className="tabular-nums">
-              {allDone}/{MISSION_TOTAL}
-            </span>{" "}
-            مهمة
-          </Badge>
-        </div>
-        <div className="grid grid-cols-5 gap-2 sm:grid-cols-7 lg:grid-cols-[repeat(13,minmax(0,1fr))]">
-          {CAREER_WEEKS.map((w) => {
-            const on = w.w === week;
-            const tint = phaseOf(w.phase).tint;
-            const hit = w.missions.filter((_, i) => missions[missionKey(w.w, i)]).length;
-            const full = hit === w.missions.length;
-            const now = w.w === live && !!career.startedAt;
-            return (
-              <button
-                key={w.w}
-                onClick={() => setWeek(w.w)}
-                aria-pressed={on}
-                title={w.title}
-                className="relative rounded-xl border py-2 text-center transition-all duration-200"
-                style={{
-                  borderColor: on ? `${tint}99` : full ? `${T.primary}4D` : T.border,
-                  backgroundImage: on ? `linear-gradient(160deg, ${tint}33, ${tint}0A)` : "none",
-                  backgroundColor: on
-                    ? "transparent"
-                    : full
-                    ? `${T.primary}12`
-                    : "rgba(255,255,255,0.03)",
-                  color: on ? tint : full ? T.primary : T.muted,
-                }}
-              >
-                <span dir="ltr" className="block text-[13px] font-extrabold tabular-nums">
-                  {w.w}
-                </span>
-                <span dir="ltr" className="block text-[9px] tabular-nums opacity-70">
-                  {hit}/{w.missions.length}
-                </span>
-                {now && (
-                  <span
-                    aria-label="الأسبوع الحالي"
-                    className="absolute left-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
-                    style={{ background: T.cta, boxShadow: `0 0 8px ${T.cta}` }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* the selected week */}
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Badge tint={phase.tint}>{phase.label}</Badge>
-              <Badge tint={T.faint}>
-                الأسبوع{" "}
-                <span dir="ltr" className="tabular-nums">
-                  {week}
-                </span>
-              </Badge>
-            </div>
-            <h3 className="mt-2.5 text-[19px] font-extrabold" style={{ color: T.fg }}>
-              {data.title}
-            </h3>
-            <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
-              {data.aim}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Btn
-              variant="ghost"
-              size="icon"
-              onClick={() => setWeek(Math.max(1, week - 1))}
-              disabled={week === 1}
-              aria-label="الأسبوع السابق"
-              style={{ borderColor: T.border }}
-            >
-              <ChevronRight size={15} />
-            </Btn>
-            <span
-              dir="ltr"
-              className="text-[13px] font-extrabold tabular-nums"
-              style={{ color: doneHere === data.missions.length ? T.primary : T.accent }}
-            >
-              {doneHere}/{data.missions.length}
-            </span>
-            <Btn
-              variant="ghost"
-              size="icon"
-              onClick={() => setWeek(Math.min(CAREER_WEEK_COUNT, week + 1))}
-              disabled={week === CAREER_WEEK_COUNT}
-              aria-label="الأسبوع التالي"
-              style={{ borderColor: T.border }}
-            >
-              <ChevronLeft size={15} />
-            </Btn>
-          </div>
-        </div>
-
-        <div className="mt-5 space-y-2.5">
-          {data.missions.map((m, i) => {
-            const on = !!missions[missionKey(week, i)];
-            return (
-              <div
-                key={i}
-                className="flex items-start gap-3 rounded-xl border px-3.5 py-3 transition-all duration-300"
-                style={{
-                  borderColor: on ? `${T.primary}4D` : T.border,
-                  background: on ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
-                }}
-              >
-                <span
-                  dir="ltr"
-                  className="mt-1 w-4 shrink-0 text-center text-[10px] font-extrabold tabular-nums"
-                  style={{ color: on ? T.primary : T.faint }}
-                >
-                  {i + 1}
-                </span>
-                <Checkbox
-                  checked={on}
-                  onToggle={() => toggle(i)}
-                  label={m}
-                  tint={T.primary}
-                  size="sm"
-                />
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function SprintCard({ sprint, onToggle, onNote, onEdit, onDelete }) {
-  const [open, setOpen] = useState(sprintOpenDay(sprint));
-  const [copied, fireCopied] = useBurst(1800);
-  const done = sprintDone(sprint);
-  const pct = Math.round((done / SPRINT_DAYS.length) * 100);
-  const next = sprintOpenDay(sprint);
-  const finished = next === 0;
-
-  /* Finishing a day opens the next one. The sequence is the whole feature,
-     and hunting for the next card is how a sequence gets abandoned. */
-  const tick = (d) => {
-    onToggle(d);
-    setOpen(sprint.days[d] ? d : d < SPRINT_DAYS.length ? d + 1 : 0);
-  };
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(sprintPitch(sprint));
-      fireCopied();
-    } catch {
-      /* clipboard can be blocked — the text is on screen to select */
-    }
-  };
-
-  return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <span
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
-              style={{
-                borderColor: finished ? `${T.primary}45` : `${T.cta}45`,
-                background: finished ? `${T.primary}18` : `${T.cta}18`,
-                color: finished ? T.primary : T.cta,
-              }}
-            >
-              <Crosshair size={18} />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-[16px] font-extrabold" style={{ color: T.fg }}>
-                {sprint.company || "شركة بلا اسم"}
-              </p>
-              <p className="truncate text-[10.5px]" style={{ color: T.faint }}>
-                {sprint.role || "دور إداري"} · بدأ <Since day={sprint.startedAt} />
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge tint={finished ? T.primary : T.cta}>
-            <span dir="ltr" className="tabular-nums">
-              {done}/{SPRINT_DAYS.length}
-            </span>
-          </Badge>
-          <Btn
-            variant="ghost"
-            size="icon"
-            onClick={onEdit}
-            aria-label="تعديل الهجوم"
-            style={{ borderColor: T.border }}
-          >
-            <Pencil size={13} />
-          </Btn>
-          <Btn
-            variant="ghost"
-            size="icon"
-            onClick={onDelete}
-            aria-label="حذف الهجوم"
-            style={{ borderColor: T.border, color: T.danger }}
-          >
-            <Trash2 size={13} />
-          </Btn>
-        </div>
-      </div>
-
-      <div
-        className="mt-4 h-1.5 overflow-hidden rounded-full"
-        style={{ background: "rgba(255,255,255,0.07)" }}
-      >
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${pct}%`,
-            background: `linear-gradient(90deg, ${finished ? T.primary : T.cta}, ${
-              finished ? T.primaryLift : T.accent
-            })`,
-            boxShadow: pct > 0 ? `0 0 10px ${finished ? T.primary : T.cta}80` : "none",
-          }}
-        />
-      </div>
-
-      <div className="mt-4 space-y-2.5">
-        {SPRINT_DAYS.map((d) => {
-          const on = !!sprint.days[d.d];
-          /* Locked until the day before it is ticked: a sprint that jumps
-             to day seven is just another cold message, which is the thing
-             this schedule exists to replace. */
-          const locked = !on && d.d !== next;
-          const Icon = locked ? Lock : d.icon;
-          const expanded = open === d.d;
-          return (
-            <div
-              key={d.d}
-              className="overflow-hidden rounded-xl border transition-all duration-300"
-              style={{
-                borderColor: on
-                  ? `${T.primary}4D`
-                  : locked
-                  ? T.border
-                  : `${d.tint}70`,
-                background: on
-                  ? `${T.primary}0F`
-                  : locked
-                  ? "rgba(255,255,255,0.02)"
-                  : `${d.tint}10`,
-                opacity: locked ? 0.55 : 1,
-              }}
-            >
-              <button
-                onClick={() => setOpen(expanded ? 0 : d.d)}
-                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-right"
-                aria-expanded={expanded}
-              >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
-                  style={{
-                    borderColor: on ? `${T.primary}45` : `${d.tint}3D`,
-                    background: on ? `${T.primary}18` : `${d.tint}14`,
-                    color: on ? T.primary : locked ? T.faint : d.tint,
-                  }}
-                >
-                  <Icon size={14} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate text-[12.5px] font-extrabold"
-                    style={{ color: on ? T.primary : locked ? T.muted : T.fg }}
-                  >
-                    اليوم{" "}
-                    <span dir="ltr" className="tabular-nums">
-                      {d.d}
-                    </span>{" "}
-                    · {d.label}
-                  </p>
-                  <p className="truncate text-[10px]" style={{ color: T.faint }}>
-                    {d.out}
-                  </p>
-                </div>
-                {expanded ? (
-                  <ChevronUp size={14} style={{ color: T.faint }} />
-                ) : (
-                  <ChevronDown size={14} style={{ color: T.faint }} />
-                )}
-              </button>
-
-              {expanded && (
-                <div className="space-y-3 border-t px-3.5 py-3" style={{ borderColor: T.border }}>
-                  <p className="text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
-                    {d.task}
-                  </p>
-
-                  {d.d === 7 && (
-                    <div
-                      className="rounded-xl border p-3"
-                      style={{ borderColor: `${T.cta}3D`, background: `${T.cta}0D` }}
-                    >
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: T.ctaLift }}>
-                          <Send size={11} /> الرسالة الجاهزة
-                        </p>
-                        <Btn
-                          variant={copied ? "success" : "outline"}
-                          size="sm"
-                          onClick={copy}
-                          style={copied ? undefined : { borderColor: T.border }}
-                        >
-                          {copied ? <CheckCheck size={12} /> : <Copy size={12} />}
-                          {copied ? "نُسخت" : "انسخ"}
-                        </Btn>
-                      </div>
-                      <pre
-                        className="whitespace-pre-wrap text-[11px] leading-relaxed"
-                        style={{ color: T.muted, fontFamily: "inherit" }}
-                      >
-                        {sprintPitch(sprint)}
-                      </pre>
-                    </div>
-                  )}
-
-                  <Field
-                    as="textarea"
-                    rows={2}
-                    value={sprint.notes[d.d] || ""}
-                    onChange={(e) => onNote(d.d, e.target.value)}
-                    className="resize-none text-[12px]"
-                    placeholder="ما خرجت به من هذا اليوم…"
-                    aria-label={`ملاحظة اليوم ${d.d}`}
-                  />
-
-                  <Btn
-                    variant={on ? "outline" : "success"}
-                    size="sm"
-                    onClick={() => tick(d.d)}
-                    disabled={locked}
-                    className="w-full"
-                    style={on ? { borderColor: T.border } : undefined}
-                  >
-                    {on ? (
-                      <>
-                        <RotateCcw size={12} /> أعد فتح اليوم
-                      </>
-                    ) : (
-                      <>
-                        <Check size={13} strokeWidth={3} /> أنجزت هذا اليوم
-                      </>
-                    )}
-                  </Btn>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-function SprintModal({ open, draft, setDraft, onClose, onSave }) {
-  if (!draft) return null;
-  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={draft.id ? "تعديل الهجوم" : "هجوم شركة جديد"}
-      footer={
-        <>
-          <Btn variant="default" onClick={onSave} className="flex-1" disabled={!draft.company.trim()}>
-            <Check size={15} strokeWidth={3} /> {draft.id ? "حفظ" : "ابدأ السبعة أيام"}
-          </Btn>
-          <Btn variant="ghost" onClick={onClose} style={{ borderColor: T.border }}>
-            إلغاء
-          </Btn>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="los-sp-c" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            اسم الشركة
-          </label>
-          <Field id="los-sp-c" value={draft.company} onChange={set("company")} placeholder="مثال: شركة المراعي" />
-        </div>
-        <div>
-          <label htmlFor="los-sp-r" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            الدور المستهدف
-          </label>
-          <Field id="los-sp-r" value={draft.role} onChange={set("role")} placeholder="منسّق إداري" />
-        </div>
-        <div>
-          <label htmlFor="los-sp-n" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            جهة الاتصال (إن عرفتها)
-          </label>
-          <Field id="los-sp-n" value={draft.contact} onChange={set("contact")} placeholder="أ. فلان، مدير الموارد البشرية" />
-        </div>
-        <div>
-          <label htmlFor="los-sp-p" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            نقطة الألم — تُكتب في اليوم الأول
-          </label>
-          <Field
-            id="los-sp-p"
-            as="textarea"
-            rows={2}
-            value={draft.pain}
-            onChange={set("pain")}
-            className="resize-none"
-            placeholder="تتوسّع بثلاثة فروع ولا يظهر لها نظام متابعة طلبات موحّد"
-          />
-        </div>
-        <div>
-          <label htmlFor="los-sp-s" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            المخرج — يُبنى في اليوم الثاني
-          </label>
-          <Field
-            id="los-sp-s"
-            as="textarea"
-            rows={2}
-            value={draft.solution}
-            onChange={set("solution")}
-            className="resize-none"
-            placeholder="نموذج متابعة طلبات على إكسل بلوحة مؤشّرات"
-          />
-        </div>
-        <p className="text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-          النقطة والمخرج يُركّبان رسالة اليوم السابع تلقائيًّا.
-        </p>
-      </div>
-    </Modal>
-  );
-}
-
-function CareerWar({ state, setState }) {
-  const sprints = state.career.sprints || [];
-  const [draft, setDraft] = useState(null);
-
-  const save = () => {
-    const company = draft.company.trim();
-    if (!company) return;
-    setState((s) => ({
-      ...s,
-      career: {
-        ...s.career,
-        sprints: draft.id
-          ? s.career.sprints.map((x) => (x.id === draft.id ? { ...x, ...draft, company } : x))
-          : [sprintShape({ ...draft, company }), ...s.career.sprints],
-      },
-    }));
-    setDraft(null);
-  };
-
-  const patch = (id, fn) =>
-    setState((s) => ({
-      ...s,
-      career: {
-        ...s.career,
-        sprints: s.career.sprints.map((x) => (x.id === id ? fn(x) : x)),
-      },
-    }));
-
-  const remove = (id) => {
-    if (!window.confirm("حذف هذا الهجوم وكل ملاحظاته؟")) return;
-    setState((s) => ({
-      ...s,
-      career: { ...s.career, sprints: s.career.sprints.filter((x) => x.id !== id) },
-    }));
-  };
-
-  return (
-    <div className="space-y-5">
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-              <Crosshair size={17} /> خطة اختراق الشركات
-            </h3>
-            <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-              اكتب اسم شركة، فيُولَّد لها جدول سبعة أيام مقفل بالترتيب: بحث، ثم
-              مخرج، ثم أسماء، ثم ثلاثة أيام قيمة أولًا، ثم رسالة واحدة تُرسل.
-            </p>
-          </div>
-          <Btn
-            variant="default"
-            size="sm"
-            onClick={() =>
-              setDraft({
-                company: "",
-                role: "",
-                contact: "",
-                pain: "",
-                solution: "",
-              })
-            }
-          >
-            <Plus size={14} strokeWidth={3} /> هجوم جديد
-          </Btn>
-        </div>
-      </Card>
-
-      {sprints.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 border-dashed p-10 text-center">
-          <Crosshair size={26} style={{ color: T.faint }} />
-          <p className="text-[12.5px]" style={{ color: T.muted }}>
-            لا هجوم مفتوح. شركة واحدة مدروسة أفضل من خمسين تقديمًا منسوخًا.
-          </p>
-        </Card>
-      ) : (
-        sprints.map((sp) => (
-          <SprintCard
-            key={sp.id}
-            sprint={sp}
-            onToggle={(d) =>
-              patch(sp.id, (x) => {
-                const days = { ...x.days };
-                if (days[d]) delete days[d];
-                else days[d] = true;
-                return { ...x, days };
-              })
-            }
-            onNote={(d, text) =>
-              patch(sp.id, (x) => ({ ...x, notes: { ...x.notes, [d]: text } }))
-            }
-            onEdit={() => setDraft({ ...sp })}
-            onDelete={() => remove(sp.id)}
-          />
-        ))
-      )}
-
-      <SprintModal
-        open={!!draft}
-        draft={draft}
-        setDraft={setDraft}
-        onClose={() => setDraft(null)}
-        onSave={save}
-      />
-    </div>
-  );
-}
-
-function AppModal({ open, draft, setDraft, onClose, onSave }) {
-  if (!draft) return null;
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={draft.id ? "تعديل التقديم" : "تقديم جديد"}
-      footer={
-        <>
-          <Btn variant="default" onClick={onSave} className="flex-1" disabled={!draft.company.trim()}>
-            <Check size={15} strokeWidth={3} /> حفظ
-          </Btn>
-          <Btn variant="ghost" onClick={onClose} style={{ borderColor: T.border }}>
-            إلغاء
-          </Btn>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="los-ap-c" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            الشركة
-          </label>
-          <Field
-            id="los-ap-c"
-            value={draft.company}
-            onChange={(e) => setDraft({ ...draft, company: e.target.value })}
-            placeholder="اسم الشركة"
-          />
-        </div>
-        <div>
-          <label htmlFor="los-ap-r" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            المسمّى
-          </label>
-          <Field
-            id="los-ap-r"
-            value={draft.role}
-            onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-            placeholder="منسّق إداري"
-          />
-        </div>
-        <div>
-          <p className="mb-1.5 text-[11px] font-bold" style={{ color: T.muted }}>
-            المرحلة
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {APP_STAGES.map((s) => {
-              const on = s.id === draft.stage;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setDraft({ ...draft, stage: s.id })}
-                  aria-pressed={on}
-                  className="rounded-xl border px-3 py-1.5 text-[11.5px] font-bold transition-all duration-200"
-                  style={{
-                    borderColor: on ? `${s.tint}80` : T.border,
-                    background: on ? `${s.tint}1F` : "transparent",
-                    color: on ? s.tint : T.faint,
-                  }}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div>
-          <label htmlFor="los-ap-n" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            ملاحظة
-          </label>
-          <Field
-            id="los-ap-n"
-            as="textarea"
-            rows={2}
-            value={draft.note}
-            onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-            className="resize-none"
-            placeholder="القناة، اسم من كلّمك، أي وعد بموعد…"
-          />
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function StoryModal({ open, draft, setDraft, onClose, onSave }) {
-  if (!draft) return null;
-  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
-  const rows = [
-    { k: "situation", label: "الموقف", hint: "أين ومتى، في سطر" },
-    { k: "task", label: "المهمة", hint: "ما كان مطلوبًا منك تحديدًا" },
-    { k: "action", label: "الإجراء", hint: "ما فعلته أنت، لا ما فعله الفريق" },
-    { k: "result", label: "النتيجة", hint: "برقم: وفّرت، قلّصت، أنجزت قبل…" },
-  ];
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={draft.id ? "تعديل القصة" : "قصة مقابلة جديدة"}
-      footer={
-        <>
-          <Btn variant="default" onClick={onSave} className="flex-1" disabled={!draft.title.trim()}>
-            <Check size={15} strokeWidth={3} /> حفظ
-          </Btn>
-          <Btn variant="ghost" onClick={onClose} style={{ borderColor: T.border }}>
-            إلغاء
-          </Btn>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="los-st-t" className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-            عنوان القصة
-          </label>
-          <Field
-            id="los-st-t"
-            value={draft.title}
-            onChange={set("title")}
-            placeholder="مثال: أنقذت تسليم تقرير متأخّر"
-          />
-        </div>
-        {rows.map((r) => (
-          <div key={r.k}>
-            <label htmlFor={`los-st-${r.k}`} className="mb-1.5 block text-[11px] font-bold" style={{ color: T.muted }}>
-              {r.label}
-            </label>
-            <Field
-              id={`los-st-${r.k}`}
-              as="textarea"
-              rows={2}
-              value={draft[r.k]}
-              onChange={set(r.k)}
-              className="resize-none"
-              placeholder={r.hint}
-            />
-          </div>
-        ))}
-      </div>
-    </Modal>
-  );
-}
-
-function StoryCard({ story, onEdit, onDelete }) {
-  const [copied, fireCopied] = useBurst(1800);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        [
-          story.title,
-          "",
-          `الموقف: ${story.situation}`,
-          `المهمة: ${story.task}`,
-          `الإجراء: ${story.action}`,
-          `النتيجة: ${story.result}`,
-        ].join("\n"),
-      );
-      fireCopied();
-    } catch {
-      /* clipboard blocked — the text is on screen to select */
-    }
-  };
-
-  return (
-    <div
-      className="rounded-xl border p-3.5"
-      style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-    >
-      <div className="flex items-start gap-2.5">
-        <Award size={15} className="mt-0.5 shrink-0" style={{ color: T.rose }} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-extrabold" style={{ color: T.fg }}>
-            {story.title}
-          </p>
-          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed" style={{ color: T.muted }}>
-            {story.result || story.action || story.situation || "لم تُكتب بعد"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Btn
-            variant="ghost"
-            size="icon"
-            onClick={copy}
-            aria-label="انسخ القصة"
-            style={{ borderColor: T.border, color: copied ? T.primary : T.muted }}
-          >
-            {copied ? <CheckCheck size={13} /> : <Copy size={13} />}
-          </Btn>
-          <Btn variant="ghost" size="icon" onClick={onEdit} aria-label="تعديل" style={{ borderColor: T.border }}>
-            <Pencil size={13} />
-          </Btn>
-          <Btn
-            variant="ghost"
-            size="icon"
-            onClick={onDelete}
-            aria-label="حذف"
-            style={{ borderColor: T.border, color: T.danger }}
-          >
-            <Trash2 size={13} />
-          </Btn>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CareerTrack({ state, setState }) {
-  const apps = state.career.apps || [];
-  const stories = state.career.stories || [];
-  const [draft, setDraft] = useState(null);
-  const [story, setStory] = useState(null);
-
-  const overdue = apps.filter(needsFollowUp);
-  const sent30 = apps.filter((a) => daysBetween(a.sentAt) <= 30).length;
-  const interviews = apps.filter((a) => a.stage === "intv" || a.stage === "offer").length;
-  const offers = apps.filter((a) => a.stage === "offer").length;
-
-  const saveApp = () => {
-    const company = draft.company.trim();
-    if (!company) return;
-    setState((s) => ({
-      ...s,
-      career: {
-        ...s.career,
-        apps: draft.id
-          ? s.career.apps.map((a) => (a.id === draft.id ? { ...a, ...draft, company } : a))
-          : [appShape({ ...draft, company }), ...s.career.apps],
-      },
-    }));
-    setDraft(null);
-  };
-
-  const touch = (id) =>
-    setState((s) => ({
-      ...s,
-      career: {
-        ...s.career,
-        apps: s.career.apps.map((a) =>
-          a.id === id
-            ? { ...a, touchedAt: dayKey(), stage: a.stage === "sent" ? "touch" : a.stage }
-            : a,
-        ),
-      },
-    }));
-
-  const removeApp = (id) =>
-    setState((s) => ({
-      ...s,
-      career: { ...s.career, apps: s.career.apps.filter((a) => a.id !== id) },
-    }));
-
-  const saveStory = () => {
-    const title = story.title.trim();
-    if (!title) return;
-    setState((s) => ({
-      ...s,
-      career: {
-        ...s.career,
-        stories: story.id
-          ? s.career.stories.map((x) => (x.id === story.id ? { ...x, ...story, title } : x))
-          : [...s.career.stories, storyShape({ ...story, title })],
-      },
-    }));
-    setStory(null);
-  };
-
-  const stats = [
-    { label: "تقديم خلال ٣٠ يومًا", n: sent30, tint: T.indigo },
-    { label: "مقابلات", n: interviews, tint: T.accent },
-    { label: "عروض", n: offers, tint: T.primary },
-    { label: "تحتاج متابعة", n: overdue.length, tint: overdue.length ? T.danger : T.faint },
-  ];
-
-  return (
-    <div className="space-y-5">
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-              <ClipboardList size={17} /> لوحة التقديمات
-            </h3>
-            <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
-              التقديم الذي لا يُتابَع يُنسى. ما مضى عليه{" "}
-              <span dir="ltr" className="tabular-nums">
-                {FOLLOWUP_DAYS}
-              </span>{" "}
-              أيام بلا حركة يظهر في الرادار.
-            </p>
-          </div>
-          <Btn
-            variant="default"
-            size="sm"
-            onClick={() => setDraft({ company: "", role: "", stage: "sent", note: "" })}
-          >
-            <Plus size={14} strokeWidth={3} /> تقديم جديد
-          </Btn>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className="rounded-xl border px-3 py-2.5 text-center"
-              style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-            >
-              <p dir="ltr" className="text-[20px] font-extrabold tabular-nums" style={{ color: s.tint }}>
-                {s.n}
-              </p>
-              <p className="mt-0.5 text-[10px] leading-tight" style={{ color: T.faint }}>
-                {s.label}
-              </p>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {overdue.length > 0 && (
-        <Card
-          className="p-5 sm:p-6"
-          style={{ borderColor: `${T.danger}59`, boxShadow: `0 18px 44px -28px ${T.danger}` }}
-        >
-          <h3 className="flex items-center gap-2 text-[15px] font-extrabold" style={{ color: T.danger }}>
-            <Radar size={16} /> رادار المتابعة
-          </h3>
-          <p className="mt-1.5 text-[11.5px]" style={{ color: T.muted }}>
-            رسالة متابعة واحدة قصيرة ترفع احتمال الردّ أكثر من تقديم جديد.
-          </p>
-          <div className="mt-4 space-y-2">
-            {overdue.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center gap-3 rounded-xl border px-3.5 py-2.5"
-                style={{ borderColor: `${T.danger}3D`, background: `${T.danger}0D` }}
-              >
-                <AlertTriangle size={14} className="shrink-0" style={{ color: T.danger }} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-bold" style={{ color: T.fg }}>
-                    {a.company}
-                  </p>
-                  <p className="truncate text-[10px]" style={{ color: T.faint }}>
-                    بلا حركة منذ{" "}
-                    <span dir="ltr" className="tabular-nums">
-                      {daysBetween(a.touchedAt || a.sentAt)}
-                    </span>{" "}
-                    {dayWord(daysBetween(a.touchedAt || a.sentAt))}
-                  </p>
-                </div>
-                <Btn variant="success" size="sm" onClick={() => touch(a.id)}>
-                  <Mail size={12} /> تابعت اليوم
-                </Btn>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      <Card className="p-5 sm:p-6">
-        <div className="space-y-2">
-          {apps.length === 0 ? (
-            <p
-              className="rounded-xl border border-dashed py-10 text-center text-[11.5px]"
-              style={{ borderColor: T.border, color: T.faint }}
-            >
-              لا تقديمات بعد — ابدأ بواحد مطابق اليوم، لا بعشرة منسوخة
-            </p>
-          ) : (
-            apps.map((a) => {
-              const st = stageOf(a.stage);
-              const late = needsFollowUp(a);
-              return (
-                <div
-                  key={a.id}
-                  className="flex items-center gap-3 rounded-xl border px-3.5 py-2.5 transition-all duration-300"
-                  style={{
-                    borderColor: late ? `${T.danger}3D` : T.border,
-                    background: "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
-                    style={{
-                      borderColor: `${st.tint}3D`,
-                      background: `${st.tint}14`,
-                      color: st.tint,
-                    }}
-                  >
-                    <Send size={13} />
-                  </span>
-                  <button
-                    onClick={() => setDraft({ ...a })}
-                    className="min-w-0 flex-1 text-right"
-                    aria-label={`تعديل تقديم ${a.company}`}
-                  >
-                    <p className="truncate text-[12.5px] font-extrabold" style={{ color: T.fg }}>
-                      {a.company}
-                    </p>
-                    <p className="truncate text-[10px]" style={{ color: T.faint }}>
-                      {a.role || "بلا مسمّى"} · أُرسل <Since day={a.sentAt} />
-                    </p>
-                  </button>
-                  <Badge tint={st.tint} className="shrink-0">
-                    {st.label}
-                  </Badge>
-                  <Btn
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeApp(a.id)}
-                    aria-label="حذف التقديم"
-                    style={{ borderColor: T.border, color: T.danger }}
-                  >
-                    <Trash2 size={13} />
-                  </Btn>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
-
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-[17px] font-extrabold" style={{ color: T.rose }}>
-              <Award size={17} /> بنك قصص المقابلة
-            </h3>
-            <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-              السبب الأول لرفض حديث التخرّج أنه يذكر صفاته ولا يملك قصصًا. ستّ
-              قصص بصيغة STAR تكفي كل سؤال سلوكي تقريبًا.
-            </p>
-          </div>
-          <Btn
-            variant="default"
-            size="sm"
-            onClick={() =>
-              setStory({ title: "", situation: "", task: "", action: "", result: "" })
-            }
-          >
-            <Plus size={14} strokeWidth={3} /> قصة جديدة
-          </Btn>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          {stories.length === 0 ? (
-            <p
-              className="rounded-xl border border-dashed py-8 text-center text-[11.5px]"
-              style={{ borderColor: T.border, color: T.faint }}
-            >
-              لا قصص بعد — ابدأ بموقف واحد انتهى بنتيجة يمكن قياسها
-            </p>
-          ) : (
-            stories.map((s) => (
-              <StoryCard
-                key={s.id}
-                story={s}
-                onEdit={() => setStory({ ...s })}
-                onDelete={() =>
-                  setState((st) => ({
-                    ...st,
-                    career: {
-                      ...st.career,
-                      stories: st.career.stories.filter((x) => x.id !== s.id),
-                    },
-                  }))
-                }
-              />
-            ))
-          )}
-        </div>
-      </Card>
-
-      <AppModal
-        open={!!draft}
-        draft={draft}
-        setDraft={setDraft}
-        onClose={() => setDraft(null)}
-        onSave={saveApp}
-      />
-      <StoryModal
-        open={!!story}
-        draft={story}
-        setDraft={setStory}
-        onClose={() => setStory(null)}
-        onSave={saveStory}
-      />
-    </div>
-  );
-}
-
-/* ==================================================================== *
- *  The kit — the three things a hunt stalls on when they are missing
- *
- *  A plan tells you what to do this week; it does not tell you where to
- *  register, what to type, or what you will be asked. Those three gaps are
- *  where this hunt actually stops, so they get their own screen rather
- *  than a paragraph buried in a week's missions.
- * ==================================================================== */
-function SetupRow({ item, on, open, onOpen, onToggle }) {
-  const Icon = item.icon;
-  return (
-    <div
-      className="rounded-xl border transition-all duration-300"
-      style={{
-        borderColor: on ? `${T.primary}4D` : T.border,
-        background: on ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="flex items-center gap-3 px-3.5 py-2.5">
-        <Icon size={15} className="shrink-0" style={{ color: item.tint }} />
-        <Checkbox
-          checked={on}
-          onToggle={onToggle}
-          label={item.label}
-          tint={T.primary}
-          size="sm"
-        />
-        <button
-          onClick={onOpen}
-          aria-expanded={open}
-          aria-label={open ? `أغلق شرح: ${item.label}` : `لماذا وكيف: ${item.label}`}
-          className="shrink-0 rounded-lg border p-1.5 transition-all duration-200 hover:brightness-125"
-          style={{
-            borderColor: open ? `${item.tint}4D` : T.border,
-            color: open ? item.tint : T.faint,
-            background: open ? `${item.tint}14` : "transparent",
-          }}
-        >
-          <ChevronDown
-            size={13}
-            style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .25s" }}
-          />
-        </button>
-      </div>
-
-      {open && (
-        <div
-          className="los-in space-y-2.5 border-t px-3.5 pb-3.5 pt-3"
-          style={{ borderColor: T.border }}
-        >
-          <p className="text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
-            {item.why}
-          </p>
-          <ol className="space-y-1.5">
-            {item.how.map((line, i) => (
-              <li key={i} className="flex items-start gap-2 text-[11.5px] leading-relaxed">
-                <span
-                  dir="ltr"
-                  className="mt-[3px] shrink-0 text-[10px] font-extrabold tabular-nums"
-                  style={{ color: item.tint }}
-                >
-                  {i + 1}.
-                </span>
-                <span style={{ color: T.muted }}>{line}</span>
-              </li>
-            ))}
-          </ol>
-          <p
-            dir="ltr"
-            className="flex items-center justify-end gap-1.5 text-[11px] font-bold"
-            style={{ color: item.tint }}
-          >
-            {item.link}
-            <ExternalLink size={11} />
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TemplateCard({ tpl, open, onOpen }) {
-  const Icon = tpl.icon;
-  return (
-    <Card className="overflow-hidden p-0">
-      <button
-        onClick={onOpen}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-right transition-colors duration-200"
-      >
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
-          style={{
-            borderColor: `${tpl.tint}45`,
-            background: `${tpl.tint}18`,
-            color: tpl.tint,
-          }}
-        >
-          <Icon size={15} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-extrabold" style={{ color: T.fg }}>
-            {tpl.label}
-          </span>
-          <span className="block truncate text-[10.5px]" style={{ color: T.faint }}>
-            {tpl.when}
-          </span>
-        </span>
-        <ChevronDown
-          size={14}
-          className="shrink-0"
-          style={{
-            color: T.faint,
-            transform: open ? "rotate(180deg)" : "none",
-            transition: "transform .25s",
-          }}
-        />
-      </button>
-      {open && (
-        <div className="los-in px-4 pb-4">
-          <CopyBox text={tpl.body} tint={tpl.tint} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function CareerKit({ state, setState }) {
-  const career = state.career;
-  const setup = career.setup || {};
-  const [openSetup, setOpenSetup] = useState(null);
-  const [openTpl, setOpenTpl] = useState(null);
-
-  const done = setupDone(career);
-  const pct = Math.round((done / SETUP_TOTAL) * 100);
-
-  const toggleSetup = (id) =>
-    setState((s) => {
-      const next = { ...(s.career.setup || {}) };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return { ...s, career: { ...s.career, setup: next } };
-    });
-
-  return (
-    <div className="space-y-5">
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3
-              className="flex items-center gap-2 text-[17px] font-extrabold"
-              style={{ color: T.sky }}
-            >
-              <Building2 size={17} /> الأرضية: المنصّات والبرامج
-            </h3>
-            <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-              ثماني خطوات تُنجَز مرّة واحدة، ثم تعمل لك شهورًا وأنت نائم. أهمّها
-              تمهير: أقصر طريق معروف لأول عقد لخريج إدارة في السوق السعودي.
-              أنجِزها قبل أن تبدأ أسابيع الخطة — لا بعدها.
-            </p>
-          </div>
-          <Badge tint={done === SETUP_TOTAL ? T.primary : T.sky}>
-            <span dir="ltr" className="tabular-nums">
-              {done}/{SETUP_TOTAL}
-            </span>
-          </Badge>
-        </div>
-
-        <div
-          className="mt-4 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: "rgba(255,255,255,0.07)" }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${pct}%`,
-              background: `linear-gradient(90deg, ${T.sky}, ${done === SETUP_TOTAL ? T.primary : T.cta})`,
-            }}
-          />
-        </div>
-
-        <div className="mt-4 space-y-2">
-          {SAUDI_SETUP.map((item) => (
-            <SetupRow
-              key={item.id}
-              item={item}
-              on={!!setup[item.id]}
-              open={openSetup === item.id}
-              onOpen={() => setOpenSetup((x) => (x === item.id ? null : item.id))}
-              onToggle={() => toggleSetup(item.id)}
-            />
-          ))}
-        </div>
-
-        <p className="mt-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-          أسماء المنصّات ثابتة، وروابطها قد تتغيّر مع إعادة ترتيب البوّابات —
-          ابحث بالاسم إن لم يفتح الرابط مباشرة.
-        </p>
-      </Card>
-
-      <Card className="p-5 sm:p-6">
-        <h3
-          className="flex items-center gap-2 text-[17px] font-extrabold"
-          style={{ color: T.ctaLift }}
-        >
-          <MessageSquare size={17} /> بنك الرسائل
-        </h3>
-        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-          كل توقّف في البحث عن عمل هو لحظة لا تعرف فيها ماذا تكتب. تسع رسائل
-          جاهزة، تملأ ما بين الأقواس وترسل. غيّر جملة واحدة على الأقل في كل
-          رسالة — القالب الذي يصل كما هو يُقرأ قالبًا.
-        </p>
-        <div className="mt-4 space-y-2.5">
-          {TEMPLATES.map((t) => (
-            <TemplateCard
-              key={t.id}
-              tpl={t}
-              open={openTpl === t.id}
-              onOpen={() => setOpenTpl((x) => (x === t.id ? null : t.id))}
-            />
-          ))}
-        </div>
-      </Card>
-
-      <Card className="p-5 sm:p-6">
-        <h3
-          className="flex items-center gap-2 text-[17px] font-extrabold"
-          style={{ color: T.rose }}
-        >
-          <ScanFace size={17} /> أسئلة المقابلة وفخاخها
-        </h3>
-        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-          ثمانية أسئلة تحسم مقابلة حديث التخرّج. اكتب قصص{" "}
-          <span dir="ltr">STAR</span> في «التقديمات» وأنت تنظر إلى هذه
-          القائمة، لا في الفراغ.
-        </p>
-        <div className="mt-4 space-y-2">
-          {INTERVIEW_QS.map((x, i) => (
-            <div
-              key={x.q}
-              className="rounded-xl border px-3.5 py-3"
-              style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-            >
-              <p className="flex items-start gap-2 text-[12.5px] font-extrabold" style={{ color: T.fg }}>
-                <span dir="ltr" className="mt-[2px] shrink-0 text-[10px] tabular-nums" style={{ color: T.rose }}>
-                  {i + 1}.
-                </span>
-                {x.q}
-              </p>
-              <p className="mt-1.5 pr-5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
-                <span className="font-bold" style={{ color: T.danger }}>
-                  الفخّ:{" "}
-                </span>
-                {x.trap}
-              </p>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function CareerModule({ state, setState }) {
-  const [view, setView] = useState("today");
-  const career = state.career;
-
-  const start = () =>
-    setState((s) => ({ ...s, career: { ...s.career, startedAt: dayKey() } }));
-
-  return (
-    <div className="space-y-7">
-      <ReadinessCard career={career} onStart={start} />
-
-      <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
-        {CAREER_VIEWS.map((v) => {
-          const on = v.id === view;
-          const Icon = v.icon;
-          return (
-            <button
-              key={v.id}
-              onClick={() => setView(v.id)}
-              aria-pressed={on}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 transition-all duration-200 sm:px-2"
-              style={{
-                borderColor: on ? `${T.cta}80` : T.border,
-                backgroundImage: on
-                  ? `linear-gradient(160deg, ${T.cta}2E, ${T.cta}0A)`
-                  : "none",
-                backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
-                color: on ? T.ctaLift : T.muted,
-                boxShadow: on ? `0 10px 26px -16px ${T.cta}` : "none",
-              }}
-            >
-              <Icon size={16} strokeWidth={on ? 2.6 : 2} />
-              <span className="text-[10px] font-extrabold sm:text-[11.5px]">{v.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div key={view} className="los-in">
-        {view === "today" && (
-          <CareerToday state={state} setState={setState} onGo={setView} />
-        )}
-        {view === "kit" && <CareerKit state={state} setState={setState} />}
-        {view === "plan" && <CareerPlan state={state} setState={setState} />}
-        {view === "war" && <CareerWar state={state} setState={setState} />}
-        {view === "track" && <CareerTrack state={state} setState={setState} />}
-      </div>
-    </div>
-  );
-}
 
 
 const LEVEL_BG = [
@@ -11550,25 +8628,10 @@ function DayRollCall({ row, state }) {
     [state.reading, row],
   );
 
-  const careerDay = useMemo(
-    () => (state.career?.log || []).find((e) => e.date === row?.date) || null,
-    [state.career, row],
-  );
-
   if (!row) return null;
 
   const extras = [
     pages > 0 && { label: "صفحة قراءة", n: pages, tint: T.violet },
-    careerDay?.skills?.length && {
-      label: "حصّة مهارة",
-      n: careerDay.skills.length,
-      tint: T.sky,
-    },
-    careerDay?.am?.length && {
-      label: "خطوة صباحية",
-      n: careerDay.am.length,
-      tint: T.accent,
-    },
   ].filter(Boolean);
 
   return (
@@ -13410,9 +10473,18 @@ function AgendaModule({ state, setState, onGo }) {
 }
 
 
+/* One row of the sidebar. The active state is carried by four things at
+   once — a warm gradient, a lit border, an ambient glow under the row and a
+   rail down its leading edge — because any one of them alone is a tint, and
+   a tint is what the eye skips. The icon sits in a tile of its own so the
+   lit row has a shape rather than just a colour.
+
+   Coral, not the emerald it would be tempting to reach for: emerald in this
+   app means *done*, and a nav row that borrows it makes "where I am" and "I
+   finished this" the same signal on the same screen. */
 function NavList({ items, tab, onGo, showLabels }) {
   return (
-    <nav className="flex flex-col gap-1.5">
+    <nav className="flex flex-col gap-1">
       {items.map((n) => {
         const on = n.id === tab;
         const Icon = n.icon;
@@ -13422,26 +10494,119 @@ function NavList({ items, tab, onGo, showLabels }) {
             onClick={() => onGo(n.id)}
             aria-current={on ? "page" : undefined}
             title={showLabels ? undefined : n.label}
-            className={`los-nav flex items-center gap-3 rounded-xl border px-3 py-2.5 text-right transition-all duration-200${
-              on ? " los-nav-on" : ""
-            }`}
+            className={`los-nav relative flex items-center gap-3 rounded-xl border text-right transition-all duration-200 ${
+              showLabels ? "px-2.5 py-2" : "justify-center px-0 py-2"
+            }${on ? " los-nav-on" : ""}`}
             style={{
-              borderColor: on ? `${T.cta}66` : "transparent",
-              background: on
-                ? `linear-gradient(135deg, ${T.cta}2E, ${T.cta}0F)`
-                : "transparent",
+              borderColor: on ? `${T.cta}59` : "transparent",
+              backgroundImage: on
+                ? `linear-gradient(115deg, ${T.cta}33 0%, ${T.cta}1A 45%, ${T.ember}14 100%)`
+                : "none",
               color: on ? T.ctaLift : T.muted,
-              boxShadow: on ? `0 8px 22px -12px ${T.cta}` : "none",
+              boxShadow: on
+                ? `0 10px 26px -16px ${T.cta}, inset 0 1px 0 0 rgba(255,235,225,0.10)`
+                : "none",
             }}
           >
-            <Icon size={18} strokeWidth={on ? 2.4 : 1.9} className="shrink-0" />
+            {/* The rail. On the leading edge, which is the right one here. */}
+            {on && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-1.5 right-0 w-[3px] rounded-full"
+                style={{
+                  background: `linear-gradient(180deg, ${T.cta}, ${T.ember})`,
+                  boxShadow: `0 0 12px -1px ${T.cta}`,
+                }}
+              />
+            )}
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
+              style={{
+                backgroundColor: on ? `${T.cta}26` : "rgba(255,255,255,0.045)",
+                color: on ? T.ctaLift : T.muted,
+              }}
+            >
+              <Icon size={16} strokeWidth={on ? 2.5 : 1.9} />
+            </span>
             {showLabels && (
-              <span className="truncate text-[13.5px] font-bold">{n.label}</span>
+              <span className="truncate text-[13px] font-bold">{n.label}</span>
             )}
           </button>
         );
       })}
     </nav>
+  );
+}
+
+/* The column, cut into its three groups. Each one lists only the tabs that
+   are both in it and out front, in his order — so a group he has emptied by
+   pushing all of its tabs behind «المزيد» does not leave a heading standing
+   over nothing.
+
+   Collapsed to icons the headings go and a hairline takes their place: at
+   80px wide a heading is unreadable, but the grouping is the one thing worth
+   keeping, and a rule between the groups says it in the space available. */
+function NavGroups({ items, tab, onGo, showLabels }) {
+  const groups = NAV_GROUPS.map((g) => ({
+    ...g,
+    rows: items.filter((n) => GROUP_OF_TAB.get(n.id) === g.id),
+  })).filter((g) => g.rows.length);
+
+  /* A tab whose id is in no group would otherwise be dropped from the
+     sidebar without a sound. Listed last, under a heading that says so. */
+  const loose = items.filter((n) => !GROUP_OF_TAB.has(n.id));
+
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map((g, i) => (
+        <div key={g.id}>
+          {showLabels ? (
+            /* The heading and a hairline that runs out to the edge. The
+               label alone, at this size, had to be faint enough not to
+               compete with the rows and was then too faint to read; the rule
+               carries the division so the words do not have to. */
+            <div className="mb-2 flex items-center gap-2 px-2.5">
+              <p
+                className="shrink-0 text-[9.5px] font-extrabold tracking-[0.12em]"
+                style={{ color: "rgba(253,248,246,0.46)" }}
+              >
+                {g.label}
+              </p>
+              <span
+                aria-hidden="true"
+                className="h-px flex-1"
+                style={{
+                  background:
+                    "linear-gradient(to left, rgba(255,255,255,0.13), transparent)",
+                }}
+              />
+            </div>
+          ) : (
+            i > 0 && (
+              <div
+                aria-hidden="true"
+                className="mx-auto mb-3 h-px w-7"
+                style={{ background: "rgba(255,255,255,0.10)" }}
+              />
+            )
+          )}
+          <NavList items={g.rows} tab={tab} onGo={onGo} showLabels={showLabels} />
+        </div>
+      ))}
+      {loose.length > 0 && (
+        <div>
+          {showLabels && (
+            <p
+              className="mb-1.5 px-2.5 text-[9.5px] font-extrabold uppercase tracking-[0.14em]"
+              style={{ color: T.faint }}
+            >
+              غير مصنّف
+            </p>
+          )}
+          <NavList items={loose} tab={tab} onGo={onGo} showLabels={showLabels} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -13711,7 +10876,10 @@ function BottomTabs({ items, more: behind, tab, onGo, onSettings }) {
     backgroundImage:
       "linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.035))",
     borderColor: "rgba(255,255,255,0.16)",
-    backdropFilter: "blur(24px) saturate(160%)",
+    /* 14px rather than 24px: this bar floats over the scrolling column, so
+       unlike the sidebar its backdrop genuinely changes on every frame of
+       every scroll and the radius is paid each time. */
+    backdropFilter: "blur(14px) saturate(160%)",
     boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.16), 0 20px 44px -16px rgba(0,0,0,0.95), 0 0 34px -16px ${T.cta}`,
   };
 
@@ -14671,6 +11839,13 @@ export default function LifeOS() {
   }, [undo]);
   const dropUndo = useCallback(() => setUndo(null), []);
 
+  /* Once per open, and only to give back what the rotation above took: the
+     three unread copies are already ~78KB of the quota this profile has been
+     carrying, and nothing reclaims them by itself. */
+  useEffect(() => {
+    dropDeadBackups();
+  }, []);
+
   useEffect(() => {
     /* The one gate that matters. A window that lost the lease is holding a
        snapshot from before the other one started working; writing it back is
@@ -14690,7 +11865,6 @@ export default function LifeOS() {
     if (conflict) return; // already stopped; nothing is written until it is answered
     const next = stored + 1;
     try {
-      saveAutoBackup(state);
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       /* The counter moves only after the payload it counts has landed.
          Bumping first and failing second would leave every other window
@@ -14795,7 +11969,6 @@ export default function LifeOS() {
     setResolving(true);
     const next = readRev() + 1;
     try {
-      saveAutoBackup(state);
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       writeRev(next);
       myRevRef.current = next;
@@ -15126,7 +12299,16 @@ export default function LifeOS() {
             width: collapsed ? 80 : 268,
             borderColor: T.border,
             background: "var(--los-veil-strong, rgba(255,255,255,0.045))",
-            backdropFilter: "blur(18px) saturate(150%)",
+            /* 12px, like `GLASS`, and for the same reason one floor down:
+               this panel is `h-screen`, so it is the largest blurred region
+               on a desktop page by a wide margin and the one whose radius
+               costs the most. The sidebar sits beside the scrolling column
+               rather than over it, so it is also the blur the eye compares
+               a card against — matching the two is cheaper *and* tidier. */
+            backdropFilter: "blur(12px) saturate(150%)",
+            /* Nothing inside can paint outside it, so a card scrolling past
+               in the next column never dirties this layer. */
+            contain: "layout paint style",
           }}
         >
           <div className="mb-7 flex items-center gap-3">
@@ -15188,41 +12370,72 @@ export default function LifeOS() {
               onReset={resetNav}
             />
           ) : (
-            <>
-              <NavList items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
+            /* Scrolls on its own, and only here. Three headings and four
+               gaps are taller than the flat list was, and on a short laptop
+               screen the bill for that used to be the day indicator and the
+               settings button pushed off the bottom edge. The groups scroll;
+               the wordmark above and the ring below stay put. */
+            <div className="los-scroll -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+              <NavGroups items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
               <NavMore
                 items={moreItems}
                 tab={tab}
                 onGo={go}
                 showLabels={!collapsed}
               />
-            </>
+            </div>
           )}
 
           <div className="mt-auto space-y-3">
-            {!collapsed && (
+            {/* --- the day, at the foot of the column ---------------------
+                A number in a box was a second, worse copy of the ring the
+                routine screen already draws. This is the ring itself, small,
+                with the figure inside it and the run beside it — one object
+                that belongs to the sidebar rather than a panel parked at the
+                bottom of it. Collapsed, the figure alone is still the one
+                thing worth 80px of width. */}
+            {!collapsed ? (
               <div
-                className="rounded-2xl border p-4 text-center"
-                style={{ borderColor: T.border, background: T.card }}
+                className="flex items-center gap-3 rounded-2xl border p-3"
+                style={{
+                  borderColor: discipline >= STREAK_TARGET ? `${T.primary}3D` : T.border,
+                  backgroundColor: T.card,
+                  backgroundImage: `linear-gradient(115deg, ${
+                    discipline >= STREAK_TARGET ? `${T.primary}1A` : `${T.accent}12`
+                  }, transparent 70%)`,
+                }}
               >
-                <p className="text-[10px] text-white/35">مؤشر اليوم</p>
+                <ProgressRing value={discipline} size={54} stroke={5} label={null} />
+                <div className="min-w-0">
+                  <p className="text-[9.5px] font-bold" style={{ color: T.faint }}>
+                    مؤشر اليوم
+                  </p>
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-white/55">
+                    <Flame
+                      size={12}
+                      style={{
+                        color:
+                          discipline >= STREAK_TARGET ? T.ember : "rgba(255,255,255,.25)",
+                      }}
+                    />
+                    <span dir="rtl">
+                      {streak} {countedWord(streak)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="rounded-xl border py-2 text-center"
+                style={{ borderColor: T.border, backgroundColor: T.card }}
+                title={`مؤشر اليوم ${discipline}% · ${streak} ${countedWord(streak)}`}
+              >
                 <p
-                  className="text-3xl font-extrabold tabular-nums"
-                  style={{
-                    color: discipline >= STREAK_TARGET ? T.primary : T.accent,
-                  }}
+                  className="text-[15px] font-extrabold tabular-nums"
+                  style={{ color: discipline >= STREAK_TARGET ? T.primary : T.accent }}
                 >
                   {discipline}%
                 </p>
-                <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-white/40">
-                  <Flame
-                    size={13}
-                    style={{
-                      color: discipline >= STREAK_TARGET ? T.ember : "rgba(255,255,255,.25)",
-                    }}
-                  />
-                  {streak} {countedWord(streak)}
-                </div>
               </div>
             )}
             <Btn
@@ -15259,7 +12472,10 @@ export default function LifeOS() {
               top: "env(safe-area-inset-top, 0px)",
               borderColor: "rgba(255,255,255,0.10)",
               backgroundColor: `${T.bg}D9`,
-              backdropFilter: "blur(18px) saturate(150%)",
+              /* Same bill as the bottom bar: it is pinned over the column
+                 the content scrolls through, so its backdrop is new every
+                 frame. */
+              backdropFilter: "blur(12px) saturate(150%)",
             }}
           >
             <div className="min-w-0">
@@ -15341,25 +12557,13 @@ export default function LifeOS() {
               {tab === "uni" && (
                 <UniModule state={state} setState={setState} onGo={go} />
               )}
-              {tab === "career" && (
-                <CareerModule state={state} setState={setState} />
-              )}
               {tab === "matrix" && (
                 <MatrixModule state={state} setState={setState} />
               )}
               {tab === "deep" && <DeepWorkModule state={state} setState={setState} />}
               {tab === "goals" && <GoalsModule state={state} setState={setState} />}
-              {tab === "pipeline" && (
-                <PipelineModule state={state} setState={setState} />
-              )}
-              {tab === "tactical" && (
-                <TacticalModule state={state} setState={setState} />
-              )}
               {tab === "finance" && (
                 <FinanceModule state={state} setState={setState} />
-              )}
-              {tab === "prompts" && (
-                <PromptsModule state={state} setState={setState} />
               )}
               {tab === "vault" && <VaultModule state={state} setState={setState} />}
               {tab === "analytics" && (

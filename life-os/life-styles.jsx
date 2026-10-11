@@ -183,6 +183,25 @@ export function SkyBackdrop({ phase }) {
       style={{
         background: `linear-gradient(180deg, ${phase.sky[0]} 0%, ${phase.sky[1]} 58%, ${phase.sky[2]} 100%)`,
         transition: "background 1600ms ease",
+        /* --- the sky is drawn once, not on every scrolled frame ---------
+           Sixty-five stars, three clouds and four gradients, all behind a
+           card tree whose every glass surface re-samples this layer as it
+           moves. Left in the page's normal paint, the whole lot is rasterised
+           again each frame of a scroll; given a compositor layer of its own it
+           is rasterised once and then only composited.
+
+           `translateZ(0)` is what asks for the layer and `contain` promises
+           the browser nothing inside can affect anything outside it, so it
+           never has to look. `backfaceVisibility` keeps Chrome from keeping a
+           second copy of the texture for a flip that cannot happen.
+
+           Safe to transform here, and only here: the scenery holds no
+           `position: fixed` descendant to re-parent — every child is
+           `absolute` — and no text clipped to a gradient, which is the pair
+           this project has been bitten by before. */
+        transform: "translateZ(0)",
+        backfaceVisibility: "hidden",
+        contain: "layout paint style",
       }}
     >
       {phase.stars > 0 && (
@@ -424,6 +443,54 @@ export function AppStyles() {
           }
           .los-btn:hover { transform: none !important; }
         }
+
+        /* --- what a scroll actually costs --------------------------------
+           Not the length of the page. A glass card re-samples the sky behind
+           it and re-blurs it on every frame it moves, so the bill is the
+           number of blurred cards the browser is holding times the radius of
+           each — and left alone, that is every card on the screen whether or
+           not it is anywhere near the viewport. The routine screen carries
+           sixteen of them.
+
+           "content-visibility: auto" is the one property that fixes this
+           rather than trimming it: a card scrolled out of view is not laid
+           out, not styled, not painted and not blurred at all, so the cost
+           follows what is on screen instead of what exists. The browser
+           still finds text inside one for find-in-page, focus and anchors,
+           and renders it before it scrolls in.
+
+           "contain-intrinsic-size: auto 220px" is what keeps the scrollbar
+           still: "auto" remembers each card's real height once it has been
+           rendered the first time, and the 220px is only the guess used
+           before that has ever happened.
+
+           ".los-cue" is excluded deliberately, not forgotten.
+           "content-visibility" implies paint containment, and that card
+           carries two decorative glows positioned outside its own border
+           box — contained, they are clipped away. It is one card, always
+           near the top of the screen, so it is also the one that gains
+           least from being skipped. */
+        .los-surface:not(.los-cue) {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 220px;
+        }
+
+        /* A scrollable strip inside a glass panel, without the platform
+           scrollbar cutting a grey trench down the middle of it. Thin,
+           transparent until the pointer is actually over the strip, and
+           never reserving a gutter — the sidebar is 268px and cannot spare
+           15 of them to a bar that is only needed on a short screen. */
+        .los-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+        .los-scroll::-webkit-scrollbar { width: 6px; }
+        .los-scroll::-webkit-scrollbar-track { background: transparent; }
+        .los-scroll::-webkit-scrollbar-thumb {
+          background: transparent;
+          border-radius: 999px;
+          transition: background 200ms ease;
+        }
+        .los-scroll:hover { scrollbar-color: rgba(255,255,255,0.18) transparent; }
+        .los-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); }
+        .los-scroll:hover::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
       `}</style>
   );
 }

@@ -10,14 +10,14 @@
  *  the book shelf and the rest each have their own file
  *  (`life-state-habits.mjs`, `life-state-goals.mjs`, `life-state-books.mjs`,
  *  `life-state-tasks.mjs`, `life-state-calendar.mjs`, `life-state-uni.mjs`,
- *  `life-state-career.mjs`, `life-state-streak.mjs`, and the dependency-free
- *  `life-state-util.mjs` every one of them is built on). What stays here is
+ *  `life-state-streak.mjs`, and the dependency-free `life-state-util.mjs`
+ *  every one of them is built on). What stays here is
  *  only what is inherently cross-cutting — the day boundary, `SCHEMA`, the
  *  nav order, the general cue quotes, and `freshState`/`migrate`/`carryOf`/
  *  `rollDay`, which by nature touch every domain's shape at once.
  *
  *  Every other file in the app still imports from `"./life-state.mjs"`
- *  alone — this file re-exports everything the 9 domain files export, so the
+ *  alone — this file re-exports everything the 8 domain files export, so the
  *  split below is invisible to every consumer. Add a field to a domain file
  *  and it is already exported from here; nothing else needs to change.
  *
@@ -77,7 +77,6 @@ import {
 } from "./life-state-books.mjs";
 import { eventShape, placeShape } from "./life-state-calendar.mjs";
 import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
-import { careerShape, SEED_PROMPTS, SEED_PIPELINE } from "./life-state-career.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 
 /* --- the tabs --------------------------------------------------------- *
@@ -92,19 +91,41 @@ export const NAV_IDS = [
   "routine",
   "agenda",
   "uni",
-  "career",
   "matrix",
   "deep",
   "goals",
-  "pipeline",
-  "tactical",
   "finance",
-  "prompts",
   "vault",
   "analytics",
   "breaker",
   "graph",
 ];
+
+/* --- what the sidebar is divided into --------------------------------- *
+ *  Twelve tabs in one column is a wall you read top to bottom every time,
+ *  because nothing in it says which of them you are even looking for. The
+ *  groups are the answer to that and nothing more: a heading and a gap, so
+ *  the eye lands on a third of the list instead of all of it.
+ *
+ *  They are a *view*, not a second ordering. Which tabs take a row and in
+ *  what sequence is his — `navOrder` and `navMore` — and that does not stop
+ *  being true because the column grew headings: a group lists whichever of
+ *  its tabs are out front, in the order he put them, and a tab he pushed
+ *  behind «المزيد» answers from there as it always has. So the two never
+ *  disagree, and the arrange mode stays one flat list, which is the only
+ *  shape in which "move this above that" means anything.
+ *
+ *  A tab with no group would silently vanish from the sidebar, so a test
+ *  holds these ids against `NAV_IDS`.
+ * ---------------------------------------------------------------------- */
+export const NAV_GROUPS = [
+  { id: "daily", label: "التركيز اليومي", ids: ["today", "routine", "agenda", "deep"] },
+  { id: "growth", label: "النمو والتطوير", ids: ["goals", "uni", "finance"] },
+  { id: "tools", label: "الأدوات", ids: ["matrix", "breaker", "vault", "analytics", "graph"] },
+];
+export const GROUP_OF_TAB = new Map(
+  NAV_GROUPS.flatMap((g) => g.ids.map((id) => [id, g.id])),
+);
 
 /* --- the phone bar -----------------------------------------------------
  *  Four tabs fit a 375px bar and keep their labels legible; the rest live
@@ -265,7 +286,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 25;
+export const SCHEMA = 26;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
@@ -292,9 +313,6 @@ export const freshState = (carry = {}) => ({
   sessions: carry.sessions || [],
   income: carry.income || [],
   ventures: carry.ventures || [],
-  prompts: carry.prompts || SEED_PROMPTS,
-  reviews: carry.reviews || [],
-  pipeline: carry.pipeline || SEED_PIPELINE,
   badHabits: carry.badHabits || [],
   /* The calendar and the university desk. Every row in both is keyed to a
      calendar date of its own, so they cross a day rollover untouched —
@@ -303,7 +321,6 @@ export const freshState = (carry = {}) => ({
   uni: carry.uni || SEED_UNI(),
   /* Entirely date-derived inside, so it carries across a rollover whole —
      the two daily checklists empty themselves by reading today's log row. */
-  career: careerShape(carry.career),
   navOrder: orderNavIds(carry.navOrder),
   /* Which of them answer only from «المزيد». Normalised through the same
      split the screens read, so the floor holds here too and a carried list
@@ -571,39 +588,6 @@ export function migrate(saved) {
      it. Nothing moves here. */
   let navOrder = orderNavIds(saved.navOrder);
 
-  /* Schema 14 adds the employability masterplan. orderNavIds appends a tab
-     the saved order has never seen to the *end*, which on a phone buries it
-     behind «المزيد» — so this one is placed by hand, once, right after the
-     routine. A daily driver that takes two taps to reach is not daily. */
-  if (from < 14 && !(saved.navOrder || []).includes("career")) {
-    const rest = navOrder.filter((id) => id !== "career");
-    const at = rest.indexOf("routine");
-    navOrder =
-      at < 0
-        ? ["career", ...rest]
-        : [...rest.slice(0, at + 1), "career", ...rest.slice(at + 1)];
-  }
-
-  /* Run through the shape whether or not it is new: a hand-edited backup
-     that lost a field comes back whole instead of crashing a render. */
-  let career = careerShape(saved.career);
-
-  /* Schema 15 rewrote the morning routine as instructions, and one step's
-     id went with it ("keyword" became "polish" when it stopped being about
-     keywords alone). Rename it inside the log rather than dropping it: an
-     orphan id still counts toward the day's total but can never render as
-     ticked, which reads as a checkbox that lies. */
-  if (from < 15) {
-    career = {
-      ...career,
-      log: (career.log || []).map((e) =>
-        (e.am || []).includes("keyword")
-          ? { ...e, am: e.am.map((id) => (id === "keyword" ? "polish" : id)) }
-          : e,
-      ),
-    };
-  }
-
   /* Schema 17 adds the calendar and the university desk. An older payload
      has neither and starts them empty; one written by a newer build is run
      back through the shapes, so a row that lost a field to a hand-edited
@@ -618,8 +602,8 @@ export function migrate(saved) {
   const events = rows(saved.events).map(eventShape);
   const uni = saved.uni ? uniShape(saved.uni) : SEED_UNI();
 
-  /* Both are daily screens for a student, so — like `career` before them —
-     they are placed by hand right after the routine instead of being
+  /* Both are daily screens for a student, so they are placed by hand right
+     after the routine instead of being
      appended to the end, where a phone buries a tab behind «المزيد». A tab
      the user has already positioned himself is left exactly where he put
      it, and becomes the anchor for the next one. */
@@ -691,8 +675,9 @@ export function migrate(saved) {
    *  screen asks. */
   const streakBase = from < 25 ? streakBaseFrom(history) : saved.streakBase;
 
+  const { career: _career, pipeline: _pipeline, prompts: _prompts, reviews: _reviews, ...carried } = saved;
   return {
-    ...saved,
+    ...carried,
     schema: SCHEMA,
     streakBase: Number.isFinite(+streakBase) && +streakBase > 0 ? +streakBase : 0,
     habits: habits.map(habitShape),
@@ -702,7 +687,6 @@ export function migrate(saved) {
     reads,
     books,
     badHabits,
-    career,
     events,
     uni,
     navOrder,
@@ -711,9 +695,6 @@ export function migrate(saved) {
     sessions: rows(saved.sessions),
     income: rows(saved.income),
     ventures: rows(saved.ventures),
-    prompts: rows(saved.prompts),
-    reviews: rows(saved.reviews),
-    pipeline: rows(saved.pipeline),
     reading: rows(saved.reading),
     readGoal: Number.isFinite(saved.readGoal)
       ? saved.readGoal
@@ -754,13 +735,9 @@ export const carryOf = (s) => ({
   sessions: s.sessions,
   income: s.income,
   ventures: s.ventures,
-  prompts: s.prompts,
-  reviews: s.reviews,
-  pipeline: s.pipeline,
   badHabits: s.badHabits,
   events: s.events,
   uni: s.uni,
-  career: s.career,
   navOrder: s.navOrder,
   navMore: s.navMore,
   quotes: s.quotes,
@@ -980,16 +957,6 @@ export {
   uniPending,
   SEED_UNI,
 } from "./life-state-uni.mjs";
-
-export {
-  SEED_PROMPTS,
-  SEED_PIPELINE,
-  APP_STAGES,
-  sprintShape,
-  appShape,
-  storyShape,
-  careerShape,
-} from "./life-state-career.mjs";
 
 export {
   HISTORY_CAP,

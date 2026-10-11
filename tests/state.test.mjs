@@ -18,6 +18,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import {
+  NAV_GROUPS,
+  GROUP_OF_TAB,
   SCHEMA,
   CORE_CAP,
   TOP_TASK_CAP,
@@ -93,9 +95,6 @@ const LISTS = [
   "sessions",
   "income",
   "ventures",
-  "prompts",
-  "reviews",
-  "pipeline",
   "reading",
 ];
 
@@ -442,9 +441,9 @@ test("orderNavIds survives junk", () => {
    are separate lists on purpose: a pushed-back tab keeps its place, so
    pulling it out again returns it there and not to the end. */
 test("navSplit sends the named tabs behind «المزيد» and keeps the rest in order", () => {
-  const order = ["routine", "graph", "agenda", "uni", "career", "matrix"];
-  const { main, behind } = navSplit(order, ["graph", "career"]);
-  assert.deepEqual(behind, ["graph", "career"]);
+  const order = ["routine", "graph", "agenda", "uni", "matrix"];
+  const { main, behind } = navSplit(order, ["graph"]);
+  assert.deepEqual(behind, ["graph"]);
   assert.deepEqual(main.slice(0, 4), ["routine", "agenda", "uni", "matrix"]);
   assert.equal(
     main.length + behind.length,
@@ -479,7 +478,7 @@ test("navSplit ignores a tab this build no longer has", () => {
 });
 
 test("migrate hands a schema-20 payload the default «المزيد» list, untouched order", () => {
-  const order = ["routine", "graph", "agenda", "uni", "career"];
+  const order = ["routine", "graph", "agenda", "uni", "matrix"];
   const out = migrate({ schema: 20, navOrder: order });
   assert.deepEqual(out.navMore, MORE_IDS, "the map did not move behind المزيد");
   /* «اليوم» is placed at the front by schema 22 — see its own test. Every
@@ -1338,4 +1337,30 @@ test("the comeback threshold is two, and the walk is bounded", () => {
   /* A year of silence cannot walk a year of dates. */
   const long = [{ date: "2020-01-01", pct: 90, done: [], all: [] }];
   assert.ok(comebackFrom(long) <= GAP_REACH);
+});
+
+/* --- the sidebar's three groups ---------------------------------------
+   A tab that belongs to no group does not throw and does not look wrong in
+   any review: it simply stops being listed in the sidebar, because the
+   column is built by walking the groups. The only place that is visible is
+   on the screen, after it ships. So the grouping is held against the
+   canonical tab list from both directions. */
+test("every tab belongs to exactly one sidebar group", () => {
+  const grouped = NAV_GROUPS.flatMap((g) => g.ids);
+
+  const missing = NAV_IDS.filter((id) => !GROUP_OF_TAB.has(id));
+  assert.deepEqual(missing, [], "tabs in no group would vanish from the sidebar");
+
+  const unknown = grouped.filter((id) => !NAV_IDS.includes(id));
+  assert.deepEqual(unknown, [], "a group naming a tab this build does not have");
+
+  /* Listed twice, it would be drawn twice — in two different groups. */
+  assert.equal(new Set(grouped).size, grouped.length, "a tab in two groups");
+  assert.equal(grouped.length, NAV_IDS.length);
+
+  /* Empty groups and nameless ones are both headings over nothing. */
+  for (const g of NAV_GROUPS) {
+    assert.ok(g.ids.length > 0, g.id + " is an empty group");
+    assert.ok(g.label && g.label.trim().length > 0, g.id + " has no label");
+  }
 });

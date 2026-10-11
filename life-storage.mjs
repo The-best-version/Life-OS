@@ -306,20 +306,29 @@ export const claimHandover = () => {
     return false;
   }
 };
-export function saveAutoBackup(state) {
+/* --- the three localStorage backups that were never read ------------
+   `life-os-backup-1..3` were written on every single state change — three
+   reads and three writes of the whole payload, plus a stringify of it, for
+   a rotation no code path in this app has ever read back. Write-only, and
+   paid for twice: ~78KB of the one storage quota the whole year shares and
+   that `IMAGE_BUDGET` is measured against, and a copy of the entire state
+   serialized three times over on every tick of a habit.
+
+   Nothing is lost by dropping them. A copy kept in the same localStorage as
+   the original is cleared by the same gesture that clears the original, so
+   it never protected against the case it looks like it protects against —
+   while the disk behind `syncOut` keeps `.prev.json`, 72 hourly snapshots,
+   120 daily ones and a guard copy before every shrinking write, all of them
+   reachable from the recovery centre and all of them on the one storage
+   that survives the browser.
+
+   `dropDeadBackups` reclaims the space on the next open. It is not a
+   migration: `migrate()` reshapes the payload and these were never in it. */
+export function dropDeadBackups() {
   try {
-    const backups = [];
-    for (let i = 1; i <= 3; i++) {
-      const b = window.localStorage.getItem('life-os-backup-' + i);
-      if (b) backups.push(b);
-    }
-    // Shift backups
-    if (backups.length === 3) backups.pop();
-    backups.unshift(JSON.stringify(state));
-    for (let i = 0; i < backups.length; i++) {
-      window.localStorage.setItem('life-os-backup-' + (i + 1), backups[i]);
-    }
+    for (let i = 1; i <= 3; i++)
+      window.localStorage.removeItem("life-os-backup-" + i);
   } catch {
-    // Ignore if storage blocked
+    /* Blocked storage has nothing to reclaim. */
   }
 }

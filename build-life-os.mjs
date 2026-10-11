@@ -68,7 +68,6 @@ const shipped = [
   "life-state-books.mjs",
   "life-state-calendar.mjs",
   "life-state-uni.mjs",
-  "life-state-career.mjs",
   "life-state-streak.mjs",
 ];
 const splitSrc = scanned.map((f) => join(root, f));

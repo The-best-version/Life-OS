@@ -88,11 +88,14 @@ export function useBurst(ms = 640) {
   useEffect(() => () => clearTimeout(timer.current), []);
   return [on, fire];
 }
+/* `los-surface` is not decoration — it is what lets the stylesheet find
+   every glass card at once and keep the ones nobody is looking at out of
+   the frame budget. See the `content-visibility` block in `AppStyles`. */
 export function Card({ children, className = "", style, as = "div", ...rest }) {
   const Tag = as;
   return (
     <Tag
-      className={`rounded-2xl border ${className}`}
+      className={`los-surface rounded-2xl border ${className}`}
       style={{ ...GLASS, ...style }}
       {...rest}
     >
@@ -441,7 +444,13 @@ export function ProgressRing({
           }}
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+      {/* Padding in proportion to the ring, not a fixed `px-6`: that was
+          24px a side, which is most of a 54px ring and left the figure
+          nowhere to sit. */}
+      <div
+        className="absolute inset-0 flex flex-col items-center justify-center text-center"
+        style={{ paddingInline: size * 0.14 }}
+      >
         {/* The throb lives on a wrapper: a transform on the same element as
             background-clip:text collapses the clip in Chrome and the number
             paints as a solid block. */}
@@ -461,12 +470,20 @@ export function ProgressRing({
             <span className="align-super text-[0.45em] font-bold">%</span>
           </span>
         </span>
-        <span
-          className="mt-1 text-[10.5px] font-bold leading-tight"
-          style={{ color: full ? T.primaryLift : T.faint }}
-        >
-          {full ? fullLabel : label}
-        </span>
+        {/* `label={null}` is a ring with no caption — for the small ones
+            that already sit beside their own heading, where a second one
+            inside the circle is unreadable at that size anyway. */}
+        {label !== null && (
+          <span
+            className="mt-1 font-bold leading-tight"
+            style={{
+              color: full ? T.primaryLift : T.faint,
+              fontSize: Math.max(8, Math.min(10.5, size * 0.07)),
+            }}
+          >
+            {full ? fullLabel : label}
+          </span>
+        )}
       </div>
     </div>
   );

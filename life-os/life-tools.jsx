@@ -16,7 +16,6 @@ import {
   api,
   postSync,
   readRev,
-  saveAutoBackup,
   served,
   writeRev,
 } from "./life-storage.mjs";
@@ -39,7 +38,7 @@ import {
  *  owns, and that is the whole test of where a seam can go.
  *
  *  Every name this file reads off life-storage.mjs — `api`, `served`,
- *  `readRev`, `writeRev`, `postSync`, `saveAutoBackup`, `STORAGE_KEY` —
+ *  `readRev`, `writeRev`, `postSync`, `STORAGE_KEY` —
  *  is used inside a try/catch, which is exactly the shape of the bug
  *  tests/split.test.mjs exists to catch: a missing import there throws
  *  where nobody can see it, and the screen renders perfectly while the
@@ -193,7 +192,6 @@ export function DataHealth({ open, state, savedAt, diskAt, onGo, onEditYesterday
     ["جلسة قراءة", state.reading],
     ["عادة سيئة", state.badHabits],
     ["جلسة تركيز", state.sessions],
-    ["مراجعة", state.reviews],
     ["دخل", state.income],
   ];
 
@@ -340,7 +338,6 @@ const RECOVER_SECTIONS = [
   ["reading", "جلسة قراءة"],
   ["badHabits", "عادة سيئة"],
   ["sessions", "جلسة تركيز"],
-  ["reviews", "مراجعة"],
   ["income", "دخل"],
 ];
 
@@ -526,7 +523,6 @@ export function RecoveryModal({ open, onClose, state }) {
       const from = Number.isFinite(ver) && ver > 0 ? ver : 0;
       const next = migrate({ ...freshState(), ...saved, schema: from });
       const rev = readRev() + 1;
-      saveAutoBackup(next);
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       writeRev(rev);
       /* Forced, because a snapshot is older than the file by definition and
