@@ -264,9 +264,6 @@ import {
   REFLECT_MAX_SHOWS,
   historyIndex,
   habitStreak,
-  habitBest,
-  habitTally,
-  habitStrip,
   levelOf,
   bookForHabit,
   sumPages,
@@ -291,6 +288,121 @@ import {
   alertsOf,
 } from "./state/life-state.mjs";
 
+
+/* ==================================================================== *
+ *  خريطة الشاشات — SCREENS
+ *  ★ هذا هو الملف الذي تعدّله لتركيب الصفحات. ★
+ *
+ *  كل سطر هنا يجيب على سؤال واحد: «التبويب الفلاني، أيّ مكوّن يفتح؟»
+ *  لا شيء آخر في التطبيق يعرف الجواب، فتغييرٌ هنا يكفي وحده.
+ *
+ *  ── الأسماء والترتيب والإخفاء ليست هنا ──
+ *  لأنها ثلاثة أسئلة مختلفة، ولكلٍّ مكانه:
+ *    • أسماء التبويبات وأيقوناتها → NAV_META في layouts/life-nav.jsx
+ *    • التبويبات الموجودة أصلًا   → NAV_IDS في state/life-state.mjs
+ *    • ترتيبها وأيّها خلف «المزيد» → يملكها المستخدم من داخل التطبيق
+ *      (navOrder / navMore)، فلا تُبرمج هنا بحال.
+ *
+ *  ── كيف تنقل ميزة من صفحة إلى صفحة ──
+ *  كل قيمة هنا دالّة تُعيد JSX، فالصفحة تجميعٌ لمكوّنات لا كتلة واحدة.
+ *  مثال: لتظهر مصفوفة المهام أسفل شاشة الروتين، اجعل السطر:
+ *
+ *      routine: (c) => (
+ *        <>
+ *          <RoutineModule {...} />
+ *          <MatrixModule state={c.state} setState={c.setState} />
+ *        </>
+ *      ),
+ *
+ *  ── كيف تضيف تبويبًا جديدًا ──
+ *  ثلاثة أسطر، وكلّها يحميها اختبار:
+ *    ١. الـ id في NAV_IDS           (state/life-state.mjs)
+ *    ٢. الاسم والأيقونة في NAV_META (layouts/life-nav.jsx)
+ *    ٣. سطر هنا يربط الـ id بمكوّنه
+ *  وتبويب بلا مجموعة في SIDEBAR_GROUPS يختفي من القائمة الجانبية —
+ *  اختبار يمسك ذلك قبل أن تراه.
+ *
+ *  ── الوسيط `c` ──
+ *  كائن واحد يحمل كل ما تحتاجه أي شاشة: الحالة، ومُعدّلها، والدرجة،
+ *  والسلسلة، ودوالّ فتح النوافذ. يُبنى في مكان واحد (screenCtx أسفل
+ *  هذا الملف) حتى لا تُمرَّر عشرون prop عبر أربع طبقات. شاشة لا
+ *  تحتاج شيئًا تتجاهله ببساطة: `graph: () => <GraphModule />`.
+ * ==================================================================== */
+const SCREENS = {
+  /* اليوم — الشاشة التي يُفتح عليها التطبيق. لا تملك شيئًا: كل رقم فيها
+     مشتقّ، وعبارة الكتب ووالمهام الثلاث مكوّنات مشتركة تُعرض هنا وهناك. */
+  today: (c) => (
+    <TodayModule
+      state={c.state}
+      setState={c.setState}
+      discipline={c.discipline}
+      streak={c.streak}
+      onGo={c.go}
+      onOpenSettings={c.openSettings}
+      onOpenTomorrow={c.openTomorrow}
+      comeback={c.comeback}
+      onCloseComeback={c.closeComeback}
+    />
+  ),
+
+  /* الروتين اليومي — ستّ بلوكات مربوطة بأوقات الصلاة. أكبر شاشة في
+     التطبيق؛ إن أردت تقسيمها فابدأ بنقل كتلة منها إلى ملف مستقلّ ثم
+     ركّبها هنا بسطر، لا بتمرير props جديدة من الصدفة. */
+  routine: (c) => (
+    <RoutineModule
+      state={c.state}
+      setState={c.setState}
+      discipline={c.discipline}
+      streak={c.streak}
+      quote={c.quote}
+      onShuffleQuote={c.shuffleQuote}
+      mirror={c.mirror}
+      savedAt={c.savedAt}
+      diskAt={c.diskAt}
+      diskStuck={c.diskStuck}
+      onOpenMirror={c.openMirror}
+      onOpenReflect={c.openReflect}
+      onOpenTomorrow={c.openTomorrow}
+      onOpenFix={c.openFix}
+      onOpenSettings={c.openSettings}
+      onGoGoals={c.goGoals}
+      reflected={c.reflected}
+      prepped={c.prepped}
+    />
+  ),
+
+  /* التقويم — يقرأ تسليمات الجامعة مع صفوفه هو. */
+  agenda: (c) => <AgendaModule state={c.state} setState={c.setState} onGo={c.go} />,
+
+  /* الجامعة — المقرّرات والفصول والدرجات وشبكة الأسبوع. */
+  uni: (c) => <UniModule state={c.state} setState={c.setState} onGo={c.go} />,
+
+  /* مصفوفة المهام — أربع مناطق، والسقف ثلاث مهام في اليوم. */
+  matrix: (c) => <MatrixModule state={c.state} setState={c.setState} />,
+
+  /* العمل العميق — المؤقّت وجلساته. */
+  deep: (c) => <DeepWorkModule state={c.state} setState={c.setState} />,
+
+  /* الأهداف — ستّ ركائز، وأرباع سنة، وساعات الأفق. */
+  goals: (c) => <GoalsModule state={c.state} setState={c.setState} />,
+
+  /* الدخل والمشاريع. */
+  finance: (c) => <FinanceModule state={c.state} setState={c.setState} />,
+
+  /* المكتبة — الرفّ ومكتب الكتاب. */
+  vault: (c) => <VaultModule state={c.state} setState={c.setState} />,
+
+  /* التتبع الشهري — يقرأ الأرشيف ولا يكتب فيه. */
+  analytics: (c) => (
+    <AnalyticsModule state={c.state} discipline={c.discipline} streak={c.streak} />
+  ),
+
+  /* كاسر العادات. */
+  breaker: (c) => <BreakerModule state={c.state} setState={c.setState} />,
+
+  /* خريطة المعرفة — روابط لا embeds، ولهذا لا تحتاج حالة. */
+  graph: () => <GraphModule />,
+};
 /* ==================================================================== *
  *  2027 LIFE OS — the shell
  *
@@ -1373,6 +1485,34 @@ export default function LifeOS() {
     go(id);
   };
 
+  /* ── الوسيط الذي تستقبله كل شاشة ──
+     يُبنى هنا مرّة واحدة، وتقرأ منه خريطة SCREENS أعلى الملف ما يلزمها.
+     المكسب أنّ إضافة شاشة لا تعني تمرير props جديدة عبر الصدفة: تأخذ
+     من هذا الكائن ما تحتاجه وتتجاهل الباقي. */
+  const screenCtx = {
+    state,
+    setState,
+    discipline,
+    streak,
+    quote,
+    shuffleQuote,
+    mirror: todayEntry?.mirror || "",
+    savedAt,
+    diskAt,
+    diskStuck,
+    reflected: alreadyReflected,
+    prepped,
+    comeback,
+    go,
+    goGoals: () => go("goals"),
+    openSettings: () => setSettings(true),
+    openTomorrow: () => setTomorrow(true),
+    openMirror: () => setMirror(true),
+    openReflect: () => setReflect(true),
+    openFix: () => setFixing(true),
+    closeComeback: () => setBack({ day: state.date }),
+  };
+
   /* Below every hook, without exception — a return placed among them is
      React error #310 and a blank screen, which this file has already paid
      for once. */
@@ -1625,67 +1765,7 @@ export default function LifeOS() {
               onOpen={() => go("breaker")}
             />
             <div key={tab} className="los-in">
-              {tab === "today" && (
-                <TodayModule
-                  state={state}
-                  setState={setState}
-                  discipline={discipline}
-                  streak={streak}
-                  onGo={go}
-                  onOpenSettings={() => setSettings(true)}
-                  onOpenTomorrow={() => setTomorrow(true)}
-                  comeback={comeback}
-                  onCloseComeback={() => setBack({ day: state.date })}
-                />
-              )}
-              {tab === "routine" && (
-                <RoutineModule
-                  state={state}
-                  setState={setState}
-                  discipline={discipline}
-                  streak={streak}
-                  quote={quote}
-                  onShuffleQuote={shuffleQuote}
-                  mirror={todayEntry?.mirror || ""}
-                  savedAt={savedAt}
-                  diskAt={diskAt}
-                  diskStuck={diskStuck}
-                  onOpenMirror={() => setMirror(true)}
-                  onOpenReflect={() => setReflect(true)}
-                  onOpenTomorrow={() => setTomorrow(true)}
-                  onOpenFix={() => setFixing(true)}
-                  onOpenSettings={() => setSettings(true)}
-                  onGoGoals={() => go("goals")}
-                  reflected={alreadyReflected}
-                  prepped={prepped}
-                />
-              )}
-              {tab === "agenda" && (
-                <AgendaModule state={state} setState={setState} onGo={go} />
-              )}
-              {tab === "uni" && (
-                <UniModule state={state} setState={setState} onGo={go} />
-              )}
-              {tab === "matrix" && (
-                <MatrixModule state={state} setState={setState} />
-              )}
-              {tab === "deep" && <DeepWorkModule state={state} setState={setState} />}
-              {tab === "goals" && <GoalsModule state={state} setState={setState} />}
-              {tab === "finance" && (
-                <FinanceModule state={state} setState={setState} />
-              )}
-              {tab === "vault" && <VaultModule state={state} setState={setState} />}
-              {tab === "analytics" && (
-                <AnalyticsModule
-                  state={state}
-                  discipline={discipline}
-                  streak={streak}
-                />
-              )}
-              {tab === "breaker" && (
-                <BreakerModule state={state} setState={setState} />
-              )}
-              {tab === "graph" && <GraphModule />}
+              {SCREENS[tab]?.(screenCtx)}
             </div>
 
             <footer className="mt-14 text-center text-[11px] text-white/20">

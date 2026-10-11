@@ -977,11 +977,7 @@ export {
   REFLECT_SNOOZE_MS,
   REFLECT_MAX_SHOWS,
   historyIndex,
-  askedOn,
   keptOn,
   habitStreak,
-  habitBest,
-  habitTally,
-  habitStrip,
   levelOf,
 } from "./life-state-streak.mjs";

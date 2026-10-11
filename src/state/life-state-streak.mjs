@@ -4,7 +4,7 @@
  *  reads the one score every other part of the app reads — `disciplineOf` —
  *  which is why this is the one domain file that imports from another.
  * --------------------------------------------------------------------- */
-import { rows, isKey, addDays, dayKey, logicalNow, fmtDay, daysBetween, DAY_START_HOUR } from "./life-state-util.mjs";
+import { rows, isKey, addDays, dayKey, logicalNow, fmtDay, DAY_START_HOUR } from "./life-state-util.mjs";
 import { disciplineOf } from "./life-state-habits.mjs";
 
 /* How many archive rows are kept, and the discipline a day has to reach to
@@ -264,11 +264,6 @@ export const historyIndex = (history) => {
   return by;
 };
 
-/* Was this habit on the roster that day? A row written before the roster was
-   archived has no `all`, so it can only say "there was a day here". */
-export const askedOn = (row, id) =>
-  !row ? false : Array.isArray(row.all) ? row.all.includes(id) : true;
-
 export const keptOn = (row, id) => !!row && row.done.includes(id);
 
 /* Days in a row, walking back from today. A run that ended yesterday still
@@ -284,58 +279,6 @@ export function habitStreak(by, id) {
     n += 1;
     d.setDate(d.getDate() - 1);
   }
-}
-
-/* The longest run ever recorded, which outlives the streak that ended it.
-   Walks the archive in date order and only treats two rows as consecutive
-   when their dates genuinely are — a gap in the archive breaks the run
-   rather than silently joining across it. */
-export function habitBest(by, id) {
-  const days = [...by.keys()].filter((k) => keptOn(by.get(k), id)).sort();
-  let best = 0;
-  let run = 0;
-  let prev = null;
-  for (const k of days) {
-    const [y, m, d] = k.split("-").map(Number);
-    const t = new Date(y, m - 1, d).getTime();
-    run = prev !== null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1;
-    if (run > best) best = run;
-    prev = t;
-  }
-  return best;
-}
-
-/* Kept out of asked, over a window of days — `0` means the whole archive.
-   The denominator counts only days the habit was actually on the roster. */
-export function habitTally(by, id, win = 0) {
-  let kept = 0;
-  let asked = 0;
-  for (const [k, row] of by) {
-    if (win && daysBetween(k) >= win) continue;
-    if (!askedOn(row, id)) continue;
-    asked += 1;
-    if (keptOn(row, id)) kept += 1;
-  }
-  return { kept, asked, pct: asked ? Math.round((kept / asked) * 100) : 0 };
-}
-
-/* The last `n` days as a strip, oldest first, for the dot grid. Three states
-   and they are not interchangeable: kept, asked-and-missed, and never asked
-   — drawing the third as a miss is the lie this whole file exists to avoid. */
-export function habitStrip(by, id, n = 30) {
-  const out = [];
-  const d = logicalNow();
-  d.setDate(d.getDate() - (n - 1));
-  for (let i = 0; i < n; i += 1) {
-    const key = dayKey(d);
-    const row = by.get(key);
-    out.push({
-      key,
-      state: !askedOn(row, id) ? "off" : keptOn(row, id) ? "kept" : "missed",
-    });
-    d.setDate(d.getDate() + 1);
-  }
-  return out;
 }
 
 export const levelOf = (pct) =>

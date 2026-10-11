@@ -1,5 +1,5 @@
 import { ReadLogModal, TopThree, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, ProgressRing, T, arDate, clockAt, countedWord, courseIn, courseName, coursesIn, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
+import { Badge, Btn, Card, Checkbox, ProgressRing, ReadingCue, T, arDate, clockAt, countedWord, courseIn, courseName, coursesIn, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, scoredOf, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
 import { blockAt } from "../utils/prayer-times.mjs";
 import { AlarmClock, ArrowLeft, CalendarClock, CalendarDays, ClipboardList, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MoonStar, School, Star, Sunrise, X, Zap } from "lucide-react";
@@ -579,6 +579,11 @@ export function TodayModule({
           </div>
         </Card>
       </div>
+
+      {/* عبارة من الكتب — تُقرأ هنا لأن هذه هي الشاشة التي يُفتح عليها
+          اليوم. مكوّن مستقل في life-shared.jsx: انقله إلى أي صفحة
+          بنسخ هذا السطر وحده. */}
+      <ReadingCue list={state.reads} />
 
       <ReadLogModal
         open={!!logging}

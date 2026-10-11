@@ -50,8 +50,8 @@ const SKY = [
     orb: { kind: "moon", x: 73, y: 15, r: 30, color: "#F4EBD6", glow: "#BFD4FF" },
     clouds: 0.12,
     cloud: "#2A2F52",
-    veil: "rgba(255,255,255,0.055)",
-    veilStrong: "rgba(255,255,255,0.05)",
+    veil: "rgba(198,214,255,0.075)",
+    veilStrong: "rgba(186,203,255,0.062)",
   },
   {
     id: "fajr",
@@ -63,8 +63,8 @@ const SKY = [
     orb: { kind: "glow", x: 24, y: 88, r: 46, color: "#FFB48A", glow: "#FF7E6B" },
     clouds: 0.32,
     cloud: "#6B4A6B",
-    veil: "rgba(255,255,255,0.06)",
-    veilStrong: "rgba(255,255,255,0.05)",
+    veil: "rgba(255,222,232,0.075)",
+    veilStrong: "rgba(250,212,226,0.062)",
   },
   {
     id: "sunrise",
@@ -76,8 +76,8 @@ const SKY = [
     orb: { kind: "sun", x: 26, y: 74, r: 42, color: "#FFF1C9", glow: "#FF9A4C" },
     clouds: 0.72,
     cloud: "#FFD8C4",
-    veil: "rgba(34,16,24,0.54)",
-    veilStrong: "rgba(28,13,20,0.62)",
+    veil: "rgba(34,16,24,0.62)",
+    veilStrong: "rgba(28,13,20,0.70)",
   },
   {
     id: "day",
@@ -89,8 +89,8 @@ const SKY = [
     orb: { kind: "sun", x: 74, y: 18, r: 36, color: "#FFFBE8", glow: "#FFE07A" },
     clouds: 1,
     cloud: "#FFFFFF",
-    veil: "rgba(15,19,31,0.66)",
-    veilStrong: "rgba(11,15,26,0.74)",
+    veil: "rgba(15,19,31,0.73)",
+    veilStrong: "rgba(11,15,26,0.81)",
   },
   {
     id: "asr",
@@ -102,8 +102,8 @@ const SKY = [
     orb: { kind: "sun", x: 22, y: 58, r: 40, color: "#FFF4D2", glow: "#FFB347" },
     clouds: 0.85,
     cloud: "#FFE9CF",
-    veil: "rgba(30,18,14,0.58)",
-    veilStrong: "rgba(24,14,11,0.66)",
+    veil: "rgba(30,18,14,0.66)",
+    veilStrong: "rgba(24,14,11,0.74)",
   },
   {
     id: "maghrib",
@@ -115,8 +115,8 @@ const SKY = [
     orb: { kind: "sun", x: 20, y: 86, r: 44, color: "#FFD9A8", glow: "#FF5E3A" },
     clouds: 0.55,
     cloud: "#9C5A72",
-    veil: "rgba(26,14,30,0.46)",
-    veilStrong: "rgba(21,11,25,0.56)",
+    veil: "rgba(26,14,30,0.57)",
+    veilStrong: "rgba(21,11,25,0.67)",
   },
 ];
 
@@ -436,12 +436,51 @@ export function AppStyles() {
         .los-btn:active { filter: brightness(.95); }
         .los-tab:active { transform: scale(.93); }
     
+        /* --- الارتفاع عند المرور (los-raise) ---------------------------
+           بطاقة تُلمَس يجب أن ترتفع لا أن تتلوّن: الظلّ يتعمّق تحتها
+           والحدّ يسخن، فتُقرأ كجسم مرفوع عن السماء لا كمستطيل غيّر لونه.
+           هذا هو مصدر إحساس الـ 3D في هذا التطبيق — طبقات ظلّ، لا تدرّج
+           ألوان.
+
+           ثلاثة ظلال لا ظلّ واحد، وهذا هو بيت القصيد: ظلّ تماسّ ضيّق
+           يثبّت الحافة، وظلّ متوسّط يعطي الارتفاع، وظلّ واسع خفيف هو
+           الضوء المحيط. ظلّ واحد واسع يبدو ضبابًا تحت البطاقة.
+
+           المنحنى هو منحنى التطبيق — cubic-bezier(.22,1,.36,1) — خروجٌ
+           فقط بلا دخول، لأن حركة تبدأ بطيئة تبدو متأخّرة عن الإصبع.
+
+           ولا will-change هنا بقصد: البطاقة تحمل backdrop-filter، وطلب
+           طبقة مركّبة لكل بطاقة على الشاشة هو ثمن التمرير نفسه الذي
+           يحاربه content-visibility أدناه. */
+        .los-raise {
+          transition: transform .34s cubic-bezier(.22,1,.36,1),
+                      box-shadow .34s cubic-bezier(.22,1,.36,1),
+                      border-color .34s cubic-bezier(.22,1,.36,1);
+        }
+        .los-raise:hover,
+        .los-raise:focus-visible {
+          transform: translateY(-3px);
+          border-color: rgba(255,235,220,0.30);
+          box-shadow:
+            inset 0 1px 0 0 rgba(255,240,230,0.20),
+            inset 0 -1px 0 0 rgba(0,0,0,0.34),
+            0 2px 4px -2px rgba(0,0,0,0.65),
+            0 14px 26px -12px rgba(0,0,0,0.60),
+            0 40px 80px -36px rgba(0,0,0,0.95);
+        }
+        .los-raise:active { transform: translateY(-1px) scale(.994); }
+    
         @media (prefers-reduced-motion: reduce) {
           .los-flame, .los-in, .los-cover-in, .los-reward,
           .los-pop, .los-ripple, .los-halo, .los-throb, .los-drift {
             animation: none !important;
           }
           .los-btn:hover { transform: none !important; }
+          /* الارتفاع حركةٌ أيضًا: يبقى تعمّق الظلّ ويسقط الإزاحة. */
+          .los-raise, .los-raise:hover, .los-raise:focus-visible, .los-raise:active {
+            transform: none !important;
+            transition: box-shadow .2s linear, border-color .2s linear;
+          }
         }
 
         /* --- what a scroll actually costs --------------------------------

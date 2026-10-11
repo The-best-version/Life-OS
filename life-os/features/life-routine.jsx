@@ -1,7 +1,7 @@
 import { HorizonRow, clockLabel, horizonClock } from "./life-goals.jsx";
 import { ReadLogModal, TopThree, useHabitTick } from "../components/life-day.jsx";
 import { Badge, Btn, Card, Checkbox, Field, GLASS, GROUPS, Modal, PRAYERS, ProgressRing, T, arDate, clockAt, countedWord, cupWord, dayWord, groupOf, nextPrayer, shrinkImage, useBurst, useMinuteClock, useUndo } from "../components/life-shared.jsx";
-import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, clampGoal, coreOf, currentQuarter, goalShape, habitBest, habitShape, habitStreak, habitStrip, habitTally, historyIndex, isGap, pctOfRow, placeShape, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
+import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, clampGoal, coreOf, currentQuarter, goalShape, habitShape, habitStreak, historyIndex, isGap, pctOfRow, placeShape, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
 import { fixHour, prayerTimes } from "../utils/prayer-times.mjs";
 import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Droplets, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MapPin, MessageSquareQuote, MoonStar, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -529,8 +529,6 @@ export function RoutineModule({
           );
         })}
       </div>
-
-      <HabitLedger state={state} />
 
       <ReadLogModal
         open={!!logging}
@@ -1546,85 +1544,6 @@ const GONE_BLOCK = {
 };
 
 
-function HabitLedger({ state }) {
-  const [win, setWin] = useState(30);
-  const by = useMemo(() => historyIndex(state.history), [state.history]);
-  const habits = state.habits || [];
-
-  /* Sorted by what is standing, not alphabetically: the longest run at the
-     top is the one to protect, and the bottom of the list is where the next
-     percentage point is hiding. */
-  const sorted = useMemo(() => {
-    return habits
-      .map((h) => ({ h, run: habitStreak(by, h.id), t: habitTally(by, h.id, win) }))
-      .sort((a, b) => b.run - a.run || b.t.pct - a.t.pct)
-      .map((x) => x.h);
-  }, [habits, by, win]);
-
-  const any = by.size > 0;
-
-  return (
-    <Card className="p-6 sm:p-7">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            className="flex items-center gap-2 text-[17px] font-extrabold"
-            style={{ color: T.ctaLift }}
-          >
-            <Flame size={17} /> سجل العادات
-          </h3>
-          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-            لكل عادة سلسلتها وأطول ما بلغته وثلاثون يومًا من سجلّها. المربّع
-            الممتلئ يومٌ التزمت فيه، والباهت يومٌ لم تكن العادة فيه مطلوبة.
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-1.5">
-          {LEDGER_WINDOWS.map((w) => {
-            const on = w.id === win;
-            return (
-              <button
-                key={w.id}
-                onClick={() => setWin(w.id)}
-                aria-pressed={on}
-                className="rounded-lg border px-2.5 py-1 text-[10.5px] font-bold transition-all duration-200"
-                style={{
-                  borderColor: on ? `${T.cta}80` : T.border,
-                  background: on ? `${T.cta}1F` : "transparent",
-                  color: on ? T.ctaLift : T.faint,
-                }}
-              >
-                {w.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {!any ? (
-        <p
-          className="mt-5 rounded-xl border border-dashed py-10 text-center text-[11.5px] leading-relaxed"
-          style={{ borderColor: T.border, color: T.faint }}
-        >
-          لا سجلّ بعد — يبدأ العدّ من اليوم.
-          <br />
-          كل يوم تؤشّر فيه عادةً يضيف عمودًا هنا.
-        </p>
-      ) : sorted.length === 0 ? (
-        <p className="mt-5 py-8 text-center text-[11.5px]" style={{ color: T.faint }}>
-          لا عادات في روتينك بعد.
-        </p>
-      ) : (
-        <div className="mt-5 grid grid-cols-1 gap-2 lg:grid-cols-2">
-          {sorted.map((h) => (
-            <HabitLedgerRow key={h.id} habit={h} by={by} win={win} />
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-
 /* --- prayer times ----------------------------------------------------- *
  *  The six blocks of this routine are anchored to the prayers, so the times
  *  they are anchored to are shown beside them. Computed locally and never
@@ -1961,113 +1880,3 @@ function nudgeHabit(habits, id, dir) {
   }
   return habits;
 }
-
-
-function HabitLedgerRow({ habit, by, win }) {
-  const group = GROUPS.find((g) => g.id === habit.group);
-  const tint = group?.tint || T.accent;
-  const run = habitStreak(by, habit.id);
-  const best = habitBest(by, habit.id);
-  const { kept, asked, pct } = habitTally(by, habit.id, win);
-  const strip = habitStrip(by, habit.id, 30);
-  const hot = run >= 3;
-
-  return (
-    <div
-      className="rounded-xl border px-3.5 py-3"
-      style={{
-        borderColor: hot ? `${T.ember}3D` : T.border,
-        background: hot ? `${T.ember}0A` : "rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="flex items-baseline gap-2">
-        <p
-          className="min-w-0 flex-1 truncate text-[12.5px] font-bold"
-          style={{ color: T.fg }}
-          title={habit.label}
-        >
-          {habit.label}
-        </p>
-        {run > 0 && (
-          <span
-            className="flex shrink-0 items-center gap-1 text-[11px] font-extrabold"
-            style={{ color: hot ? T.ember : T.muted }}
-            title={`${run} ${dayWord(run)} متتالية`}
-          >
-            <Flame size={11} className={hot ? "los-flame" : ""} />
-            <span dir="ltr" className="tabular-nums">
-              {run}
-            </span>
-          </span>
-        )}
-        {best > 0 && (
-          <span
-            className="flex shrink-0 items-center gap-1 text-[10.5px]"
-            style={{ color: T.accent }}
-            title={`أطول سلسلة: ${best} ${dayWord(best)}`}
-          >
-            <Star size={10} />
-            <span dir="ltr" className="tabular-nums">
-              {best}
-            </span>
-          </span>
-        )}
-        <span
-          dir="ltr"
-          className="w-9 shrink-0 text-left text-[12.5px] font-extrabold tabular-nums"
-          style={{
-            color: pct >= 80 ? T.primary : pct >= 50 ? T.accent : pct > 0 ? T.ember : T.faint,
-          }}
-        >
-          {asked ? `${pct}%` : "—"}
-        </span>
-      </div>
-
-      {/* Thirty days, oldest on the right because the page reads right to
-          left: today is the dot nearest the left edge. */}
-      <div className="mt-2.5 flex flex-row-reverse flex-wrap justify-end gap-[3px]">
-        {strip.map((d) => (
-          <span
-            key={d.key}
-            title={d.key}
-            className="h-2.5 w-2.5 shrink-0 rounded-[3px] transition-colors"
-            style={{
-              background:
-                d.state === "kept"
-                  ? T.primary
-                  : d.state === "missed"
-                    ? `${T.danger}59`
-                    : "rgba(255,255,255,0.06)",
-              boxShadow: d.state === "kept" ? `0 0 6px ${T.primary}66` : "none",
-            }}
-          />
-        ))}
-      </div>
-
-      <p className="mt-2 flex items-center gap-1.5 text-[9.5px]" style={{ color: T.faint }}>
-        {group && <span style={{ color: tint }}>{group.label}</span>}
-        {group && "·"}
-        <span dir="ltr" className="tabular-nums">
-          {kept}/{asked}
-        </span>{" "}
-        {dayWord(asked)}
-      </p>
-    </div>
-  );
-}
-
-
-/* --- the habit ledger ------------------------------------------------- *
- *  The routine screen answers «ماذا عليّ اليوم؟». This answers the question
- *  that actually changes behaviour: «على أيّ عادة أصمد، وأيّها تسقط أولًا؟»
- *
- *  Every figure is derived from the archive — see `habitStreak` and friends.
- *  Nothing new is stored, so this view can never disagree with the history
- *  the calendar and the monthly tracker read from.
- * ---------------------------------------------------------------------- */
-const LEDGER_WINDOWS = [
-  { id: 30, label: "٣٠ يومًا" },
-  { id: 90, label: "٩٠ يومًا" },
-  { id: 0, label: "الكل" },
-];
-

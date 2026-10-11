@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useContext, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Bed, Undo2 } from "lucide-react";
+import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Bed, Undo2, RotateCcw, Quote } from "lucide-react";
 import { uid, STREAK_TARGET, hhmm, GRADES, daysUntil, minsIn, BLOCK_IDS, daysBetween } from "../state/life-state.mjs";
 import { fixHour, prayerTimes } from "../utils/prayer-times.mjs";
 
@@ -56,8 +56,16 @@ export const GLASS = {
      scales with the radius. Behind a veil this dark the two are hard to tell
      apart, so the cheaper one is the honest default. */
   backdropFilter: "blur(12px) saturate(150%)",
+  /* سلّم ارتفاع لا ظلّ واحد. الإحساس الثلاثي الأبعاد يأتي من ثلاث
+     مسافات مختلفة في وقت واحد: ظلّ تماسّ ضيّق يثبّت الحافة على السماء،
+     وظلّ متوسّط يرفع البطاقة، وظلّ واسع خفيف هو الضوء المحيط. وإضاءة
+     داخلية من الأعلى مع ظلّ داخلي من الأسفل هما ما يجعل اللوح يبدو
+     سميكًا — حافّة مضاءة وحدها تبدو خطًّا مرسومًا.
+
+     الظلال رخيصة: تُرسم ولا تُعاد عيّنة السماء من أجلها، بخلاف
+     backdrop-filter. ولهذا العمق هنا ولا في زيادة نصف قطر الضبابة. */
   boxShadow:
-    "inset 0 1px 0 0 rgba(255,235,225,0.14), 0 22px 52px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,87,34,0.04)",
+    "inset 0 1px 0 0 rgba(255,240,230,0.16), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 1px 2px -1px rgba(0,0,0,0.55), 0 8px 18px -10px rgba(0,0,0,0.55), 0 30px 64px -34px rgba(0,0,0,0.92), 0 0 0 1px rgba(255,87,34,0.05)",
 };
 
 export function usePrefersReducedMotion() {
@@ -981,6 +989,86 @@ export function useDailyQuote(list, key = QUOTE_KEY) {
   const quote = total ? list[i % total] : null;
   return [quote, shuffle];
 }
+
+/* ==================================================================== *
+ * بطاقة عبارات الكتب — ReadingCue
+ *
+ * قابلة للوضع في أي صفحة بسطر واحد:
+ *     <ReadingCue list={state.reads} />
+ *
+ * كانت محصورة داخل شاشة المكتبة، وهي الآن مكوّن مستقل لأن مكانها
+ * الطبيعي هو الشاشة التي يفتح عليها اليوم — لا الشاشة التي يزورها
+ * مرّة في الأسبوع. لتعيدها إلى المكتبة أو تضعها في الروتين، استورد
+ * المكوّن واكتب السطر أعلاه؛ لا حالة تملكها ولا شيء آخر يتغيّر.
+ *
+ * المؤشّر (cursor) محفوظ في READ_KEY، وهو مستقلّ عن مؤشّر عبارات
+ * اليوم — ولهذا يأخذ `useDailyQuote` مفتاحًا: حتى لا تتزاحم قائمتان
+ * على عدّاد واحد.
+ *
+ * ملاحظة بصرية: الهالتان خارج حدود البطاقة، ولهذا تحمل `los-cue`
+ * المستثناة من `content-visibility` في ورقة الأنماط.
+ * ==================================================================== */
+export function ReadingCue({ list, className = "" }) {
+  const [read, shuffle] = useDailyQuote(list || [], READ_KEY);
+
+  return (
+    <button
+      type="button"
+      onClick={shuffle}
+      title="اضغط لعبارة أخرى"
+      aria-label="عبارة من الكتب — اضغط لعبارة أخرى"
+      className={`los-cue los-raise group relative w-full overflow-hidden rounded-2xl border p-5 text-center transition-all duration-300 ${className}`}
+      style={{
+        borderColor: `${T.accent}33`,
+        backgroundColor: `${T.accent}0D`,
+      }}
+    >
+      {/* هالتان لا واحدة: الدفء من جهة والبنفسجي من الأخرى، فتبدو
+          البطاقة مُضاءة من داخلها بدلًا من أن تكون مساحة ملوّنة. */}
+      <div
+        className="pointer-events-none absolute -top-20 right-1/4 h-44 w-44 rounded-full opacity-25 blur-3xl transition-opacity duration-500 group-hover:opacity-50"
+        style={{ background: T.accent }}
+      />
+      <div
+        className="pointer-events-none absolute -bottom-24 left-1/4 h-44 w-44 rounded-full opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-30"
+        style={{ background: T.cta }}
+      />
+
+      <Quote
+        size={15}
+        className="relative mx-auto mb-2 opacity-40 transition-opacity duration-300 group-hover:opacity-70"
+        style={{ color: T.accent }}
+      />
+
+      {read ? (
+        <>
+          <p
+            key={read.text}
+            className="los-in relative mx-auto max-w-xl text-[13.5px] font-bold leading-loose"
+            style={{ color: T.fg }}
+          >
+            {read.text}
+          </p>
+          <p className="relative mt-2 text-[10.5px]" style={{ color: T.accent }}>
+            — {read.author}
+          </p>
+        </>
+      ) : (
+        <p className="relative text-[12px]" style={{ color: T.muted }}>
+          لا عبارات في هذه القائمة.
+        </p>
+      )}
+
+      <span
+        className="relative mt-2.5 inline-flex items-center gap-1.5 text-[10px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{ color: T.faint }}
+      >
+        <RotateCcw size={10} /> اضغط لعبارة أخرى
+      </span>
+    </button>
+  );
+}
+
 
 /* --- the eight seconds after a delete --------------------------------- *
  *  Every destructive button in this app was immediate and final, and three

@@ -1,6 +1,6 @@
-import { Btn, Card, Field, Modal, READ_KEY, StarRating, T, countedWord, shrinkImage, useDailyQuote, useUndo } from "../components/life-shared.jsx";
+import { Btn, Card, Field, Modal, StarRating, T, countedWord, shrinkImage, useUndo } from "../components/life-shared.jsx";
 import { bookShape, dayKey, goalPct, pctOf, readStreak, rows, sumPages, uid } from "../state/life-state.mjs";
-import { CheckCheck, ChevronDown, ChevronUp, Copy, ImagePlus, NotebookPen, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCheck, ChevronDown, ChevronUp, Copy, ImagePlus, NotebookPen, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 /* ==================================================================== *
@@ -17,7 +17,6 @@ export function VaultModule({ state, setState }) {
   const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState("all");
   const [deskId, setDeskId] = useState(null);
-  const [read, shuffleRead] = useDailyQuote(state.reads || [], READ_KEY);
   const arm = useUndo();
 
   const save = () => {
@@ -195,50 +194,6 @@ export function VaultModule({ state, setState }) {
             ))}
           </div>
         </div>
-
-        {/* the reading cue — tap for the next one */}
-        <button
-          type="button"
-          onClick={shuffleRead}
-          title="اضغط لعبارة أخرى"
-          className="los-cue group relative mt-4 w-full overflow-hidden rounded-2xl border p-4 text-center transition-all duration-300"
-          style={{
-            borderColor: `${T.accent}33`,
-            background: `${T.accent}0D`,
-          }}
-        >
-          <div
-            className="pointer-events-none absolute -top-16 right-1/3 h-40 w-40 rounded-full opacity-25 blur-3xl transition-opacity duration-500 group-hover:opacity-45"
-            style={{ background: T.accent }}
-          />
-          {read ? (
-            <>
-              <p
-                key={read.text}
-                className="los-in relative mx-auto max-w-xl text-[13px] font-bold leading-relaxed"
-                style={{ color: T.fg }}
-              >
-                {read.text}
-              </p>
-              <p
-                className="relative mt-1.5 text-[10.5px]"
-                style={{ color: T.accent }}
-              >
-                — {read.author}
-              </p>
-            </>
-          ) : (
-            <p className="relative text-[12px]" style={{ color: T.muted }}>
-              لا عبارات في هذه القائمة.
-            </p>
-          )}
-          <span
-            className="relative mt-2 inline-flex items-center gap-1.5 text-[10px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-            style={{ color: T.faint }}
-          >
-            <RotateCcw size={10} /> اضغط لعبارة أخرى
-          </span>
-        </button>
       </Card>
 
       <div className="flex flex-wrap gap-2">
@@ -280,15 +235,7 @@ export function VaultModule({ state, setState }) {
             return (
               <Card
                 key={b.id}
-                className="group flex gap-4 p-4 transition-all duration-500 hover:-translate-y-1"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = `${T.accent}59`;
-                  e.currentTarget.style.boxShadow = `0 18px 50px -22px ${T.accent}88`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = T.border;
-                  e.currentTarget.style.boxShadow = "none";
-                }}
+                className="group los-raise flex gap-4 p-4"
               >
                 {/* spine + cover */}
                 <div
