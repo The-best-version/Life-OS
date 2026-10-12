@@ -15,6 +15,10 @@ import {
   CalendarRange,
   CalendarClock,
   AlarmClock,
+  Repeat,
+  Filter,
+  BellOff,
+  Lightbulb,
 } from "lucide-react";
 import {
   T,
@@ -26,14 +30,25 @@ import {
   TimeField,
   NumStep,
   DOW_AR,
+  AR_MONTHS,
   arCount,
   minWord,
   prettyTime,
+  whenWord,
   useUndo,
 } from "../components/life-shared.jsx";
 import {
   botShape,
   reminderShape,
+  REMINDER_REPEATS,
+  repeatMeta,
+  DOM_MIN,
+  DOM_MAX,
+  GATES,
+  gateMeta,
+  gateOf,
+  nextFireOf,
+  REMINDER_IDEAS,
   planDay,
   nextInPlan,
   onDay,
@@ -184,7 +199,9 @@ function Fact({ label, value, ltr }) {
   );
 }
 
-/* A timestamp in milliseconds as "HH:MM", so `prettyTime` can read it. */
+/* A moment as "HH:MM", so `prettyTime` can read it. Milliseconds or a
+   `Date` — `new Date()` takes either, which is why the next-fire line uses
+   this one instead of a second copy of the same two `padStart`s. */
 const clockOf = (ms) => {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
@@ -607,8 +624,17 @@ function Preset({ icon: Icon, tint, title, on, onToggle, note, children }) {
   );
 }
 
-/* --- the ones he writes ------------------------------------------------ */
-export function CustomRemindersCard({ bot, onAdd, onPatchOne, onRemove }) {
+/* --- the ones he writes ------------------------------------------------ *
+ *  A row says three things now that it could not before: how often it comes
+ *  back, on which day of the month when that is the answer, and the
+ *  condition that buys its silence. The add form still asks for two.
+ *
+ *  That is deliberate: a reminder is written in one breath — a sentence and
+ *  an hour — and the rest is refined on the row itself, where the day chips
+ *  already lived. An add form that asks five questions is a form he abandons
+ *  and a list that stays empty.
+ * ---------------------------------------------------------------------- */
+export function CustomRemindersCard({ bot, state, onAdd, onPatchOne, onRemove }) {
   const [text, setText] = useState("");
   const [at, setAt] = useState("09:00");
   const list = bot.customs;
@@ -629,7 +655,8 @@ export function CustomRemindersCard({ bot, onAdd, onPatchOne, onRemove }) {
             تذكيرات بنصّك
           </h3>
           <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
-            جملة وساعة. والأيام اختيارية — بلا اختيار تعني كل يوم.
+            جملة وساعة، ثم اختر: كل يوم، أيامًا من الأسبوع، أو يومًا من الشهر —
+            وبشرطٍ يُسكته إن كان الشي مُنجزًا أصلًا.
           </p>
         </div>
         <Badge tint={full ? T.danger : T.faint}>
@@ -661,6 +688,8 @@ export function CustomRemindersCard({ bot, onAdd, onPatchOne, onRemove }) {
         </p>
       )}
 
+      <IdeaChips list={list} full={full} onAdd={onAdd} />
+
       <div className="mt-5 space-y-2.5">
         {list.length === 0 ? (
           <p
@@ -671,65 +700,240 @@ export function CustomRemindersCard({ bot, onAdd, onPatchOne, onRemove }) {
           </p>
         ) : (
           list.map((r) => (
-            <div
+            <ReminderRow
               key={r.id}
-              className="group rounded-xl border px-4 py-3"
-              style={{
-                borderColor: r.on ? `${T.violet}33` : T.border,
-                background: "rgba(255,255,255,0.03)",
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  checked={r.on}
-                  onToggle={() => onPatchOne(r.id, { on: !r.on })}
-                  size="sm"
-                  tint={T.violet}
-                />
-                <span className="min-w-0 flex-1 truncate text-[13px]">{r.text}</span>
-                <span
-                  className="shrink-0 text-[11.5px] font-bold tabular-nums"
-                  style={{ color: T.violet }}
-                >
-                  {prettyTime(r.at)}
-                </span>
-                <button
-                  onClick={() => onRemove(r.id)}
-                  aria-label={`حذف ${r.text}`}
-                  className="shrink-0 rounded p-1 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-              {/* Seven small buttons rather than a dropdown: picking «الأحد
-                  والثلاثاء» out of a select is three interactions, and this
-                  is one each. */}
-              <div className="mt-2.5 flex flex-wrap gap-1.5 ps-8">
-                {DOW_AR.map((name, i) => {
-                  const picked = onDay(r, i);
-                  return (
-                    <button
-                      key={name}
-                      onClick={() => onPatchOne(r.id, { days: toggleDay(r.days, i) })}
-                      aria-label={`${name}${picked ? " — مفعّل" : ""}`}
-                      aria-pressed={picked}
-                      className="rounded-lg border px-2 py-1 text-[10.5px] transition-colors"
-                      style={{
-                        borderColor: picked ? `${T.violet}4D` : T.border,
-                        background: picked ? `${T.violet}1A` : "transparent",
-                        color: picked ? T.violet : T.faint,
-                      }}
-                    >
-                      {name.slice(0, 3)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              r={r}
+              state={state}
+              onPatch={(part) => onPatchOne(r.id, part)}
+              onRemove={() => onRemove(r.id)}
+            />
           ))
         )}
       </div>
     </Card>
+  );
+}
+
+/* --- one reminder, and everything it can be ---------------------------- */
+export function ReminderRow({ r, state, onPatch, onRemove }) {
+  const gate = gateOf(state, r.only);
+  const next = nextFireOf(r);
+  /* A condition already satisfied means this reminder would stay quiet if
+     its hour arrived this minute. Said out loud, because a reminder that is
+     silent for a good reason and one that is broken look identical from the
+     outside — and the whole value of a condition is trusting it. */
+  const quiet = r.on && r.only !== "always" && !gate.pass;
+
+  return (
+    <div
+      className="group rounded-xl border px-4 py-3"
+      style={{
+        borderColor: r.on ? `${T.violet}33` : T.border,
+        background: "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <Checkbox
+          checked={r.on}
+          onToggle={() => onPatch({ on: !r.on })}
+          size="sm"
+          tint={T.violet}
+        />
+        <span className="min-w-0 flex-1 truncate text-[13px]">{r.text}</span>
+        <span
+          className="shrink-0 text-[11.5px] font-bold tabular-nums"
+          style={{ color: T.violet }}
+        >
+          {prettyTime(r.at)}
+        </span>
+        <button
+          onClick={onRemove}
+          aria-label={`حذف ${r.text}`}
+          className="shrink-0 rounded p-1 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      {/* How often. Three buttons and not a select: this is the field that
+          decides what the line under it even asks, so it has to be readable
+          without opening anything. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 ps-8">
+        <Repeat size={12} strokeWidth={2} style={{ color: T.faint }} />
+        {REMINDER_REPEATS.map((k) => {
+          const picked = r.repeat === k.id;
+          return (
+            <button
+              key={k.id}
+              onClick={() => onPatch({ repeat: k.id })}
+              aria-pressed={picked}
+              title={k.note}
+              className="rounded-lg border px-2.5 py-1 text-[10.5px] transition-colors"
+              style={{
+                borderColor: picked ? `${T.violet}4D` : T.border,
+                background: picked ? `${T.violet}1A` : "transparent",
+                color: picked ? T.violet : T.faint,
+                fontWeight: picked ? 700 : 400,
+              }}
+            >
+              {k.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Seven small buttons rather than a dropdown: picking «الأحد
+          والثلاثاء» out of a select is three interactions, and this is one
+          each. Shown only for the repeat that reads them — a day chip beside
+          a monthly reminder is a control that does nothing. */}
+      {r.repeat === "week" && (
+        <div className="mt-2 flex flex-wrap gap-1.5 ps-8">
+          {DOW_AR.map((name, i) => {
+            const picked = onDay(r, i);
+            return (
+              <button
+                key={name}
+                onClick={() => onPatch({ days: toggleDay(r.days, i) })}
+                aria-label={`${name}${picked ? " — مفعّل" : ""}`}
+                aria-pressed={picked}
+                className="rounded-lg border px-2 py-1 text-[10.5px] transition-colors"
+                style={{
+                  borderColor: picked ? `${T.violet}4D` : T.border,
+                  background: picked ? `${T.violet}1A` : "transparent",
+                  color: picked ? T.violet : T.faint,
+                }}
+              >
+                {/* The definite article dropped, not the word cut short:
+                    three characters of «الأحد» and three of «الأربعاء» are
+                    the same three, so the row carried two chips nobody
+                    could tell apart. */}
+                {name.replace(/^ال/, "")}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {r.repeat === "month" && (
+        <div className="mt-2 flex flex-wrap items-center gap-3 ps-8">
+          <span className="text-[11px]" style={{ color: T.faint }}>
+            يوم من الشهر
+          </span>
+          <div className="w-[150px]">
+            <NumStep
+              value={r.dom}
+              onChange={(n) => onPatch({ dom: n })}
+              min={DOM_MIN}
+              max={DOM_MAX}
+              unit=""
+              tint={T.violet}
+            />
+          </div>
+          {r.dom > 28 && (
+            <span className="text-[10.5px]" style={{ color: T.muted }}>
+              الشهر الأقصر يأخذه في آخر يوم منه — لا يُتخطّى شهر.
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* The condition. A select here and buttons above because this one is
+          six answers and is read far less often than it is set. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 ps-8">
+        <Filter size={12} strokeWidth={2} style={{ color: T.faint }} />
+        {/* The options carry their own solid background: an option list
+            inherits the page's transparent one and renders white-on-white in
+            Chrome otherwise — the same note the focus desk's select keeps. */}
+        <select
+          value={r.only}
+          onChange={(e) => onPatch({ only: e.target.value })}
+          aria-label={`شرط إرسال: ${r.text}`}
+          className="rounded-lg border bg-transparent px-2 py-1 text-[10.5px] outline-none transition-colors focus:border-white/30"
+          style={{
+            borderColor: r.only === "always" ? T.border : `${T.sky}4D`,
+            color: r.only === "always" ? T.faint : T.sky,
+          }}
+        >
+          {GATES.map((g) => (
+            <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>
+              {g.label}
+            </option>
+          ))}
+        </select>
+        <span className="text-[10.5px]" style={{ color: T.faint }}>
+          {gateMeta(r.only).note}
+        </span>
+      </div>
+
+      {/* When it actually comes back. A monthly reminder whose next firing
+          cannot be seen is one that cannot be trusted — «يوم ٣١» read in
+          February says nothing about whether February was understood. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 ps-8">
+        <span className="text-[10.5px]" style={{ color: T.faint }}>
+          {r.on
+            ? next
+              ? `القادم: ${nextWords(next)} · ${prettyTime(clockOf(next))}`
+              : "لا موعد قادم"
+            : "موقوف"}
+        </span>
+        {quiet && (
+          <span
+            className="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px]"
+            style={{ borderColor: `${T.primary}40`, background: `${T.primary}12`, color: T.primary }}
+          >
+            <BellOff size={10} strokeWidth={2.2} /> صامت الآن — الشرط مُستوفى
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* The near days in words and the far ones as a date. `whenWord` already owns
+   «اليوم» and «غدًا», so they are not written a second time here — what it
+   cannot do is the one thing a monthly reminder needs, which is to say
+   «٢٨ أكتوبر» instead of «بعد ١٦ يومًا». A bill is checked against a date. */
+export const nextWords = (when) => {
+  const today = new Date();
+  const days = Math.round(
+    (new Date(when.getFullYear(), when.getMonth(), when.getDate()) -
+      new Date(today.getFullYear(), today.getMonth(), today.getDate())) /
+      86400000,
+  );
+  if (days <= 2) return whenWord(dayKey(when));
+  if (days < 7) return DOW_AR[when.getDay()];
+  return `${when.getDate()} ${AR_MONTHS[when.getMonth()]}`;
+};
+
+/* --- the ones worth having, offered rather than hidden ----------------- *
+ *  An empty list with a text box above it tells nobody that a reminder can
+ *  be monthly, or that it can be the kind that stays quiet when the thing is
+ *  already done. One tap each, and an idea already taken drops out of the
+ *  row — a suggestion still offered after it was accepted is a suggestion
+ *  that duplicates itself.
+ * ---------------------------------------------------------------------- */
+export function IdeaChips({ list, full, onAdd }) {
+  const taken = new Set(rows(list).map((r) => r.text));
+  const left = REMINDER_IDEAS.filter((i) => !taken.has(i.text));
+  if (full || !left.length) return null;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-1.5">
+      <Lightbulb size={12} strokeWidth={2} style={{ color: T.faint }} />
+      <span className="me-1 text-[10.5px]" style={{ color: T.faint }}>
+        جاهزة بلمسة
+      </span>
+      {left.map((i) => (
+        <button
+          key={i.text}
+          onClick={() => onAdd(i)}
+          className="los-raise rounded-lg border px-2.5 py-1 text-[10.5px]"
+          style={{ borderColor: T.border, background: "rgba(255,255,255,0.04)", color: T.muted }}
+          title={`${repeatMeta(i.repeat).label} · ${prettyTime(i.at)}`}
+        >
+          + {i.text}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -773,7 +977,11 @@ export function TodayPlanCard({ bot, state }) {
       if (at !== null) events.push({ id: ev.id, at: at / 60 });
     }
   }
-  const plan = planDay(bot, { dow: now.getDay(), prayers, hasTasks, blocks, events });
+  /* The whole day, not its weekday alone — `planDay` reads the date and the
+     length of the month out of it for the monthly reminders, and a preview
+     that passed less than the bot does is a preview that disagrees with the
+     evening it is previewing. */
+  const plan = planDay(bot, { date: now, prayers, hasTasks, blocks, events });
   const mins = now.getHours() * 60 + now.getMinutes();
   const next = nextInPlan(plan, mins);
 
@@ -855,7 +1063,11 @@ function kindName(p, state) {
     return row ? `قبل ${row.label}` : "قبل الأذان";
   }
   const own = rows(state.bot?.customs).find((x) => x.id === p.id);
-  return own ? own.text.slice(0, 24) : "تذكير";
+  if (!own) return "تذكير";
+  /* A conditional reminder is armed like any other and may still say
+     nothing, exactly as the coach's check may. The plan says so rather than
+     promising a message that the condition will cancel. */
+  return `${own.text.slice(0, 24)}${own.only && own.only !== "always" ? " · بشرط" : ""}`;
 }
 
 /* --- the vocabulary, on the desk --------------------------------------- *
@@ -1062,8 +1274,12 @@ export function BotModule({ state, setState }) {
       <TodayPlanCard bot={bot} state={state} />
       <BriefTimesCard bot={bot} onPatch={patch} />
       <PresetRemindersCard bot={bot} onPatch={patch} />
+      {/* `state` and not `bot`: a condition is read against the whole day —
+          the habits, the three tasks, the cups, the pages, the minutes — and
+          the row says whether it would be silent right now. */}
       <CustomRemindersCard
         bot={bot}
+        state={state}
         onAdd={addCustom}
         onPatchOne={patchOne}
         onRemove={removeCustom}

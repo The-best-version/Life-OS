@@ -65,6 +65,13 @@ export const keyToDate = (ds) => {
 
 export const isKey = (ds) => !!keyToDate(ds);
 
+/* How many days a month has, 1-indexed on the month like a human says it.
+   Day zero of the next month is the last day of this one, which is the one
+   piece of date arithmetic that needs no table of month lengths and no leap
+   rule. A monthly reminder set for the 31st reads this to land on the 28th
+   of February rather than skipping the month. */
+export const monthDays = (y, m) => new Date(y, m, 0).getDate();
+
 export const addDays = (ds, n) => {
   const d = keyToDate(ds);
   if (!d) return ds;

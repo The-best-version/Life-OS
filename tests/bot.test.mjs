@@ -419,6 +419,50 @@ test("a reminder says what is actually left, or says nothing", () => {
   assert.ok(textFor({ kind: "tasks" }, s).text.includes("باقي"));
 });
 
+test("a conditional reminder stays quiet when the thing is already done", () => {
+  /* The whole point of the condition. «اقرأ قبل النوم» at half past ten on a
+     night the pages were already read is the message that teaches you to
+     swipe the rest unread — so the timer fires, the day is read, and nothing
+     is sent. The silence the sweep and the coach already keep, extended to
+     the one kind of message here that used to speak regardless. */
+  const s = freshState();
+  const armed = { kind: "custom", id: "r2" };
+  const withGate = (only) => ({
+    ...s,
+    bot: botShape({ customs: [{ id: "r2", on: true, at: "22:30", text: "اقرأ", only }] }),
+  });
+
+  const open = withGate("read");
+  assert.match(textFor(armed, open).text, /اقرأ/);
+  /* And the reason it arrived is on the line under it, built from the day
+     rather than from the moment it was armed. */
+  assert.match(textFor(armed, open).text, /باقي/);
+
+  const read = {
+    ...withGate("read"),
+    readGoal: 20,
+    reading: [{ date: dayKey(), pages: 40, habit: "h" }],
+  };
+  assert.equal(textFor(armed, read), null, "the goal was met — nothing to say");
+
+  /* A water condition hands the cup button out with the message, which is
+     how a conditional nudge gets its buttons with no new wiring. */
+  const thirsty = { ...withGate("water"), water: 1, waterGoal: 8 };
+  assert.equal(textFor(armed, thirsty).water, true);
+  assert.equal(textFor(armed, { ...thirsty, water: 8 }), null);
+
+  /* And a habit condition hands the habits out, for the same reason. */
+  const habits = withGate("habits");
+  assert.ok(textFor(armed, habits).habits.length > 0);
+  const allDone = { ...habits, habits: s.habits.map((h) => ({ ...h, done: true })) };
+  assert.equal(textFor(armed, allDone), null);
+
+  /* «بلا شرط» is the old behaviour, unchanged: it speaks whatever the day
+     looks like. */
+  const plain = withGate("always");
+  assert.ok(textFor(armed, plain).text);
+});
+
 test("a custom reminder fires with the words it has now, not the ones it was armed with", () => {
   const armed = { kind: "custom", id: "r1", text: "النصّ القديم" };
   const s = freshState();

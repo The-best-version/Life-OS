@@ -80,6 +80,7 @@ export const habitsWord = forms("عادة", "عادتان", "عادات", "عا�
 export const tasksWord = forms("مهمة", "مهمتان", "مهام", "مهمة");
 export const roundsWord = forms("جولة", "جولتان", "جولات", "جولة");
 export const notesWord = forms("ملاحظة", "ملاحظتان", "ملاحظات", "ملاحظة");
+export const cupsWord = forms("كوب", "كوبان", "أكواب", "كوبًا");
 
 /* Minutes as hours and minutes, when there are enough of them to be worth
    saying that way. Ninety minutes is «ساعة ونصف» to a person and «٩٠ دقيقة»

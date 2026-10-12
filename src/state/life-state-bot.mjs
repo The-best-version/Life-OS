@@ -12,7 +12,15 @@
  *  `.env` keeps the two *credentials* and the fallbacks. A value here always
  *  wins; `.env` is what answers before this object has ever been written.
  * --------------------------------------------------------------------- */
-import { uid, obj, rows, hhmm, minsIn, clampNum } from "./life-state-util.mjs";
+import { uid, obj, rows, hhmm, minsIn, clampNum, monthDays, dayKey, logicalNow } from "./life-state-util.mjs";
+/* Three domain files read from here, for the one reason any domain file reads
+   another: a condition on «هل بقيت عادة؟» answered by a second copy of
+   `scoredOf` is a condition that eventually disagrees with the ring. The
+   direction stays one-way — nothing in habits, books or focus reads the
+   schedule back. */
+import { scoredOf, clampGoal } from "./life-state-habits.mjs";
+import { sumPages, READ_GOAL_DEFAULT } from "./life-state-books.mjs";
+import { focusShape, focusDay } from "./life-state-focus.mjs";
 
 /* --- where the bot answers from --------------------------------------- *
  *  A loopback listener of its own, on a port beside the sync server's. It
@@ -125,6 +133,117 @@ export const COACH_MAX = 3;
 export const WEEKLY_AT_DEFAULT = "20:30";
 export const WEEKLY_DOW_DEFAULT = 5; // Friday, in Date.getDay() numbering
 
+/* --- how often a reminder comes back ----------------------------------- *
+ *  Three answers, and the third is the one this list was missing. A weekday
+ *  pattern already expressed «كل جمعة» — pick one day and the row is
+ *  weekly — but nothing here could express «يوم ٢٨ من كل شهر», which is the
+ *  shape every recurring *obligation* actually has: the rent, the bill, the
+ *  quarter's goals, the month's budget. Those are the reminders worth having
+ *  a bot for at all, because a daily one you would have remembered anyway.
+ *
+ *  `day` ignores `days` and `dom`; `week` reads `days`; `month` reads `dom`.
+ *  One field says which, so no reader has to guess from which other field
+ *  happens to be filled — the mistake the empty-`days` convention would have
+ *  turned into three.
+ * ---------------------------------------------------------------------- */
+/* Named apart from the calendar's `REPEATS`, and with different ids, because
+   they are different questions rather than one asked twice: an event recurs
+   from a date it already has («كل شهر» means the day it is on), while a
+   standing reminder has no date at all and has to be told which days it
+   comes back on. Two tables, two names — a shared `monthly` that meant the
+   event's own day in one reader and `dom` in the other would be the worse
+   kind of reuse. */
+export const REMINDER_REPEATS = [
+  { id: "day", label: "كل يوم", note: "بلا استثناء" },
+  { id: "week", label: "أيام الأسبوع", note: "يوم واحد يعني أسبوعيًّا" },
+  { id: "month", label: "شهريًّا", note: "يوم واحد من كل شهر" },
+];
+export const REMINDER_REPEAT_IDS = REMINDER_REPEATS.map((r) => r.id);
+export const repeatMeta = (id) =>
+  REMINDER_REPEATS.find((r) => r.id === id) || REMINDER_REPEATS[0];
+export const DOM_MIN = 1;
+export const DOM_MAX = 31;
+export const DOM_DEFAULT = 1;
+
+/* --- the condition that buys the silence ------------------------------- *
+ *  Every sentence the bot sends is built from the day at the moment it
+ *  fires, and `null` is already a legitimate answer: the task sweep with
+ *  nothing to sweep says nothing, and the coach on a good day says nothing.
+ *  A reminder in his own words was the one thing here that always spoke —
+ *  «اشرب ماء» at four in the afternoon on a day the goal was met at two is
+ *  exactly the message that teaches you to swipe the rest unread.
+ *
+ *  So a reminder may carry a condition, and the condition is read when the
+ *  timer fires rather than when it was armed. The gate is not a filter on
+ *  the plan: `planDay` arms a conditional reminder unconditionally, the same
+ *  way it arms the coach, because whether there is anything worth saying is
+ *  a question about a day that is still hours away when the plan is built.
+ *
+ *  Each gate also hands back what it was looking at, which is how a
+ *  conditional nudge gets a button with no new wiring: the bot already
+ *  builds «💧 + كاس ماء» and a habit's tick row out of exactly these fields.
+ * ---------------------------------------------------------------------- */
+export const GATES = [
+  { id: "always", label: "بلا شرط", note: "يُرسل في وقته دائمًا" },
+  { id: "habits", label: "إن بقيت عادة", note: "صامت إذا أُغلقت عادات اليوم" },
+  { id: "tasks", label: "إن بقيت مهمة", note: "من مهام اليوم الثلاث" },
+  { id: "water", label: "إن لم يكتمل الماء", note: "صامت بعد بلوغ الأكواب" },
+  { id: "read", label: "إن لم تقرأ", note: "صفحات اليوم دون هدف القراءة" },
+  { id: "focus", label: "إن لم تركّز", note: "دقائق اليوم دون هدف المكتب" },
+];
+export const GATE_IDS = GATES.map((g) => g.id);
+export const gateMeta = (id) => GATES.find((g) => g.id === id) || GATES[0];
+
+/* Whether a gated reminder has anything to be about, as of `now`.
+ *
+ *  Returns the *facts* and never the sentence: `left` is how much of the
+ *  thing is still undone and `goal` is what it was measured against, and the
+ *  Arabic is composed by whoever is speaking — the bot in its own words, the
+ *  screen in shorter ones. A sentence built here would be a second copy of
+ *  the one the bot already knows how to write.
+ */
+export function gateOf(state, id = "always", now = new Date()) {
+  const s = obj(state);
+  const open = { pass: true, kind: "always", left: 0, goal: 0 };
+  if (!id || id === "always" || !GATE_IDS.includes(id)) return open;
+
+  if (id === "habits") {
+    const left = scoredOf(rows(s.habits)).filter((h) => !h.done);
+    /* The habits themselves ride back, so the message that asks about them
+       can also be the message that ticks one. */
+    return { pass: left.length > 0, kind: id, left: left.length, goal: 0, habits: left };
+  }
+
+  if (id === "tasks") {
+    const left = rows(s.tasks).filter((t) => t.today && !t.done);
+    return { pass: left.length > 0, kind: id, left: left.length, goal: 0, tasks: left };
+  }
+
+  if (id === "water") {
+    const goal = clampGoal(s.waterGoal);
+    const had = Math.max(0, Math.round(Number(s.water) || 0));
+    return { pass: had < goal, kind: id, left: Math.max(0, goal - had), goal, water: true };
+  }
+
+  if (id === "read") {
+    const goal = Number.isFinite(s.readGoal) ? s.readGoal : READ_GOAL_DEFAULT;
+    const today = dayKey(logicalNow(now));
+    const had = sumPages(rows(s.reading).filter((r) => r.date === today));
+    return { pass: had < goal, kind: id, left: Math.max(0, goal - had), goal };
+  }
+
+  if (id === "focus") {
+    const goal = focusShape(s.focus).goal;
+    /* No goal set is not a day that fell short of one. The honest reading of
+       «إن لم تركّز» without a target is «ولا دقيقة». */
+    const had = focusDay(s.sessions, dayKey(logicalNow(now))).minutes;
+    const bar = goal > 0 ? goal : 1;
+    return { pass: had < bar, kind: id, left: Math.max(0, bar - had), goal };
+  }
+
+  return open;
+}
+
 /* --- a custom reminder ------------------------------------------------- *
  *  A time, a sentence, and which days it applies to. `days` empty means
  *  every day — an explicit "all seven" and an empty list would be two
@@ -143,6 +262,7 @@ export const reminderShape = (r) => {
         .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
     ),
   ].sort((a, b) => a - b);
+  const kept = days.length === 7 ? [] : days;
   return {
     id: r.id || uid(),
     on: r.on !== false,
@@ -151,9 +271,90 @@ export const reminderShape = (r) => {
        text the user typed. */
     at: hhmm(r.at, "09:00"),
     text: typeof r.text === "string" ? r.text.slice(0, REMINDER_MAX) : "",
-    days: days.length === 7 ? [] : days,
+    days: kept,
+    /* A row written before the repeat existed is read by what it already
+       says: days picked meant «هذي الأيام» and no days meant «كل يوم», which
+       is exactly the two answers `week` and `day` give. So nothing is
+       guessed and nothing changes behaviour — the shape is the migration,
+       the same arrangement the rest of `state.bot` arrived under. */
+    repeat: REMINDER_REPEAT_IDS.includes(r.repeat) ? r.repeat : kept.length ? "week" : "day",
+    dom: Math.round(clampNum(r.dom, DOM_MIN, DOM_MAX, DOM_DEFAULT)),
+    only: GATE_IDS.includes(r.only) ? r.only : "always",
   };
 };
+
+/* --- which day is it, as a recurrence sees it -------------------------- *
+ *  One reading of a day, so the plan, the preview and the next-fire line
+ *  cannot disagree about whether the 28th of February is the 31st.
+ * ---------------------------------------------------------------------- */
+export const whenOf = (date = new Date()) => ({
+  dow: date.getDay(),
+  dom: date.getDate(),
+  lastDom: monthDays(date.getFullYear(), date.getMonth() + 1),
+});
+
+/* Whether a reminder comes back on a given day.
+ *
+ *  The month case carries the one rule worth stating out loud: a reminder
+ *  set for the 31st lands on the last day of a month that has no 31st, and
+ *  never on the 1st of the next one. A month skipped is a bill unpaid, and
+ *  «آخر يوم في الشهر» is what somebody who typed 31 actually meant.
+ */
+export const firesOn = (r, when) => {
+  const w = obj(when);
+  if (r.repeat === "month") {
+    const dom = Math.round(clampNum(r.dom, DOM_MIN, DOM_MAX, DOM_DEFAULT));
+    const last = Number.isFinite(w.lastDom) ? w.lastDom : DOM_MAX;
+    return w.dom === Math.min(dom, last);
+  }
+  if (r.repeat === "week") return onDay(r, w.dow);
+  return true;
+};
+
+/* --- when it next comes back ------------------------------------------- *
+ *  A monthly reminder you cannot see the next firing of is one you cannot
+ *  trust: «يوم ٣١» on the 5th of February says nothing about whether it
+ *  understood February. So the row says the date out loud, and it says it
+ *  by walking the same `firesOn` the bot arms from rather than by reasoning
+ *  about the fields a second time.
+ *
+ *  Bounded, because an unbounded walk over a row that fires on nothing is a
+ *  loop with no end: sixty-two days is twice the longest gap any shape here
+ *  can produce (a month), and a row still silent after it fires on nothing.
+ * ---------------------------------------------------------------------- */
+export const NEXT_REACH = 62;
+export function nextFireOf(r, now = new Date()) {
+  const row = reminderShape(r);
+  const mins = minsIn(row.at);
+  if (!row.on || mins === null) return null;
+  for (let i = 0; i <= NEXT_REACH; i += 1) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    if (!firesOn(row, whenOf(day))) continue;
+    const when = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, mins, 0, 0);
+    if (when.getTime() > now.getTime()) return when;
+  }
+  return null;
+}
+
+/* --- the ones worth having, offered rather than hidden ----------------- *
+ *  Seeds, never written by a migration: a reminder added here is one he
+ *  tapped. They exist because the empty list was a text box and an hour
+ *  picker, and a text box does not tell anybody that a reminder can be
+ *  monthly, or that it can be the kind that stays quiet when the thing is
+ *  already done. Two of these are the only way most people would ever find
+ *  out — the same reason the core five ask on the routine screen instead of
+ *  waiting in settings.
+ * ---------------------------------------------------------------------- */
+export const REMINDER_IDEAS = [
+  { text: "راجع مصروف اليوم", at: "21:30", repeat: "day" },
+  { text: "اقرأ قبل النوم", at: "22:30", repeat: "day", only: "read" },
+  { text: "جولة تركيز واحدة على الأقل", at: "16:00", repeat: "day", only: "focus" },
+  { text: "خطّط الأسبوع القادم", at: "20:00", repeat: "week", days: [5] },
+  { text: "اتصل بوالديك", at: "19:00", repeat: "week", days: [5] },
+  { text: "سدّد الفواتير", at: "10:00", repeat: "month", dom: 1 },
+  { text: "راجع ميزانية الشهر", at: "20:00", repeat: "month", dom: 28 },
+  { text: "راجع أهداف الربع", at: "20:00", repeat: "month", dom: 15 },
+];
 
 /* --- the whole schedule ------------------------------------------------ */
 export const botShape = (b) => {
@@ -262,11 +463,18 @@ export const onDay = (r, dow) =>
  * ---------------------------------------------------------------------- */
 export function planDay(
   bot,
-  { dow = 0, prayers = null, hasTasks = true, blocks = null, events = null } = {},
+  { date = new Date(), prayers = null, hasTasks = true, blocks = null, events = null } = {},
 ) {
   const b = botShape(bot);
   const out = [];
   if (!b.on) return out;
+  /* One day in, three readings out. It used to take `dow` alone, which was
+     enough while the only thing that recurred was a weekday — a monthly row
+     also needs the date and the length of the month, and three arguments
+     every caller has to remember to keep in step is three ways for the
+     preview to disagree with the evening it is previewing. */
+  const when = whenOf(date);
+  const dow = when.dow;
 
   const push = (kind, mins, extra) => {
     if (!Number.isFinite(mins) || mins < 0 || mins >= 1440) return;
@@ -330,9 +538,13 @@ export function planDay(
      previewing today and the bot arming today pass the same number. */
   if (b.weekly.on && dow === b.weekly.dow) push("weekly", minsIn(b.weekly.at));
 
+  /* Armed on the days it comes back, and armed whatever its condition says:
+     a gated reminder is the coach all over again — whether there is anything
+     worth saying is a question about a day that is still hours away when the
+     plan is built, so the timer fires and `textFor` is what stays silent. */
   for (const r of b.customs) {
-    if (!r.on || !r.text || !onDay(r, dow)) continue;
-    push("custom", minsIn(r.at), { id: r.id, text: r.text });
+    if (!r.on || !r.text || !firesOn(r, when)) continue;
+    push("custom", minsIn(r.at), { id: r.id, text: r.text, only: r.only });
   }
 
   return out.sort((a, b2) => a.at - b2.at);

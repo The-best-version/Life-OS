@@ -39,6 +39,7 @@ import {
   rows,
   isKey,
   addDays,
+  monthDays,
   yesterdayKey,
 } from "./life-state-util.mjs";
 import {
@@ -297,7 +298,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 29;
+export const SCHEMA = 30;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
@@ -767,6 +768,13 @@ export function migrate(saved) {
        floor: what the bot may interrupt him for is not a question a
        migration is in any position to answer. */
     bot: botShape(saved.bot),
+    /* Schema 30 gives a custom reminder a repeat (daily, weekday, monthly)
+       and an optional condition. Shaped and not branched, like the schedule
+       it sits in: a row written before either existed is read by what it
+       already says — days picked means `week`, no days means `day` — so an
+       older payload fires on exactly the evenings it fired on before, and
+       `migrate` has not guessed anything. The condition defaults to
+       «بلا شرط», which is the behaviour every existing reminder had. */
     /* Schema 24's evening prep. Shaped rather than branched, like the three
        above: an older payload simply arrives with nothing prepared, which is
        exactly what it means. Stale is not this function's problem — a prep
@@ -859,6 +867,7 @@ export {
   keyToDate,
   isKey,
   addDays,
+  monthDays,
   hhmm,
   minsIn,
   clampNum,
@@ -1070,9 +1079,24 @@ export {
   COACH_MAX,
   WEEKLY_AT_DEFAULT,
   WEEKLY_DOW_DEFAULT,
+  REMINDER_REPEATS,
+  REMINDER_REPEAT_IDS,
+  repeatMeta,
+  DOM_MIN,
+  DOM_MAX,
+  DOM_DEFAULT,
+  GATES,
+  GATE_IDS,
+  gateMeta,
+  gateOf,
+  NEXT_REACH,
+  REMINDER_IDEAS,
   reminderShape,
   botShape,
   onDay,
+  whenOf,
+  firesOn,
+  nextFireOf,
   planDay,
   nextInPlan,
 } from "./life-state-bot.mjs";

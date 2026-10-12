@@ -82,6 +82,15 @@ import {
   planDay,
   nextInPlan,
   onDay,
+  firesOn,
+  clampGoal,
+  whenOf,
+  nextFireOf,
+  gateOf,
+  monthDays,
+  DOM_MIN,
+  DOM_MAX,
+  REMINDER_IDEAS,
   REMINDER_CAP,
   WATER_EVERY_MAX,
   PRAYER_BEFORE_MAX,
@@ -1641,10 +1650,147 @@ test("an all-seven day list and an empty one are one shape, not two", () => {
   assert.equal(onDay({}, 0), true);
 });
 
+test("an older reminder is read by what it already says, never guessed", () => {
+  /* The shape is the migration here, so the one thing it must not do is
+     change what an existing row did. Days picked meant «هذي الأيام» and no
+     days meant «كل يوم» — which is exactly `week` and `day`. */
+  assert.equal(reminderShape({ text: "ت", days: [5] }).repeat, "week");
+  assert.equal(reminderShape({ text: "ت" }).repeat, "day");
+  assert.equal(reminderShape({ text: "ت", days: [0, 1, 2, 3, 4, 5, 6] }).repeat, "day");
+  assert.equal(reminderShape({ text: "ت", repeat: "nonsense" }).repeat, "day");
+  /* And the condition an existing reminder had is the one it keeps. */
+  assert.equal(reminderShape({ text: "ت" }).only, "always");
+  assert.equal(reminderShape({ text: "ت", only: "خرابيط" }).only, "always");
+  assert.equal(reminderShape({ text: "ت", only: "water" }).only, "water");
+  assert.equal(reminderShape({ text: "ت", dom: 99 }).dom, DOM_MAX);
+  assert.equal(reminderShape({ text: "ت", dom: 0 }).dom, DOM_MIN);
+});
+
+test("a monthly reminder lands on the last day of a month too short for it", () => {
+  /* The rule worth stating out loud: «يوم ٣١» must not skip February. A
+     month skipped is a bill unpaid, and the last day of a short month is
+     what somebody who typed 31 actually meant. */
+  const r = reminderShape({ text: "سدّد", repeat: "month", dom: 31 });
+  assert.equal(firesOn(r, whenOf(new Date(2027, 1, 28))), true, "28 Feb is February's 31st");
+  assert.equal(firesOn(r, whenOf(new Date(2027, 1, 27))), false);
+  assert.equal(firesOn(r, whenOf(new Date(2027, 2, 31))), true, "March has a real 31st");
+  assert.equal(firesOn(r, whenOf(new Date(2027, 2, 28))), false, "and March's 28th is not it");
+  /* A leap February has a 29th, and that is the day it lands on. */
+  assert.equal(firesOn(r, whenOf(new Date(2028, 1, 29))), true);
+  assert.equal(firesOn(r, whenOf(new Date(2028, 1, 28))), false);
+  /* The ordinary case is still the ordinary case. */
+  const first = reminderShape({ text: "سدّد", repeat: "month", dom: 1 });
+  assert.equal(firesOn(first, whenOf(new Date(2027, 1, 1))), true);
+  assert.equal(firesOn(first, whenOf(new Date(2027, 1, 2))), false);
+  /* A daily row ignores both of the other two fields. */
+  const daily = reminderShape({ text: "ت", repeat: "day", days: [3], dom: 9 });
+  assert.equal(firesOn(daily, whenOf(new Date(2027, 1, 2))), true);
+});
+
+test("the plan arms a monthly reminder on its day and on no other", () => {
+  const bot = botShape({
+    morningOn: false,
+    eveningOn: false,
+    customs: [{ text: "سدّد الفواتير", at: "10:00", repeat: "month", dom: 31 }],
+  });
+  const on28 = planDay(bot, { date: new Date(2027, 1, 28, 8, 0) });
+  assert.deepEqual(on28.map((p) => p.kind), ["custom"]);
+  assert.equal(on28[0].at, 600);
+  assert.deepEqual(planDay(bot, { date: new Date(2027, 1, 27, 8, 0) }), []);
+  /* A weekly one is the same row with a day list, and it fires on that day
+     alone — 5 March 2027 is a Friday and the 4th is a Thursday. */
+  const weekly = botShape({
+    morningOn: false,
+    eveningOn: false,
+    customs: [{ text: "خطّط الأسبوع", at: "20:00", repeat: "week", days: [5] }],
+  });
+  assert.equal(planDay(weekly, { date: new Date(2027, 2, 5) }).length, 1);
+  assert.equal(planDay(weekly, { date: new Date(2027, 2, 4) }).length, 0);
+});
+
+test("a conditional reminder is armed anyway, and the gate answers later", () => {
+  /* The same arrangement the coach has: whether there is anything worth
+     saying is a question about a day that is still hours away when the plan
+     is built, so the timer is armed and the sentence is what stays silent. */
+  const bot = botShape({
+    morningOn: false,
+    eveningOn: false,
+    customs: [{ text: "اشرب", at: "14:00", only: "water" }],
+  });
+  const plan = planDay(bot, { date: new Date(2027, 2, 1, 9, 0) });
+  assert.deepEqual(plan.map((p) => p.kind), ["custom"]);
+  assert.equal(plan[0].only, "water", "the gate rides out with the entry");
+});
+
+test("a gate reads the day as it stands and hands back what it looked at", () => {
+  const s = freshState();
+  /* Nothing done yet, so every gate has something to be about. */
+  assert.equal(gateOf(s, "always").pass, true);
+  assert.equal(gateOf(s, "habits").pass, true);
+  assert.ok(gateOf(s, "habits").habits.length > 0, "the habits ride back for the tick row");
+  assert.equal(gateOf(s, "water").pass, true);
+  assert.equal(gateOf(s, "water").left, clampGoal(s.waterGoal));
+  assert.equal(gateOf(s, "water").water, true);
+  /* An unknown condition is «بلا شرط» and never a reminder that never fires:
+     a hand-edited payload must not be able to silence a row for good. */
+  assert.equal(gateOf(s, "خرابيط").pass, true);
+
+  const done = {
+    ...s,
+    habits: s.habits.map((h) => ({ ...h, done: true })),
+    tasks: s.tasks.map((t) => ({ ...t, done: true })),
+    water: clampGoal(s.waterGoal),
+    reading: [{ date: dayKey(), pages: 500, habit: "x" }],
+  };
+  assert.equal(gateOf(done, "habits").pass, false, "nothing left to ask about");
+  assert.equal(gateOf(done, "tasks").pass, false);
+  assert.equal(gateOf(done, "water").pass, false);
+  assert.equal(gateOf(done, "read").pass, false);
+});
+
+test("the next firing is read off the same rule the plan is armed from", () => {
+  const noon = new Date(2027, 1, 5, 12, 0, 0);
+  /* Today's hour has gone, so the next one is tomorrow's. */
+  const daily = { text: "ت", at: "09:00", repeat: "day" };
+  assert.equal(nextFireOf(daily, noon).getDate(), 6);
+  assert.equal(nextFireOf({ ...daily, at: "20:00" }, noon).getDate(), 5, "still ahead today");
+  /* The 31st of a February, which is the 28th. */
+  const monthly = { text: "ت", at: "10:00", repeat: "month", dom: 31 };
+  const next = nextFireOf(monthly, noon);
+  assert.equal(next.getMonth(), 1);
+  assert.equal(next.getDate(), 28);
+  assert.equal(next.getHours(), 10);
+  /* A switched-off reminder has no next firing, and neither has one whose
+     day list is a day it never reaches. */
+  assert.equal(nextFireOf({ ...daily, on: false }, noon), null);
+});
+
+test("every idea offered with one tap is a reminder the shape accepts", () => {
+  /* Seeds, and never written by a migration — what the bot may interrupt him
+     for is his answer. But an idea that the shape would normalise into
+     something else is an idea that lies about what the tap will add. */
+  for (const idea of REMINDER_IDEAS) {
+    const r = reminderShape(idea);
+    assert.equal(r.text, idea.text);
+    assert.equal(r.at, idea.at);
+    assert.equal(r.repeat, idea.repeat);
+    if (idea.repeat === "month") assert.equal(r.dom, idea.dom);
+    if (idea.repeat === "week") assert.deepEqual(r.days, idea.days);
+    assert.equal(r.only, idea.only || "always");
+  }
+  assert.ok(REMINDER_IDEAS.length <= REMINDER_CAP, "a row of ideas must fit the list");
+});
+
 test("the custom list is bounded like every list a phone can feed", () => {
   const many = Array.from({ length: REMINDER_CAP + 10 }, (_, i) => ({ text: "ت" + i, at: "09:00" }));
   assert.equal(botShape({ customs: many }).customs.length, REMINDER_CAP);
 });
+
+/* 1 March 2027 is a Monday. Every plan test below is asked about one real
+   day rather than about a weekday number: a monthly reminder needs the date
+   and the length of the month too, and `planDay` reads all three out of the
+   one `date` it is handed. */
+const MONDAY = new Date(2027, 2, 1, 9, 0, 0);
 
 test("planDay is sorted, bounded to the day, and silent when switched off", () => {
   const bot = botShape({
@@ -1655,23 +1801,23 @@ test("planDay is sorted, bounded to the day, and silent when switched off", () =
     tasks: { on: true, at: "17:00" },
   });
   const prayers = { fajr: 5, sunrise: 6.2, dhuhr: 12, asr: 15.5, maghrib: 18, isha: 19.5 };
-  const plan = planDay(bot, { dow: 1, prayers, hasTasks: true });
+  const plan = planDay(bot, { date: MONDAY, prayers, hasTasks: true });
   const mins = plan.map((p) => p.at);
   assert.deepEqual([...mins].sort((a, b) => a - b), mins, "sorted");
   assert.ok(mins.every((m) => m >= 0 && m < 1440), "inside the day");
   /* 15 minutes before Dhuhr at 12:00. */
   assert.ok(plan.some((p) => p.kind === "prayer" && p.prayer === "dhuhr" && p.at === 11 * 60 + 45));
   /* A prayer the sun never reaches contributes nothing rather than a NaN. */
-  const polar = planDay(bot, { dow: 1, prayers: { fajr: null, dhuhr: 12 }, hasTasks: true });
+  const polar = planDay(bot, { date: MONDAY, prayers: { fajr: null, dhuhr: 12 }, hasTasks: true });
   assert.ok(polar.every((p) => Number.isFinite(p.at)));
 
-  assert.deepEqual(planDay(botShape({ on: false }), { dow: 1 }), []);
+  assert.deepEqual(planDay(botShape({ on: false }), { date: MONDAY }), []);
 });
 
 test("the task sweep is armed only when there is something to sweep", () => {
   const bot = botShape({ morningOn: false, eveningOn: false, tasks: { on: true, at: "17:00" } });
-  assert.equal(planDay(bot, { dow: 1, hasTasks: true }).length, 1);
-  assert.equal(planDay(bot, { dow: 1, hasTasks: false }).length, 0);
+  assert.equal(planDay(bot, { date: MONDAY, hasTasks: true }).length, 1);
+  assert.equal(planDay(bot, { date: MONDAY, hasTasks: false }).length, 0);
 });
 
 test("nextInPlan reads the day forward and runs out at the end of it", () => {

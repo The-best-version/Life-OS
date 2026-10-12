@@ -13,6 +13,7 @@
  * --------------------------------------------------------------------- */
 import {
   planDay,
+  gateOf,
   botShape,
   rows,
   scoredOf,
@@ -33,6 +34,7 @@ import {
   blockTimes,
   BLOCK_ANCHORS,
 } from "../../src/utils/prayer-times.mjs";
+import * as F from "./fmt.js";
 import { coachNote } from "./insight.js";
 import { weekReview } from "./ask.js";
 
@@ -65,7 +67,10 @@ export function planToday(state, now = new Date()) {
       events.push({ id: ev.id, at: at / 60 });
     }
   }
-  const plan = planDay(state.bot, { dow: now.getDay(), prayers, hasTasks, blocks, events });
+  /* The whole day goes in, not just its weekday: a monthly reminder needs
+     the date and the length of the month, and `whenOf` inside `planDay` is
+     the one place all three are read. */
+  const plan = planDay(state.bot, { date: now, prayers, hasTasks, blocks, events });
   return plan.map((p) => {
     const when = new Date(now);
     when.setHours(0, Math.round(p.at), 0, 0);
@@ -164,11 +169,44 @@ export function textFor(entry, state, now = new Date()) {
        whose text was edited at noon must fire with the new words at five,
        and the plan it was armed from is hours old by then. */
     const own = botShape(state.bot).customs.find((r) => r.id === entry.id);
-    const text = own && own.on ? own.text : null;
-    return text ? { text: `🔔 ${text}` } : null;
+    if (!own || !own.on || !own.text) return null;
+    /* The condition, asked of the day as it stands right now. A reminder
+       whose thing is already done says nothing at all — the same silence the
+       sweep and the coach keep, extended to the one kind of message here
+       that used to speak regardless. */
+    const gate = gateOf(state, own.only, now);
+    if (!gate.pass) return null;
+    const why = gateLine(gate);
+    return {
+      text: `🔔 ${own.text}${why ? `
+   ↳ ${why}` : ""}`,
+      /* Whatever the gate was looking at rides out with the message, which
+         is how a conditional nudge gets its buttons for nothing: the fields
+         are the ones the water, task and habit reminders already set. */
+      water: gate.water,
+      tasks: gate.tasks,
+      habits: gate.habits,
+    };
   }
 
   return null; // morning and evening are the briefs, and they build their own
+}
+
+/* --- why a conditional reminder spoke ---------------------------------- *
+ *  `gateOf` hands back the numbers and never the sentence, so the sentence
+ *  is written here, where every other thing the bot says is written. It is
+ *  worth one line: «اقرأ قبل النوم» is the instruction, «باقي ١٤ صفحة» is
+ *  the reason it arrived tonight and not the reason it arrived every night.
+ * ---------------------------------------------------------------------- */
+export function gateLine(gate) {
+  if (!gate || gate.kind === "always" || !(gate.left > 0)) return "";
+  if (gate.kind === "habits") return `باقي ${F.habitsWord(gate.left)}`;
+  if (gate.kind === "tasks") return `باقي ${F.tasksWord(gate.left)}`;
+  if (gate.kind === "water") return `باقي ${F.cupsWord(gate.left)} من ${F.num(gate.goal)}`;
+  if (gate.kind === "read") return `باقي ${F.pagesWord(gate.left)} على هدف اليوم`;
+  if (gate.kind === "focus")
+    return gate.goal > 0 ? `باقي ${F.spanOf(gate.left)} على هدف المكتب` : "ولا دقيقة تركيز اليوم";
+  return "";
 }
 
 /* A one-line summary of where the day stands, appended to nothing and used
