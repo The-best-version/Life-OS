@@ -79,6 +79,7 @@ import {
   runRunning,
   spentMinutes,
   settleRun,
+  closePhase,
   sessionOf,
   manualSession,
   addSession,
@@ -430,65 +431,23 @@ export function DeepWorkModule({ state, setState }) {
   const endPhase = useCallback(
     (r, { log = true, minutes, full, advance = true, nextRun = null, at = Date.now() } = {}) => {
       if (!r) return null;
-      const wasFocus = !isBreak(r.phase);
-      const row = log && wasFocus ? sessionOf(r, { minutes, full, now: at }) : null;
+      /* The row is computed here as well as inside `closePhase` because the
+         caller needs it back synchronously — the end-of-round sheet is a
+         receipt for what just happened and is opened from the return value,
+         not from the next render. Same function, same arguments, same row. */
+      const row = log && !isBreak(r.phase) ? sessionOf(r, { minutes, full, now: at }) : null;
       setState((s) => {
-        const base = focusIn(s);
-        const cur = base.run;
+        const cur = focusIn(s).run;
         /* Already settled by the other caller — nothing to do, and crucially
-           nothing to write twice. */
+           nothing to write twice. The guard stays here because it is a
+           question about the live state and not about the rhythm. */
         if (!cur || keyOf(cur) !== keyOf(r)) return s;
-        const p = presetFor(base, r.presetId);
-        /* The cycle counter: a completed focus round adds one, a completed
-           long break resets it, and anything else leaves it alone. A round
-           that was cut short does not advance it — the long break is earned
-           by rounds that were actually sat through. */
-        const round = !advance
-          ? base.round
-          : wasFocus
-            ? Math.min(EVERY_MAX * 2, base.round + 1)
-            : r.phase === "long"
-              ? 0
-              : base.round;
-        let next = nextRun;
-        if (next === null && advance) {
-          if (wasFocus && base.autoBreak) {
-            const bp = nextBreak(p, round);
-            next = armRun({
-              phase: bp,
-              planned: breakMinutes(p, bp),
-              presetId: p.id,
-              taskId: r.taskId,
-              label: r.label,
-              round,
-              now: at,
-            });
-            if (base.autoStartBreak) next = startRun(next, at);
-          } else if (!wasFocus) {
-            next = armRun({
-              phase: "focus",
-              planned: p.min,
-              presetId: p.id,
-              taskId: r.taskId,
-              label: r.label,
-              round,
-              now: at,
-            });
-            if (base.autoNext) next = startRun(next, at);
-          }
-        }
-        return {
-          ...s,
-          sessions: row ? addSession(s.sessions, row) : s.sessions,
-          focus: { ...base, round, run: next },
-          /* The old behaviour, now opt-in: twenty-five minutes is not
-             evidence that a task is finished, and a task ticked by a timer
-             is a task he has to go and untick. The sheet asks instead. */
-          tasks:
-            wasFocus && row && base.autoDone && r.taskId
-              ? rows(s.tasks).map((t) => (t.id === r.taskId ? { ...t, done: true } : t))
-              : s.tasks,
-        };
+        /* The counter, the row and the next phase, from the one place that
+           owns them. The bot ends rounds from a phone now, and a second copy
+           of this arithmetic is a second answer to «which round earns the
+           long break». */
+        const out = closePhase(s, r, { log, minutes, full, advance, nextRun, at });
+        return { ...s, sessions: out.sessions, focus: out.focus, tasks: out.tasks };
       });
       return row;
     },

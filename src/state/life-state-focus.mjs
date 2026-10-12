@@ -410,6 +410,96 @@ export function settleRun(run, now = Date.now()) {
   };
 }
 
+/* --- a phase closed, and what follows it ------------------------------- *
+ *  The cycle counter, the row to file, and the next phase armed — the three
+ *  things that happen together when a round ends, and they have to happen
+ *  together or the rhythm comes apart: a round logged without advancing the
+ *  counter is a long break that never arrives, and a counter advanced
+ *  without logging is a break earned by work nobody recorded.
+ *
+ *  It was written inside the focus desk's own `endPhase` while the screen
+ *  was the only thing that could end a round. The Telegram bot starts and
+ *  stops rounds from a phone now, and two copies of this arithmetic is a bug
+ *  waiting for the day they disagree about whether the fourth round earns
+ *  the long break — so it lives here, with the rest of the rhythm, and both
+ *  callers read it.
+ *
+ *  Pure, and it returns the slices rather than a whole state: the caller
+ *  knows whether it is inside a `setState` or building a payload for the
+ *  disk. The untouched lists are handed back **by identity**, never through
+ *  `rows()` — a fresh array for an unchanged list is a re-render of every
+ *  screen reading it.
+ * ---------------------------------------------------------------------- */
+export function closePhase(
+  state,
+  run,
+  { log = true, minutes, full, advance = true, nextRun = null, at = Date.now() } = {},
+) {
+  const base = focusShape(obj(state).focus);
+  if (!run) return { row: null, round: base.round, run: base.run, focus: base, sessions: state.sessions, tasks: state.tasks };
+  const wasFocus = !isBreak(run.phase);
+  /* A break leaves no row. `state.sessions` has meant «جلسة تركيز» since the
+     day it existed, and filing rest in it would make the data-health panel,
+     the recovery centre and every total on the desk say something they do
+     not mean. */
+  const row = log && wasFocus ? sessionOf(run, { minutes, full, now: at }) : null;
+  const p = presetFor(base, run.presetId);
+  /* A completed focus round adds one, a completed long break resets it, and
+     anything else leaves it alone. A round cut short does not advance it —
+     the long break is earned by rounds that were actually sat through. */
+  const round = !advance
+    ? base.round
+    : wasFocus
+      ? Math.min(EVERY_MAX * 2, base.round + 1)
+      : run.phase === "long"
+        ? 0
+        : base.round;
+  let next = nextRun;
+  if (next === null && advance) {
+    if (wasFocus && base.autoBreak) {
+      const bp = nextBreak(p, round);
+      next = armRun({
+        phase: bp,
+        planned: breakMinutes(p, bp),
+        presetId: p.id,
+        taskId: run.taskId,
+        label: run.label,
+        round,
+        now: at,
+      });
+      /* The break arms *and* starts itself by default, because the break is
+         the half of the technique that gets skipped. */
+      if (base.autoStartBreak) next = startRun(next, at);
+    } else if (!wasFocus) {
+      next = armRun({
+        phase: "focus",
+        planned: p.min,
+        presetId: p.id,
+        taskId: run.taskId,
+        label: run.label,
+        round,
+        now: at,
+      });
+      /* The next round does not start itself unless he said so: a round
+         nobody chose to begin is a round nobody committed to. */
+      if (base.autoNext) next = startRun(next, at);
+    }
+  }
+  return {
+    row,
+    round,
+    run: next,
+    focus: { ...base, round, run: next },
+    sessions: row ? addSession(state.sessions, row) : state.sessions,
+    /* The old behaviour, opt-in and off by default: twenty-five minutes is
+       not evidence that a task is finished. */
+    tasks:
+      wasFocus && row && base.autoDone && run.taskId
+        ? rows(state.tasks).map((t) => (t.id === run.taskId ? { ...t, done: true } : t))
+        : state.tasks,
+  };
+}
+
 /* --- the desk's own state --------------------------------------------- */
 export const focusShape = (f) => {
   f = obj(f);

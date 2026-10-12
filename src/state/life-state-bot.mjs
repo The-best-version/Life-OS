@@ -59,6 +59,37 @@ export const PRAYER_BEFORE_MIN = 5;
 export const PRAYER_BEFORE_MAX = 45;
 export const PRAYER_BEFORE_DEFAULT = 15;
 
+/* --- the coach --------------------------------------------------------- *
+ *  The one entry in the schedule that decides for itself whether to speak.
+ *  Everything else fires because a time arrived; this one fires, reads the
+ *  day, and then usually says nothing at all — `advise()` in the bot returns
+ *  an empty list on a day that is going fine.
+ *
+ *  That silence is the feature and not a shortfall. A coach that files a
+ *  report every noon is a notification you learn to swipe without reading,
+ *  and the one noon it has something real to say is the noon you swipe that
+ *  too. It is the same rule the task sweep already keeps, applied to a
+ *  message whose whole content is a judgement.
+ *
+ *  Off by default, like every other periodic reminder: what the bot may
+ *  interrupt him for is not a question a migration can answer.
+ * ---------------------------------------------------------------------- */
+export const COACH_AT_DEFAULT = "11:00";
+/* How many observations one nudge may carry. Three is the bound that keeps
+   it a glance — `advise` ranks, and the fourth-most-urgent thing about a day
+   has never been the thing that changed it. */
+export const COACH_MAX = 3;
+
+/* --- the week, once ---------------------------------------------------- *
+ *  A day is too short a window to see a slope in. The weekly review is the
+ *  one message the bot sends that is not about now: the average, the days
+ *  nobody recorded, where the money went, how far the reading moved. Friday
+ *  evening by default — the day the week is actually over here, and late
+ *  enough that the day it summarises is in it.
+ * ---------------------------------------------------------------------- */
+export const WEEKLY_AT_DEFAULT = "20:30";
+export const WEEKLY_DOW_DEFAULT = 5; // Friday, in Date.getDay() numbering
+
 /* --- a custom reminder ------------------------------------------------- *
  *  A time, a sentence, and which days it applies to. `days` empty means
  *  every day — an explicit "all seven" and an empty list would be two
@@ -95,6 +126,9 @@ export const botShape = (b) => {
   const water = obj(b.water);
   const prayer = obj(b.prayer);
   const tasks = obj(b.tasks);
+  const coach = obj(b.coach);
+  const weekly = obj(b.weekly);
+  const dow = Number(weekly.dow);
   return {
     /* The master switch. Off means the bot still answers everything he
        sends it and sends nothing of its own — which is the difference
@@ -131,6 +165,20 @@ export const botShape = (b) => {
     tasks: {
       on: tasks.on === true,
       at: hhmm(tasks.at, "17:00"),
+    },
+    /* The coach reads the day and decides whether there is anything worth
+       saying. Off by default — it is the one reminder whose content is an
+       opinion, and an opinion nobody asked for is the first one muted. */
+    coach: {
+      on: coach.on === true,
+      at: hhmm(coach.at, COACH_AT_DEFAULT),
+    },
+    /* One day of the week, not every day: a review that arrives daily is a
+       daily report, which is what the evening brief already is. */
+    weekly: {
+      on: weekly.on === true,
+      at: hhmm(weekly.at, WEEKLY_AT_DEFAULT),
+      dow: Number.isInteger(dow) && dow >= 0 && dow <= 6 ? dow : WEEKLY_DOW_DEFAULT,
     },
     customs: rows(b.customs).map(reminderShape).slice(0, REMINDER_CAP),
   };
@@ -192,6 +240,15 @@ export function planDay(bot, { dow = 0, prayers = null, hasTasks = true } = {}) 
   /* Armed only when there is something to sweep. The bot asks this of the
      state it holds; the screen asks it of the state on screen. */
   if (b.tasks.on && hasTasks) push("tasks", minsIn(b.tasks.at));
+
+  /* Armed unconditionally when it is on, unlike the sweep: whether there is
+     anything to say is a question about the day at the moment it fires, and
+     the plan is built hours earlier. The bot asks `advise` then, and sends
+     nothing when the answer is empty. */
+  if (b.coach.on) push("coach", minsIn(b.coach.at));
+  /* The only entry that is not every day. `dow` is the caller's — the screen
+     previewing today and the bot arming today pass the same number. */
+  if (b.weekly.on && dow === b.weekly.dow) push("weekly", minsIn(b.weekly.at));
 
   for (const r of b.customs) {
     if (!r.on || !r.text || !onDay(r, dow)) continue;

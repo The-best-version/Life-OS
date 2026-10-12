@@ -30,9 +30,11 @@ import { withState, readLife, DiskError } from "./lifeos-client.js";
 import { parse, fold } from "./parse.js";
 import * as act from "./actions.js";
 import * as V from "./views.js";
-import { Scheduler, textFor, quoteFor } from "./reminders.js";
+import { Scheduler, Bell, textFor, quoteFor } from "./reminders.js";
+import { coachReply } from "./insight.js";
+import { answer, weekReview } from "./ask.js";
 import { startHealth, maskId } from "./health.js";
-import { BOT_API } from "../../src/state/life-state.mjs";
+import { BOT_API, URGE_TAGS } from "../../src/state/life-state.mjs";
 
 const problems = configProblems();
 if (problems.length) {
@@ -99,6 +101,11 @@ async function apply(ctx, run, say) {
     return ctx.reply("⚠️ " + msg);
   }
   if (out.refused) return ctx.reply("⚠️ " + out.refused);
+  /* A write may have started or ended a focus round, and the bell is armed
+     off a moment rather than off a clock time — so it is re-read here rather
+     than waiting for the next minute's tick. A one-minute round started from
+     a message would otherwise ring late or not at all. */
+  if (out.next) bell.sync(out.next);
   const keys = out.before ? V.undoKeys(armUndo(out.before)) : null;
   return ctx.reply(say(out), keys ? { reply_markup: keys } : undefined);
 }
@@ -146,10 +153,37 @@ async function showOpen(ctx) {
   if (!got) return;
   return ctx.reply(
     got.day.openScored.length
-      ? "باقي من عاداتك الأساسية — اضغط ما أنجزته:"
+      ? "باقي من عاداتك الأساسية — اضغط ما أنجزته، أو حدّها الأدنى:"
       : "كل عاداتك الأساسية مسجّلة اليوم ✅",
     keysOr(V.openKeys(got.state)),
   );
+}
+
+/* --- the half nobody asked for, asked for ----------------------------- *
+ *  The same sweep the scheduled coach runs, with a floor under it: a button
+ *  pressed that answers with silence reads as a dead bot, so `coachReply`
+ *  always has something to say even when `coachNote` would not.
+ * ---------------------------------------------------------------------- */
+async function showCoach(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  const note = coachReply(got.state);
+  const out = note.more
+    ? `${note.text}\n\n${"‏"}و${note.more} ملاحظة أخرى — أرسل «يومي» لترى الصورة كاملة.`
+    : note.text;
+  return ctx.reply(out, keysOr(V.coachKeys(note.actions)));
+}
+
+async function showWeek(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(weekReview(got.state));
+}
+
+async function showFocus(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(V.focusStand(got.state), keysOr(V.focusKeys(got.state.focus?.run || null)));
 }
 
 /* Keyed on the *folded* word, because that is what the lookup is given:
@@ -166,18 +200,33 @@ const WORDS = new Map(
     ["باقي", showOpen],
     ["صباح", (ctx) => sendMorning(ctx.chat.id)],
     ["مساء", (ctx) => sendEvening(ctx.chat.id)],
+    ["المدرب", showCoach],
+    ["مدرب", showCoach],
+    ["وجهني", showCoach],
+    ["الأسبوع", showWeek],
+    ["مراجعة", showWeek],
+    ["القائمة", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() })],
+    ["قائمة", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() })],
   ].map(([word, run]) => [fold(word), run]),
 );
 
-bot.command(["start", "help"], (ctx) => ctx.reply(V.HELP));
+bot.command(["start", "help"], (ctx) => ctx.reply(V.HELP, { reply_markup: V.menuKeys() }));
 bot.command("today", showToday);
 bot.command("now", showOpen);
+bot.command("coach", showCoach);
+bot.command("week", showWeek);
+bot.command("focus", showFocus);
+bot.command("menu", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() }));
 bot.command("morning", (ctx) => sendMorning(ctx.chat.id));
 bot.command("evening", (ctx) => sendEvening(ctx.chat.id));
 
 /* --- the buttons ------------------------------------------------------- */
 bot.on("callback_query:data", async (ctx) => {
-  const [kind, arg] = String(ctx.callbackQuery.data).split(":");
+  /* Split into parts and not a pair: the breaker's tag buttons carry
+     `holdt:<badId>:<tag>`, and a two-way split would read the tag as part of
+     the id. Telegram caps the whole string at 64 bytes, which three short
+     fields stay well inside. */
+  const [kind, arg, extra] = String(ctx.callbackQuery.data).split(":");
   /* Answered first and always: an unanswered callback leaves the button
      spinning on the phone for a minute, which reads as a dead bot. */
   await ctx.answerCallbackQuery().catch(() => {});
@@ -192,13 +241,86 @@ bot.on("callback_query:data", async (ctx) => {
        same label. */
     return apply(ctx, (s) => ({ ...act.undo(s, before), before: null }), V.undone);
   }
-  if (kind === "tick") return apply(ctx, (s) => act.tickHabit(s, arg), V.savedHabit);
-  if (kind === "tiny") return apply(ctx, (s) => act.tickHabit(s, arg, true), V.savedHabit);
+  if (kind === "tick") return tickAndMaybeRead(ctx, arg, false);
+  if (kind === "tiny") return tickAndMaybeRead(ctx, arg, true);
   if (kind === "task") return apply(ctx, (s) => act.finishTask(s, arg), V.savedTaskDone);
   if (kind === "water") {
     return apply(ctx, (s) => act.drinkWater(s, Number(arg) || 1), V.savedWater);
   }
+  if (kind === "read") {
+    const pages = Number(arg) || 0;
+    /* «لاحقًا» is a real answer and writes nothing. The habit is already
+       ticked by the time this keyboard exists, so skipping the pages must
+       never undo the completion — the same rule the app's modal keeps. */
+    if (!pages) return ctx.reply("تمام — العادة مسجّلة، والصفحات تُسجّل وقت ما تجي.");
+    return apply(ctx, (s) => act.logReading(s, { pages }), V.savedReading);
+  }
+  if (kind === "top") return apply(ctx, (s) => act.flagToday(s, arg), V.savedTop);
+  if (kind === "prep") return apply(ctx, (s) => act.pickTomorrow(s, arg), V.savedPrep);
+
+  if (kind === "focus") return runFocus(ctx, arg);
+
+  /* The breaker, in two taps. The first names which habit, the second names
+     the trigger — and the second is skippable, because a hold logged with no
+     trigger is still a hold the mirror counts. */
+  if (kind === "hold" || kind === "fall") {
+    return ctx.reply(
+      kind === "fall" ? "ما الذي سبقها؟" : "ما المحرّك الذي صمدت أمامه؟",
+      { reply_markup: V.tagKeys(kind, arg, URGE_TAGS) },
+    );
+  }
+  if (kind === "holdt") {
+    return apply(ctx, (s) => act.holdUrge(s, arg, { tag: extra || "" }), V.savedHold);
+  }
+  if (kind === "fallt") {
+    return apply(ctx, (s) => act.fallUrge(s, arg, { tag: extra || "" }), V.savedFall);
+  }
+
+  if (kind === "menu") {
+    if (arg === "today") return showToday(ctx);
+    if (arg === "open") return showOpen(ctx);
+    if (arg === "coach") return showCoach(ctx);
+    if (arg === "week") return showWeek(ctx);
+    if (arg === "focus") return showFocus(ctx);
+    return ctx.reply(V.HELP);
+  }
 });
+
+/* --- a tick, and the question it opens -------------------------------- *
+ *  A habit can feed the library, and the pages are asked for *after* the
+ *  tick has landed — never before. The reward has to be paid and the habit
+ *  has to stay done whether or not a number follows, which is the one rule
+ *  the app's own reading modal keeps.
+ * ---------------------------------------------------------------------- */
+async function tickAndMaybeRead(ctx, id, tiny) {
+  let out;
+  try {
+    out = await withState((s) => act.tickHabit(s, id, tiny));
+  } catch (e) {
+    const msg = e instanceof DiskError ? e.message : "صار خطأ غير متوقّع. ما كُتب شي.";
+    console.error("tick: " + (e && e.message ? e.message : e));
+    return ctx.reply("⚠️ " + msg);
+  }
+  if (out.refused) return ctx.reply("⚠️ " + out.refused);
+  const keys = out.before ? V.undoKeys(armUndo(out.before)) : null;
+  await ctx.reply(V.savedHabit(out), keys ? { reply_markup: keys } : undefined);
+  if (out.book) {
+    await ctx.reply(`📖 «${out.book.title}» — كم صفحة؟`, { reply_markup: V.readKeys() });
+  }
+  return undefined;
+}
+
+/* --- the focus desk's buttons and words ------------------------------- */
+function runFocus(ctx, what) {
+  if (what === "start") return apply(ctx, (s) => act.startFocus(s, {}), V.savedFocusStart);
+  if (what === "break") return apply(ctx, (s) => act.breakFocus(s, {}), V.savedFocusBreak);
+  if (what === "pause") return apply(ctx, (s) => act.pauseFocus(s), V.savedFocusPause);
+  if (what === "resume") return apply(ctx, (s) => act.resumeFocus(s), V.savedFocusResume);
+  if (what === "stop") return apply(ctx, (s) => act.stopFocus(s), V.savedFocusStop);
+  if (what === "settle") return apply(ctx, (s) => act.settleFocus(s), V.savedFocusSettle);
+  if (what === "drop") return apply(ctx, (s) => act.dropFocus(s), V.savedFocusDrop);
+  return showFocus(ctx);
+}
 
 /* --- the sentence ----------------------------------------------------- */
 bot.on("message:text", async (ctx) => {
@@ -243,11 +365,82 @@ bot.on("message:text", async (ctx) => {
     }
     return apply(ctx, (s) => act.tickHabit(s, open[0].id), V.savedHabit);
   }
+  if (said.kind === "reading") {
+    return apply(ctx, (s) => act.logReading(s, { pages: said.pages }), V.savedReading);
+  }
+  if (said.kind === "focus") {
+    if (said.act === "status") return showFocus(ctx);
+    if (said.act === "log") {
+      return apply(
+        ctx,
+        (s) => act.logFocus(s, { minutes: said.minutes, label: said.label }),
+        V.savedFocusLog,
+      );
+    }
+    if (said.act === "start") {
+      return apply(
+        ctx,
+        (s) => act.startFocus(s, { minutes: said.minutes, label: said.label }),
+        V.savedFocusStart,
+      );
+    }
+    if (said.act === "break") {
+      return apply(ctx, (s) => act.breakFocus(s, { minutes: said.minutes }), V.savedFocusBreak);
+    }
+    return runFocus(ctx, said.act);
+  }
+  if (said.kind === "urge") {
+    /* Which habit is matched against the live list, so it needs the state —
+       read here without writing. One match logs after the tag question; more
+       than one asks which, because a fall recorded against the wrong habit
+       resets the wrong counter. */
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const pick = act.oneBad(got.state, said.query);
+    if (pick.refused) return ctx.reply("⚠️ " + pick.refused);
+    if (pick.many) {
+      return ctx.reply("أيّ واحدة؟", { reply_markup: V.badKeys(pick.many, said.act) });
+    }
+    return ctx.reply(
+      said.act === "fall" ? "ما الذي سبقها؟" : "ما المحرّك الذي صمدت أمامه؟",
+      { reply_markup: V.tagKeys(said.act, pick.bad.id, URGE_TAGS) },
+    );
+  }
+  if (said.kind === "reflect") {
+    return apply(ctx, (s) => act.reflect(s, said), V.savedReflect);
+  }
+  /* A question is answered and nothing is written — which is the whole point
+     of reading it as one. An unrecognised subject is not filed as a task
+     either: a question misfiled in the inbox is a row he then has to go and
+     delete. */
+  if (said.kind === "ask") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const text = answer(got.state, said);
+    if (text) return ctx.reply(text, keysOr(answerKeys(said.topic, got)));
+    return ctx.reply(
+      "❓ ما فهمت السؤال. اسأل عن: المال، الانتظام، القراءة، التركيز، الصلاة، المهام، الجامعة، الأهداف.",
+      { reply_markup: V.menuKeys() },
+    );
+  }
   if (said.kind === "task") {
     return apply(ctx, (s) => act.addTask(s, said), V.savedTask);
   }
   return ctx.reply(V.HELP);
 });
+
+/* An answer that can be acted on comes with the action under it. An answer
+   that cannot — the prayer times, the money — comes bare, because a keyboard
+   under a number nobody can change is a keyboard that teaches him the
+   buttons mean nothing. */
+function answerKeys(topic, got) {
+  if (topic === "habits") return V.openKeys(got.state);
+  if (topic === "tasks") return V.taskKeys(got.day);
+  if (topic === "water") return V.openKeys(got.state, 0);
+  if (topic === "read") return V.readKeys();
+  if (topic === "focus") return V.focusKeys(got.state.focus?.run || null);
+  return null;
+}
 
 /* --- the briefs ------------------------------------------------------- */
 /* Both briefs are reached two ways — the timer and a word typed by hand —
@@ -328,13 +521,63 @@ async function deliver(entry) {
       ? new InlineKeyboard().text("💧 + كاس ماء", "water:1")
       : said.tasks
         ? V.taskKeys(act.dayAt(state))
-        : null;
+        : said.coach
+          ? V.coachKeys(said.actions)
+          : null;
   await bot.api.sendMessage(CONFIG.chatId, said.text, keysOr(keys)).catch((e) => {
     console.error("reminder send: " + (e?.message || e));
   });
 }
 
+/* --- the bell ---------------------------------------------------------- *
+ *  A round that finished while the laptop was shut has to be written down by
+ *  somebody, and the only process awake is this one. So the bell settles the
+ *  run first and announces it second — `settleFocus` is the same function the
+ *  screen's own settle goes through, so the session row, the cycle counter
+ *  and the armed break come out identical either way.
+ *
+ *  A refusal here is the ordinary case and not an error: if a window was
+ *  open, it already settled the round, and this write finds nothing left to
+ *  do. The bell still rings, because the round still ended.
+ * ---------------------------------------------------------------------- */
+async function ringBell(what) {
+  let settled = null;
+  try {
+    settled = await withState((s) => act.settleFocus(s));
+  } catch (e) {
+    console.error("bell settle: " + (e && e.message ? e.message : e));
+  }
+  const lines = [`‏🔔 ${what.label} انتهت.`];
+  if (settled && !settled.refused && settled.minutes) {
+    lines.push(`‏سُجّلت ${settled.minutes} دقيقة.`);
+  }
+  lines.push(
+    what.phase === "focus"
+      ? "‏خُذ راحتك — الراحة نصف الطريقة."
+      : "‏جولة أخرى؟",
+  );
+  /* The keyboard is read off the state after the settle, so it offers the
+     break that was actually armed rather than the one that would have
+     been. */
+  let run = null;
+  try {
+    const now = await readLife();
+    run = now?.focus?.run || null;
+  } catch {
+    /* The disk is unreachable; the bell is still worth sending without
+       buttons under it. */
+  }
+  await bot.api
+    .sendMessage(CONFIG.chatId, lines.join("\n"), keysOr(V.focusKeys(run)))
+    .catch((e) => console.error("bell send: " + (e?.message || e)));
+}
+
 const scheduler = new Scheduler(deliver);
+/* The focus bell is its own timer and not one of the scheduler's, because it
+   is armed off `run.endAt` — an absolute moment that only exists once a
+   round was started, and one that moves on every pause while the day's plan
+   does not move at all. */
+const bell = new Bell(ringBell);
 let lastTickAt = 0;
 
 async function tick() {
@@ -354,6 +597,7 @@ async function tick() {
       `          ${new Date().toTimeString().slice(0, 8)}  ${scheduler.armed.length} تذكير مسلّح`,
     );
   }
+  bell.sync(state);
 }
 
 const ticker = setInterval(tick, TICK);
@@ -387,6 +631,7 @@ const health = startHealth({
 const bye = async () => {
   clearInterval(ticker);
   scheduler.clear();
+  bell.clear();
   try {
     health.close();
   } catch {}
@@ -412,7 +657,17 @@ console.log("  الحالة على " + BOT_API);
    worse than one that was lost. */
 bot.start({
   drop_pending_updates: true,
-  onStart: () => console.log("  ✓ يستقبل"),
+  onStart: () => {
+    console.log("  ✓ يستقبل");
+    /* Telegram's own command menu, so the slash commands are discoverable
+       without reading the help once. Registered after the loop is up and
+       never awaited before it: a failure here is cosmetic, and a bot that
+       refuses to start because a menu would not register is a bot down over
+       nothing. */
+    bot.api
+      .setMyCommands(V.COMMANDS)
+      .catch((e) => console.warn("القائمة ما سُجّلت: " + (e?.message || e)));
+  },
 }).catch((e) => {
   /* The first call grammY makes is getMe and the loop after it is
      getUpdates, and each way they fail has its own answer — a name that will

@@ -19,6 +19,8 @@
  * --------------------------------------------------------------------- */
 import {
   rows,
+  uid,
+  dayKey,
   expenseShape,
   incomeShape,
   MONEY_CAP,
@@ -30,6 +32,34 @@ import {
   stampToday,
   disciplineOf,
   scoredOf,
+  bookForHabit,
+  READ_GOAL_DEFAULT,
+  sumPages,
+  readStreak,
+  focusShape,
+  presetFor,
+  armRun,
+  startRun,
+  pauseRun,
+  runRunning,
+  runLeft,
+  settleRun,
+  closePhase,
+  spentMinutes,
+  manualSession,
+  addSession,
+  isBreak,
+  phaseOf,
+  nextBreak,
+  breakMinutes,
+  urgeShape,
+  stamp,
+  cleanDays,
+  prepShape,
+  prepPickAdd,
+  prepPicks,
+  tomorrowKey,
+  TOP_TASK_CAP,
 } from "../../src/state/life-state.mjs";
 import { fold } from "./parse.js";
 
@@ -196,8 +226,410 @@ export function tickHabit(state, id, tiny = false) {
     habit: h,
     tiny: !!tiny,
     pct: disciplineOf(next.habits),
+    /* A habit can feed the library, and the tick is what opens the question.
+       Handed back rather than acted on: the reply must land and the reward
+       must be paid whether or not pages are then logged, exactly as the
+       app's modal is skippable. */
+    book: bookForHabit(h, rows(state.books)),
     next,
     before: { habits: state.habits, history: state.history },
+  };
+}
+
+/* --- the library ------------------------------------------------------- *
+ *  The app logs pages from a modal that opens the instant a reading habit is
+ *  ticked. The same thing from a phone is one sentence — «قرأت ٢٠ صفحة» — and
+ *  it writes exactly what the modal writes: a row on `state.reading` and the
+ *  book's page counter moved forward, bounded by the book's own total.
+ *
+ *  Which book is not a question the bot asks. A reading habit ticked a
+ *  moment ago names one; otherwise it is whichever book is marked «أقرأه
+ *  الآن», which is the same answer `READ_ACTIVE` gives the app.
+ * ---------------------------------------------------------------------- */
+export function logReading(state, { pages, habitId = null } = {}) {
+  const n = Math.round(Number(pages) || 0);
+  if (n < 1) return { refused: "كم صفحة؟ مثال: «قرأت ٢٠ صفحة»." };
+  const books = rows(state.books);
+  const habit = habitId ? rows(state.habits).find((h) => h.id === habitId) : null;
+  const book =
+    (habit && bookForHabit(habit, books)) ||
+    books.find((b) => b.status === "reading") ||
+    null;
+  if (!book) {
+    return {
+      refused: "ما فيه كتاب معلّم «أقرأه الآن» على الرف — علّم واحدًا من المكتبة أولًا.",
+    };
+  }
+  const total = parseInt(book.pages, 10);
+  const at = parseInt(book.page, 10);
+  const base = Number.isFinite(at) ? at : 0;
+  /* Bounded by the book's own total when it has one, exactly as the modal
+     bounds it: a counter past the last page is a book that reads as
+     finished and is not. */
+  const next =
+    Number.isFinite(total) && total > 0 ? Math.min(total, base + n) : base + n;
+  const row = { id: uid(), date: dayKey(), bookId: book.id, habitId: habit?.id || null, pages: n };
+  const goal = Number.isFinite(+state.readGoal) ? +state.readGoal : READ_GOAL_DEFAULT;
+  const reading = [...rows(state.reading), row];
+  return {
+    kind: "reading",
+    row,
+    book: { ...book, page: String(next) },
+    pages: n,
+    at: next,
+    total: Number.isFinite(total) && total > 0 ? total : null,
+    goal,
+    today: sumPages(reading.filter((r) => r.date === dayKey())),
+    streak: readStreak(reading, goal),
+    next: {
+      ...state,
+      reading,
+      books: books.map((b) => (b.id === book.id ? { ...b, page: String(next) } : b)),
+    },
+    before: { reading: state.reading, books: state.books },
+  };
+}
+
+/* --- the focus desk, from a phone -------------------------------------- *
+ *  The run is state and is counted off an absolute `endAt`, which is the
+ *  whole reason this is possible at all: a round started from a message and
+ *  a round started from the screen are the same row, and either side can end
+ *  it. Nothing here re-decides the rhythm — `closePhase` in the state layer
+ *  owns the cycle counter, the row and the next phase, and both writers call
+ *  it.
+ * ---------------------------------------------------------------------- */
+
+/* A run found already over is settled before anything else is decided.
+   Otherwise a round that finished three hours ago would still be «counting»
+   when the next message arrives, and the minutes it earned would be lost
+   the moment it was replaced. */
+const settled = (state, now) => {
+  const focus = focusShape(state.focus);
+  const out = settleRun(focus.run, now);
+  if (out.run === focus.run) return { focus, state, closed: null };
+  /* A finished round goes through `closePhase` so the counter advances and
+     the break is armed exactly as it would have been on screen. */
+  if (out.rang && focus.run) {
+    const next = closePhase(state, focus.run, { minutes: focus.run.planned, full: true, at: now });
+    return {
+      focus: next.focus,
+      state: { ...state, sessions: next.sessions, focus: next.focus, tasks: next.tasks },
+      closed: { phase: focus.run.phase, row: next.row },
+    };
+  }
+  /* Stale: the minutes of a paused round are kept, a round still counting
+     when it went stale writes nothing. `settleRun` already drew that line. */
+  const sessions = out.log ? addSession(state.sessions, out.log) : state.sessions;
+  const focusNext = { ...focus, run: null };
+  return {
+    focus: focusNext,
+    state: { ...state, sessions, focus: focusNext },
+    closed: { phase: focus.run?.phase, row: out.log, dropped: true },
+  };
+};
+
+export function startFocus(state, { minutes = 0, label = "", taskId = null } = {}, now = Date.now()) {
+  const base = settled(state, now);
+  const focus = base.focus;
+  if (runRunning(focus.run)) {
+    return {
+      refused: `${phaseOf(focus.run.phase).label} تعدّ الآن — باقي ${Math.ceil(
+        runLeft(focus.run, now) / 60,
+      )} دقيقة. أرسل «أوقف» أولًا.`,
+    };
+  }
+  const preset = presetFor(focus, focus.pick);
+  const planned = minutes >= 1 ? minutes : preset.min;
+  const run = startRun(
+    armRun({
+      phase: "focus",
+      planned,
+      presetId: preset.id,
+      taskId,
+      label,
+      round: focus.round,
+      now,
+    }),
+    now,
+  );
+  return {
+    kind: "focus-start",
+    run,
+    preset,
+    next: { ...base.state, focus: { ...focus, run } },
+    before: { focus: state.focus, sessions: state.sessions },
+  };
+}
+
+/* The break, armed and started on purpose. A break that has to be asked for
+   is still better than one that never comes, which is what a timer with no
+   break at all guarantees. */
+export function breakFocus(state, { minutes = 0 } = {}, now = Date.now()) {
+  const base = settled(state, now);
+  const focus = base.focus;
+  if (runRunning(focus.run) && !isBreak(focus.run.phase)) {
+    return { refused: "جولة تركيز تعدّ الآن. أرسل «أوقف» ثم «استراحة»." };
+  }
+  const preset = presetFor(focus, focus.pick);
+  const phase = nextBreak(preset, focus.round);
+  const planned = minutes >= 1 ? minutes : breakMinutes(preset, phase);
+  const run = startRun(
+    armRun({ phase, planned, presetId: preset.id, round: focus.round, now }),
+    now,
+  );
+  return {
+    kind: "focus-break",
+    run,
+    next: { ...base.state, focus: { ...focus, run } },
+    before: { focus: state.focus, sessions: state.sessions },
+  };
+}
+
+export function pauseFocus(state, now = Date.now()) {
+  const focus = focusShape(state.focus);
+  if (!runRunning(focus.run)) return { refused: "ما فيه شي يعدّ الآن." };
+  const run = pauseRun(focus.run, now);
+  return {
+    kind: "focus-pause",
+    run,
+    spent: spentMinutes(run, now),
+    next: { ...state, focus: { ...focus, run } },
+    before: { focus: state.focus },
+  };
+}
+
+export function resumeFocus(state, now = Date.now()) {
+  const base = settled(state, now);
+  const focus = base.focus;
+  if (!focus.run) return { refused: "ما فيه جولة موقوفة. أرسل «ابدأ تركيز»." };
+  if (runRunning(focus.run)) return { refused: "هي تعدّ أصلاً." };
+  const run = startRun(focus.run, now);
+  return {
+    kind: "focus-resume",
+    run,
+    next: { ...base.state, focus: { ...focus, run } },
+    before: { focus: state.focus, sessions: state.sessions },
+  };
+}
+
+/* Stopped, and logged as the minutes it actually was. The old timer wrote
+   nothing unless the round finished, so eighty minutes of a ninety-minute
+   round simply never existed — `full: false` is what makes the row honest
+   instead of absent. A round cut short does not advance the cycle counter:
+   the long break is earned by rounds that were sat through. */
+export function stopFocus(state, now = Date.now()) {
+  const base = settled(state, now);
+  const focus = base.focus;
+  if (!focus.run) return { refused: "ما فيه جولة قائمة." };
+  const run = focus.run;
+  const mins = spentMinutes(run, now);
+  const out = closePhase(base.state, run, {
+    minutes: mins,
+    full: false,
+    advance: false,
+    nextRun: null,
+    at: now,
+  });
+  return {
+    kind: "focus-stop",
+    run,
+    minutes: mins,
+    logged: !!out.row,
+    next: { ...base.state, sessions: out.sessions, focus: { ...out.focus, run: null }, tasks: out.tasks },
+    before: { focus: state.focus, sessions: state.sessions },
+  };
+}
+
+/* A stale run, accepted or thrown away by hand — the two buttons the coach
+   offers when it finds one. Accepting is what `settleRun` would have done
+   on its own; dropping is the one case the user overrules it. */
+export function settleFocus(state, now = Date.now()) {
+  const focus = focusShape(state.focus);
+  if (!focus.run) return { refused: "ما فيه جولة معلّقة." };
+  const base = settled(state, now);
+  if (!base.closed) return { refused: "الجولة ما زالت قائمة — ما فيه شي يُعتمد." };
+  return {
+    kind: "focus-settle",
+    minutes: base.closed.row ? base.closed.row.minutes : 0,
+    next: base.state,
+    before: { focus: state.focus, sessions: state.sessions },
+  };
+}
+
+export function dropFocus(state) {
+  const focus = focusShape(state.focus);
+  if (!focus.run) return { refused: "ما فيه جولة معلّقة." };
+  return {
+    kind: "focus-drop",
+    next: { ...state, focus: { ...focus, run: null } },
+    before: { focus: state.focus },
+  };
+}
+
+/* Work that happened away from any timer. Marked `full` because there was no
+   plan to have fallen short of. */
+export function logFocus(state, { minutes, label = "", taskId = null } = {}, now = Date.now()) {
+  const row = manualSession({ minutes, label, taskId, at: now });
+  if (!row) return { refused: "كم دقيقة؟ مثال: «ركزت ٤٥ دقيقة على المحاسبة»." };
+  return {
+    kind: "focus-log",
+    row,
+    next: { ...state, sessions: addSession(state.sessions, row) },
+    before: { sessions: state.sessions },
+  };
+}
+
+/* --- the breaker ------------------------------------------------------- *
+ *  A hold never touches `startDate`: surviving the urge is the run
+ *  continuing, not an event in it. A fall stamps the run that just ended
+ *  onto the log, so the record outlives the counter it cost.
+ * ---------------------------------------------------------------------- */
+function oneBad(state, query) {
+  const list = rows(state.badHabits);
+  if (!list.length) return { refused: "ما فيه عادة مسجّلة في كاسر العادات." };
+  if (!query) return list.length === 1 ? { bad: list[0] } : { many: list };
+  const q = fold(query);
+  const hit = list.filter((b) => {
+    const t = fold(b.title);
+    return t === q || t.includes(q) || q.includes(t);
+  });
+  if (!hit.length) return list.length === 1 ? { bad: list[0] } : { many: list };
+  return hit.length === 1 ? { bad: hit[0] } : { many: hit };
+}
+
+export function holdUrge(state, id, { tag = "", mood = "", trigger = "" } = {}) {
+  const list = rows(state.badHabits);
+  const bad = list.find((b) => b.id === id);
+  if (!bad) return { refused: "هذي العادة لم تعد موجودة." };
+  const row = urgeShape({ ...stamp(), tag, mood, trigger }, "hold");
+  return {
+    kind: "hold",
+    bad,
+    row,
+    days: cleanDays(bad),
+    next: stampToday({
+      ...state,
+      badHabits: list.map((b) =>
+        b.id === id ? { ...b, urges: [...rows(b.urges), row] } : b,
+      ),
+    }),
+    before: { badHabits: state.badHabits, history: state.history },
+  };
+}
+
+export function fallUrge(state, id, { tag = "", mood = "", trigger = "" } = {}) {
+  const list = rows(state.badHabits);
+  const bad = list.find((b) => b.id === id);
+  if (!bad) return { refused: "هذي العادة لم تعد موجودة." };
+  const was = cleanDays(bad);
+  const row = urgeShape(
+    { ...stamp(), days: was, tag, mood, trigger },
+    "fall",
+  );
+  return {
+    kind: "fall",
+    bad,
+    row,
+    was,
+    next: stampToday({
+      ...state,
+      badHabits: list.map((b) =>
+        b.id === id
+          ? { ...b, logs: [...rows(b.logs), row], startDate: dayKey() }
+          : b,
+      ),
+    }),
+    before: { badHabits: state.badHabits, history: state.history },
+  };
+}
+
+export { oneBad };
+
+/* --- tomorrow's three, tonight ----------------------------------------- *
+ *  `prepPickAdd` holds the cap and refuses the fourth outright, which is one
+ *  of its four doors. Nothing here counts picks itself.
+ * ---------------------------------------------------------------------- */
+export function pickTomorrow(state, taskId) {
+  const task = rows(state.tasks).find((t) => t.id === taskId);
+  if (!task) return { refused: "هذي المهمة لم تعد موجودة." };
+  const day = tomorrowKey();
+  /* `prepPickAdd` refuses by handing the prep back unchanged rather than by
+     returning nothing — it is written for a screen, where a no-op button is
+     the whole of a refusal. In a chat a silent no-op is indistinguishable
+     from a write that failed, so the two cases it refuses for are read here
+     and each one is said out loud. The cap itself is still the state
+     layer's: nothing below counts picks to decide whether to allow one. */
+  const was = prepShape(state.prep);
+  const already = was.for === day ? was.picks : [];
+  if (already.some((x) => x.task === taskId)) {
+    return { refused: `«${task.text}» مختارة لغد أصلاً.` };
+  }
+  if (already.length >= TOP_TASK_CAP) {
+    return {
+      refused: `مهام الغد مكتملة بـ${TOP_TASK_CAP} — والحد مقصود. اشطب واحدة من «جهّز غدك».`,
+    };
+  }
+  const prep = prepPickAdd(state.prep, taskId, day);
+  return {
+    kind: "prep",
+    task,
+    picks: prepPicks(prep).length,
+    next: { ...state, prep },
+    before: { prep: state.prep },
+  };
+}
+
+/* --- one of today's three, chosen from the matrix ---------------------- *
+ *  The flag, not a new task: the coach offers what is already in the
+ *  quadrants rather than asking him to type it twice. `capToday` is the
+ *  gate, as it is for every other door.
+ * ---------------------------------------------------------------------- */
+export function flagToday(state, taskId) {
+  const list = rows(state.tasks);
+  const task = list.find((t) => t.id === taskId);
+  if (!task) return { refused: "هذي المهمة لم تعد موجودة." };
+  if (task.done) return { refused: `«${task.text}» مُنجزة أصلاً ✅` };
+  if (task.today) return { refused: `«${task.text}» من مهام اليوم أصلاً.` };
+  const capped = capToday(list.map((t) => (t.id === taskId ? { ...t, today: true } : t)));
+  const kept = capped.find((t) => t.id === taskId);
+  if (!kept || !kept.today) {
+    return {
+      refused: `مهام اليوم مكتملة بـ${TOP_TASK_CAP} — والحد مقصود. أنجِز واحدة أولًا.`,
+    };
+  }
+  return {
+    kind: "top",
+    row: kept,
+    next: { ...state, tasks: capped },
+    before: { tasks: state.tasks },
+  };
+}
+
+/* --- the evening reflection -------------------------------------------- *
+ *  Written onto today's archive row, which is where the app writes it. The
+ *  row is stamped first so it exists and is current, then the field is
+ *  merged — `stampToday` spreads the previous entry precisely so anything
+ *  written per-day survives a habit toggle, and this is one of those things.
+ * ---------------------------------------------------------------------- */
+export function reflect(state, { field, note }) {
+  const text = String(note ?? "").trim();
+  if (!text) return { refused: "اكتب الجواب بعد الكلمة." };
+  if (field !== "distraction" && field !== "fix") {
+    return { refused: "ما فهمت أي جزء من التقييم." };
+  }
+  const today = dayKey();
+  const stamped = stampToday(state);
+  return {
+    kind: "reflect",
+    field,
+    note: text.slice(0, 300),
+    next: {
+      ...stamped,
+      history: rows(stamped.history).map((h) =>
+        h.date === today ? { ...h, [field]: text.slice(0, 300) } : h,
+      ),
+    },
+    before: { history: state.history },
   };
 }
 

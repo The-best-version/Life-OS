@@ -68,9 +68,27 @@ const CURRENCY = new RegExp(
    longer words come first so «لـ» is tried before «ل». */
 const LEAD_FILLER = /^(على|في|لـ|ل|من|عن|بـ|ب|:|-|،|,)\s*/;
 
+/* The minute word, stripped from a focus round's label the way the currency
+   word is stripped from an expense's — «ركزت ٤٥ دقيقة على المحاسبة» is
+   forty-five minutes on «المحاسبة», not on «دقيقة على المحاسبة».
+ *
+ *  Deliberately NOT part of `clean`, which every branch uses: a task reading
+ *  «اليوم: اقرأ ٢٠ صفحة» goes through the same function, and silently
+ *  deleting a word he typed is the one thing none of this is allowed to do.
+ *  It is applied in the one branch where the unit is known to be a unit. */
+const UNIT_MIN = new RegExp(EDGE_L + "(دقائق|دقيقه|دقيقة|دقايق)" + EDGE_R, "giu");
+
 /* An amount: digits with an optional decimal part. The thousands comma is
    dropped first so «1,500» is one number and not two. */
 const NUMBER = /\d+(?:\.\d+)?/;
+
+/* Bounds on the two counts a message can carry that are not money. A page
+   count of two thousand is a thumb slip, and a book marked finished by one
+   is a book he has to go and un-finish; a focus round of nine hours is the
+   same mistake one field over. Both refuse rather than clamp — a clamped
+   number is a wrong number stated confidently. */
+export const PAGES_MAX = 600;
+export const MINUTES_MAX = 300;
 /* Hours, when they were recorded beside the money. «ساعتين» carries its own
    count inside the word, so it is matched without a digit. */
 const HOURS = new RegExp("(\\d+(?:\\.\\d+)?)\\s*(?:ساعات|ساعه|ساعة)" + EDGE_R, "u");
@@ -114,11 +132,174 @@ const RULES = [
     words: ["تمت", "تم", "خلصت", "أنجزت", "أنهيت", "سويت", "صليت", "أديت"],
   },
   {
+    /* Pages read, straight onto the active book. `amount: true` because
+       «قرأت كتابًا جميلًا» is a thought and not a log — with no number there
+       is nothing to add to the counter. */
+    kind: "reading",
+    amount: true,
+    words: ["قرأت", "قريت", "صفحات", "صفحة"],
+  },
+  /* --- the focus desk, by verb --------------------------------------- *
+   *  Five rules and not one with a sub-grammar, because `TRIGGERS` already
+   *  sorts every word longest-first across all of them: «ابدأ تركيز» is
+   *  therefore tried before «ابدأ», and the rule that matched carries the
+   *  verb with it. A second table of verbs inside one rule would be a
+   *  second ordering to keep in step with the first.
+   * ------------------------------------------------------------------- */
+  {
+    kind: "focus",
+    act: "stop",
+    words: ["أوقف التركيز", "وقف التركيز", "أوقف الجولة", "وقف الجولة", "أوقف", "وقف"],
+  },
+  {
+    kind: "focus",
+    act: "pause",
+    words: ["علّق التركيز", "علق الجولة", "وقفة"],
+  },
+  {
+    kind: "focus",
+    act: "resume",
+    words: ["أكمل التركيز", "أكمل الجولة", "كمّل", "أكمل"],
+  },
+  {
+    kind: "focus",
+    act: "break",
+    words: ["استراحة", "راحة قصيرة", "راحة"],
+  },
+  {
+    kind: "focus",
+    act: "start",
+    words: ["ابدأ تركيز", "ابدأ جولة", "ابدأ بومودورو", "ابدأ التركيز", "بومودورو", "ابدأ"],
+  },
+  {
+    /* Work that happened away from the screen. With a number it is a logged
+       round; without one it is a request for where the day stands. */
+    kind: "focus",
+    act: "log",
+    words: ["ركزت", "تركيز", "الجولة"],
+  },
+  /* --- the breaker ---------------------------------------------------- *
+   *  A hold and a fall, and the hold is the one that has to be frictionless:
+   *  surviving the urge is the event most likely to go unrecorded, and a
+   *  mirror that only ever sees the losses makes him look weaker than he is.
+   * ------------------------------------------------------------------- */
+  {
+    kind: "urge",
+    act: "fall",
+    words: ["سقطت", "رجعت للعادة", "انهزمت", "ما قدرت", "كسرت الصمود"],
+  },
+  {
+    kind: "urge",
+    act: "hold",
+    words: ["صمدت", "قاومت", "جاني وسواس", "جاتني رغبة", "راودتني", "رغبة", "وسواس"],
+  },
+  /* --- the evening reflection ---------------------------------------- *
+   *  Two sentences, two triggers, and no pending-question state: a bot that
+   *  remembers it asked something is a bot whose memory of the question
+   *  outlives the mood that would have answered it.
+   * ------------------------------------------------------------------- */
+  {
+    kind: "reflect",
+    field: "distraction",
+    words: ["شتتني", "شتتتني", "الذي شتتني"],
+  },
+  {
+    kind: "reflect",
+    field: "fix",
+    words: ["الحل", "علاجه", "الإصلاح", "أصلحها"],
+  },
+  {
     kind: "task",
     today: true,
     words: ["مهمة اليوم", "اليوم", "أهم"],
   },
 ];
+
+/* --- a question is not a task ------------------------------------------ *
+ *  Everything unrecognised becomes a task, and that is right for a thought:
+ *  an unrecognised sentence is exactly what the inbox is for. It is wrong
+ *  for a question — «كم صرفت هذا الشهر؟» was landing in «مهم غير عاجل» as a
+ *  to-do item, which is a wrong answer *and* a row he then has to delete.
+ *
+ *  So a question is read first and answered, and nothing is written. The
+ *  subject words are matched anywhere in the sentence rather than only at
+ *  the start, which is the opposite of the trigger rule above and correct
+ *  for the same reason: a question's leading word is the question word, and
+ *  what it is *about* comes after it.
+ * ---------------------------------------------------------------------- */
+const QUESTION_WORDS = [
+  "كم", "وين", "أين", "متى", "ماذا", "ما هو", "ايش", "إيش", "شو",
+  "هل", "كيف", "من هو", "أعطني", "اعطني", "وريني", "ورني",
+];
+
+/* Priority order, and it is load-bearing: «كم صرفت على الكتب» is a money
+   question with a book in it, so the money subjects are consulted before
+   the library's. The first list with a hit wins. */
+const TOPICS = [
+  ["spend", ["صرفت", "مصروف", "مصاريف", "صرف", "مصروفاتي", "دفعت"]],
+  ["earn", ["دخلي", "كسبت", "ربحت", "أرباحي", "ارباحي", "قبضت", "دخل"]],
+  ["money", ["الرصيد", "رصيدي", "رصيد", "فلوس", "الميزانية", "المال", "مالي"]],
+  ["prayer", ["الصلاة", "الصلوات", "صلاة", "الأذان", "أذان", "الفجر", "الظهر", "العصر", "المغرب", "العشاء"]],
+  ["read", ["القراءة", "قراءتي", "قراءة", "الكتاب", "كتابي", "كتاب", "صفحات", "وصلت"]],
+  ["focus", ["التركيز", "تركيزي", "تركيز", "بومودورو", "الجولات", "العمل العميق"]],
+  ["uni", ["الجامعة", "محاضرات", "محاضرة", "الاختبار", "اختبارات", "اختبار", "المواد", "جدولي", "الجدول"]],
+  ["goals", ["أهدافي", "اهدافي", "أهداف", "هدفي", "الخزنة", "الربع"]],
+  ["breaker", ["الكاسر", "العادات السيئة", "صامد", "نظيف", "الصمود"]],
+  ["water", ["الماء", "أكواب", "اكواب", "كاس", "كوب", "ماي"]],
+  ["tasks", ["مهامي", "المهام", "مهام", "المهمة"]],
+  ["habits", ["عاداتي", "العادات", "عادات", "باقي", "المفتوح"]],
+  ["discipline", ["انتظامي", "الانتظام", "انتظام", "نسبتي", "السلسلة", "سلسلتي", "streak"]],
+  ["month", ["المتوسط", "متوسطي", "الأرشيف", "السجل", "الشهر الماضي"]],
+];
+
+/* How far back the question is asking about. Separate from the subject on
+   purpose: «كم صرفت هذا الشهر» is one subject and one window, and folding
+   them into a single table would need an entry per pair. */
+const WINDOWS = [
+  [1, ["اليوم", "اليوم؟"]],
+  [7, ["الأسبوع", "أسبوع", "هذا الأسبوع"]],
+  [30, ["الشهر", "شهر", "هذا الشهر"]],
+  [90, ["الربع", "ثلاثة أشهر"]],
+  [365, ["السنة", "سنة", "هذي السنة"]],
+];
+
+const holds = (folded, word) => {
+  const w = fold(word);
+  return folded === w || folded.startsWith(w + " ") || folded.includes(" " + w + " ") || folded.endsWith(" " + w);
+};
+
+/* A question, or null. Either it opens with a question word or it ends in a
+   question mark — and a sentence doing neither is not one, however many
+   subject words it happens to contain. */
+export function askedAbout(raw) {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const folded = fold(text);
+  const marked = /[?؟]\s*$/.test(text);
+  const opens = QUESTION_WORDS.some((w) => holds(folded, w) && folded.startsWith(fold(w)));
+  if (!marked && !opens) return null;
+  let topic = null;
+  for (const [id, words] of TOPICS) {
+    if (words.some((w) => holds(folded, w))) {
+      topic = id;
+      break;
+    }
+  }
+  let days = null;
+  for (const [n, words] of WINDOWS) {
+    if (words.some((w) => holds(folded, w))) {
+      days = n;
+      break;
+    }
+  }
+  /* A bare number in a question is a window in days, which is how «كم صرفت
+     آخر ١٠ أيام» is actually typed. */
+  if (days === null) {
+    const m = /(\d+)\s*(?:يوم|أيام|ايام)/u.exec(asciiDigits(folded));
+    if (m) days = Math.min(365, Math.max(1, Number(m[1])));
+  }
+  return { kind: "ask", topic, days, text };
+}
 
 /* Every trigger, longest first, so «كاس ماء» is tried before «كاس» would
    have been and «مهمة اليوم» before «اليوم». */
@@ -171,6 +352,13 @@ export function parse(raw) {
   const text = String(raw ?? "").trim();
   if (!text) return { kind: "empty", text: "" };
 
+  /* Before the triggers, because a question's subject is usually one of
+     them: «كم صرفت هذا الشهر؟» has to be answered and not recorded as an
+     expense of thirty, and the trigger table would read it as one the
+     moment a number appeared in the sentence. */
+  const asked = askedAbout(text);
+  if (asked) return asked;
+
   const folded = fold(text);
   const hit = TRIGGERS.find((t) => leads(folded, t.word));
 
@@ -202,6 +390,31 @@ export function parse(raw) {
       /* «تم» on its own is not a habit — it is an acknowledgement. With
          nothing to match against there is nothing to tick. */
       if (q) return { kind: "habit", query: q, text };
+    } else if (rule.kind === "reading") {
+      const { amount } = amounts(tail);
+      /* Bounded, because «قرأت 2000» is a typo and a page counter that
+         accepts it is a book marked finished by a slip of the thumb. */
+      if (amount >= 1 && amount <= PAGES_MAX) {
+        return { kind: "reading", pages: Math.round(amount), text };
+      }
+    } else if (rule.kind === "focus") {
+      const { amount, rest } = amounts(tail);
+      const minutes = amount >= 1 && amount <= MINUTES_MAX ? Math.round(amount) : 0;
+      /* «ركزت» with no number is not a logged round — there is nothing to
+         log — so it is read as the question it probably was. */
+      const act = rule.act === "log" && !minutes ? "status" : rule.act;
+      return {
+        kind: "focus",
+        act,
+        minutes,
+        label: clean(String(rest).replace(UNIT_MIN, " ")),
+        text,
+      };
+    } else if (rule.kind === "urge") {
+      return { kind: "urge", act: rule.act, query: clean(tail), text };
+    } else if (rule.kind === "reflect") {
+      const body = clean(tail);
+      if (body) return { kind: "reflect", field: rule.field, note: body, text };
     } else if (rule.kind === "task") {
       const body = clean(tail);
       if (body) return { kind: "task", today: true, label: body, text };

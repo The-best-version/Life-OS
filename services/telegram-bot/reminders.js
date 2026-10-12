@@ -19,8 +19,13 @@ import {
   clampGoal,
   disciplineOf,
   dayKey,
+  focusShape,
+  phaseOf,
+  RUN_STALE_MS,
 } from "../../src/state/life-state.mjs";
 import { prayerTimes, PRAYER_ROWS } from "../../src/utils/prayer-times.mjs";
+import { coachNote } from "./insight.js";
+import { weekReview } from "./ask.js";
 
 /* The plan for the day `now` falls in, as real moments. Prayer times are
    computed here because the state layer may not import the solar maths —
@@ -47,7 +52,7 @@ export function planToday(state, now = new Date()) {
  *  nothing to sweep, a water nudge after the goal is met — the message that
  *  fires to say «nothing» is the one that teaches you to ignore the rest.
  * ---------------------------------------------------------------------- */
-export function textFor(entry, state) {
+export function textFor(entry, state, now = new Date()) {
   if (entry.kind === "water") {
     const goal = clampGoal(state.waterGoal);
     const had = Math.max(0, Math.round(state.water || 0));
@@ -72,6 +77,19 @@ export function textFor(entry, state) {
       text: `🎯 باقي من مهام اليوم:\n${lines.join("\n")}`,
       tasks: open,
     };
+  }
+
+  /* The one entry that decides for itself whether to speak. `coachNote`
+     returns null on a day with nothing wrong, and null here means the timer
+     fired and nothing was sent — which is the whole reason the coach is
+     worth leaving switched on. */
+  if (entry.kind === "coach") {
+    const note = coachNote(state, now);
+    return note ? { text: note.text, actions: note.actions, coach: true } : null;
+  }
+
+  if (entry.kind === "weekly") {
+    return { text: weekReview(state, now), weekly: true };
   }
 
   if (entry.kind === "custom") {
@@ -169,5 +187,68 @@ export class Scheduler {
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
     this.armed = [];
+  }
+}
+
+/* --- the one moment no clock time can predict -------------------------- *
+ *  Every other thing the bot sends unprompted comes off `planDay`, which is
+ *  a list of minutes past midnight. A focus round's bell is not: it rings at
+ *  `run.endAt`, an absolute epoch that only exists once the round was
+ *  started, and a schedule armed at four in the morning cannot know about a
+ *  round begun at two in the afternoon.
+ *
+ *  So it is a second, tiny scheduler, and it is deliberately not folded into
+ *  the first: `Scheduler.sync` re-arms a dozen timers whenever the *plan*
+ *  moves, and the run moves far more often than the plan does — every pause,
+ *  every resume, every round. One timer, re-armed off one number.
+ *
+ *  It respects the master switch, like everything else unprompted: a round
+ *  started on the laptop already rings there, and two bells for one round is
+ *  the kind of duplication that gets a bot muted.
+ * ---------------------------------------------------------------------- */
+export class Bell {
+  constructor(ring) {
+    this.ring = ring;
+    this.timer = null;
+    /* The deadline currently armed, or null. Compared rather than recomputed,
+       so a tick that changes nothing arms nothing. */
+    this.at = null;
+  }
+
+  /* Returns true when the arming actually changed. */
+  sync(state, now = Date.now()) {
+    const bot = botShape(state.bot);
+    const run = focusShape(state.focus).run;
+    /* Only a round that is *counting* has a bell. A paused one has no
+       deadline to ring at, and that is correct: a pause is a round nobody is
+       waiting on. */
+    const at = bot.on && run && run.endAt ? run.endAt : null;
+    if (at === this.at) return false;
+    this.clear();
+    this.at = at;
+    if (at === null) return true;
+    const wait = at - now;
+    /* Already past, or further out than a round can possibly be. Either way
+       nothing is armed: the first is settled by `settleRun` on the next
+       write, and the second is a damaged `endAt` that `setTimeout` would
+       fire on immediately. */
+    if (wait <= 0 || wait > RUN_STALE_MS) {
+      this.at = null;
+      return true;
+    }
+    const phase = run.phase;
+    const planned = run.planned;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.at = null;
+      this.ring({ phase, planned, label: phaseOf(phase).label });
+    }, wait);
+    this.timer.unref?.();
+    return true;
+  }
+
+  clear() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
   }
 }

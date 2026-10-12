@@ -11,6 +11,8 @@ import {
   Sunrise,
   Moon,
   Power,
+  Sparkles,
+  CalendarRange,
 } from "lucide-react";
 import {
   T,
@@ -383,6 +385,92 @@ export function PresetRemindersCard({ bot, onPatch }) {
             يعلّمك تجاهل البقية.
           </p>
         </Preset>
+
+        {/* المدرّب — the one entry whose content is a judgement */}
+        <Preset
+          icon={Sparkles}
+          tint={T.rose}
+          title="المدرّب"
+          on={bot.coach.on}
+          onToggle={() => onPatch({ coach: { ...bot.coach, on: !bot.coach.on } })}
+          note={bot.coach.on ? `يفحص يومك ${prettyTime(bot.coach.at)}` : "مطفأ"}
+        >
+          <label className="flex items-center gap-2 text-[11.5px]" style={{ color: T.faint }}>
+            الساعة
+            <TimeField
+              value={bot.coach.at}
+              onChange={(v) => onPatch({ coach: { ...bot.coach, at: v } })}
+              aria-label="وقت فحص المدرّب"
+              className="max-w-[120px]"
+            />
+          </label>
+          {/* The silence is the feature, and it has to be said here or the
+              first quiet day reads as a broken reminder. */}
+          <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
+            يقرأ اليوم كاملًا — السلسلة، ساعة السقوط، المستحقّ، الماء، القراءة —
+            ويرسل أهم ثلاث ملاحظات <strong>مع أزرارها</strong>. وفي اليوم الذي
+            لا شيء فيه يستحق القول، لا يرسل شيئًا: الإشعار الذي يرنّ ليقول «كل
+            شي تمام» هو الذي يعلّمك تجاهل الذي بعده.
+          </p>
+          <p className="mt-1.5 text-[10.5px]" style={{ color: T.faint }}>
+            واطلبه في أي وقت من المحادثة بكلمة «المدرّب».
+          </p>
+        </Preset>
+
+        {/* مراجعة الأسبوع */}
+        <Preset
+          icon={CalendarRange}
+          tint={T.accent}
+          title="مراجعة الأسبوع"
+          on={bot.weekly.on}
+          onToggle={() => onPatch({ weekly: { ...bot.weekly, on: !bot.weekly.on } })}
+          note={
+            bot.weekly.on
+              ? `${DOW_AR[bot.weekly.dow]} ${prettyTime(bot.weekly.at)}`
+              : "مطفأ"
+          }
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-[11.5px]" style={{ color: T.faint }}>
+              الساعة
+              <TimeField
+                value={bot.weekly.at}
+                onChange={(v) => onPatch({ weekly: { ...bot.weekly, at: v } })}
+                aria-label="وقت مراجعة الأسبوع"
+                className="max-w-[120px]"
+              />
+            </label>
+          </div>
+          {/* One day, picked the same way a custom reminder's days are: seven
+              small buttons, because picking a weekday out of a select is
+              three interactions and this is one. */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {DOW_AR.map((name, i) => {
+              const picked = bot.weekly.dow === i;
+              return (
+                <button
+                  key={name}
+                  onClick={() => onPatch({ weekly: { ...bot.weekly, dow: i } })}
+                  aria-label={`${name}${picked ? " — مفعّل" : ""}`}
+                  aria-pressed={picked}
+                  className="rounded-lg border px-2 py-1 text-[10.5px] transition-colors"
+                  style={{
+                    borderColor: picked ? `${T.accent}4D` : T.border,
+                    background: picked ? `${T.accent}1A` : "transparent",
+                    color: picked ? T.accent : T.faint,
+                  }}
+                >
+                  {name.slice(0, 3)}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
+            الرسالة الوحيدة التي لا تتكلّم عن الآن: متوسط الانتظام، الأيام بدون
+            تسجيل <strong>معدودة لا مُذوّبة في المتوسط</strong>، أثبت عادة
+            وأضعفها، الصفحات، دقائق التركيز، المال، والمستحقّ الأسبوع القادم.
+          </p>
+        </Preset>
       </div>
     </Card>
   );
@@ -629,6 +717,11 @@ function kindName(p, state) {
   if (p.kind === "evening") return "إقفال المساء";
   if (p.kind === "water") return "الماء";
   if (p.kind === "tasks") return "جرد المهام";
+  /* Named «فحص» and not «رسالة»: the timer fires, the day is read, and on a
+     day with nothing wrong nothing is sent — so the plan below is a plan of
+     checks, one of which may turn out to be silent. */
+  if (p.kind === "coach") return "فحص المدرّب";
+  if (p.kind === "weekly") return "مراجعة الأسبوع";
   if (p.kind === "prayer") {
     const row = PRAYER_ROWS.find((x) => x.id === p.prayer);
     return row ? `قبل ${row.label}` : "قبل الأذان";
@@ -650,6 +743,13 @@ const PHRASES = [
   ["كاس ماء", "كوب على عدّاد اليوم"],
   ["تمت صلاة العصر", "تسجيل العادة التي تشبه الكلمات"],
   ["اليوم: راجع المحاسبة", "من مهام اليوم الثلاث"],
+  ["قرأت ٢٠ صفحة", "يتقدّم الكتاب المعلَّم «أقرأه الآن»"],
+  ["ابدأ تركيز ٥٠ مراجعة", "جولة تعدّ فعلًا، والجرس يصلك هنا"],
+  ["أوقف · وقفة · أكمل · استراحة", "إدارة الجولة من الجوّال"],
+  ["ركزت ٤٥ دقيقة على المحاسبة", "جولة عُمِلت بعيدًا عن الشاشة"],
+  ["صمدت · سقطت", "أمام عادة في كاسر العادات، ثم يسأل عن المحرّك"],
+  ["شتتني الجوال", "يُكتب في تقييم اليوم، و«الحل …» يكمله"],
+  ["كم صرفت هذا الشهر؟", "سؤال — يُجاب ولا يُسجَّل شيء"],
   ["أي نصّ آخر", "صندوق الوارد — مربّع «مهم غير عاجل»"],
 ];
 
