@@ -318,9 +318,11 @@ bot.start({
   drop_pending_updates: true,
   onStart: () => console.log("  ✓ يستقبل"),
 }).catch((e) => {
-  /* The first call grammY makes is getMe, and the two ways it fails are a
-     token Telegram does not know and a network that cannot reach Telegram.
-     Unhandled, both arrive as a stack trace with the answer buried in it. */
+  /* The first call grammY makes is getMe and the loop after it is
+     getUpdates, and each way they fail has its own answer — a name that will
+     not resolve, a token Telegram does not know, a second copy on the same
+     token. Unhandled, every one of them arrives as the same stack trace with
+     the answer buried in it. */
   const cause = String(e?.cause?.code || e?.message || e);
   if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|ETIMEDOUT/.test(cause)) {
     console.error(
@@ -330,8 +332,16 @@ bot.start({
     console.error("جرّب شبكة أخرى، أو ضع عنوان وسيط في TELEGRAM_API_ROOT داخل .env.\n");
   } else if (/401/.test(cause)) {
     console.error("\nتيليجرام رفض التوكن. خُذ واحدًا جديدًا من @BotFather.\n");
+  } else if (/409/.test(cause)) {
+    /* Two long-polling clients on one token take turns stealing each other's
+       updates, and Telegram ends the older one with a 409. The symptom
+       otherwise is a bot that answers every other message, so this names it
+       rather than letting it read as a generic failure — and this copy is
+       the one that stops, which is correct: the newest start wins. */
+    console.error("\nنسخة أخرى من البوت تعمل على نفس التوكن. هذه النسخة توقّفت.");
+    console.error("نسخة واحدة فقط — أوقف الباقي ثم شغّل واحدة.\n");
   } else {
-    console.error("\nالبوت ما بدأ: " + (e?.message || e) + "\n");
+    console.error("\nالبوت توقّف: " + (e?.message || e) + "\n");
   }
   process.exit(1);
 });
