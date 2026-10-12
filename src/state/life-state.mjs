@@ -80,6 +80,12 @@ import {
 import { eventShape, placeShape } from "./life-state-calendar.mjs";
 import { incomeShape, expenseShape, MONEY_CAP } from "./life-state-finance.mjs";
 import { botShape } from "./life-state-bot.mjs";
+import {
+  focusShape,
+  focusCarry,
+  sessionShape,
+  SESSION_CAP,
+} from "./life-state-focus.mjs";
 import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 
@@ -291,7 +297,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 28;
+export const SCHEMA = 29;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
@@ -316,6 +322,12 @@ export const freshState = (carry = {}) => ({
   books: carry.books || SEED_BOOKS,
   goals: carry.goals || SEED_GOALS(),
   sessions: carry.sessions || [],
+  /* The focus desk: the rhythms, the daily goal, the switches, and the run
+     still counting if one is. The cycle count is the one thing `focusCarry`
+     resets — four rounds yesterday must not hand this morning's first round
+     a long break — and the run itself crosses, because a round begun at
+     03:50 is still being worked at 04:01. */
+  focus: focusCarry(carry.focus),
   income: carry.income || [],
   /* What the day cost, beside what it paid. Both carry across a rollover
      whole — every row is dated, so neither of them belongs to "today" in the
@@ -704,7 +716,23 @@ export function migrate(saved) {
     navOrder,
     navMore,
     history,
-    sessions: rows(saved.sessions),
+    /* Schema 29 gives a focus round a shape. Every row written before it
+       carried a day and a length and nothing else, so `sessionShape` fills
+       the rest with what an older row *means*: `planned` equal to the
+       minutes worked, `full: true` because the old timer only ever wrote a
+       row on completion, no start time (the hour bands say how many rows
+       they had to leave out rather than guessing), and no interruptions.
+       Bounded like the money lists, for the same reason — a list with no
+       ceiling is a payload that grows until a save throws. */
+    sessions: rows(saved.sessions).map(sessionShape).slice(-SESSION_CAP),
+    /* Schema 29's focus desk. Shaped rather than branched, like the bot's
+       schedule: a payload from before it arrives with the four seeded
+       rhythms, the default goal and a run of `null`, which is exactly what
+       it means to have never opened the screen. `migrate` does not turn
+       `autoDone` on — the old behaviour of a finished round silently
+       ticking its task is not something to restore by default, and the
+       end-of-round sheet asks instead. */
+    focus: focusShape(saved.focus),
     /* Schema 27 gives the money two lists and both of them a shape. No
        branch is needed for either: an older payload simply arrives with no
        expenses, which is what it means, and the income rows it does hold go
@@ -762,6 +790,7 @@ export const carryOf = (s) => ({
   books: s.books,
   goals: s.goals,
   sessions: s.sessions,
+  focus: s.focus,
   income: s.income,
   expenses: s.expenses,
   ventures: s.ventures,
@@ -1033,6 +1062,64 @@ export {
   planDay,
   nextInPlan,
 } from "./life-state-bot.mjs";
+
+export {
+  SESSION_CAP,
+  PRESET_CAP,
+  FOCUS_GOAL_DEFAULT,
+  FOCUS_GOAL_MAX,
+  RUN_STALE_MS,
+  MIN_LOGGED,
+  INTERRUPT_MAX,
+  PHASES,
+  PHASE_IDS,
+  phaseOf,
+  isBreak,
+  ROUND_MIN,
+  ROUND_MAX,
+  BREAK_MIN,
+  BREAK_MAX,
+  LONG_MIN,
+  LONG_MAX,
+  EVERY_MIN,
+  EVERY_MAX,
+  presetShape,
+  PRESET_SEED,
+  SEED_PRESETS,
+  presetIn,
+  presetFor,
+  runShape,
+  armRun,
+  runLeft,
+  runRunning,
+  runDone,
+  runSpent,
+  spentMinutes,
+  startRun,
+  pauseRun,
+  runStale,
+  sessionShape,
+  sessionOf,
+  manualSession,
+  addSession,
+  nextBreak,
+  breakMinutes,
+  tillLong,
+  settleRun,
+  focusShape,
+  focusCarry,
+  sessionsOn,
+  sessionMinutes,
+  focusDay,
+  focusStreak,
+  focusWeek,
+  sessionsSince,
+  focusBands,
+  bestBand,
+  focusByTask,
+  focusSpan,
+  interruptRate,
+} from "./life-state-focus.mjs";
 
 export {
   MONEY_CAP,

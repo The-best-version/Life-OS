@@ -543,6 +543,21 @@ export const weekWord = (n) => arCount(n, WEEK_FORMS);
 export const LECTURE_FORMS = ["محاضرة", "محاضرتان", "محاضرات", "محاضرة"];
 export const TASK_FORMS = ["مهمة", "مهمتان", "مهام", "مهمة"];
 export const taskWord = (n) => arCount(n, TASK_FORMS);
+/* A focus round. The focus desk prints this beside a live number in five
+   places — the day's meter, the week bars, the end-of-round sheet, the
+   per-task totals and the log — and «3 جولة» is exactly the sentence
+   `arCount` exists to prevent. */
+export const ROUND_FORMS = ["جولة", "جولتان", "جولات", "جولة"];
+export const roundWord = (n) => arCount(n, ROUND_FORMS);
+/* The whole phrase, numeral included — and the numeral is *dropped* for one
+   and two, the same rule `daysPhrase` and `tasksPhrase` follow: Arabic's
+   dual already carries the number, so «2 جولتان» reads as a translation and
+   not as a sentence. Two forms because the dual inflects: «جولتان» stands
+   on its own, «جولتين» follows a preposition or «كل». */
+export const roundsPhrase = (n) =>
+  Math.abs(n) === 1 ? "جولة واحدة" : Math.abs(n) === 2 ? "جولتان" : `${n} ${roundWord(n)}`;
+export const roundsAfter = (n) =>
+  Math.abs(n) === 1 ? "جولة" : Math.abs(n) === 2 ? "جولتين" : `${n} ${roundWord(n)}`;
 /* Same rule `daysPhrase` follows, and for the same reason: Arabic's dual
    already carries the number, so «٢ مهمتان» reads as a translation rather
    than a sentence. The verb agrees too — one waits, two wait. */

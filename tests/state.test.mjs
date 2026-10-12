@@ -93,6 +93,45 @@ import {
   sinceDays,
   hourRate,
   netBalance,
+  SESSION_CAP,
+  PRESET_CAP,
+  FOCUS_GOAL_DEFAULT,
+  RUN_STALE_MS,
+  MIN_LOGGED,
+  INTERRUPT_MAX,
+  ROUND_MAX,
+  EVERY_MAX,
+  presetShape,
+  SEED_PRESETS,
+  presetFor,
+  runShape,
+  armRun,
+  startRun,
+  pauseRun,
+  runLeft,
+  runRunning,
+  runDone,
+  runStale,
+  spentMinutes,
+  settleRun,
+  sessionShape,
+  sessionOf,
+  manualSession,
+  addSession,
+  nextBreak,
+  breakMinutes,
+  tillLong,
+  isBreak,
+  focusShape,
+  focusCarry,
+  focusDay,
+  focusStreak,
+  focusWeek,
+  focusSpan,
+  focusByTask,
+  focusBands,
+  bestBand,
+  interruptRate,
 } from "../src/state/life-state.mjs";
 import { BLOCK_ANCHORS, blockAt } from "../src/utils/prayer-times.mjs";
 
@@ -1640,4 +1679,469 @@ test("nextInPlan reads the day forward and runs out at the end of it", () => {
   assert.equal(nextInPlan(plan, 0).at, 420);
   assert.equal(nextInPlan(plan, 420).at, 1200, "a moment already passed is not next");
   assert.equal(nextInPlan(plan, 1300), null);
+});
+
+/* ===================================================================== *
+ *  the focus desk — the rhythm, the run, and the minutes it writes down
+ *
+ *  Two of these exist because of the bug this file was written to prevent:
+ *  a run found already over on load used to be logged unconditionally,
+ *  which turns a laptop closed overnight into ninety minutes of work that
+ *  never happened — and the *paused* case used to be dropped outright,
+ *  which threw away minutes that were known exactly. `settleRun` is the
+ *  line between those two and is tested from both sides.
+ * ===================================================================== */
+
+test("a preset bounds every number and keeps the name typed", () => {
+  const p = presetShape({ label: "  دورة  ", min: 999, brk: 0, long: 1, every: 99 });
+  assert.equal(p.label, "دورة", "a label is trimmed, never cleared");
+  assert.equal(p.min, 180);
+  assert.equal(p.brk, 1);
+  assert.equal(p.long, 5);
+  assert.equal(p.every, EVERY_MAX);
+  assert.ok(p.id, "a preset without an id gets one");
+
+  const bad = presetShape({ min: "خمسة", brk: NaN, long: null, every: undefined });
+  for (const k of ["min", "brk", "long", "every"])
+    assert.ok(Number.isFinite(bad[k]), k + " is a number, never NaN");
+});
+
+test("focusShape seeds a usable desk and never turns a switch on by itself", () => {
+  const f = focusShape(null);
+  assert.equal(f.presets.length, SEED_PRESETS().length);
+  assert.ok(
+    f.presets.some((p) => p.id === f.pick),
+    "the picked rhythm is one that exists",
+  );
+  assert.equal(f.goal, FOCUS_GOAL_DEFAULT);
+  assert.equal(f.run, null);
+  assert.equal(f.round, 0);
+  /* The same refusal as the core five and the habit floor: what the screen
+     may do without being asked is not a question a shape can answer. */
+  assert.equal(f.autoDone, false, "a finished round must not silently tick a task");
+  assert.equal(f.autoNext, false, "a round nobody chose is a round nobody committed to");
+  /* And the one default that is deliberately on, because the break is the
+     half of the technique that gets skipped. */
+  assert.equal(f.autoBreak, true);
+
+  /* An empty list is not a choice the editor allows, so it is damage. */
+  assert.equal(focusShape({ presets: [] }).presets.length, SEED_PRESETS().length);
+  assert.equal(focusShape({ presets: [null, 3, "x"] }).presets.length, SEED_PRESETS().length);
+  /* A pick naming a rhythm that is gone falls back rather than dangling. */
+  const gone = focusShape({ pick: "nope" });
+  assert.ok(gone.presets.some((p) => p.id === gone.pick));
+});
+
+test("the preset list is bounded, so the chooser never becomes the decision", () => {
+  const many = Array.from({ length: 40 }, (_, i) => ({ label: "أ" + i, min: 25 }));
+  assert.equal(focusShape({ presets: many }).presets.length, PRESET_CAP);
+});
+
+test("presetFor can always answer, even for a rhythm deleted mid-round", () => {
+  const f = focusShape({});
+  assert.equal(presetFor(f, f.presets[1].id).id, f.presets[1].id);
+  assert.equal(presetFor(f, "deleted").id, f.pick, "falls back to the picked one");
+  assert.ok(presetFor({ presets: [] }, "x").min > 0, "and to a shape when there is nothing");
+});
+
+/* --- the run ---------------------------------------------------------- */
+
+test("a run is armed paused, starts off an absolute deadline, and pauses without loss", () => {
+  const t0 = Date.UTC(2027, 2, 3, 9, 0, 0);
+  const armed = armRun({ phase: "focus", planned: 25, now: t0 });
+  assert.equal(runRunning(armed), false, "arming does not start the clock");
+  assert.equal(runLeft(armed, t0), 25 * 60);
+
+  const going = startRun(armed, t0);
+  assert.equal(going.endAt, t0 + 25 * 60 * 1000);
+  assert.equal(runRunning(going), true);
+  assert.equal(runLeft(going, t0 + 10 * 60 * 1000), 15 * 60, "counted off the deadline");
+
+  const held = pauseRun(going, t0 + 10 * 60 * 1000);
+  assert.equal(held.endAt, null);
+  assert.equal(runLeft(held, t0 + 99 * 60 * 1000), 15 * 60, "a pause of any length costs nothing");
+  assert.equal(spentMinutes(held, t0), 10, "and the minutes worked are known exactly");
+
+  const back = startRun(held, t0 + 60 * 60 * 1000);
+  assert.equal(runLeft(back, t0 + 60 * 60 * 1000), 15 * 60, "resuming keeps the remainder");
+
+  /* A clock reading from before the round started must not report more
+     time left than the round has. The screen ticks `now` only while
+     something counts, so the render in which a round starts holds a stale
+     one — and the dial flashed «25:17» on a 25-minute round until this
+     bound existed. */
+  assert.equal(runLeft(going, t0 - 17 * 1000), 25 * 60, "never more than it was planned for");
+});
+
+test("runShape keeps a run across a reload and refuses one that is not a run", () => {
+  const t0 = Date.now();
+  const going = startRun(armRun({ phase: "long", planned: 30, now: t0 }), t0);
+  const back = runShape(JSON.parse(JSON.stringify(going)));
+  assert.deepEqual(back, going, "a run survives a round trip through the disk unchanged");
+
+  assert.equal(runShape(null), null);
+  assert.equal(runShape({ phase: "nonsense", planned: 25 }), null);
+  assert.equal(
+    runShape({ phase: "focus", left: 0, endAt: null }),
+    null,
+    "no deadline and nothing left is not a run",
+  );
+  /* «خمس دقائق أخرى» raises `planned` past any one preset's ceiling, and a
+     reload must not clamp it back down and lose those minutes. */
+  const long = runShape({ phase: "focus", planned: 300, left: 300 * 60, endAt: null });
+  assert.equal(long.planned, 300);
+});
+
+test("settleRun writes down the bell that rang into an empty room", () => {
+  const t0 = Date.now() - 20 * 60 * 1000;
+  const run = startRun(armRun({ phase: "focus", planned: 15, taskId: "t1", now: t0 }), t0);
+  assert.equal(runDone(run), true);
+  const out = settleRun(run);
+  assert.equal(out.rang, true);
+  assert.equal(out.dropped, false);
+  assert.equal(out.run, null);
+  assert.equal(out.log.minutes, 15);
+  assert.equal(out.log.full, true);
+  assert.equal(out.log.taskId, "t1");
+});
+
+test("settleRun never invents the minutes of a laptop that was shut", () => {
+  /* Started long enough ago that the deadline itself is past the staleness
+     window — the window is measured from the *deadline*, not from the
+     start, so an exactly-boundary case is deliberately not what is tested
+     here: `runStale` is strictly greater, and a run that went stale on the
+     very millisecond is still a run. */
+  const t0 = Date.now() - RUN_STALE_MS - 91 * 60 * 1000;
+  const run = startRun(armRun({ phase: "focus", planned: 90, now: t0 }), t0);
+  assert.equal(runStale(run), true);
+  const out = settleRun(run);
+  assert.equal(out.dropped, true);
+  assert.equal(out.rang, false);
+  assert.equal(out.run, null);
+  assert.equal(
+    out.log,
+    null,
+    "a round still counting when it went stale writes nothing — nobody can say when he left it",
+  );
+});
+
+test("settleRun keeps the minutes a pause recorded exactly, however long ago", () => {
+  const t0 = Date.now() - RUN_STALE_MS - 60 * 60 * 1000;
+  const held = pauseRun(
+    startRun(armRun({ phase: "focus", planned: 50, now: t0 }), t0),
+    t0 + 32 * 60 * 1000,
+  );
+  const out = settleRun(held);
+  assert.equal(out.dropped, true);
+  assert.ok(out.log, "a paused round is the one case the amount worked is known");
+  assert.equal(out.log.minutes, 32);
+  assert.equal(out.log.full, false, "and it is marked for what it is");
+});
+
+test("settleRun leaves a run that is still going alone", () => {
+  const t0 = Date.now();
+  const run = startRun(armRun({ phase: "focus", planned: 25, now: t0 }), t0);
+  const out = settleRun(run, t0 + 60 * 1000);
+  assert.equal(out.run, run);
+  assert.equal(out.log, null);
+  assert.equal(out.rang, false);
+  assert.equal(out.dropped, false);
+});
+
+test("a break leaves no row in a list that has always meant «جلسة تركيز»", () => {
+  const t0 = Date.now();
+  for (const phase of ["short", "long"]) {
+    const r = startRun(armRun({ phase, planned: 10, now: t0 }), t0);
+    assert.equal(sessionOf(r, { minutes: 10 }), null, phase + " is rest, not work");
+    assert.equal(settleRun(r, t0 + 11 * 60 * 1000).log, null);
+  }
+});
+
+test("a round under a minute is a misclick, not a session", () => {
+  const t0 = Date.now();
+  const r = startRun(armRun({ phase: "focus", planned: 25, now: t0 }), t0);
+  assert.equal(sessionOf(r, { now: t0 + 20 * 1000 }), null);
+  assert.ok(sessionOf(r, { now: t0 + 60 * 1000 }), "a whole minute is");
+  assert.equal(manualSession({ minutes: 0 }), null);
+  assert.equal(manualSession({ minutes: MIN_LOGGED }).minutes, MIN_LOGGED);
+});
+
+test("a round is dated by the logical day it was started in", () => {
+  /* 03:45 belongs to the night that is still going on, not to the morning
+     the bell rings in — the same boundary every other part of the app
+     keeps. Built off today so the test cannot rot. */
+  const d = new Date();
+  const small = new Date(d.getFullYear(), d.getMonth(), d.getDate(), DAY_START_HOUR - 1, 45);
+  const row = manualSession({ minutes: 30, at: small.getTime() });
+  const before = new Date(small.getFullYear(), small.getMonth(), small.getDate() - 1);
+  assert.equal(row.date, fmtDay(before), "a round at 03:45 files under the day before");
+});
+
+test("a stopped round is written down as the minutes it actually was", () => {
+  const t0 = Date.now();
+  const run = startRun(armRun({ phase: "focus", planned: 90, now: t0 }), t0);
+  const row = sessionOf(run, { full: false, now: t0 + 80 * 60 * 1000 });
+  assert.equal(row.minutes, 80, "eighty minutes of a ninety-minute round still happened");
+  assert.equal(row.planned, 90);
+  assert.equal(row.full, false, "and the row says it fell short rather than rounding itself up");
+});
+
+/* --- the shape an older row arrives in -------------------------------- */
+
+test("a session row written before schema 29 keeps its meaning", () => {
+  const old = sessionShape({ id: "s1", date: "2027-01-05", minutes: 25, taskId: "t9" });
+  assert.equal(old.minutes, 25);
+  assert.equal(old.planned, 25, "an older row planned exactly what it did");
+  assert.equal(old.full, true, "the old timer only ever wrote a row on completion");
+  assert.equal(old.at, null, "and it never knew the hour");
+  assert.equal(old.interrupts, 0);
+  assert.equal(old.id, "s1", "its id is kept, so nothing is re-keyed");
+
+  const junk = sessionShape({ minutes: "خمس", interrupts: 9999, note: "x".repeat(400) });
+  assert.ok(Number.isFinite(junk.minutes));
+  assert.equal(junk.interrupts, INTERRUPT_MAX);
+  assert.equal(junk.note.length, 160, "a long note is trimmed, never cleared");
+});
+
+test("migrate gives an older payload a focus desk and loses no round", () => {
+  const before = {
+    schema: 28,
+    sessions: [
+      { id: "a", date: "2027-01-05", minutes: 25, taskId: null },
+      { id: "b", date: "2027-01-06", minutes: 90, taskId: "t1" },
+    ],
+  };
+  const out = migrate(before);
+  assert.equal(out.schema, SCHEMA);
+  assert.equal(out.sessions.length, 2);
+  assert.deepEqual(
+    out.sessions.map((s) => s.minutes),
+    [25, 90],
+  );
+  assert.ok(out.sessions.every((s) => s.full === true && s.planned === s.minutes));
+  assert.ok(out.focus.presets.length > 0, "and a desk to run them on");
+  assert.equal(out.focus.run, null);
+  assert.equal(out.focus.autoDone, false, "migrate never restores the silent tick");
+});
+
+test("the session list is bounded, because a phone could feed it forever", () => {
+  const many = Array.from({ length: SESSION_CAP + 60 }, (_, i) => ({
+    id: "s" + i,
+    date: "2027-01-05",
+    minutes: 25,
+  }));
+  const out = migrate({ schema: 28, sessions: many });
+  assert.equal(out.sessions.length, SESSION_CAP);
+  assert.equal(out.sessions[0].id, "s60", "the oldest go, never the newest");
+
+  let list = [];
+  for (let i = 0; i < SESSION_CAP + 10; i += 1)
+    list = addSession(list, { id: "x" + i, date: dayKey(), minutes: 5 });
+  assert.equal(list.length, SESSION_CAP);
+  assert.equal(addSession(list, null).length, SESSION_CAP, "nothing to add is not a truncation");
+});
+
+test("the focus desk crosses a day rollover, but its cycle count does not", () => {
+  const t0 = Date.now();
+  const f = focusShape({
+    round: 3,
+    goal: 180,
+    autoNext: true,
+    run: startRun(armRun({ phase: "focus", planned: 90, now: t0 }), t0),
+  });
+  const next = focusCarry(f);
+  assert.equal(next.round, 0, "four rounds yesterday must not hand today a long break");
+  assert.equal(next.goal, 180);
+  assert.equal(next.autoNext, true);
+  assert.ok(next.run, "a round begun at 03:50 is still being worked at 04:01");
+  assert.equal(next.run.endAt, f.run.endAt);
+  /* And the same through the door the app actually uses. */
+  const rolled = freshState(carryOf({ ...freshState(), focus: f }));
+  assert.equal(rolled.focus.round, 0);
+  assert.equal(rolled.focus.goal, 180);
+  assert.ok(rolled.focus.run);
+});
+
+/* --- the rhythm ------------------------------------------------------- */
+
+test("the long break lands every N rounds and carries its own length", () => {
+  const p = presetShape({ min: 25, brk: 5, long: 15, every: 4 });
+  assert.equal(nextBreak(p, 1), "short");
+  assert.equal(nextBreak(p, 3), "short");
+  assert.equal(nextBreak(p, 4), "long", "the fourth round earns the long one, not the fifth");
+  assert.equal(nextBreak(p, 8), "long");
+  assert.equal(nextBreak(p, 0), "short", "and nothing earns it before the first round");
+
+  assert.equal(breakMinutes(p, "short"), 5);
+  assert.equal(breakMinutes(p, "long"), 15);
+  /* The pairing is the whole point of a preset: a ninety-minute cycle
+     followed by five minutes is not a rhythm. */
+  const deep = presetShape({ min: 90, brk: 20, long: 30, every: 2 });
+  assert.equal(breakMinutes(deep, "short"), 20);
+  assert.equal(nextBreak(deep, 2), "long");
+
+  assert.equal(tillLong(p, 0), 4);
+  assert.equal(tillLong(p, 3), 1);
+  assert.equal(tillLong(p, 4), 4, "a finished cycle starts the count over");
+});
+
+test("isBreak tells rest from work, and nothing else is rest", () => {
+  assert.equal(isBreak("focus"), false);
+  assert.equal(isBreak("short"), true);
+  assert.equal(isBreak("long"), true);
+  assert.equal(isBreak(undefined), false);
+});
+
+/* --- the readings ----------------------------------------------------- */
+
+const focusRows = (spec) =>
+  spec.map(([date, minutes, extra = {}], i) =>
+    sessionShape({ id: "f" + i, date, minutes, ...extra }),
+  );
+
+test("focusDay counts a day once, and says how many rounds went the distance", () => {
+  const today = dayKey();
+  const list = focusRows([
+    [today, 25, { full: true, interrupts: 1 }],
+    [today, 18, { full: false, planned: 25, interrupts: 3 }],
+    [addDays(today, -1), 50, { full: true }],
+  ]);
+  const d = focusDay(list, today);
+  assert.equal(d.minutes, 43);
+  assert.equal(d.rounds, 2);
+  assert.equal(d.full, 1);
+  assert.equal(d.interrupts, 4);
+  assert.equal(focusDay(list, addDays(today, -1)).minutes, 50);
+  assert.equal(focusDay([], today).minutes, 0, "an empty list is a zero, not a throw");
+});
+
+test("a focus streak whose last qualifying day was yesterday still counts today", () => {
+  const today = dayKey();
+  const list = focusRows([
+    [addDays(today, -1), 120],
+    [addDays(today, -2), 130],
+  ]);
+  assert.equal(focusStreak(list, 120), 2, "the day is not over, so it is not broken");
+  /* Today joining the run extends it rather than restarting it. */
+  assert.equal(focusStreak([...list, ...focusRows([[today, 120]])], 120), 3);
+  /* A day under the goal ends it — this meter forgives nothing, unlike the
+     discipline streak, because it is a dose and not a day's verdict. */
+  const broken = focusRows([
+    [addDays(today, -1), 10],
+    [addDays(today, -2), 200],
+  ]);
+  assert.equal(focusStreak(broken, 120), 0);
+  assert.equal(focusStreak(list, 0), 0, "no goal is no streak, never an infinite one");
+});
+
+test("the week is seven rows, and a day with no work is a zero and not a hole", () => {
+  const today = dayKey();
+  const week = focusWeek(
+    focusRows([
+      [today, 30],
+      [addDays(today, -3), 60],
+    ]),
+    7,
+    today,
+  );
+  assert.equal(week.length, 7);
+  assert.equal(week[6].date, today, "oldest first, today last");
+  assert.equal(week[6].minutes, 30);
+  assert.equal(week[3].minutes, 60);
+  assert.equal(week[0].minutes, 0);
+  assert.ok(week.every((d) => typeof d.minutes === "number"));
+});
+
+test("the month's average is taken over every day, not only the days that worked", () => {
+  const today = dayKey();
+  const span = focusSpan(focusRows([[today, 300]]), 30, today);
+  assert.equal(span.total, 300);
+  assert.equal(span.active, 1);
+  assert.equal(
+    span.perDay,
+    10,
+    "an average over «the days with work» improves every time one is missed",
+  );
+  assert.equal(span.best.minutes, 300);
+  assert.equal(span.best.date, today);
+  assert.equal(focusSpan([], 30, today).total, 0);
+});
+
+test("minutes per task survive the task being deleted", () => {
+  const today = dayKey();
+  const list = focusRows([
+    [today, 50, { taskId: "t1", label: "تقرير" }],
+    [today, 25, { taskId: "t1", label: "تقرير" }],
+    [today, 40, { taskId: "gone", label: "عرض قديم" }],
+    [today, 10, {}],
+  ]);
+  const out = focusByTask(list, [{ id: "t1", text: "تقرير الفصل" }], 7, today);
+  assert.equal(out[0].minutes, 75);
+  assert.equal(out[0].label, "تقرير الفصل", "the live task's current name wins");
+  const dead = out.find((r) => r.taskId === "gone");
+  assert.equal(dead.label, "عرض قديم", "a deleted task does not erase the afternoon it took");
+  assert.equal(dead.gone, true);
+  assert.ok(out.find((r) => r.label === "بلا مهمة محدّدة"));
+  const mins = out.map((r) => r.minutes);
+  assert.deepEqual(mins, [...mins].sort((a, b) => b - a), "biggest first");
+});
+
+test("the hour bands count only the rows that know their hour, and say what they left out", () => {
+  const today = dayKey();
+  const at = (h) => {
+    const d = new Date();
+    d.setHours(h, 30, 0, 0);
+    return d.getTime();
+  };
+  const list = focusRows([
+    [today, 60, { at: at(6) }],
+    [today, 30, { at: at(7) }],
+    [today, 20, { at: at(22) }],
+    [today, 90, {}],
+  ]);
+  const out = focusBands(list, 7, today);
+  assert.equal(out.known, 3);
+  assert.equal(out.missing, 1, "an older row knows its day and not its hour");
+  assert.equal(out.bands.find((b) => b.id === "dawn").minutes, 90);
+  assert.equal(out.bands.find((b) => b.id === "night").minutes, 20);
+  assert.equal(bestBand(list, 7, today).id, "dawn");
+  /* One round is not a pattern. */
+  assert.equal(bestBand(focusRows([[today, 60, { at: at(6) }]]), 7, today), null);
+  assert.equal(bestBand([], 7, today), null);
+});
+
+test("the interruption rate is null with nothing to divide by, never a clean sheet", () => {
+  const today = dayKey();
+  assert.equal(interruptRate([], 7, today), null);
+  assert.equal(interruptRate(focusRows([[today, 25, { interrupts: 0 }]]), 7, today), 0);
+  const two = focusRows([
+    [today, 25, { interrupts: 3 }],
+    [today, 25, { interrupts: 0 }],
+  ]);
+  assert.equal(interruptRate(two, 7, today), 1.5);
+});
+
+test("a whole cycle runs the way the screen draws it", () => {
+  /* Four rounds of twenty-five, the fourth earning the long break — the
+     bookkeeping the end-of-phase handler performs, stated once here so the
+     rhythm cannot drift from what the state layer says it is. */
+  const p = presetShape({ min: 25, brk: 5, long: 15, every: 4 });
+  let round = 0;
+  let minutes = 0;
+  const breaks = [];
+  for (let i = 0; i < 4; i += 1) {
+    const t0 = Date.now() - 60 * 60 * 1000;
+    const run = startRun(armRun({ phase: "focus", planned: p.min, presetId: p.id, now: t0 }), t0);
+    const out = settleRun(run);
+    assert.ok(out.rang);
+    minutes += out.log.minutes;
+    round += 1;
+    const brk = nextBreak(p, round);
+    breaks.push(brk);
+    if (brk === "long") round = 0;
+  }
+  assert.deepEqual(breaks, ["short", "short", "short", "long"]);
+  assert.equal(minutes, 100);
+  assert.equal(round, 0, "and the cycle starts over");
+  assert.ok(ROUND_MAX >= p.min);
 });

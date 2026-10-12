@@ -106,6 +106,7 @@ const shipped = [
   "state/life-state-streak.mjs",
   "state/life-state-finance.mjs",
   "state/life-state-bot.mjs",
+  "state/life-state-focus.mjs",
 ];
 const splitSrc = scanned.map((f) => join(srcDir, f));
 const site = join(root, "life-os");
