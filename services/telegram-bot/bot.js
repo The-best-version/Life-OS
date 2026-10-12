@@ -317,4 +317,21 @@ console.log("  المساء     " + hhmm(eveningMins()));
 bot.start({
   drop_pending_updates: true,
   onStart: () => console.log("  ✓ يستقبل"),
+}).catch((e) => {
+  /* The first call grammY makes is getMe, and the two ways it fails are a
+     token Telegram does not know and a network that cannot reach Telegram.
+     Unhandled, both arrive as a stack trace with the answer buried in it. */
+  const cause = String(e?.cause?.code || e?.message || e);
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|ETIMEDOUT/.test(cause)) {
+    console.error(
+      `\nتعذّر حلّ اسم ${new URL(CONFIG.apiRoot).hostname} — الشبكة تحجب تيليجرام.`,
+    );
+    console.error("البوت سليم؛ المشكلة بين هذا الجهاز وتيليجرام.");
+    console.error("جرّب شبكة أخرى، أو ضع عنوان وسيط في TELEGRAM_API_ROOT داخل .env.\n");
+  } else if (/401/.test(cause)) {
+    console.error("\nتيليجرام رفض التوكن. خُذ واحدًا جديدًا من @BotFather.\n");
+  } else {
+    console.error("\nالبوت ما بدأ: " + (e?.message || e) + "\n");
+  }
+  process.exit(1);
 });

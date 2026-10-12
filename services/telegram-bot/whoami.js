@@ -18,12 +18,35 @@ if (!CONFIG.token) {
   process.exit(1);
 }
 
-const res = await fetch(`https://api.telegram.org/bot${CONFIG.token}/getUpdates`);
+/* A top-level `await fetch` with nothing around it ends as an unhandled
+   rejection — a Node stack trace with `ENOTFOUND` in the middle of it, from
+   the one script a new setup runs first. The three ways this fails have
+   three different answers, and none of them is a stack trace. */
+let res;
+try {
+  res = await fetch(`${CONFIG.apiRoot}/bot${CONFIG.token}/getUpdates`);
+} catch (e) {
+  const dns = /ENOTFOUND|EAI_AGAIN|getaddrinfo/.test(String(e?.cause?.code || e?.message || e));
+  console.error(
+    dns
+      ? `تعذّر حلّ اسم ${new URL(CONFIG.apiRoot).hostname} — الشبكة تحجب تيليجرام.\n` +
+          "البوت نفسه سليم؛ المشكلة بين هذا الجهاز وتيليجرام. الخيارات:\n" +
+          "  • جرّب شبكة أخرى (بيانات الجوال مثلًا).\n" +
+          "  • أو مرّره على وسيط، وضع عنوانه في TELEGRAM_API_ROOT داخل .env."
+      : "تعذّر الاتصال بتيليجرام: " + (e?.message || e),
+  );
+  process.exit(1);
+}
+
 const body = await res.json().catch(() => null);
 
 if (!body || !body.ok) {
   console.error("تيليجرام ردّ: " + (body?.description || res.status));
-  console.error("تأكد من التوكن.");
+  console.error(
+    res.status === 401
+      ? "التوكن غير صحيح أو سُحب. خُذ واحدًا جديدًا من @BotFather."
+      : "تأكد من التوكن.",
+  );
   process.exit(1);
 }
 
