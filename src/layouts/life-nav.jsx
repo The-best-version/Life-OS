@@ -1,6 +1,6 @@
 import { T } from "../components/life-shared.jsx";
 import { GROUP_OF_TAB, MORE_IDS, NAV_GROUPS, NAV_IDS, TAB_BAR, navSplit, orderNavIds, rows } from "../state/life-state.mjs";
-import { BarChart3, CalendarDays, ChevronDown, ChevronUp, Compass, Flag, GraduationCap, GripVertical, LayoutGrid, Library, ListChecks, Menu, Network, Settings, ShieldOff, Timer, Wallet } from "lucide-react";
+import { BarChart3, Bot, CalendarDays, ChevronDown, ChevronUp, Compass, Flag, GraduationCap, GripVertical, LayoutGrid, Library, ListChecks, Menu, Network, Settings, ShieldOff, Timer, Wallet } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 /* ==================================================================== *
@@ -48,6 +48,7 @@ const NAV_META = {
   vault: { label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
   analytics: { label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
   breaker: { label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
+  bot: { label: "بوت تيليجرام", short: "البوت", icon: Bot },
   graph: { label: "خريطة المعرفة", short: "الخريطة", icon: Network },
 };
 

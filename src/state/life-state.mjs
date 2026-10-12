@@ -10,15 +10,16 @@
  *  the book shelf and the rest each have their own file
  *  (`life-state-habits.mjs`, `life-state-goals.mjs`, `life-state-books.mjs`,
  *  `life-state-tasks.mjs`, `life-state-calendar.mjs`, `life-state-uni.mjs`,
- *  `life-state-finance.mjs`, `life-state-streak.mjs`, and the
- *  dependency-free `life-state-util.mjs` every one of them is built on).
+ *  `life-state-finance.mjs`, `life-state-bot.mjs`, `life-state-streak.mjs`,
+ *  and the dependency-free `life-state-util.mjs` every one of them is built
+ *  on).
  *  What stays here is
  *  only what is inherently cross-cutting — the day boundary, `SCHEMA`, the
  *  nav order, the general cue quotes, and `freshState`/`migrate`/`carryOf`/
  *  `rollDay`, which by nature touch every domain's shape at once.
  *
  *  Every other file in the app still imports from `"./life-state.mjs"`
- *  alone — this file re-exports everything the 9 domain files export, so the
+ *  alone — this file re-exports everything the 10 domain files export, so the
  *  split below is invisible to every consumer. Add a field to a domain file
  *  and it is already exported from here; nothing else needs to change.
  *
@@ -78,6 +79,7 @@ import {
 } from "./life-state-books.mjs";
 import { eventShape, placeShape } from "./life-state-calendar.mjs";
 import { incomeShape, expenseShape, MONEY_CAP } from "./life-state-finance.mjs";
+import { botShape } from "./life-state-bot.mjs";
 import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 
@@ -100,6 +102,7 @@ export const NAV_IDS = [
   "vault",
   "analytics",
   "breaker",
+  "bot",
   "graph",
 ];
 
@@ -123,7 +126,7 @@ export const NAV_IDS = [
 export const NAV_GROUPS = [
   { id: "daily", label: "التركيز اليومي", ids: ["today", "routine", "agenda", "deep"] },
   { id: "growth", label: "النمو والتطوير", ids: ["goals", "uni", "finance"] },
-  { id: "tools", label: "الأدوات", ids: ["matrix", "breaker", "vault", "analytics", "graph"] },
+  { id: "tools", label: "الأدوات", ids: ["matrix", "breaker", "vault", "analytics", "bot", "graph"] },
 ];
 export const GROUP_OF_TAB = new Map(
   NAV_GROUPS.flatMap((g) => g.ids.map((id) => [id, g.id])),
@@ -288,7 +291,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 27;
+export const SCHEMA = 28;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
@@ -342,6 +345,9 @@ export const freshState = (carry = {}) => ({
   northStar: northStarShape(carry.northStar),
   place: placeShape(carry.place),
   waterGoal: clampGoal(carry.waterGoal),
+  /* What the Telegram bot sends unprompted, and when. Carried whole — a
+     schedule has nothing to do with which day it is. */
+  bot: botShape(carry.bot),
   /* The evening's prep, spent or still waiting. It carries — a prep written
      at 22:00 has to survive the rollover that consumes it — but it is spent
      by the line above, so the day it named clears it. */
@@ -725,6 +731,14 @@ export function migrate(saved) {
     northStar: northStarShape(saved.northStar),
     place: placeShape(saved.place),
     waterGoal: clampGoal(saved.waterGoal),
+    /* Schema 28's bot schedule. Shaped rather than branched, like the four
+       above: an older payload arrives with the defaults — the two briefs on
+       at 07:00 and 20:00, every periodic reminder off — which is exactly
+       what it means to have never opened the screen. `migrate` never turns
+       a reminder *on*, the same refusal as the core five and the habit
+       floor: what the bot may interrupt him for is not a question a
+       migration is in any position to answer. */
+    bot: botShape(saved.bot),
     /* Schema 24's evening prep. Shaped rather than branched, like the three
        above: an older payload simply arrives with nothing prepared, which is
        exactly what it means. Stale is not this function's problem — a prep
@@ -763,6 +777,7 @@ export const carryOf = (s) => ({
   northStar: s.northStar,
   place: s.place,
   waterGoal: s.waterGoal,
+  bot: s.bot,
   tomorrow: s.tomorrow,
   cueImage: s.cueImage,
   history: s.history,
@@ -998,6 +1013,26 @@ export {
   habitStreak,
   levelOf,
 } from "./life-state-streak.mjs";
+
+export {
+  BOT_PORT,
+  BOT_API,
+  BOT_MORNING_DEFAULT,
+  BOT_EVENING_DEFAULT,
+  REMINDER_CAP,
+  REMINDER_MAX,
+  WATER_EVERY_MIN,
+  WATER_EVERY_MAX,
+  WATER_EVERY_DEFAULT,
+  PRAYER_BEFORE_MIN,
+  PRAYER_BEFORE_MAX,
+  PRAYER_BEFORE_DEFAULT,
+  reminderShape,
+  botShape,
+  onDay,
+  planDay,
+  nextInPlan,
+} from "./life-state-bot.mjs";
 
 export {
   MONEY_CAP,

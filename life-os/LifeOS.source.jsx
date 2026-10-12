@@ -1,3 +1,4 @@
+import { BotModule } from "./features/life-bot.jsx";
 import { BreakerModule } from "./features/life-breaker.jsx";
 import { GoalsModule } from "./features/life-goals.jsx";
 import { VaultModule } from "./features/life-vault.jsx";
@@ -399,6 +400,12 @@ const SCREENS = {
 
   /* كاسر العادات. */
   breaker: (c) => <BreakerModule state={c.state} setState={c.setState} />,
+
+  /* بوت تيليجرام — جدولة ما يرسله البوت دون طلب. لا تتحكّم بالعملية:
+     تكتب `state.bot` كأي شاشة، والبوت يقرؤها عن القرص ويعيد تسليح
+     نفسه. الشيء الحيّ الوحيد فيها شريط الحالة، لأن «هل العملية شغّالة
+     الآن؟» سؤال لا يجيب عنه ملف. */
+  bot: (c) => <BotModule state={c.state} setState={c.setState} />,
 
   /* خريطة المعرفة — روابط لا embeds، ولهذا لا تحتاج حالة. */
   graph: () => <GraphModule />,
@@ -1055,7 +1062,21 @@ export default function LifeOS() {
   }, []);
   const takeBack = useCallback(() => {
     if (!undo) return;
-    setState((s) => ({ ...s, ...undo.before }));
+    /* Spread over whatever the state is by then, never over the state the
+       delete was made on, so an unrelated change in those eight seconds is
+       not undone with it.
+     *
+     *  `before` may also be a function of that state, and the control hub is
+     *  why: every other delete in this app restores a top-level array, where
+     *  a plain slice already has the property above — an unrelated change
+     *  lives under a different key. A reminder lives *inside* `state.bot`
+     *  beside the water window and the two brief times, so a snapshot of the
+     *  whole object would quietly revert a toggle flipped a second later. A
+     *  function can rebuild one field of it against the current value. */
+    setState((s) => ({
+      ...s,
+      ...(typeof undo.before === "function" ? undo.before(s) : undo.before),
+    }));
     setUndo(null);
   }, [undo]);
   const dropUndo = useCallback(() => setUndo(null), []);

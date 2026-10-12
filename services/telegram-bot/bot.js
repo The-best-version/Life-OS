@@ -30,7 +30,9 @@ import { withState, readLife, DiskError } from "./lifeos-client.js";
 import { parse, fold } from "./parse.js";
 import * as act from "./actions.js";
 import * as V from "./views.js";
-import { schedule, eveningMins, quoteFor } from "./briefing.js";
+import { Scheduler, textFor, quoteFor } from "./reminders.js";
+import { startHealth, maskId } from "./health.js";
+import { BOT_API } from "../../src/state/life-state.mjs";
 
 const problems = configProblems();
 if (problems.length) {
@@ -288,26 +290,120 @@ const sendEvening = (chatId) =>
    notices. */
 bot.catch((err) => console.error("bot: " + (err?.message || err)));
 
-const stopMorning = schedule(CONFIG.morningAt, () => sendMorning(CONFIG.chatId));
-const stopEvening = schedule(eveningMins(), () => sendEvening(CONFIG.chatId));
+/* --- the schedule ------------------------------------------------------ *
+ *  Everything the bot sends unprompted comes off `state.bot`, which the
+ *  control hub in the app edits and the sync server keeps on disk. There is
+ *  no command channel between the screen and this process and there must not
+ *  be one: the screen saves, the disk changes, and the tick below notices.
+ *
+ *  A minute is the resolution. It costs one local HTTP read, it is how the
+ *  bot learns about an edit made thirty seconds ago, and it is also how the
+ *  day rollover arrives — `Scheduler.sync` re-arms only when the plan it
+ *  depends on has actually moved, so the other 1,439 ticks do nothing.
+ * ---------------------------------------------------------------------- */
+const TICK = 60 * 1000;
+
+async function deliver(entry) {
+  let state;
+  try {
+    state = await readLife();
+  } catch (e) {
+    console.error("reminder: " + (e && e.message ? e.message : e));
+    return;
+  }
+  if (!state) return;
+
+  if (entry.kind === "morning") return sendMorning(CONFIG.chatId);
+  if (entry.kind === "evening") return sendEvening(CONFIG.chatId);
+
+  /* Built from the state at the moment it fires, never at the moment it was
+     armed: a water nudge armed at 07:00 that still says «باقي ٨ أكواب» at
+     three in the afternoon has stopped being true. `null` means there is
+     nothing worth saying, and silence is the right output for that. */
+  const said = textFor(entry, state);
+  if (!said) return;
+
+  const keys =
+    said.water
+      ? new InlineKeyboard().text("💧 + كاس ماء", "water:1")
+      : said.tasks
+        ? V.taskKeys(act.dayAt(state))
+        : null;
+  await bot.api.sendMessage(CONFIG.chatId, said.text, keysOr(keys)).catch((e) => {
+    console.error("reminder send: " + (e?.message || e));
+  });
+}
+
+const scheduler = new Scheduler(deliver);
+let lastTickAt = 0;
+
+async function tick() {
+  lastTickAt = Date.now();
+  let state;
+  try {
+    state = await readLife();
+  } catch {
+    /* The sync server is down or restarting. The timers already armed keep
+       their moments, and the next tick that succeeds re-reads the schedule.
+       Nothing is written and nothing is lost. */
+    return;
+  }
+  if (!state) return;
+  if (scheduler.sync(state)) {
+    console.log(
+      `          ${new Date().toTimeString().slice(0, 8)}  ${scheduler.armed.length} تذكير مسلّح`,
+    );
+  }
+}
+
+const ticker = setInterval(tick, TICK);
+ticker.unref?.();
+tick();
+
+/* --- the status strip's one endpoint ----------------------------------- */
+const startedAt = Date.now();
+const health = startHealth({
+  read: () => ({
+    since: startedAt,
+    chat: maskId(CONFIG.chatId),
+    api: CONFIG.apiRoot,
+    armed: scheduler.armed.length,
+    next: scheduler.armed[0]?.when?.getTime() ?? null,
+    checkedAt: lastTickAt,
+  }),
+  /* The test ping. It proves the whole chain in one tap — this process is
+     alive, the token works, the network reaches Telegram, and the chat id is
+     the right one — which is four different failures a single message rules
+     out at once. */
+  ping: async () => {
+    await bot.api.sendMessage(
+      CONFIG.chatId,
+      "‏🧪 رسالة تجريبية من لوحة التحكم. القناة تعمل.",
+    );
+    return true;
+  },
+});
 
 const bye = async () => {
-  stopMorning();
-  stopEvening();
+  clearInterval(ticker);
+  scheduler.clear();
+  try {
+    health.close();
+  } catch {}
   await bot.stop().catch(() => {});
   process.exit(0);
 };
 process.once("SIGINT", bye);
 process.once("SIGTERM", bye);
 
-const hhmm = (mins) =>
-  `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
-
 console.log("2027 Life OS — بوت تيليجرام");
 console.log("  الحالة من  " + CONFIG.origin);
 console.log("  يردّ على   " + CONFIG.chatId);
-console.log("  الصباح     " + hhmm(CONFIG.morningAt));
-console.log("  المساء     " + hhmm(eveningMins()));
+console.log("  الحالة على " + BOT_API);
+/* The schedule is deliberately absent from this banner. It lives in
+   `state.bot` and is edited on the «بوت تيليجرام» screen, so printing a copy
+   of it at startup would be a second answer that goes stale the first time
+   he changes a time — the tick below logs what it actually armed. */
 
 /* Long polling, not a webhook: no public URL, no tunnel, no TLS to terminate
    on a home machine, and nothing listening on a port that did not need to be

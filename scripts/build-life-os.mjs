@@ -65,6 +65,7 @@ const scanned = [
   "features/life-vault.jsx",
   "features/life-goals.jsx",
   "components/life-shared.jsx",
+  "features/life-bot.jsx",
   "features/life-breaker.jsx",
   "components/life-day.jsx",
   "features/life-uni.jsx",
@@ -84,6 +85,7 @@ const shipped = [
   "features/life-vault.jsx",
   "features/life-goals.jsx",
   "components/life-shared.jsx",
+  "features/life-bot.jsx",
   "features/life-breaker.jsx",
   "components/life-day.jsx",
   "features/life-uni.jsx",
@@ -103,6 +105,7 @@ const shipped = [
   "state/life-state-uni.mjs",
   "state/life-state-streak.mjs",
   "state/life-state-finance.mjs",
+  "state/life-state-bot.mjs",
 ];
 const splitSrc = scanned.map((f) => join(srcDir, f));
 const site = join(root, "life-os");

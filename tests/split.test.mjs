@@ -82,6 +82,7 @@ const MODULES = [
   "features/life-vault.jsx",
   "features/life-goals.jsx",
   "state/life-state.mjs",
+  "features/life-bot.jsx",
   "features/life-breaker.jsx",
   "utils/prayer-times.mjs",
   "utils/life-storage.mjs",
@@ -101,6 +102,7 @@ const MODULES = [
   "state/life-state-uni.mjs",
   "state/life-state-streak.mjs",
   "state/life-state-finance.mjs",
+  "state/life-state-bot.mjs",
 ];
 const CONSUMERS = [
   "features/life-settings.jsx",
@@ -113,6 +115,7 @@ const CONSUMERS = [
   "features/life-vault.jsx",
   "features/life-goals.jsx",
   "LifeOS.jsx",
+  "features/life-bot.jsx",
   "features/life-breaker.jsx",
   "components/life-shared.jsx",
   "features/life-uni.jsx",
@@ -131,6 +134,7 @@ const CONSUMERS = [
   "state/life-state-uni.mjs",
   "state/life-state-streak.mjs",
   "state/life-state-finance.mjs",
+  "state/life-state-bot.mjs",
 ];
 
 function exportsOf(src) {

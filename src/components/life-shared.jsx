@@ -1095,7 +1095,13 @@ export const UndoBus = React.createContext(null);
 
 /* `arm(label, before)` — `before` is the slice of state to restore, e.g.
    `{ habits: s.habits }`. Spread back over whatever the state is by then, so
-   an unrelated change made in those eight seconds is not undone with it. */
+   an unrelated change made in those eight seconds is not undone with it.
+
+   It may also be a function `(s) => slice`, for the one case a plain slice
+   cannot express: a row that lives *inside* an object rather than in a
+   top-level array. `{ bot: wholeBotObject }` would revert every other field
+   of `state.bot` along with the reminder being put back; `(s) => ({ bot:
+   { ...s.bot, customs: kept } })` puts back only what was deleted. */
 export function useUndo() {
   return useContext(UndoBus) || noUndo;
 }

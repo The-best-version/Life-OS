@@ -77,6 +77,14 @@ import {
   comebackFrom,
   COMEBACK_MIN,
   stampToday,
+  botShape,
+  reminderShape,
+  planDay,
+  nextInPlan,
+  onDay,
+  REMINDER_CAP,
+  WATER_EVERY_MAX,
+  PRAYER_BEFORE_MAX,
   incomeShape,
   expenseShape,
   MONEY_CAP,
@@ -1524,4 +1532,112 @@ test("a hole in either money list is dropped, not carried forward to throw", () 
   assert.equal(after.expenses.length, 1);
   assert.equal(after.expenses[0].amount, 5);
   assert.equal(after.income.length, 0);
+});
+
+/* --- the Telegram bot's schedule ---------------------------------------
+   It lives in the state and not in the bot's own .env for one reason: a
+   schedule that can only be changed by editing a file on the machine the bot
+   runs on is a schedule that never changes. These tests hold the shape the
+   screen writes and the bot reads. */
+test("migrate never turns a reminder on", () => {
+  /* The same refusal as the core five and the habit floor. What the bot may
+     interrupt him for is not a question a migration is in any position to
+     answer, so an older payload arrives with every periodic reminder off and
+     the screen asks. */
+  const after = migrate(fixture("schema-20.json"));
+  assert.equal(after.schema, SCHEMA);
+  assert.equal(after.bot.water.on, false);
+  assert.equal(after.bot.prayer.on, false);
+  assert.equal(after.bot.tasks.on, false);
+  assert.deepEqual(after.bot.customs, []);
+  /* The two briefs are on, because a bot that greets you is the point. */
+  assert.equal(after.bot.morningOn, true);
+  assert.equal(after.bot.eveningOn, true);
+  assert.equal(after.bot.morningAt, "07:00");
+});
+
+test("the schedule survives a day rollover whole", () => {
+  /* A schedule has nothing to do with which day it is, so it carries — and a
+     key missing from `carryOf` is data that exists all day and is gone by
+     04:00 with nothing on screen to say why. */
+  const s = freshState();
+  const mine = botShape({ ...s.bot, morningAt: "06:30", water: { on: true, every: 90 } });
+  const rolled = rollDay({ ...s, bot: mine, date: addDays(dayKey(), -1) });
+  assert.equal(rolled.bot.morningAt, "06:30");
+  assert.equal(rolled.bot.water.on, true);
+  assert.equal(rolled.bot.water.every, 90);
+});
+
+test("botShape bounds every number and keeps every word", () => {
+  const b = botShape({
+    morningAt: "99:99",
+    water: { every: 9999 },
+    prayer: { before: -4 },
+    tasks: { at: "7:5" },
+  });
+  assert.equal(b.morningAt, "07:00", "an unreadable time falls back, never to NaN");
+  assert.equal(b.water.every, WATER_EVERY_MAX);
+  assert.equal(b.prayer.before, 5, "clamped to the floor, not to zero");
+  assert.equal(b.tasks.at, "17:00");
+  assert.equal(botShape(null).on, true);
+  assert.equal(botShape("nonsense").customs.length, 0);
+});
+
+test("a reminder with a long sentence is trimmed, never cleared", () => {
+  /* Text the user typed is never silently deleted on the way through a shape
+     that runs on every load. */
+  const long = "ذ".repeat(400);
+  const r = reminderShape({ text: long, at: "bad" });
+  assert.equal(r.text.length, 120);
+  assert.equal(r.at, "09:00", "a reminder with no hour cannot be armed");
+  assert.equal(r.on, true);
+  assert.ok(r.id);
+});
+
+test("an all-seven day list and an empty one are one shape, not two", () => {
+  assert.deepEqual(reminderShape({ days: [0, 1, 2, 3, 4, 5, 6] }).days, []);
+  assert.deepEqual(reminderShape({ days: [3, 3, 1, 99, "x"] }).days, [1, 3]);
+  assert.equal(onDay({ days: [] }, 4), true);
+  assert.equal(onDay({ days: [1] }, 4), false);
+  assert.equal(onDay({}, 0), true);
+});
+
+test("the custom list is bounded like every list a phone can feed", () => {
+  const many = Array.from({ length: REMINDER_CAP + 10 }, (_, i) => ({ text: "ت" + i, at: "09:00" }));
+  assert.equal(botShape({ customs: many }).customs.length, REMINDER_CAP);
+});
+
+test("planDay is sorted, bounded to the day, and silent when switched off", () => {
+  const bot = botShape({
+    morningAt: "07:00",
+    eveningAt: "20:00",
+    water: { on: true, every: 120, from: "08:00", to: "12:00" },
+    prayer: { on: true, before: 15 },
+    tasks: { on: true, at: "17:00" },
+  });
+  const prayers = { fajr: 5, sunrise: 6.2, dhuhr: 12, asr: 15.5, maghrib: 18, isha: 19.5 };
+  const plan = planDay(bot, { dow: 1, prayers, hasTasks: true });
+  const mins = plan.map((p) => p.at);
+  assert.deepEqual([...mins].sort((a, b) => a - b), mins, "sorted");
+  assert.ok(mins.every((m) => m >= 0 && m < 1440), "inside the day");
+  /* 15 minutes before Dhuhr at 12:00. */
+  assert.ok(plan.some((p) => p.kind === "prayer" && p.prayer === "dhuhr" && p.at === 11 * 60 + 45));
+  /* A prayer the sun never reaches contributes nothing rather than a NaN. */
+  const polar = planDay(bot, { dow: 1, prayers: { fajr: null, dhuhr: 12 }, hasTasks: true });
+  assert.ok(polar.every((p) => Number.isFinite(p.at)));
+
+  assert.deepEqual(planDay(botShape({ on: false }), { dow: 1 }), []);
+});
+
+test("the task sweep is armed only when there is something to sweep", () => {
+  const bot = botShape({ morningOn: false, eveningOn: false, tasks: { on: true, at: "17:00" } });
+  assert.equal(planDay(bot, { dow: 1, hasTasks: true }).length, 1);
+  assert.equal(planDay(bot, { dow: 1, hasTasks: false }).length, 0);
+});
+
+test("nextInPlan reads the day forward and runs out at the end of it", () => {
+  const plan = [{ at: 420 }, { at: 1200 }];
+  assert.equal(nextInPlan(plan, 0).at, 420);
+  assert.equal(nextInPlan(plan, 420).at, 1200, "a moment already passed is not next");
+  assert.equal(nextInPlan(plan, 1300), null);
 });

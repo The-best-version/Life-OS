@@ -24,7 +24,7 @@ import {
   undo,
   dayAt,
 } from "../services/telegram-bot/actions.js";
-import { quoteFor, nextAt } from "../services/telegram-bot/briefing.js";
+import { quoteFor, planToday, textFor, Scheduler } from "../services/telegram-bot/reminders.js";
 import {
   freshState,
   dayKey,
@@ -32,6 +32,7 @@ import {
   WATER_GOAL_DEFAULT,
   disciplineOf,
   isGap,
+  botShape,
 } from "../src/state/life-state.mjs";
 
 /* --- the reading ------------------------------------------------------- */
@@ -303,8 +304,127 @@ test("the morning cue is the same all day and different tomorrow", () => {
   assert.equal(quoteFor([], "2027-03-04"), null);
 });
 
-test("a brief armed for an hour already past is armed for tomorrow", () => {
-  const from = new Date(2027, 2, 4, 9, 0, 0);
-  assert.equal(nextAt(7 * 60, from).getDate(), 5);
-  assert.equal(nextAt(20 * 60, from).getDate(), 4);
+/* --- what the bot sends unprompted -------------------------------------
+   The schedule is `state.bot` and `planDay` turns it into minutes; the two
+   tests below hold the half that cannot be pure — turning those minutes
+   into moments, and turning a kind into a sentence built from the day as it
+   stands when it fires rather than when it was armed. */
+
+const withBot = (part) => {
+  const s = freshState();
+  return { ...s, bot: botShape({ ...s.bot, ...part }), place: null };
+};
+
+test("the plan becomes moments on the day it is asked about", () => {
+  const noon = new Date(2027, 2, 4, 12, 0, 0);
+  const state = withBot({ morningAt: "07:00", eveningAt: "20:00" });
+  const plan = planToday(state, noon);
+  assert.deepEqual(plan.map((p) => p.kind), ["morning", "evening"]);
+  assert.equal(plan[0].when.getDate(), 4);
+  assert.equal(plan[0].when.getHours(), 7);
+  assert.equal(plan[1].when.getHours(), 20);
+});
+
+test("a reminder already past today is not armed, and one ahead is", () => {
+  /* The arming rule the whole scheduler rests on: a brief whose hour has
+     gone is tomorrow's problem, and tomorrow's arming is what picks it up.
+     Arming it anyway would fire it the instant the bot restarts. */
+  const nine = new Date(2027, 2, 4, 9, 0, 0);
+  const state = withBot({ morningAt: "07:00", eveningAt: "20:00" });
+  const sch = new Scheduler(() => {});
+  assert.equal(sch.sync(state, nine), true);
+  assert.deepEqual(sch.armed.map((p) => p.kind), ["evening"]);
+  sch.clear();
+});
+
+test("the scheduler re-arms when the schedule moves and not otherwise", () => {
+  /* Re-arming every tick would cancel and recreate a dozen timers a minute
+     for nothing; re-arming on none of them would mean an edit that never
+     takes effect until tomorrow. */
+  const nine = new Date(2027, 2, 4, 9, 0, 0);
+  const sch = new Scheduler(() => {});
+  const state = withBot({ eveningAt: "20:00" });
+  assert.equal(sch.sync(state, nine), true, "first sync always arms");
+  assert.equal(sch.sync(state, new Date(2027, 2, 4, 9, 1, 0)), false, "a minute later, nothing moved");
+  const moved = withBot({ eveningAt: "21:30" });
+  assert.equal(sch.sync(moved, nine), true, "an edited time re-arms");
+  assert.equal(sch.armed[0].when.getHours(), 21);
+  sch.clear();
+});
+
+test("the water window is a window, and a backwards one arms nothing", () => {
+  const noon = new Date(2027, 2, 4, 0, 1, 0);
+  const on = withBot({
+    morningOn: false,
+    eveningOn: false,
+    water: { on: true, every: 120, from: "08:00", to: "14:00" },
+  });
+  const plan = planToday(on, noon);
+  assert.deepEqual(
+    plan.map((p) => p.when.getHours()),
+    [10, 12, 14],
+    "every two hours after the start, up to and including the end",
+  );
+  const backwards = withBot({
+    morningOn: false,
+    eveningOn: false,
+    water: { on: true, every: 60, from: "22:00", to: "06:00" },
+  });
+  assert.deepEqual(planToday(backwards, noon), [], "a window that ends before it starts is a mistake, not a wrap");
+});
+
+test("a custom reminder only fires on the days it names", () => {
+  const thursday = new Date(2027, 2, 4, 0, 1, 0); // getDay() === 4
+  assert.equal(thursday.getDay(), 4);
+  const base2 = { morningOn: false, eveningOn: false };
+  const onThu = withBot({
+    ...base2,
+    customs: [{ id: "r1", on: true, at: "09:00", text: "اتصل بالجامعة", days: [4] }],
+  });
+  assert.equal(planToday(onThu, thursday).length, 1);
+  const onSun = withBot({
+    ...base2,
+    customs: [{ id: "r1", on: true, at: "09:00", text: "اتصل بالجامعة", days: [0] }],
+  });
+  assert.equal(planToday(onSun, thursday).length, 0);
+  /* No days named means every day — an explicit all-seven and an empty list
+     would be two shapes meaning one thing. */
+  const always = withBot({
+    ...base2,
+    customs: [{ id: "r1", on: true, at: "09:00", text: "اتصل بالجامعة", days: [] }],
+  });
+  assert.equal(planToday(always, thursday).length, 1);
+});
+
+test("the master switch silences the plan without forgetting it", () => {
+  const noon = new Date(2027, 2, 4, 0, 1, 0);
+  const off = withBot({ on: false, morningAt: "07:00" });
+  assert.deepEqual(planToday(off, noon), []);
+  /* Off is mute, not uninstall: the schedule it was holding is still there. */
+  assert.equal(off.bot.morningAt, "07:00");
+});
+
+test("a reminder says what is actually left, or says nothing", () => {
+  let s = freshState();
+  s = { ...s, water: 2, waterGoal: 9 };
+  const said = textFor({ kind: "water" }, s);
+  assert.match(said.text, /2/);
+  assert.equal(said.water, true);
+  /* The goal met: the message that fires to say «nothing» is the one that
+     teaches you to ignore the rest. */
+  assert.equal(textFor({ kind: "water" }, { ...s, water: 9 }), null);
+
+  const noTasks = { ...s, tasks: s.tasks.map((t) => ({ ...t, today: false })) };
+  assert.equal(textFor({ kind: "tasks" }, noTasks), null);
+  assert.ok(textFor({ kind: "tasks" }, s).text.includes("باقي"));
+});
+
+test("a custom reminder fires with the words it has now, not the ones it was armed with", () => {
+  const armed = { kind: "custom", id: "r1", text: "النصّ القديم" };
+  const s = freshState();
+  const now = { ...s, bot: botShape({ customs: [{ id: "r1", on: true, at: "09:00", text: "النصّ الجديد" }] }) };
+  assert.match(textFor(armed, now).text, /الجديد/);
+  /* Switched off between arming and firing: nothing is sent. */
+  const muted = { ...s, bot: botShape({ customs: [{ id: "r1", on: false, at: "09:00", text: "ن" }] }) };
+  assert.equal(textFor(armed, muted), null);
 });

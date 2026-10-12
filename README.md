@@ -32,7 +32,7 @@
 | العملية | أين | كيف تبدأ | التكلفة |
 |---|---|---|---|
 | خادم الحفظ المحلي | `services/local-sync-server.js` | اختصار في `shell:startup` | ~1 ثانية معالج في اليوم |
-| بوت تيليجرام | `services/telegram-bot/bot.js` | اختصار لـ `run-telegram-bot.vbs` في `shell:startup` | Long polling كل ٣٠ ثانية |
+| بوت تيليجرام | `services/telegram-bot/bot.js` | اختصار في `shell:startup` ✓ | Long polling + قراءة الجدول كل دقيقة |
 | مراقب الرسوم (`--watch`) | `services/report-agent.js` | **موقوف** — نسخة معطّلة في `services/launchers/` | — |
 | تحديث الرسوم عند كل commit | `.git/hooks/pre-commit` | تلقائي | ~110 مللي ثانية |
 
@@ -100,6 +100,8 @@ Businessman/   خزانة Obsidian
 | حفظ القرص، النسخ، التعارض | `services/local-sync-server.js` |
 | ما يفهمه البوت من رسالة | `services/telegram-bot/parse.js` |
 | ما تفعله الرسالة بالحالة | `services/telegram-bot/actions.js` |
+| ما يرسله البوت دون طلب | شاشة «بوت تيليجرام» في الموقع (تكتب `state.bot`) |
+| نصّ التذكيرات وتسليح مؤقّتاتها | `services/telegram-bot/reminders.js` |
 | تذكيرات Windows | `services/local-sync-server.js` + `src/utils/prayer-times.mjs` |
 | خطوات البناء أو CSS المسحوب | `scripts/build-life-os.mjs` (المصفوفتان `scanned` و`shipped`) |
 

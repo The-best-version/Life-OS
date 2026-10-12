@@ -66,18 +66,6 @@ const pick = (key, fallback) => {
   return v === undefined || v === "" ? fallback : v;
 };
 
-/* "HH:MM" to minutes past midnight, or the fallback. The same reading
-   `minsIn` does in the state layer; not imported only because this file is
-   read before anything else and deliberately depends on nothing. */
-const atMins = (v, fallback) => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
-  if (!m) return fallback;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return fallback;
-  return h * 60 + min;
-};
-
 export const CONFIG = {
   /* From @BotFather. The only secret here. */
   token: pick("TELEGRAM_BOT_TOKEN", ""),
@@ -88,12 +76,11 @@ export const CONFIG = {
      the live file, and it is the default; `--port 47699` plus this variable
      is how the bot is exercised against a throwaway copy. */
   origin: String(pick("LIFEOS_ORIGIN", "http://127.0.0.1:47615")).replace(/\/+$/, ""),
-  /* When the two briefs are sent. The morning one is a clock hour because
-     waking is: anchoring it to Fajr would send it at 04:40 in June. The
-     evening one defaults to the same hour the app's own reflection window
-     opens, and `briefing.js` reads that constant rather than repeating 20. */
-  morningAt: atMins(pick("MORNING_AT", "07:00"), 7 * 60),
-  eveningAt: atMins(pick("EVENING_AT", ""), null),
+  /* The two briefs' hours are NOT here any more. They live in `state.bot`,
+     edited on the «بوت تيليجرام» screen and read off the disk by the
+     scheduler — because a time that can only be changed by editing a file on
+     the machine the bot runs on is a time that never changes. A value left
+     in .env is simply ignored, which is the right failure: one place. */
   /* Long polling by default: no public URL, no tunnel, no webhook secret to
      leak. A home machine behind a router has no business terminating TLS. */
   seconds: Number(pick("POLL_SECONDS", "30")) || 30,
