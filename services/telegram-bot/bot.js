@@ -34,6 +34,7 @@ import { Scheduler, Bell, Snoozer, textFor, quoteFor } from "./reminders.js";
 import { coachReply } from "./insight.js";
 import { answer, weekReview, search } from "./ask.js";
 import { readVoice, VoiceError } from "./voice.js";
+import { line, notesWord } from "./fmt.js";
 import { startHealth, maskId } from "./health.js";
 import { BOT_API, URGE_TAGS, botShape } from "../../src/state/life-state.mjs";
 
@@ -191,8 +192,12 @@ async function showCoach(ctx) {
   const got = await dayOrTell(ctx);
   if (!got) return;
   const note = coachReply(got.state);
+  /* Through the Arabic formatter like every other number the bot prints: a
+     Latin digit inside Arabic text is a strong LTR run that throws itself to
+     the wrong side of the sentence, and «٣ ملاحظة» is a plural nobody says
+     out loud. */
   const out = note.more
-    ? `${note.text}\n\n${"‏"}و${note.more} ملاحظة أخرى — أرسل «يومي» لترى الصورة كاملة.`
+    ? `${note.text}\n\n${line(`و${notesWord(note.more)} أخرى — أرسل «يومي» لترى الصورة كاملة.`)}`
     : note.text;
   return ctx.reply(out, keysOr(V.coachKeys(note.actions)));
 }

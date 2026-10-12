@@ -505,10 +505,14 @@ test("the coach carries three observations and says how many it left", () => {
   const note = coachNote(s, at(21));
   assert.equal(note.ids.length, COACH_MAX);
   assert.equal(note.more, all.length - COACH_MAX);
-  /* Only the first observation's buttons: three sets under one message is a
-     wall of taps nobody reads, and the rank already said which mattered
-     most. */
-  assert.deepEqual(note.actions, all[0].actions);
+  /* One observation's buttons, never three — and the first that actually
+     has any. Several checks carry none by design (a deadline with a date on
+     it has no one-tap answer), and taking the first blindly meant a day
+     whose most urgent fact was an exam sent every other button away with
+     it. */
+  const first = all.slice(0, COACH_MAX).find((a) => a.actions.length);
+  assert.deepEqual(note.actions, first.actions);
+  assert.ok(note.actions.length, "a fresh evening has something to offer");
   /* Ranked, so the order is a decision rather than the order the checks
      happen to be written in. */
   assert.deepEqual(

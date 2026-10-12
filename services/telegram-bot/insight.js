@@ -600,10 +600,17 @@ export function coachNote(state, now = new Date()) {
   const pick = all.slice(0, COACH_MAX);
   return {
     text: pick.map((a) => a.text).join("\n\n"),
-    /* Only the first observation's buttons. Three sets of buttons under one
-       message is a wall of taps nobody reads, and the first is the one the
-       rank already said mattered most. */
-    actions: pick[0].actions,
+    /* One observation's buttons, never three: three sets under one message
+       is a wall of taps nobody reads, and the rank already said which
+       mattered most.
+     *
+     *  But the *first that has any*, not simply the first. Several checks
+     *  carry no action by design — a deadline with a date on it has no
+     *  one-tap answer — and taking `pick[0].actions` blindly meant that a
+     *  day whose most urgent fact was an exam tomorrow sent the habit
+     *  buttons and the focus buttons away with it. One set, still ranked,
+     *  and never an empty keyboard under a message that had one to offer. */
+    actions: (pick.find((a) => a.actions.length) || pick[0]).actions,
     ids: pick.map((a) => a.id),
     more: all.length - pick.length,
   };
