@@ -94,6 +94,58 @@ export const spanOf = (mins) => {
   return `${hours} و${minsWord(rest)}`;
 };
 
+/* --- a picture, without a dependency ------------------------------------ *
+ *  A week of numbers in a list is a week nobody reads the shape of, and the
+ *  shape is the whole reason a weekly review exists — a slope is the thing a
+ *  day cannot show you.
+ *
+ *  The obvious answer is to render the report agent's SVG and send it as a
+ *  photo, and it is the wrong one here: it needs an SVG-to-PNG converter,
+ *  which is a new installed dependency in a repo whose whole build borrows
+ *  what it needs and installs nothing. Block characters are a bar chart that
+ *  costs nothing, render identically on every phone, and survive being
+ *  copied out as text.
+ *
+ *  Scaled against a stated maximum rather than against the data's own: bars
+ *  normalised to the best day make every week look the same, which is
+ *  precisely the comparison a review is for.
+ * ---------------------------------------------------------------------- */
+const BARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+export const sparkline = (values, max) => {
+  const list = (Array.isArray(values) ? values : []).map((v) => Number(v) || 0);
+  if (!list.length) return "";
+  const top = Number(max) > 0 ? Number(max) : Math.max(...list, 1);
+  return list
+    .map((v) => {
+      /* Zero gets its own mark and never the shortest bar: «▁» and «لم يحدث»
+         are different facts, and a chart that draws them the same is a chart
+         that hides every empty day. */
+      if (v <= 0) return "·";
+      /* Floored, never rounded: rounding draws a 79% day at six bars out of
+         seven, which reads as a day that cleared the target it missed. A
+         chart about discipline may understate and may not overstate. */
+      const i = Math.min(BARS.length - 1, Math.max(0, Math.floor((v / top) * (BARS.length - 1))));
+      return BARS[i];
+    })
+    .join("");
+};
+
+/* The same thing with a label down the side, for when the rows need naming.
+   `width` is in characters, and the filled part is read right-to-left like
+   everything else here. */
+export const barRow = (label, value, max, width = 10) => {
+  const top = Number(max);
+  /* No maximum is no scale, and a full bar drawn against nothing is a lie.
+     Empty is the honest answer — the same reasoning as `hourRate` returning
+     zero for a month with no hours recorded rather than Infinity. */
+  const on =
+    top > 0
+      ? Math.max(0, Math.min(width, Math.floor(((Number(value) || 0) / top) * width)))
+      : 0;
+  return `${label} ${"░".repeat(width - on)}${"█".repeat(on)}`;
+};
+
 /* The days of the week in `Date.getDay()` order, so an index is an index on
    both sides of the split — the same order `DOW_AR` is written in. */
 export const DOW = [

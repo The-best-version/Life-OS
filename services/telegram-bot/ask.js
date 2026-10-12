@@ -57,6 +57,7 @@ import {
   uniDayOf,
 } from "../../src/state/life-state.mjs";
 import { PRAYER_ROWS, clockAt, prayerTimes } from "../../src/utils/prayer-times.mjs";
+import { fold } from "./parse.js";
 import {
   num,
   money,
@@ -69,6 +70,7 @@ import {
   habitsWord,
   tasksWord,
   roundsWord,
+  sparkline,
   DOW,
 } from "./fmt.js";
 
@@ -398,6 +400,73 @@ export function answer(state, { topic, days = ASK_DAYS } = {}, now = new Date())
   return null;
 }
 
+/* --- finding what he wrote --------------------------------------------- *
+ *  A year of this app is a year of sentences: tasks, book notes, lessons,
+ *  evening reflections, goals, reminders, money labels. They live on eight
+ *  different screens and there has never been one place to ask «وين كتبت
+ *  عن…؟» — not in the app either. A chat is the natural place for it,
+ *  because a search is a question and this is the half of the system that
+ *  answers questions.
+ *
+ *  Folded on both sides, so «التسويف» finds «تسويف» and a stray hamza does
+ *  not hide a note. Nothing is written, and nothing is opened — the answer
+ *  says where each hit lives, because the screen is where it gets edited.
+ * ---------------------------------------------------------------------- */
+export const SEARCH_MIN = 2;
+export const SEARCH_MAX = 4; // hits named per section before it starts counting
+
+export function search(state, query) {
+  const s = obj(state);
+  const q = fold(query);
+  if (q.length < SEARCH_MIN) return line("🔎 اكتب كلمتين على الأقل.");
+  const hit = (v) => typeof v === "string" && v && fold(v).includes(q);
+
+  const sections = [];
+  const add = (icon, label, items) => {
+    if (items.length) sections.push({ icon, label, items });
+  };
+
+  add("📥", "المهام", rows(s.tasks).filter((t) => hit(t.text) || hit(t.step)).map((t) => `${t.text}${t.done ? " ✅" : ""}`));
+  add("🎯", "الأهداف", rows(s.goals).filter((g) => hit(g.text) || hit(g.why)).map((g) => g.text));
+  add(
+    "📖",
+    "المكتبة",
+    rows(s.books)
+      .filter((b) => hit(b.title) || hit(b.lesson) || hit(b.summary) || rows(b.notes).some((n) => hit(n.text)))
+      .map((b) => b.title),
+  );
+  /* The evening reflections, which are the hardest thing in this app to
+     find again: they live one per archive row, behind a date. */
+  add(
+    "📝",
+    "تقييمات المساء",
+    rows(s.history)
+      .filter((h) => hit(h.distraction) || hit(h.fix))
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .map((h) => `${h.date} — ${h.distraction || ""}${h.fix ? ` / ${h.fix}` : ""}`),
+  );
+  add("💸", "المصاريف", rows(s.expenses).filter((e) => hit(e.label)).map((e) => `${e.label} — ${money(e.amount)}`));
+  add("💰", "الدخل", rows(s.income).filter((e) => hit(e.label)).map((e) => `${e.label} — ${money(e.amount)}`));
+  add("📅", "المواعيد", rows(s.events).filter((e) => hit(e.title) || hit(e.note)).map((e) => `${e.title} — ${e.date}`));
+  add("🛡️", "الكاسر", rows(s.badHabits).filter((b) => hit(b.title) || hit(b.replacement)).map((b) => b.title));
+  add(
+    "🎓",
+    "الجامعة",
+    uniPending(s.uni).filter((t) => hit(t.title) || hit(t.notes)).map((t) => `${t.title} — ${t.due}`),
+  );
+
+  if (!sections.length) return line(`🔎 ما لقيت «${query}» في شي مكتوب.`);
+  const out = [line(`🔎 «${query}»:`)];
+  for (const sec of sections) {
+    out.push("");
+    out.push(line(`${sec.icon} ${sec.label}:`));
+    for (const row of sec.items.slice(0, SEARCH_MAX)) out.push(line(`• ${row}`));
+    const rest = sec.items.length - SEARCH_MAX;
+    if (rest > 0) out.push(line(`و${num(rest)} غيرها`));
+  }
+  return out.join("\n");
+}
+
 /* --- the week, once ---------------------------------------------------- *
  *  The one message the bot sends that is not about now. A day is too short a
  *  window to see a slope in, and the evening brief cannot show one: it
@@ -427,6 +496,20 @@ export function weekReview(state, now = new Date()) {
     const best = real.reduce((a, b) => ((b.pct || 0) > (a.pct || 0) ? b : a));
     out.push(line(`📊 الانتظام: متوسط ${num(avg)}٪ على ${num(real.length)} يوم مسجّل.`));
     out.push(line(`${num(hit)} ${hit === 1 ? "يوم" : "أيام"} فوق ${num(STREAK_TARGET)}٪ · أفضل يوم ${num(best.pct || 0)}٪.`));
+    /* The shape, which is the whole reason a weekly review exists — a slope
+       is the thing a single day cannot show you. Scaled against 100 rather
+       than against the best day, or every week would come out looking
+       identical. A gap gets its own mark: «no bar» and «a day that scored
+       zero» are different facts, and a chart that draws them the same hides
+       exactly the thing the gap rows exist to say. */
+    const byDay = new Map(span.map((h) => [h.date, h]));
+    const week = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const row = byDay.get(addDays(today, -i));
+      week.push(row && !isGap(row) ? row.pct || 0 : null);
+    }
+    const bar = week.map((v) => (v === null ? "◌" : sparkline([v], 100))).join(" ");
+    out.push(line(`${bar}${gaps ? "   ◌ = بلا تسجيل" : ""}`));
   } else {
     out.push(line("📊 ما سُجّل يوم واحد هذا الأسبوع."));
   }

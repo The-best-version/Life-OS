@@ -30,11 +30,12 @@ import { withState, readLife, DiskError } from "./lifeos-client.js";
 import { parse, fold } from "./parse.js";
 import * as act from "./actions.js";
 import * as V from "./views.js";
-import { Scheduler, Bell, textFor, quoteFor } from "./reminders.js";
+import { Scheduler, Bell, Snoozer, textFor, quoteFor } from "./reminders.js";
 import { coachReply } from "./insight.js";
-import { answer, weekReview } from "./ask.js";
+import { answer, weekReview, search } from "./ask.js";
+import { readVoice, VoiceError } from "./voice.js";
 import { startHealth, maskId } from "./health.js";
-import { BOT_API, URGE_TAGS } from "../../src/state/life-state.mjs";
+import { BOT_API, URGE_TAGS, botShape } from "../../src/state/life-state.mjs";
 
 const problems = configProblems();
 if (problems.length) {
@@ -87,6 +88,28 @@ function armUndo(before) {
   while (undos.size > UNDO_KEEP) undos.delete(undos.keys().next().value);
   return token;
 }
+
+/* --- a choice whose payload does not fit in a button ------------------- *
+ *  Telegram caps callback data at 64 bytes. «درجة الكويز ١٨ من ٢٠» has to
+ *  survive the question «أي مادة؟», and an Arabic mark label blows that cap
+ *  on its own — so the payload stays here under a token and the button
+ *  carries the token and the row's id.
+ *
+ *  The same shape as the undo bus above, and in memory for the same reason:
+ *  a half-finished question is not state that has to survive a restart, and
+ *  a button pressed after one says so plainly instead of writing a mark onto
+ *  a course nobody chose.
+ * ---------------------------------------------------------------------- */
+const asked = new Map();
+let askSeq = 0;
+function hold(payload) {
+  const token = String(++askSeq);
+  asked.set(token, payload);
+  while (asked.size > UNDO_KEEP) asked.delete(asked.keys().next().value);
+  return token;
+}
+const stale = (ctx) =>
+  ctx.reply("⚠️ انتهت صلاحية هذا السؤال. أرسل الجملة مرة ثانية.");
 
 /* Every write goes through here, so the reply, the undo button and the error
    handling are written once. `run` is one of the pure actions in actions.js;
@@ -217,6 +240,13 @@ bot.command("coach", showCoach);
 bot.command("week", showWeek);
 bot.command("focus", showFocus);
 bot.command("menu", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() }));
+bot.command("find", async (ctx) => {
+  const q = ctx.match?.trim();
+  if (!q) return ctx.reply("اكتب ما تبحث عنه بعد الأمر. مثال: /find التسويف");
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(search(got.state, q));
+});
 bot.command("morning", (ctx) => sendMorning(ctx.chat.id));
 bot.command("evening", (ctx) => sendEvening(ctx.chat.id));
 
@@ -259,6 +289,43 @@ bot.on("callback_query:data", async (ctx) => {
   if (kind === "prep") return apply(ctx, (s) => act.pickTomorrow(s, arg), V.savedPrep);
 
   if (kind === "focus") return runFocus(ctx, arg);
+  if (kind === "unt") return apply(ctx, (s) => act.untickHabit(s, arg), V.savedUntick);
+
+  /* The three questions whose answer needs a payload bigger than a button. */
+  if (kind === "gset") {
+    const want = asked.get(arg);
+    if (!want) return stale(ctx);
+    asked.delete(arg);
+    return apply(ctx, (s) => act.moveGoal(s, extra, want), V.savedGoal);
+  }
+  if (kind === "uabs") {
+    const want = asked.get(arg);
+    if (!want) return stale(ctx);
+    asked.delete(arg);
+    return apply(ctx, (s) => act.markAbsence(s, extra), V.savedAbsence);
+  }
+  if (kind === "umrk") {
+    const want = asked.get(arg);
+    if (!want) return stale(ctx);
+    asked.delete(arg);
+    return apply(ctx, (s) => act.addMark(s, extra, want), V.savedMark);
+  }
+
+  /* «لاحقًا». The entry is re-armed, never the rendered text — a water nudge
+     deferred at eleven must say what is left at noon. */
+  if (kind === "snooze" || kind === "snz") {
+    let mins = 60;
+    try {
+      const now = await readLife();
+      if (now) mins = botShape(now.bot).snooze;
+    } catch {
+      /* The disk is unreachable; the default is still a sane later. */
+    }
+    if (!snoozer.arm(arg, mins)) {
+      return ctx.reply("⚠️ ما عاد عندي هذا التذكير — البوت أُعيد تشغيله بعده.");
+    }
+    return ctx.reply(`⏰ تمام، أذكّرك بعد ${mins} دقيقة.`);
+  }
 
   /* The breaker, in two taps. The first names which habit, the second names
      the trigger — and the second is skippable, because a hold logged with no
@@ -310,6 +377,24 @@ async function tickAndMaybeRead(ctx, id, tiny) {
   return undefined;
 }
 
+/* --- a day that is already closed -------------------------------------- *
+ *  Forgetting to tick is not the same as not having done it. `tickOn` goes
+ *  through `setDayDone`, which is the same function «عدّل أمس» uses on the
+ *  routine screen, and the streak is recomputed from the rows afterwards
+ *  rather than nudged — a counter adjusted by hand is a second opinion about
+ *  the same archive.
+ * ---------------------------------------------------------------------- */
+function editPastDay(ctx, found, back, on) {
+  if (found.length > 1) {
+    return ctx.reply(
+      "أيّ واحدة؟ (ويُسجَّل في ذلك اليوم، لا في اليوم)",
+      { reply_markup: V.habitKeys(found, on ? "tick" : "untick") },
+    );
+  }
+  const date = act.backKey(back);
+  return apply(ctx, (s) => act.tickOn(s, found[0].id, date, on), V.savedDayEdit);
+}
+
 /* --- the focus desk's buttons and words ------------------------------- */
 function runFocus(ctx, what) {
   if (what === "start") return apply(ctx, (s) => act.startFocus(s, {}), V.savedFocusStart);
@@ -323,7 +408,9 @@ function runFocus(ctx, what) {
 }
 
 /* --- the sentence ----------------------------------------------------- */
-bot.on("message:text", async (ctx) => {
+bot.on("message:text", (ctx) => handleText(ctx));
+
+async function handleText(ctx) {
   const raw = ctx.message.text.trim();
   const word = WORDS.get(fold(raw.replace(/^\//, "")));
   if (word) return word(ctx);
@@ -354,6 +441,10 @@ bot.on("message:text", async (ctx) => {
     if (!found.length) {
       return ctx.reply(`⚠️ ما لقيت عادة تشبه «${said.query}». أرسل «باقي» لتشوف المفتوح.`);
     }
+    /* «أمس تمت صلاة العصر» rewrites one archive row and moves nothing else:
+       today's habits do not shift, because today is a different day and the
+       whole value of a hard boundary is that it holds. */
+    if (said.back) return editPastDay(ctx, found, said.back, true);
     const open = found.filter((h) => !h.done);
     if (!open.length) {
       return ctx.reply(`✅ «${found[0].label}» مسجّلة أصلاً اليوم.`);
@@ -366,14 +457,18 @@ bot.on("message:text", async (ctx) => {
     return apply(ctx, (s) => act.tickHabit(s, open[0].id), V.savedHabit);
   }
   if (said.kind === "reading") {
-    return apply(ctx, (s) => act.logReading(s, { pages: said.pages }), V.savedReading);
+    return apply(
+      ctx,
+      (s) => act.logReading(s, { pages: said.pages, back: said.back }),
+      V.savedReading,
+    );
   }
   if (said.kind === "focus") {
     if (said.act === "status") return showFocus(ctx);
     if (said.act === "log") {
       return apply(
         ctx,
-        (s) => act.logFocus(s, { minutes: said.minutes, label: said.label }),
+        (s) => act.logFocus(s, { minutes: said.minutes, label: said.label, back: said.back }),
         V.savedFocusLog,
       );
     }
@@ -409,6 +504,76 @@ bot.on("message:text", async (ctx) => {
   if (said.kind === "reflect") {
     return apply(ctx, (s) => act.reflect(s, said), V.savedReflect);
   }
+  if (said.kind === "event") {
+    return apply(ctx, (s) => act.addEvent(s, said), V.savedEvent);
+  }
+  if (said.kind === "search") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    return ctx.reply(search(got.state, said.query));
+  }
+  if (said.kind === "untick") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    /* Matched against what is actually ticked: «ألغِ صلاة» with three
+       prayers ticked is a question, not a guess at which one. */
+    const found = act
+      .findHabits(got.state.habits, said.query)
+      .filter((h) => (said.back ? true : h.done));
+    if (!found.length) {
+      return ctx.reply(`⚠️ ما لقيت عادة مؤشّرة تشبه «${said.query}».`);
+    }
+    if (said.back) return editPastDay(ctx, found, said.back, false);
+    if (found.length > 1) {
+      return ctx.reply("أيّ واحدة؟", { reply_markup: V.habitKeys(found, "untick") });
+    }
+    return apply(ctx, (s) => act.untickHabit(s, found[0].id), V.savedUntick);
+  }
+  if (said.kind === "goal") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const found = act.findGoals(got.state.goals, said.query);
+    if (!found.length) {
+      return ctx.reply(`⚠️ ما لقيت هدفًا مفتوحًا يشبه «${said.query}».`);
+    }
+    const want = { value: said.value, add: said.add };
+    if (found.length > 1) {
+      return ctx.reply("أيّ هدف؟", {
+        reply_markup: V.goalKeys(found, hold(want)),
+      });
+    }
+    return apply(ctx, (s) => act.moveGoal(s, found[0].id, want), V.savedGoal);
+  }
+  if (said.kind === "uni") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const found = act.findCourses(got.state.uni, said.query);
+    if (!found.length) {
+      const all = act.findCourses(got.state.uni, "");
+      if (!all.length) return ctx.reply("⚠️ ما فيه مواد في مكتب الجامعة بعد.");
+      return ctx.reply(
+        `⚠️ ما لقيت مادة تشبه «${said.query}». أيّ واحدة؟`,
+        {
+          reply_markup:
+            said.act === "absence"
+              ? V.courseKeys(all, "uabs", hold({ at: Date.now() }))
+              : V.courseKeys(all, "umrk", hold(said)),
+        },
+      );
+    }
+    if (found.length > 1) {
+      return ctx.reply("أيّ مادة؟", {
+        reply_markup:
+          said.act === "absence"
+            ? V.courseKeys(found, "uabs", hold({ at: Date.now() }))
+            : V.courseKeys(found, "umrk", hold(said)),
+      });
+    }
+    if (said.act === "absence") {
+      return apply(ctx, (s) => act.markAbsence(s, found[0].id), V.savedAbsence);
+    }
+    return apply(ctx, (s) => act.addMark(s, found[0].id, said), V.savedMark);
+  }
   /* A question is answered and nothing is written — which is the whole point
      of reading it as one. An unrecognised subject is not filed as a task
      either: a question misfiled in the inbox is a row he then has to go and
@@ -427,7 +592,7 @@ bot.on("message:text", async (ctx) => {
     return apply(ctx, (s) => act.addTask(s, said), V.savedTask);
   }
   return ctx.reply(V.HELP);
-});
+}
 
 /* An answer that can be acted on comes with the action under it. An answer
    that cannot — the prayer times, the money — comes bare, because a keyboard
@@ -478,6 +643,37 @@ const sendEvening = (chatId) =>
     keys: V.openKeys(state),
   }));
 
+/* --- a voice note ------------------------------------------------------ *
+ *  The fastest way to record something is to say it, and the moment worth
+ *  recording is almost always a moment with a hand full of something else.
+ *
+ *  It ends where `parse` begins: the transcript goes down the *same* path a
+ *  typed message does, so every trigger, every question and every
+ *  confirmation works unchanged and there is no second grammar to keep in
+ *  step. The text is echoed back first, because a transcriber that misheard
+ *  «صرفت ثلاثين» as «صرفت ثلاثمئة» must be caught by eye and not by a
+ *  ledger that is quietly wrong — and the undo button under the write is
+ *  then one tap away.
+ * ---------------------------------------------------------------------- */
+bot.on(["message:voice", "message:audio"], async (ctx) => {
+  const file = ctx.message.voice || ctx.message.audio;
+  let text;
+  try {
+    text = await readVoice(ctx.api, file.file_id);
+  } catch (e) {
+    const msg =
+      e instanceof VoiceError ? e.message : "ما قدرت أقرأ المقطع الصوتي.";
+    console.error("voice: " + (e && e.message ? e.message : e));
+    return ctx.reply("⚠️ " + msg);
+  }
+  await ctx.reply(`🎙️ «${text}»`);
+  /* Replayed through the ordinary text handler by swapping the message's
+     own text in — so there is exactly one route from a sentence to a row,
+     whether it was typed or spoken. */
+  ctx.message.text = text;
+  return handleText(ctx);
+});
+
 /* Anything grammY could not hand to a handler. Reported and swallowed: a bot
    that exits on one bad update is a bot that is down until somebody
    notices. */
@@ -523,7 +719,18 @@ async function deliver(entry) {
         ? V.taskKeys(act.dayAt(state))
         : said.coach
           ? V.coachKeys(said.actions)
-          : null;
+          : said.habits
+            ? V.habitKeys(said.habits, "tick")
+            : new InlineKeyboard();
+
+  /* Every unprompted message gets «لاحقًا». A nudge that cannot be deferred
+     is one you mute, and a muted reminder takes the rest of the schedule
+     with it. The weekly review is the exception — it is a report, and
+     deferring a report by an hour means nothing. */
+  if (!said.weekly) {
+    V.snoozeKey(keys.row(), snoozer.hold(entry), botShape(state.bot).snooze);
+  }
+
   await bot.api.sendMessage(CONFIG.chatId, said.text, keysOr(keys)).catch((e) => {
     console.error("reminder send: " + (e?.message || e));
   });
@@ -578,6 +785,10 @@ const scheduler = new Scheduler(deliver);
    round was started, and one that moves on every pause while the day's plan
    does not move at all. */
 const bell = new Bell(ringBell);
+/* «لاحقًا» re-arms the *entry*, so the message is rebuilt from the day as it
+   stands when it finally fires — a water nudge deferred at eleven says what
+   is left at noon. */
+const snoozer = new Snoozer(deliver);
 let lastTickAt = 0;
 
 async function tick() {
@@ -632,6 +843,7 @@ const bye = async () => {
   clearInterval(ticker);
   scheduler.clear();
   bell.clear();
+  snoozer.clear();
   try {
     health.close();
   } catch {}

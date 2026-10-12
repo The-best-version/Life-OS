@@ -89,6 +89,10 @@ const NUMBER = /\d+(?:\.\d+)?/;
    number is a wrong number stated confidently. */
 export const PAGES_MAX = 600;
 export const MINUTES_MAX = 300;
+
+/* «١٨ من ٢٠» — a mark is a pair and never one number: the score alone says
+   nothing without what it was out of. */
+const OUT_OF = /(\d+(?:\.\d+)?)\s*(?:من|\/)\s*(\d+(?:\.\d+)?)/u;
 /* Hours, when they were recorded beside the money. «ساعتين» carries its own
    count inside the word, so it is matched without a digit. */
 const HOURS = new RegExp("(\\d+(?:\\.\\d+)?)\\s*(?:ساعات|ساعه|ساعة)" + EDGE_R, "u");
@@ -208,12 +212,173 @@ const RULES = [
     field: "fix",
     words: ["الحل", "علاجه", "الإصلاح", "أصلحها"],
   },
+  /* --- the calendar ---------------------------------------------------- *
+   *  An entry with an hour on it. `readWhen` below reads the day and the
+   *  time out of what follows; the title is whatever is left, which is why
+   *  it is pulled out rather than matched.
+   * ------------------------------------------------------------------- */
+  {
+    kind: "event",
+    words: ["موعد", "عندي موعد", "اجتماع", "مقابلة", "ذكّرني يوم", "ذكرني يوم"],
+  },
+  /* --- the university desk --------------------------------------------- *
+   *  The one screen he is least likely to open on a laptop, because he is
+   *  inside the lecture while the thing worth recording happens.
+   * ------------------------------------------------------------------- */
+  {
+    kind: "uni",
+    act: "absence",
+    words: ["غياب", "غبت عن", "غبت"],
+  },
+  {
+    kind: "uni",
+    act: "mark",
+    words: ["درجة", "درجتي", "علامة"],
+  },
+  /* --- the goals vault -------------------------------------------------- *
+   *  The bot could read the goals and not touch them, and the goals are the
+   *  spine of 2027. A bare number sets the meter, `+n` advances it.
+   * ------------------------------------------------------------------- */
+  {
+    kind: "goal",
+    amount: true,
+    words: ["هدف", "الهدف"],
+  },
+  {
+    kind: "search",
+    words: ["ابحث عن", "ابحث", "دوّر على", "دور على", "وين كتبت", "وين ذكرت"],
+  },
+  /* An untick is a deletion in everything but name — it withdraws the
+     evening's reading and rolls the page counter back — so it is its own
+     verb rather than a second meaning of «تمت». */
+  {
+    kind: "untick",
+    words: ["ألغِ", "ألغ", "الغ", "تراجع عن", "ما سويت", "شيل تأشير", "شيل"],
+  },
   {
     kind: "task",
     today: true,
     words: ["مهمة اليوم", "اليوم", "أهم"],
   },
 ];
+
+/* --- yesterday, and the day before ------------------------------------- *
+ *  Forgetting is the normal case, not the exception: the expense happens at
+ *  lunch and the phone comes out at midnight. `expenseShape` has always
+ *  accepted a date, so the only thing missing was a way to say one.
+ *
+ *  Read as a prefix and stripped, after which the rest of the sentence is
+ *  parsed exactly as it would have been — so «أمس صرفت ٣٥ غداء» and «صرفت ٣٥
+ *  غداء» go through one code path and cannot drift apart.
+ * ---------------------------------------------------------------------- */
+const BACK_WORDS = [
+  [1, ["أمس", "امس", "البارحة", "امبارح", "الأمس"]],
+  [2, ["أول أمس", "اول امس", "قبل أمس", "قبل يومين"]],
+];
+
+/* How far back a message may reach. Three days is the window in which
+   someone actually remembers an amount; past it he is guessing, and a
+   guessed row in a ledger is worse than a missing one. */
+export const BACK_MAX = 3;
+
+export function readBack(folded) {
+  for (const [days, words] of BACK_WORDS) {
+    for (const w of words) {
+      const f = fold(w);
+      if (folded === f || folded.startsWith(f + " ")) {
+        return { days, skip: f.split(" ").length };
+      }
+    }
+  }
+  /* «قبل ٣ أيام», typed as a count. */
+  const m = /^قبل\s+(\d+)\s+(?:يوم|ايام|أيام)(?:\s|$)/u.exec(asciiDigits(folded));
+  if (m) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= BACK_MAX) return { days: n, skip: 3 };
+  }
+  return null;
+}
+
+/* --- when, in the words people actually use ---------------------------- *
+ *  Returns the *day as a word* and the time as a clock reading — never a
+ *  date key. Resolving «الأحد» into a square is calendar arithmetic and it
+ *  belongs beside the calendar's own helpers in `actions.js`, not in a file
+ *  whose whole job is reading strings.
+ * ---------------------------------------------------------------------- */
+const DAY_WORDS = [
+  ["today", ["اليوم"]],
+  ["tomorrow", ["بكرة", "غدا", "غدًا", "بكره"]],
+  ["after", ["بعد بكرة", "بعد غد", "بعد بكره"]],
+  [0, ["الأحد", "الاحد", "احد"]],
+  [1, ["الاثنين", "الإثنين", "الإثنين", "اثنين"]],
+  [2, ["الثلاثاء", "ثلاثاء"]],
+  [3, ["الأربعاء", "الاربعاء", "اربعاء"]],
+  [4, ["الخميس", "خميس"]],
+  [5, ["الجمعة", "جمعة"]],
+  [6, ["السبت", "سبت"]],
+];
+
+/* The markers that settle an hour. Without one a bare number is a guess, and
+   the guess is stated back in the confirmation rather than hidden — a wrong
+   hour the user can see is a wrong hour he fixes in ten seconds. */
+const PM_WORDS = ["م", "مساء", "مساءً", "ظهرا", "ظهرًا", "العصر", "عصرا", "الظهر", "المغرب", "العشاء", "الليل"];
+const AM_WORDS = ["ص", "صباحا", "صباحًا", "صباح", "الفجر", "فجرا"];
+
+/* A bare hour with no marker. One to seven is an evening, eight to twelve a
+   morning — which is how an appointment is actually said out loud. */
+const bareHour = (h) => (h >= 1 && h <= 7 ? h + 12 : h === 12 ? 12 : h);
+
+export function readWhen(raw) {
+  let text = asciiDigits(String(raw ?? ""));
+  let day = null;
+  let time = "";
+
+  /* The day word, taken out wherever it sits: «موعد الدكتور الأحد» and
+     «موعد الأحد الدكتور» are the same appointment. */
+  for (const [id, words] of DAY_WORDS) {
+    if (day !== null) break;
+    for (const w of words) {
+      const re = new RegExp(EDGE_L + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + EDGE_R, "u");
+      const m = re.exec(text);
+      if (m) {
+        day = id;
+        text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
+        break;
+      }
+    }
+  }
+
+  /* HH:MM wins outright — it is the one form that cannot be misread. */
+  let m = /(?<![\d:])([01]?\d|2[0-3])\s*[:٫]\s*([0-5]\d)(?![\d:])/u.exec(text);
+  if (m) {
+    let h = Number(m[1]);
+    const rest = text.slice(m.index + m[0].length);
+    if (new RegExp("^\\s*(" + PM_WORDS.join("|") + ")" + EDGE_R, "u").test(rest) && h < 12) h += 12;
+    time = `${String(h).padStart(2, "0")}:${m[2]}`;
+    text = text.slice(0, m.index) + " " + rest.replace(new RegExp("^\\s*(" + PM_WORDS.concat(AM_WORDS).join("|") + ")" + EDGE_R, "u"), " ");
+  } else {
+    /* A bare hour, with or without a marker after it. */
+    m = new RegExp("(?<![\\d:])(\\d{1,2})\\s*(" + PM_WORDS.concat(AM_WORDS).join("|") + ")?" + EDGE_R, "u").exec(text);
+    if (m) {
+      const n = Number(m[1]);
+      if (n >= 0 && n <= 23) {
+        let h = n;
+        if (m[2] && PM_WORDS.includes(m[2])) h = n === 12 ? 12 : n + 12;
+        else if (m[2] && AM_WORDS.includes(m[2])) h = n === 12 ? 0 : n;
+        else if (n <= 12) h = bareHour(n);
+        if (h <= 23) {
+          time = `${String(h).padStart(2, "0")}:00`;
+          text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
+        }
+      }
+    }
+  }
+
+  /* «الساعة» is left behind by both branches above and belongs to neither
+     the title nor the time. */
+  text = text.replace(new RegExp(EDGE_L + "(الساعه|الساعة|في|عند)" + EDGE_R, "gu"), " ");
+  return { day, time, rest: text.replace(/\s+/g, " ").trim() };
+}
 
 /* --- a question is not a task ------------------------------------------ *
  *  Everything unrecognised becomes a task, and that is right for a thought:
@@ -348,6 +513,11 @@ const clean = (s) =>
     .trim();
 
 /* --- the one entry point ---------------------------------------------- */
+/* Which readings can carry a date that is not today. A task has no date of
+   its own and a habit's day is the archive's business, not a row's — so
+   «أمس» in front of either is simply part of what he wrote. */
+const BACKDATABLE = new Set(["expense", "income", "reading", "focus", "habit", "untick"]);
+
 export function parse(raw) {
   const text = String(raw ?? "").trim();
   if (!text) return { kind: "empty", text: "" };
@@ -358,6 +528,20 @@ export function parse(raw) {
      moment a number appeared in the sentence. */
   const asked = askedAbout(text);
   if (asked) return asked;
+
+  /* «أمس …» is stripped and the rest is parsed exactly as it would have
+     been, so the two forms go through one code path and cannot drift. The
+     days ride back on the result rather than being resolved here: turning
+     them into a date key is calendar arithmetic and belongs with the
+     actions. */
+  const back = readBack(fold(text));
+  if (back) {
+    const rest = text.split(/\s+/).slice(back.skip).join(" ").trim();
+    if (rest) {
+      const out = parse(rest);
+      return BACKDATABLE.has(out.kind) ? { ...out, back: back.days, text } : out;
+    }
+  }
 
   const folded = fold(text);
   const hit = TRIGGERS.find((t) => leads(folded, t.word));
@@ -415,6 +599,51 @@ export function parse(raw) {
     } else if (rule.kind === "reflect") {
       const body = clean(tail);
       if (body) return { kind: "reflect", field: rule.field, note: body, text };
+    } else if (rule.kind === "event") {
+      const when = readWhen(tail);
+      /* With the day and the hour taken out there may be nothing left, and
+         «اجتماع اليوم ٩ ص» is a perfectly complete sentence — the trigger
+         word *is* the title there. Falling through to the inbox instead
+         would file an appointment as a thought. */
+      const title = clean(when.rest) || text.split(/\s+/).slice(0, skip).join(" ");
+      if (title) {
+        return { kind: "event", title, day: when.day, time: when.time, text };
+      }
+    } else if (rule.kind === "uni" && rule.act === "absence") {
+      const q = clean(tail);
+      if (q) return { kind: "uni", act: "absence", query: q, text };
+    } else if (rule.kind === "uni" && rule.act === "mark") {
+      /* «١٨ من ٢٠» as one reading, because the first number alone is the
+         score and the second alone is meaningless — a mark is a pair. */
+      const m = OUT_OF.exec(asciiDigits(tail));
+      if (m) {
+        const rest = asciiDigits(tail).slice(0, m.index) + " " + asciiDigits(tail).slice(m.index + m[0].length);
+        return {
+          kind: "uni",
+          act: "mark",
+          score: Number(m[1]),
+          max: Number(m[2]),
+          query: clean(rest),
+          text,
+        };
+      }
+    } else if (rule.kind === "goal") {
+      /* `+٥` advances the meter and a bare `٣٠` sets it. Two verbs would be
+         two words to remember; the sign is already the word. */
+      const plus = /(^|\s)\+\s*\d/.test(asciiDigits(tail));
+      const { amount, rest } = amounts(tail);
+      if (amount > 0) {
+        /* The sign is left behind by `amounts`, which only takes the digits.
+           It belongs to neither the number nor the goal's name. */
+        const q = clean(String(rest).replace(/\+/g, " "));
+        return { kind: "goal", value: amount, add: plus, query: q, text };
+      }
+    } else if (rule.kind === "search") {
+      const q = clean(tail);
+      if (q) return { kind: "search", query: q, text };
+    } else if (rule.kind === "untick") {
+      const q = clean(tail);
+      if (q) return { kind: "untick", query: q, text };
     } else if (rule.kind === "task") {
       const body = clean(tail);
       if (body) return { kind: "task", today: true, label: body, text };

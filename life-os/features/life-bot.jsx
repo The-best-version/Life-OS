@@ -13,6 +13,8 @@ import {
   Power,
   Sparkles,
   CalendarRange,
+  CalendarClock,
+  AlarmClock,
 } from "lucide-react";
 import {
   T,
@@ -42,10 +44,20 @@ import {
   WATER_EVERY_MAX,
   PRAYER_BEFORE_MIN,
   PRAYER_BEFORE_MAX,
+  BLOCK_AFTER_MIN,
+  BLOCK_AFTER_MAX,
+  EVENT_BEFORE_MIN,
+  EVENT_BEFORE_MAX,
+  SNOOZE_MIN,
+  SNOOZE_MAX,
+  eventsIn,
+  minsIn,
+  logicalNow,
+  dayKey,
   BOT_API,
   BOT_PORT,
 } from "../state/life-state.mjs";
-import { prayerTimes, PRAYER_ROWS } from "../utils/prayer-times.mjs";
+import { prayerTimes, PRAYER_ROWS, blockTimes, BLOCK_ANCHORS } from "../utils/prayer-times.mjs";
 
 /* ==================================================================== *
  *  MODULE — the Telegram bot's control hub
@@ -386,6 +398,71 @@ export function PresetRemindersCard({ bot, onPatch }) {
           </p>
         </Preset>
 
+        {/* عادات البلوك — anchored to the prayers, never to the clock */}
+        <Preset
+          icon={Sunrise}
+          tint={T.ember}
+          title="عادات البلوك عند فتحه"
+          on={bot.blocks.on}
+          onToggle={() => onPatch({ blocks: { ...bot.blocks, on: !bot.blocks.on } })}
+          note={
+            bot.blocks.on
+              ? `بعد فتح كل بلوك بـ${bot.blocks.after} ${minWord(bot.blocks.after)}`
+              : "مطفأ"
+          }
+        >
+          <label className="flex items-center gap-2 text-[11.5px]" style={{ color: T.faint }}>
+            بعد فتح البلوك بـ
+            <NumStep
+              value={bot.blocks.after}
+              onChange={(v) => onPatch({ blocks: { ...bot.blocks, after: v } })}
+              min={BLOCK_AFTER_MIN}
+              max={BLOCK_AFTER_MAX}
+              step={5}
+              unit="دقيقة"
+              tint={T.ember}
+            />
+          </label>
+          <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
+            روتينك يمشي بالصلوات لا بالساعة، فتذكير «بعد العصر» الساعة ٥:٠٠
+            ثابتة يخطئ بأربعين دقيقة في مارس وبساعة في يونيو. هذا يصل حين يفتح
+            البلوك فعلًا، ويحمل عاداته المفتوحة أزرارًا — <strong>وصامت إن لم
+            يبقَ منها شيء</strong>.
+          </p>
+        </Preset>
+
+        {/* المواعيد — the hour half of a warning whose other half is in days */}
+        <Preset
+          icon={CalendarClock}
+          tint={T.indigo}
+          title="قبل مواعيد اليوم"
+          on={bot.events.on}
+          onToggle={() => onPatch({ events: { ...bot.events, on: !bot.events.on } })}
+          note={
+            bot.events.on
+              ? `قبل كل موعد بـ${bot.events.before} ${minWord(bot.events.before)}`
+              : "مطفأ"
+          }
+        >
+          <label className="flex items-center gap-2 text-[11.5px]" style={{ color: T.faint }}>
+            قبل الموعد بـ
+            <NumStep
+              value={bot.events.before}
+              onChange={(v) => onPatch({ events: { ...bot.events, before: v } })}
+              min={EVENT_BEFORE_MIN}
+              max={EVENT_BEFORE_MAX}
+              step={15}
+              unit="دقيقة"
+              tint={T.indigo}
+            />
+          </label>
+          <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
+            «التنبيه المسبق» في التقويم بالأيام — صحيح لاختبار، بلا فائدة لموعد
+            الرابعة عصرًا. هذا هو النصف الآخر: المواعيد المؤقّتة في مربّع اليوم.
+            وبلا ساعة لا تنبيه، لأن ما لا ساعة له لا يمكن التبكير عليه.
+          </p>
+        </Preset>
+
         {/* المدرّب — the one entry whose content is a judgement */}
         <Preset
           icon={Sparkles}
@@ -471,6 +548,31 @@ export function PresetRemindersCard({ bot, onPatch }) {
             وأضعفها، الصفحات، دقائق التركيز، المال، والمستحقّ الأسبوع القادم.
           </p>
         </Preset>
+      </div>
+
+      {/* The one setting that belongs to all of them at once. A nudge that
+          cannot be deferred is a nudge you mute, and a muted reminder takes
+          the rest of the schedule down with it — so «لاحقًا» sits under every
+          unprompted message, and this is how long it means. */}
+      <div
+        className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3.5"
+        style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+      >
+        <AlarmClock size={15} strokeWidth={1.9} style={{ color: T.faint }} />
+        <span className="text-[12px] font-bold">زرّ «لاحقًا» يؤجّل</span>
+        <NumStep
+          value={bot.snooze}
+          onChange={(v) => onPatch({ snooze: v })}
+          min={SNOOZE_MIN}
+          max={SNOOZE_MAX}
+          step={15}
+          unit="دقيقة"
+          tint={T.faint}
+        />
+        <p className="w-full text-[10.5px]" style={{ color: T.faint }}>
+          ويُعاد بناء النصّ لحظة عودته، لا لحظة تأجيله — تذكير ماء أجّلته
+          الحادية عشرة يقول ما بقي عند الثانية عشرة.
+        </p>
       </div>
     </Card>
   );
@@ -653,7 +755,25 @@ export function TodayPlanCard({ bot, state }) {
     ? prayerTimes(state.place, now)
     : null;
   const hasTasks = rows(state.tasks).some((t) => t.today && !t.done);
-  const plan = planDay(bot, { dow: now.getDay(), prayers, hasTasks });
+  /* The blocks and today's timed entries, exactly as the bot computes them.
+     Two readings of one schedule would eventually disagree about the same
+     evening, which is the whole reason `planDay` lives in the state layer —
+     so anything new it takes has to be passed from both sides. */
+  const blocks = state.place && Number.isFinite(state.place.lat)
+    ? blockTimes(state.place, now).map((b) => ({
+        id: b.id,
+        at: b.when.getHours() + b.when.getMinutes() / 60,
+      }))
+    : null;
+  const today = dayKey(logicalNow(now));
+  const events = [];
+  for (const [, list] of eventsIn(rows(state.events), today, today)) {
+    for (const { ev } of list) {
+      const at = minsIn(ev.time);
+      if (at !== null) events.push({ id: ev.id, at: at / 60 });
+    }
+  }
+  const plan = planDay(bot, { dow: now.getDay(), prayers, hasTasks, blocks, events });
   const mins = now.getHours() * 60 + now.getMinutes();
   const next = nextInPlan(plan, mins);
 
@@ -722,6 +842,14 @@ function kindName(p, state) {
      checks, one of which may turn out to be silent. */
   if (p.kind === "coach") return "فحص المدرّب";
   if (p.kind === "weekly") return "مراجعة الأسبوع";
+  if (p.kind === "block") {
+    const anchor = BLOCK_ANCHORS.find((b) => b.id === p.block);
+    return anchor ? `عادات ${anchor.label}` : "عادات البلوك";
+  }
+  if (p.kind === "event") {
+    const ev = rows(state.events).find((e) => e.id === p.id);
+    return ev ? `موعد: ${ev.title.slice(0, 20)}` : "موعد";
+  }
   if (p.kind === "prayer") {
     const row = PRAYER_ROWS.find((x) => x.id === p.prayer);
     return row ? `قبل ${row.label}` : "قبل الأذان";
@@ -749,6 +877,15 @@ const PHRASES = [
   ["ركزت ٤٥ دقيقة على المحاسبة", "جولة عُمِلت بعيدًا عن الشاشة"],
   ["صمدت · سقطت", "أمام عادة في كاسر العادات، ثم يسأل عن المحرّك"],
   ["شتتني الجوال", "يُكتب في تقييم اليوم، و«الحل …» يكمله"],
+  ["موعد بكرة ٥ م الدكتور", "في التقويم، وينبّهك قبله"],
+  ["غياب محاسبة", "غياب واحد، ويرفض الثاني في نفس اليوم"],
+  ["درجة محاسبة الكويز ١٨ من ٢٠", "في كشف المادة"],
+  ["هدف الحفظ ٣٠", "عدّاد الهدف — و«+٥» تزيده بدل أن تضبطه"],
+  ["أمس صرفت ٣٥ غداء", "يُسجَّل في يوم أمس، ويقول لك أين نزل"],
+  ["أمس تمت صلاة العصر", "يصحّح صفّ ذلك اليوم وحده"],
+  ["ألغِ قراءة", "يزيل التأشير ويسحب صفحات اليوم معه"],
+  ["ابحث عن التسويف", "في المهام والكتب والتقييمات والأهداف"],
+  ["🎙️ مقطع صوتي", "يُفرَّغ ويُقرأ كأنك كتبته"],
   ["كم صرفت هذا الشهر؟", "سؤال — يُجاب ولا يُسجَّل شيء"],
   ["أي نصّ آخر", "صندوق الوارد — مربّع «مهم غير عاجل»"],
 ];

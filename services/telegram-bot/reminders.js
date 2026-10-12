@@ -19,11 +19,20 @@ import {
   clampGoal,
   disciplineOf,
   dayKey,
+  logicalNow,
+  minsIn,
+  eventsIn,
+  isEventDone,
   focusShape,
   phaseOf,
   RUN_STALE_MS,
 } from "../../src/state/life-state.mjs";
-import { prayerTimes, PRAYER_ROWS } from "../../src/utils/prayer-times.mjs";
+import {
+  prayerTimes,
+  PRAYER_ROWS,
+  blockTimes,
+  BLOCK_ANCHORS,
+} from "../../src/utils/prayer-times.mjs";
 import { coachNote } from "./insight.js";
 import { weekReview } from "./ask.js";
 
@@ -35,7 +44,28 @@ export function planToday(state, now = new Date()) {
   const prayers =
     place && Number.isFinite(place.lat) ? prayerTimes(place, now) : null;
   const hasTasks = rows(state.tasks).some((t) => t.today && !t.done);
-  const plan = planDay(state.bot, { dow: now.getDay(), prayers, hasTasks });
+  /* The six blocks, as decimal hours. `blockTimes` already skips any the sun
+     never reaches, so a polar latitude arms nothing rather than arming a
+     reminder at an invented moment. Computed here for the same reason the
+     prayer times are: the state layer may not import the solar maths. */
+  const blocks = place && Number.isFinite(place.lat)
+    ? blockTimes(place, now).map((b) => ({
+        id: b.id,
+        at: b.when.getHours() + b.when.getMinutes() / 60,
+      }))
+    : null;
+  /* Today's timed entries, each one occurrence. An untimed entry has no hour
+     to be early for and `event.warn` already speaks for it in days. */
+  const today = dayKey(logicalNow(now));
+  const events = [];
+  for (const [, list] of eventsIn(rows(state.events), today, today)) {
+    for (const { ev } of list) {
+      const at = minsIn(ev.time);
+      if (at === null) continue;
+      events.push({ id: ev.id, at: at / 60 });
+    }
+  }
+  const plan = planDay(state.bot, { dow: now.getDay(), prayers, hasTasks, blocks, events });
   return plan.map((p) => {
     const when = new Date(now);
     when.setHours(0, Math.round(p.at), 0, 0);
@@ -90,6 +120,43 @@ export function textFor(entry, state, now = new Date()) {
 
   if (entry.kind === "weekly") {
     return { text: weekReview(state, now), weekly: true };
+  }
+
+  /* The block that just opened, and the habits of it still unticked. Silent
+     when none are — the routine's blocks are prayer-anchored, so this is the
+     one reminder that arrives when the day actually reached that part of
+     itself rather than when a clock hour did. */
+  if (entry.kind === "block") {
+    const open = scoredOf(rows(state.habits)).filter(
+      (h) => !h.done && h.group === entry.block,
+    );
+    if (!open.length) return null;
+    const anchor = BLOCK_ANCHORS.find((b) => b.id === entry.block);
+    const lines = open.map((h) => `• ${h.label}${h.min ? ` (أو: ${h.min})` : ""}`);
+    return {
+      text: `🕌 ${anchor ? anchor.label : "البلوك"} — باقي:\n${lines.join("\n")}`,
+      habits: open,
+    };
+  }
+
+  /* A timed entry on today's square. Read back off the live calendar rather
+     than off the entry, like a custom reminder is: an appointment moved at
+     noon must fire with its new hour at five. */
+  if (entry.kind === "event") {
+    const today = dayKey(logicalNow(now));
+    let found = null;
+    for (const [, list] of eventsIn(rows(state.events), today, today)) {
+      for (const row of list) if (row.ev.id === entry.id) found = row;
+    }
+    if (!found) return null;
+    const ev = found.ev;
+    if (isEventDone(ev, found.on)) return null; // already ticked off
+    const mins = Math.round(botShape(state.bot).events.before);
+    return {
+      text: `📅 ${ev.title} بعد ${mins} دقيقة${ev.time ? ` — ${ev.time}` : ""}${
+        ev.place ? ` · ${ev.place}` : ""
+      }`,
+    };
   }
 
   if (entry.kind === "custom") {
@@ -187,6 +254,68 @@ export class Scheduler {
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
     this.armed = [];
+  }
+}
+
+/* --- «لاحقًا», and why it is not a dismissal --------------------------- *
+ *  A nudge that cannot be deferred is a nudge you mute, and a muted
+ *  reminder takes every other reminder with it — the whole schedule is
+ *  switched off by the one message that arrived at the wrong minute. The
+ *  reflection prompt in the app learned this already; this is the same
+ *  tolerance for everything the bot sends.
+ *
+ *  The *entry* is held, never the text. A water reminder deferred at eleven
+ *  and fired at noon must say what is left at noon — the rule every sentence
+ *  in this file keeps, and holding the rendered message would be the one
+ *  place it was broken.
+ *
+ *  In memory only, like the undo bus: a pending snooze is not state that has
+ *  to survive anything, and written to disk it would be a second copy of the
+ *  day arguing with the first.
+ * ---------------------------------------------------------------------- */
+export class Snoozer {
+  constructor(fire, keep = 40) {
+    this.fire = fire;
+    this.keep = keep;
+    this.waiting = new Map();
+    this.seq = 0;
+  }
+
+  /* Hands back a token for the button to carry. */
+  hold(entry) {
+    const token = String(++this.seq);
+    this.waiting.set(token, { entry, timer: null });
+    while (this.waiting.size > this.keep) {
+      const oldest = this.waiting.keys().next().value;
+      this.drop(oldest);
+    }
+    return token;
+  }
+
+  /* True when it armed, false when the token is gone — the caller says so
+     out loud rather than leaving a pressed button doing nothing. */
+  arm(token, minutes) {
+    const row = this.waiting.get(token);
+    if (!row) return false;
+    const ms = Math.max(1, Math.round(Number(minutes) || 0)) * 60000;
+    if (row.timer) clearTimeout(row.timer);
+    row.timer = setTimeout(() => {
+      this.waiting.delete(token);
+      this.fire(row.entry);
+    }, ms);
+    /* A deferred reminder must never be the reason node stays up. */
+    row.timer.unref?.();
+    return true;
+  }
+
+  drop(token) {
+    const row = this.waiting.get(token);
+    if (row?.timer) clearTimeout(row.timer);
+    this.waiting.delete(token);
+  }
+
+  clear() {
+    for (const token of [...this.waiting.keys()]) this.drop(token);
   }
 }
 

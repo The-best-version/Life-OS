@@ -21,6 +21,8 @@ import {
   rows,
   uid,
   dayKey,
+  addDays,
+  keyToDate,
   expenseShape,
   incomeShape,
   MONEY_CAP,
@@ -55,18 +57,25 @@ import {
   urgeShape,
   stamp,
   cleanDays,
+  eventShape,
+  uniShape,
+  markShape,
+  goalShape,
+  setDayDone,
+  streakBaseFrom,
+  withdrawReading,
   prepShape,
   prepPickAdd,
   prepPicks,
   tomorrowKey,
   TOP_TASK_CAP,
 } from "../../src/state/life-state.mjs";
-import { fold } from "./parse.js";
+import { fold, BACK_MAX } from "./parse.js";
 
 /* --- the money -------------------------------------------------------- */
 
-export function addExpense(state, { label, amount }) {
-  const row = expenseShape({ label, amount });
+export function addExpense(state, { label, amount, back = 0 }) {
+  const row = expenseShape({ label, amount, date: backKey(back) });
   if (!row.amount) {
     return { refused: "ما فهمت المبلغ. مثال: «صرفت ٣٥ غداء»." };
   }
@@ -82,8 +91,8 @@ export function addExpense(state, { label, amount }) {
   };
 }
 
-export function addIncome(state, { label, amount, hours }) {
-  const row = incomeShape({ label, amount, hours });
+export function addIncome(state, { label, amount, hours, back = 0 }) {
+  const row = incomeShape({ label, amount, hours, date: backKey(back) });
   if (!row.amount) {
     return { refused: "ما فهمت المبلغ. مثال: «دخل ١٥٠٠ استشارة»." };
   }
@@ -246,7 +255,7 @@ export function tickHabit(state, id, tiny = false) {
  *  moment ago names one; otherwise it is whichever book is marked «أقرأه
  *  الآن», which is the same answer `READ_ACTIVE` gives the app.
  * ---------------------------------------------------------------------- */
-export function logReading(state, { pages, habitId = null } = {}) {
+export function logReading(state, { pages, habitId = null, back = 0 } = {}) {
   const n = Math.round(Number(pages) || 0);
   if (n < 1) return { refused: "كم صفحة؟ مثال: «قرأت ٢٠ صفحة»." };
   const books = rows(state.books);
@@ -268,7 +277,8 @@ export function logReading(state, { pages, habitId = null } = {}) {
      finished and is not. */
   const next =
     Number.isFinite(total) && total > 0 ? Math.min(total, base + n) : base + n;
-  const row = { id: uid(), date: dayKey(), bookId: book.id, habitId: habit?.id || null, pages: n };
+  const on = backKey(back);
+  const row = { id: uid(), date: on, bookId: book.id, habitId: habit?.id || null, pages: n };
   const goal = Number.isFinite(+state.readGoal) ? +state.readGoal : READ_GOAL_DEFAULT;
   const reading = [...rows(state.reading), row];
   return {
@@ -279,6 +289,7 @@ export function logReading(state, { pages, habitId = null } = {}) {
     at: next,
     total: Number.isFinite(total) && total > 0 ? total : null,
     goal,
+    on,
     today: sumPages(reading.filter((r) => r.date === dayKey())),
     streak: readStreak(reading, goal),
     next: {
@@ -468,8 +479,12 @@ export function dropFocus(state) {
 
 /* Work that happened away from any timer. Marked `full` because there was no
    plan to have fallen short of. */
-export function logFocus(state, { minutes, label = "", taskId = null } = {}, now = Date.now()) {
-  const row = manualSession({ minutes, label, taskId, at: now });
+export function logFocus(state, { minutes, label = "", taskId = null, back = 0 } = {}, now = Date.now()) {
+  /* Noon of the day it belongs to, not the current clock: `manualSession`
+     dates a row from the epoch it is handed, and midnight would land the
+     row on the wrong side of the logical day boundary. */
+  const at = back ? (keyToDate(backKey(back))?.getTime() ?? now) + 12 * 3600 * 1000 : now;
+  const row = manualSession({ minutes, label, taskId, at });
   if (!row) return { refused: "كم دقيقة؟ مثال: «ركزت ٤٥ دقيقة على المحاسبة»." };
   return {
     kind: "focus-log",
@@ -630,6 +645,251 @@ export function reflect(state, { field, note }) {
       ),
     },
     before: { history: state.history },
+  };
+}
+
+/* --- a day that is not today ------------------------------------------- *
+ *  `expenseShape` and the rest have always taken a date; nothing could say
+ *  one. The row is written with it and the confirmation says which day it
+ *  landed on, because a row filed on the wrong square is only findable if
+ *  the message said where it went.
+ * ---------------------------------------------------------------------- */
+export const backKey = (back) => {
+  const n = Math.round(Number(back) || 0);
+  return n >= 1 && n <= BACK_MAX ? addDays(dayKey(), -n) : dayKey();
+};
+
+/* --- the calendar ------------------------------------------------------ *
+ *  `readWhen` in the parser hands back the day as a *word*; turning it into
+ *  a square is calendar arithmetic and lives here, beside the shape that
+ *  will carry it.
+ * ---------------------------------------------------------------------- */
+export function whenKey(day, from = dayKey()) {
+  if (day === null || day === undefined) return from;
+  if (day === "today") return from;
+  if (day === "tomorrow") return addDays(from, 1);
+  if (day === "after") return addDays(from, 2);
+  const want = Number(day);
+  if (!Number.isInteger(want) || want < 0 || want > 6) return from;
+  /* The next one of that weekday, today included: «موعد الأحد» said on a
+     Sunday morning is this Sunday, and pushing it a week out would be the
+     app arguing with him about a day he can see. */
+  const base = keyToDate(from);
+  if (!base) return from;
+  const ahead = (want - base.getDay() + 7) % 7;
+  return addDays(from, ahead);
+}
+
+export function addEvent(state, { title, day, time }) {
+  const text = String(title ?? "").trim();
+  if (!text) return { refused: "اكتب عنوان الموعد." };
+  const row = eventShape({
+    title: text,
+    date: whenKey(day),
+    time: time || "",
+    /* «مقابلة» is a meeting and everything else is a note until he says
+       otherwise. Guessing further — an exam, a deadline — would put a red
+       tint on a dentist's appointment. */
+    kind: /مقابل|اجتماع/.test(text) ? "meet" : "note",
+  });
+  return {
+    kind: "event",
+    row,
+    next: { ...state, events: [...rows(state.events), row] },
+    before: { events: state.events },
+  };
+}
+
+/* --- the university desk ------------------------------------------------ */
+
+/* Which course a few words could mean. The same folded match `findHabits`
+   uses, over the name and the code — he says «محاسبة» and the row says
+   «مبادئ المحاسبة ١» or «ACCT 101», and either should find it. */
+export function findCourses(uni, query) {
+  const list = rows(uniShape(uni).courses);
+  const q = fold(query);
+  if (!q) return list;
+  const hit = (c) => {
+    const name = fold(c.name);
+    const code = fold(c.code);
+    return (
+      (name && (name === q || name.includes(q) || q.includes(name))) ||
+      (code && (code === q || code.includes(q) || q.includes(code)))
+    );
+  };
+  const found = list.filter(hit);
+  return found.length ? found : [];
+}
+
+/* One absence, with the guard that makes the button safe to press twice.
+   `absences` stays the authoritative count — a term usually starts with
+   absences taken before the app did — and `absentOn` is only what lets a
+   second tap on the same day be refused. */
+export function markAbsence(state, courseId, on = dayKey()) {
+  const uni = uniShape(state.uni);
+  const course = rows(uni.courses).find((c) => c.id === courseId);
+  if (!course) return { refused: "هذي المادة لم تعد موجودة." };
+  /* The array directly, never through `rows()`: that helper keeps row
+     *objects* and drops everything else, and `absentOn` is a list of bare
+     day keys — so `rows(absentOn)` is always empty and the guard it was
+     written for never fired once. The guard is the whole point here: tapping
+     «غياب» twice after one lecture is the easiest mistake on that screen and
+     the hardest to notice, because the number is simply wrong from then on. */
+  const seen = Array.isArray(course.absentOn) ? course.absentOn : [];
+  if (seen.includes(on)) {
+    return { refused: `غياب «${course.name || course.code}» مسجّل لهذا اليوم أصلاً.` };
+  }
+  const courses = uni.courses.map((c) =>
+    c.id === courseId
+      ? {
+          ...c,
+          absences: c.absences + 1,
+          absentOn: [...(Array.isArray(c.absentOn) ? c.absentOn : []), on],
+        }
+      : c,
+  );
+  const after = courses.find((c) => c.id === courseId);
+  return {
+    kind: "absence",
+    course: after,
+    count: after.absences,
+    cap: after.absenceCap,
+    next: { ...state, uni: { ...uni, courses } },
+    before: { uni: state.uni },
+  };
+}
+
+export function addMark(state, courseId, { label, score, max }) {
+  const uni = uniShape(state.uni);
+  const course = rows(uni.courses).find((c) => c.id === courseId);
+  if (!course) return { refused: "هذي المادة لم تعد موجودة." };
+  /* Checked on the way *in*, not on the shaped row: `markShape` clamps an
+     unusable `max` up to 100, which is right for a damaged payload being
+     read off disk and wrong for a sentence being typed — «١٨ من ٠» would
+     quietly become eighteen out of a hundred. */
+  if (!(Number(max) > 0)) {
+    return { refused: "الدرجة لازم تكون «من» رقم أكبر من صفر." };
+  }
+  const row = markShape({ label: String(label || "درجة").trim(), score, max });
+  const courses = uni.courses.map((c) =>
+    c.id === courseId ? { ...c, marks: [...rows(c.marks), row] } : c,
+  );
+  return {
+    kind: "mark",
+    course,
+    row,
+    next: { ...state, uni: { ...uni, courses } },
+    before: { uni: state.uni },
+  };
+}
+
+/* --- the goals vault ---------------------------------------------------- *
+ *  The meter only. A goal's text, pillar, quarter and parent are decisions
+ *  made on a screen with the whole tree visible; `current` is the one field
+ *  that changes while you are out of the house.
+ * ---------------------------------------------------------------------- */
+export function findGoals(goals, query) {
+  const q = fold(query);
+  if (!q) return [];
+  const open = rows(goals).filter((g) => !g.done);
+  const hit = (g) => {
+    const t = fold(g.text);
+    return t === q || t.includes(q) || q.includes(t);
+  };
+  const found = open.filter(hit);
+  /* A goal with a meter first: «هدف الحفظ ٣٠» is about a number, and a
+     yes/no goal has nowhere to put one. */
+  return [...found.filter((g) => g.target > 0), ...found.filter((g) => !g.target)];
+}
+
+export function moveGoal(state, id, { value, add = false }) {
+  const list = rows(state.goals);
+  const goal = list.find((g) => g.id === id);
+  if (!goal) return { refused: "هذا الهدف لم يعد موجودًا." };
+  if (!(goal.target > 0)) {
+    return {
+      refused: `«${goal.text}» بلا عدّاد — يُقاس بخطواته أو بأهداف تحته، لا برقم.`,
+    };
+  }
+  const was = Number(goal.current) || 0;
+  const want = add ? was + Number(value) : Number(value);
+  const now = Math.max(0, Math.min(goal.target, want));
+  if (now === was) {
+    return { refused: `«${goal.text}» عند ${was} أصلاً.` };
+  }
+  const next = list.map((g) => (g.id === id ? goalShape({ ...g, current: now }) : g));
+  return {
+    kind: "goal",
+    goal: next.find((g) => g.id === id),
+    was,
+    now,
+    next: { ...state, goals: next },
+    before: { goals: state.goals },
+  };
+}
+
+/* --- taking a tick back ------------------------------------------------- *
+ *  An untick is a deletion in everything but name: it withdraws today's
+ *  reading sessions for the habit and rolls the book's page counter back.
+ *  `withdrawReading` is the state layer's, so this and the routine screen
+ *  cannot disagree about where a book has reached.
+ * ---------------------------------------------------------------------- */
+export function untickHabit(state, id) {
+  const list = rows(state.habits);
+  const h = list.find((x) => x.id === id);
+  if (!h) return { refused: "هذه العادة لم تعد في روتينك." };
+  if (!h.done) return { refused: `«${h.label}» غير مؤشّرة أصلاً.` };
+  const back = withdrawReading(state.reading, state.books, id, dayKey());
+  const next = stampToday({
+    ...state,
+    /* `tiny` leaves with the tick: a habit unticked is not «done the small
+       way», it is not done, and a mark left behind would be read back by
+       the archive as a day that was carried. */
+    habits: list.map((x) => (x.id === id ? { ...x, done: false, tiny: false } : x)),
+    reading: back.reading,
+    books: back.books,
+  });
+  return {
+    kind: "untick",
+    habit: h,
+    pages: back.pages,
+    pct: disciplineOf(next.habits),
+    next,
+    before: {
+      habits: state.habits,
+      history: state.history,
+      reading: state.reading,
+      books: state.books,
+    },
+  };
+}
+
+/* --- yesterday, corrected from a phone --------------------------------- *
+ *  One archive row rewritten and nothing else moved — today's habits do not
+ *  shift, because today is a different day and the whole value of a hard
+ *  boundary is that it holds. `setDayDone` is the same function «عدّل أمس»
+ *  goes through, and the streak is recomputed from the rows rather than
+ *  nudged.
+ * ---------------------------------------------------------------------- */
+export function tickOn(state, id, date, on = true) {
+  const habits = rows(state.habits);
+  const h = habits.find((x) => x.id === id);
+  if (!h) return { refused: "هذه العادة لم تعد في روتينك." };
+  const have = rows(state.history);
+  const row = have.find((r) => r.date === date) || null;
+  const was = Array.isArray(row?.done) ? row.done : [];
+  if (on && was.includes(id)) return { refused: `«${h.label}» مسجّلة في ذلك اليوم أصلاً.` };
+  if (!on && !was.includes(id)) return { refused: `«${h.label}» غير مسجّلة في ذلك اليوم.` };
+  const done = on ? [...was, id] : was.filter((x) => x !== id);
+  const history = setDayDone(have, date, done, habits);
+  return {
+    kind: "day-edit",
+    habit: h,
+    date,
+    on,
+    pct: history.find((r) => r.date === date)?.pct ?? 0,
+    next: { ...state, history, streakBase: streakBaseFrom(history) },
+    before: { history: state.history, streakBase: state.streakBase },
   };
 }
 

@@ -102,6 +102,42 @@ export function bookForHabit(habit, books) {
   return books.find((b) => b.id === habit.book) || null;
 }
 
+/* --- pages taken back ---------------------------------------------------
+ *  Unticking a reading habit is a deletion in everything but name: today's
+ *  sessions for that habit are removed and the books they advanced are
+ *  rolled back, because a log that keeps pages the user undid is worse than
+ *  no log at all.
+ *
+ *  It lived inside `useHabitTick` while the routine screen was the only
+ *  place a habit could be unticked. The Telegram bot unticks one from a
+ *  phone now, and two copies of this arithmetic is a shelf that disagrees
+ *  with itself about where a book has reached.
+ *
+ *  Both lists come back **by identity** when nothing was dropped: a fresh
+ *  array for an unchanged list is a re-render of every screen reading it,
+ *  and this runs on every single untick.
+ * --------------------------------------------------------------------- */
+export function withdrawReading(reading, books, habitId, date = dayKey()) {
+  const log = rows(reading);
+  const dropped = log.filter((r) => r.habitId === habitId && r.date === date);
+  if (!dropped.length) return { reading, books, pages: 0 };
+  const back = new Map();
+  for (const r of dropped) back.set(r.bookId, (back.get(r.bookId) || 0) + (r.pages || 0));
+  return {
+    reading: log.filter((r) => !(r.habitId === habitId && r.date === date)),
+    books: rows(books).map((b) => {
+      const n = back.get(b.id);
+      if (!n) return b;
+      const at = parseInt(b.page, 10);
+      /* A book with no page counter has nothing to roll back, and writing a
+         number onto it here would be inventing a position it never had. */
+      if (!Number.isFinite(at)) return b;
+      return { ...b, page: String(Math.max(0, at - n)) };
+    }),
+    pages: dropped.reduce((n, r) => n + (r.pages || 0), 0),
+  };
+}
+
 /* `(log || [])` like every other list reader here. These two were the only
    ones that assumed an array outright, which made them the only two that
    could take the render down over a field the data layer had not filled. */

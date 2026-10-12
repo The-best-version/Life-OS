@@ -89,7 +89,31 @@ export const CONFIG = {
      stub, gate included, without a token and without sending a real
      message. Nothing in normal use sets it. */
   apiRoot: String(pick("TELEGRAM_API_ROOT", "https://api.telegram.org")).replace(/\/+$/, ""),
+  /* --- the voice note's one dependency ---------------------------------- *
+   *  A voice note is the fastest way there is to record something while
+   *  walking, and it is the one feature in this bot that cannot be built
+   *  out of what the repo already has: turning Arabic speech into text
+   *  needs either a model on this machine or a service off it.
+   *
+   *  So it is a seam rather than a decision. Point `VOICE_API_URL` at
+   *  anything that speaks the OpenAI transcription shape — a hosted one, or
+   *  a local `whisper.cpp` server on this same machine, which keeps the
+   *  audio on the laptop and costs nothing. With no key the feature is
+   *  simply off and the bot says so when a voice note arrives, rather than
+   *  swallowing it silently.
+   * -------------------------------------------------------------------- */
+  voiceUrl: String(pick("VOICE_API_URL", "")).replace(/\/+$/, ""),
+  voiceKey: pick("VOICE_API_KEY", ""),
+  voiceModel: pick("VOICE_MODEL", "whisper-1"),
+  /* Arabic, stated rather than detected: a ten-second clip of Arabic is
+     short enough that a detector guesses, and a guess here turns a sentence
+     into transliterated nonsense that then lands in the inbox as a task. */
+  voiceLang: pick("VOICE_LANG", "ar"),
 };
+
+/* Whether a voice note can be read at all. The URL alone is enough — a local
+   transcription server needs no key. */
+export const voiceReady = () => !!CONFIG.voiceUrl;
 
 /* What is missing, named. A bot that starts and then silently answers
    nothing is the single most confusing failure this can have, so it refuses

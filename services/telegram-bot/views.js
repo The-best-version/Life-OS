@@ -10,6 +10,7 @@ import {
   TOP_TASK_CAP,
   scoredOf,
   rows,
+  dayKey,
   runLeft,
   phaseOf,
   runRunning,
@@ -35,13 +36,13 @@ const NAME_MAX = 6;
 
 export const savedExpense = (row, balance) =>
   [
-    line(`✅ مصروف: ${row.label} — ${money(row.amount)}`),
+    line(`✅ مصروف: ${row.label} — ${money(row.amount)}${onDay(row.date)}`),
     line(`الرصيد الآن: ${money(balance)}`),
   ].join("\n");
 
 export const savedIncome = (row, balance) =>
   [
-    line(`✅ دخل: ${row.label} — ${money(row.amount)}`),
+    line(`✅ دخل: ${row.label} — ${money(row.amount)}${onDay(row.date)}`),
     row.hours ? line(`الساعات: ${num(row.hours)}`) : null,
     line(`الرصيد الآن: ${money(balance)}`),
   ]
@@ -231,6 +232,7 @@ export const COMMANDS = [
   { command: "morning", description: "موجز الصباح" },
   { command: "evening", description: "إقفال اليوم" },
   { command: "menu", description: "القائمة" },
+  { command: "find", description: "ابحث في كل ما كتبته" },
   { command: "help", description: "ماذا يفهم من رسائلك" },
 ];
 
@@ -317,6 +319,108 @@ export const savedPrep = (out) =>
   ].join("\n");
 
 export const savedTop = (out) => line(`🎯 من مهام اليوم: ${out.row.text}`);
+
+/* --- the ones that needed a day said out loud -------------------------- */
+
+/* A row filed on a past square is only findable if the message said where it
+   went — «أمس» typed and today's date stored is a row he will look for on
+   the wrong day a week later. */
+export const onDay = (date) => (date === dayKey() ? "" : ` · ${date}`);
+
+export const savedEvent = (out) =>
+  [
+    line(`📅 ${out.row.title} — ${out.row.date}${out.row.time ? ` ${time(out.row.time)}` : ""}`),
+    /* The hour is read back deliberately. A bare «٥» with no ص/م is a guess,
+       and a guess the user can see is a guess he fixes in ten seconds. */
+    line(out.row.time ? "في التقويم." : "في التقويم، بلا ساعة."),
+  ].join("\n");
+
+export const savedAbsence = (out) =>
+  [
+    line(`🎓 غياب في «${out.course.name || out.course.code}» — المجموع ${num(out.count)}.`),
+    out.cap
+      ? line(
+          out.count >= out.cap
+            ? `وبلغت الحدّ المسموح (${num(out.cap)}). ⚠️`
+            : `الحدّ ${num(out.cap)} — باقي ${num(out.cap - out.count)}.`,
+        )
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+export const savedMark = (out) =>
+  [
+    line(`🎓 ${out.course.name || out.course.code} — ${out.row.label}: ${num(out.row.score)} من ${num(out.row.max)}`),
+    line(`أي ${num(Math.round((out.row.score / out.row.max) * 100))}٪.`),
+  ].join("\n");
+
+export const savedGoal = (out) =>
+  [
+    line(`🎯 ${out.goal.text}: ${num(out.now)} من ${num(out.goal.target)}${out.goal.unit ? ` ${out.goal.unit}` : ""}`),
+    line(
+      out.now >= out.goal.target
+        ? "وبلغت الهدف ✅ — علّمه «مُحقَّق» من الخزنة."
+        : `تقدّمت ${num(out.now - out.was)} · ${num(Math.round((out.now / out.goal.target) * 100))}٪`,
+    ),
+  ].join("\n");
+
+export const savedUntick = (out) =>
+  [
+    line(`↩︎ أُزيل تأشير «${out.habit.label}».`),
+    out.pages
+      ? line(`وسُحبت ${pagesWord(out.pages)} من سجلّ القراءة ورجع عدّاد الكتاب.`)
+      : null,
+    line(`انتظام اليوم: ${num(out.pct)}٪`),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+export const savedDayEdit = (out) =>
+  [
+    line(
+      out.on
+        ? `✅ سُجّلت «${out.habit.label}» في ${out.date}.`
+        : `↩︎ أُزيلت «${out.habit.label}» من ${out.date}.`,
+    ),
+    line(`انتظام ذلك اليوم صار ${num(out.pct)}٪ — والسلسلة أُعيد حسابها من السجلّ.`),
+  ].join("\n");
+
+/* --- choosing between rows, with the payload held in memory ------------ *
+ *  Telegram caps callback data at 64 bytes, which an Arabic mark label blows
+ *  through on its own. So the payload stays in the bot's memory under a
+ *  token and the button carries the token and the id — the same arrangement
+ *  the undo bus already uses, for the same reason.
+ * ---------------------------------------------------------------------- */
+export function courseKeys(list, act, token) {
+  const kb = new InlineKeyboard();
+  for (const c of (list || []).slice(0, 8)) {
+    kb.text(`${c.name || c.code}`.slice(0, 40), `${act}:${token}:${c.id}`).row();
+  }
+  return kb;
+}
+
+export function goalKeys(list, token) {
+  const kb = new InlineKeyboard();
+  for (const g of (list || []).slice(0, 6)) {
+    kb.text(`🎯 ${g.text}`.slice(0, 40), `gset:${token}:${g.id}`).row();
+  }
+  return kb;
+}
+
+export function habitKeys(list, act, max = 6) {
+  const kb = new InlineKeyboard();
+  for (const h of (list || []).slice(0, max)) {
+    kb.text(`${act === "untick" ? "↩︎" : "✓"} ${h.label}`.slice(0, 40), `${act === "untick" ? "unt" : "tick"}:${h.id}`).row();
+  }
+  return kb;
+}
+
+/* «لاحقًا» — the button that makes every other reminder survivable. A nudge
+   that cannot be deferred is one you mute, and a muted reminder takes the
+   rest of them with it. */
+export const snoozeKey = (kb, token, minutes) =>
+  kb.text(`⏰ بعد ${minutes} دقيقة`, `snz:${token}`);
 
 export const savedReflect = (out) =>
   line(
@@ -446,6 +550,20 @@ export const HELP = [
   line("🛡️ الكاسر والتقييم"),
   line("• «صمدت» · «سقطت» → أمام عادة تكسرها"),
   line("• «شتتني الجوال» ثم «الحل أتركه في الدرج» → تقييم المساء"),
+  "",
+  line("📅 التقويم والجامعة والأهداف"),
+  line("• «موعد بكرة ٥ م الدكتور» → في التقويم، وينبّهك قبله"),
+  line("• «غياب محاسبة» → غياب واحد، ويرفض الثاني في نفس اليوم"),
+  line("• «درجة محاسبة الكويز ١٨ من ٢٠» → في كشف المادة"),
+  line("• «هدف الحفظ ٣٠» أو «هدف الحفظ +٥» → عدّاد الهدف"),
+  "",
+  line("↩︎ وما نسيته أو أخطأت فيه"),
+  line("• «أمس صرفت ٣٥ غداء» · «قبل يومين دخل ٢٠٠»"),
+  line("• «أمس تمت صلاة العصر» → يصحّح ذلك اليوم وحده"),
+  line("• «ألغِ قراءة» → يزيل التأشير ويسحب صفحات اليوم معه"),
+  line("• «ابحث عن التسويف» → في كل ما كتبته"),
+  "",
+  line("🎙️ وأرسل مقطعًا صوتيًا — يُفرَّغ ويُقرأ كأنك كتبته."),
   "",
   line("❓ واسأل، ولن يُسجَّل شي:"),
   line("• «كم صرفت هذا الشهر؟» · «وين وصلت في الكتاب؟»"),

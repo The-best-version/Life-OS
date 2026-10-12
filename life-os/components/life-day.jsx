@@ -16,7 +16,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Trash2, Target, Zap, GripVertical, Footprints } from "lucide-react";
 import { T, useBurst, Card, Btn, Field, Badge, Modal, Checkbox, useUndo } from "./life-shared.jsx";
-import { dayKey, rows, TOP_TASK_CAP, uid, bookForHabit, pctOf } from "../state/life-state.mjs";
+import { dayKey, rows, TOP_TASK_CAP, uid, bookForHabit, withdrawReading, pctOf } from "../state/life-state.mjs";
 
 /* ==================================================================== *
  *  The 80/20 hook — exactly three non-negotiables a day
@@ -215,27 +215,14 @@ export function useHabitTick(state, setState) {
         };
         /* Unticking withdraws today's sessions for this habit and rolls the
            page counters back, so the library never keeps pages that were
-           undone in the routine. */
+           undone in the routine. The arithmetic is in the state layer
+           because the bot unticks a habit from a phone now, and two copies
+           of it is a shelf that disagrees with itself about where a book
+           has reached. */
         if (habit && habit.book && !turningOn) {
-          const today = dayKey();
-          const dropped = (s.reading || []).filter(
-            (r) => r.habitId === id && r.date === today,
-          );
-          if (dropped.length) {
-            const back = new Map();
-            for (const r of dropped)
-              back.set(r.bookId, (back.get(r.bookId) || 0) + r.pages);
-            next.reading = (s.reading || []).filter(
-              (r) => !(r.habitId === id && r.date === today),
-            );
-            next.books = s.books.map((b) => {
-              const n = back.get(b.id);
-              if (!n) return b;
-              const at = parseInt(b.page, 10);
-              if (!Number.isFinite(at)) return b;
-              return { ...b, page: String(Math.max(0, at - n)) };
-            });
-          }
+          const back = withdrawReading(s.reading, s.books, id, dayKey());
+          next.reading = back.reading;
+          next.books = back.books;
         }
         return next;
       });
