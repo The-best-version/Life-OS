@@ -14,6 +14,9 @@
 | **الاختبارات** | `Tasks: Run Task` → **الاختبارات** | `npm test` |
 | **خادم تجريبي معزول** (منفذ 47699) | `Tasks: Run Task` → **خادم تجريبي** | `npm run serve:test` |
 | **تحديث الرسوم البيانية** | `Tasks: Run Task` → **تحديث الرسوم** | `npm run report` |
+| **بوت تيليجرام** | — | `npm run bot` |
+| تثبيت حزمة البوت (مرة واحدة) | — | `npm run bot:install` |
+| معرفة رقم محادثتك في تيليجرام | — | `npm run bot:whoami` |
 | خادم الحفظ في الواجهة (للتشخيص) | — | `npm run serve` |
 | تطوير Iron Log | — | `npm run iron-log` |
 
@@ -29,6 +32,7 @@
 | العملية | أين | كيف تبدأ | التكلفة |
 |---|---|---|---|
 | خادم الحفظ المحلي | `services/local-sync-server.js` | اختصار في `shell:startup` | ~1 ثانية معالج في اليوم |
+| بوت تيليجرام | `services/telegram-bot/bot.js` | اختصار لـ `run-telegram-bot.vbs` في `shell:startup` | Long polling كل ٣٠ ثانية |
 | مراقب الرسوم (`--watch`) | `services/report-agent.js` | **موقوف** — نسخة معطّلة في `services/launchers/` | — |
 | تحديث الرسوم عند كل commit | `.git/hooks/pre-commit` | تلقائي | ~110 مللي ثانية |
 
@@ -53,6 +57,7 @@ tests/         node --test — تُشغَّل تلقائياً قبل كل بن�
 scripts/       build-life-os.mjs        ← الطريقة الوحيدة لإنتاج الموقع
   step/        أدوات بناء بنوك أسئلة STEP (تُشغَّل يدوياً، مرة كل حين)
 services/      local-sync-server.js  report-agent.js
+  telegram-bot/ بوت الإدخال السريع — الحزمة الوحيدة المثبّتة في المستودع
   launchers/   مشغّلات Windows (vbs/cmd) + الاختصار المعطّل
 apps/
   step-arena/  step-arena.html + bank-grammar.js + bank-vocab.js (الثلاثة معاً)
@@ -79,8 +84,10 @@ Businessman/   خزانة Obsidian
 2. **كل ملف في `services/` و`scripts/` يحسب الجذر من `__dirname` ويصعد مستوى.** لا
    مسارات مكتوبة نصّاً: هذا بالضبط ما كسره النقل الأول (أحد عشر سكريبت كانت تحمل
    `e:/claude code/...`).
-3. **لا `"type"` في `package.json`.** ملفات `.js` هنا CommonJS و`.mjs` ESM؛ إعلان
-   أيّ نوع يكسر النصف الآخر.
+3. **لا `"type"` في `package.json` الجذر.** ملفات `.js` هنا CommonJS و`.mjs` ESM؛
+   إعلان أيّ نوع يكسر النصف الآخر. الاستثناء الوحيد
+   `services/telegram-bot/package.json` ومعه `"type": "module"` — وهو يسري على ذلك
+   المجلد وحده، لأن Node يقرأ أقرب `package.json` للملف لا أعلاه.
 
 ## أين تعدّل ماذا
 
@@ -91,6 +98,8 @@ Businessman/   خزانة Obsidian
 | بطاقة أو زر مشترك | `src/components/life-shared.jsx` |
 | ترتيب التبويبات أو الشريط | `src/layouts/life-nav.jsx` |
 | حفظ القرص، النسخ، التعارض | `services/local-sync-server.js` |
+| ما يفهمه البوت من رسالة | `services/telegram-bot/parse.js` |
+| ما تفعله الرسالة بالحالة | `services/telegram-bot/actions.js` |
 | تذكيرات Windows | `services/local-sync-server.js` + `src/utils/prayer-times.mjs` |
 | خطوات البناء أو CSS المسحوب | `scripts/build-life-os.mjs` (المصفوفتان `scanned` و`shipped`) |
 

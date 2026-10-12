@@ -100,6 +100,7 @@ const MODULES = [
   "state/life-state-calendar.mjs",
   "state/life-state-uni.mjs",
   "state/life-state-streak.mjs",
+  "state/life-state-finance.mjs",
 ];
 const CONSUMERS = [
   "features/life-settings.jsx",
@@ -129,6 +130,7 @@ const CONSUMERS = [
   "state/life-state-calendar.mjs",
   "state/life-state-uni.mjs",
   "state/life-state-streak.mjs",
+  "state/life-state-finance.mjs",
 ];
 
 function exportsOf(src) {

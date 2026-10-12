@@ -76,6 +76,15 @@ import {
   STREAK_FORGIVE,
   comebackFrom,
   COMEBACK_MIN,
+  stampToday,
+  incomeShape,
+  expenseShape,
+  MONEY_CAP,
+  amountSum,
+  hoursSum,
+  sinceDays,
+  hourRate,
+  netBalance,
 } from "../src/state/life-state.mjs";
 import { BLOCK_ANCHORS, blockAt } from "../src/utils/prayer-times.mjs";
 
@@ -1363,4 +1372,156 @@ test("every tab belongs to exactly one sidebar group", () => {
     assert.ok(g.ids.length > 0, g.id + " is an empty group");
     assert.ok(g.label && g.label.trim().length > 0, g.id + " has no label");
   }
+});
+
+/* --- today's archive row, written from one place ----------------------
+   The row used to be built inside an effect in LifeOS.jsx, which was fine
+   while the app was the only writer of it. The Telegram bot ticks a habit
+   from a phone, and a second writer with its own copy of this merge is a
+   bug waiting for the day they disagree — so it moved down here and both
+   call it. These tests are what hold the merge rule in place. */
+test("stampToday derives the whole row from the state it is handed", () => {
+  const s = freshState();
+  const first = s.habits[0].id;
+  const next = stampToday({
+    ...s,
+    habits: s.habits.map((h) => (h.id === first ? { ...h, done: true, tiny: true } : h)),
+    water: 3,
+  });
+  const row = next.history.find((h) => h.date === dayKey());
+  assert.ok(row);
+  assert.deepEqual(row.done, [first]);
+  assert.deepEqual(row.tiny, [first], "a floor is marked, and only marked");
+  assert.equal(row.all.length, s.habits.length, "the roster as it stood");
+  assert.equal(row.pct, disciplineOf(next.habits), "one reading of the score");
+  assert.equal(row.water, 3);
+  assert.equal(isGap(row), false);
+});
+
+test("today's row is merged, never rebuilt", () => {
+  /* The row also carries the evening reflection and the accountability
+     mirror. Rebuilding it from scratch on a habit toggle is how a paragraph
+     written at ten at night disappears at ten past. */
+  const s = freshState();
+  const withText = stampToday({
+    ...s,
+    history: [{ date: dayKey(), distraction: "الجوال", fix: "أتركه بغرفة ثانية", mirror: "صدقت" }],
+  });
+  const row = withText.history.find((h) => h.date === dayKey());
+  assert.equal(row.distraction, "الجوال");
+  assert.equal(row.fix, "أتركه بغرفة ثانية");
+  assert.equal(row.mirror, "صدقت");
+  assert.ok(Array.isArray(row.done));
+});
+
+test("stampToday leaves every other day alone", () => {
+  const s = freshState();
+  const old = { date: addDays(dayKey(), -3), pct: 71, done: ["x"], all: ["x", "y"] };
+  const next = stampToday({ ...s, history: [old] });
+  assert.deepEqual(next.history.find((h) => h.date === old.date), old);
+  assert.equal(next.history.length, 2);
+});
+
+test("the archive stays capped however often the row is stamped", () => {
+  const s = freshState();
+  const many = Array.from({ length: HISTORY_CAP + 20 }, (_, i) => ({
+    date: addDays(dayKey(), -(HISTORY_CAP + 20 - i)),
+    pct: 50,
+    done: [],
+    all: [],
+  }));
+  assert.equal(stampToday({ ...s, history: many }).history.length, HISTORY_CAP);
+});
+
+/* --- the money ---------------------------------------------------------
+   Schema 27 gives the day two money lists and both of them a shape. The
+   income rows predate the shape by a year, so `migrate` is the first thing
+   that has ever normalised them — which is the only reason an amount
+   hand-edited into a string cannot turn every total on the screen into NaN. */
+test("a money row is written by its shape, and never carries a NaN", () => {
+  const e = expenseShape({ label: "  غداء  ", amount: "35.456" });
+  assert.equal(e.label, "غداء");
+  assert.equal(e.amount, 35.46, "rounded to halalas");
+  assert.equal(e.date, dayKey());
+  assert.ok(e.id);
+
+  /* Anything that is not a positive number becomes a zero, not a NaN: one
+     NaN in a list makes every sum downstream unprintable. */
+  for (const bad of ["كثير", null, undefined, -5, NaN, {}]) {
+    assert.equal(expenseShape({ amount: bad }).amount, 0);
+  }
+  assert.equal(expenseShape(null).label, "مصروف");
+  assert.equal(incomeShape(null).label, "عمل مرن");
+  assert.equal(incomeShape({ amount: 10, hours: "ساعتين" }).hours, 0);
+});
+
+test("a hand-written date is kept and a broken one becomes today", () => {
+  assert.equal(expenseShape({ amount: 1, date: "2027-01-05" }).date, "2027-01-05");
+  assert.equal(expenseShape({ amount: 1, date: 1767571200000 }).date, dayKey());
+});
+
+test("the windows read day keys as strings, from the logical day", () => {
+  const today = "2027-03-10";
+  const list = [
+    { amount: 10, date: today },
+    { amount: 20, date: addDays(today, -6) },
+    { amount: 40, date: addDays(today, -7) },
+  ];
+  /* Seven days means today and the six before it — the seventh is out. */
+  assert.equal(amountSum(sinceDays(list, 7, today)), 30);
+  assert.equal(amountSum(sinceDays(list, 30, today)), 70);
+  assert.equal(amountSum(list), 70);
+  assert.equal(amountSum(null), 0);
+});
+
+test("an hour with no hours recorded is no rate, never an infinite one", () => {
+  const today = "2027-03-10";
+  assert.equal(hourRate([{ amount: 300, date: today }], 30, today), 0);
+  assert.equal(
+    hourRate([{ amount: 300, hours: 4, date: today }], 30, today),
+    75,
+  );
+  assert.equal(hoursSum([{ hours: 2 }, { hours: "3" }, { hours: null }]), 5);
+});
+
+test("the balance is signed, because a negative one is the fact worth seeing", () => {
+  assert.equal(netBalance([{ amount: 100 }], [{ amount: 250 }]), -150);
+  assert.equal(netBalance(null, null), 0);
+});
+
+test("schema 27 gives an older payload an empty expense list and keeps its income", () => {
+  const before = {
+    ...fixture("schema-20.json"),
+    income: [{ id: "i1", date: "2027-01-05", label: "توصيل", amount: "300", hours: "4" }],
+  };
+  delete before.expenses;
+  const after = migrate(before);
+  assert.equal(after.schema, SCHEMA);
+  assert.ok(Array.isArray(after.expenses));
+  assert.equal(after.expenses.length, 0);
+  assert.equal(after.income.length, 1);
+  /* Normalised on the way in — the string amount was survivable only
+     because nothing had ever summed it. */
+  assert.equal(after.income[0].amount, 300);
+  assert.equal(after.income[0].hours, 4);
+  assert.equal(after.income[0].label, "توصيل");
+  assert.equal(after.income[0].date, "2027-01-05", "a dated row keeps its date");
+});
+
+test("both money lists are bounded, so a phone cannot grow them forever", () => {
+  const many = Array.from({ length: MONEY_CAP + 50 }, (_, i) => ({
+    id: "e" + i,
+    amount: 1,
+    date: dayKey(),
+  }));
+  const after = migrate({ schema: SCHEMA, expenses: many, income: many });
+  assert.equal(after.expenses.length, MONEY_CAP);
+  assert.equal(after.income.length, MONEY_CAP);
+});
+
+test("a hole in either money list is dropped, not carried forward to throw", () => {
+  const after = migrate({ schema: SCHEMA, expenses: [null, 7, "x", { amount: 5 }], income: [null] });
+  assert.equal(after.expenses.length, 1);
+  assert.equal(after.expenses[0].amount, 5);
+  assert.equal(after.income.length, 0);
 });

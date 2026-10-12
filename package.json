@@ -10,6 +10,9 @@
     "open": "wscript \"services/launchers/run-life-os.vbs\"",
     "serve": "node services/local-sync-server.js",
     "serve:test": "node services/local-sync-server.js --port 47699 --data-dir life-os-test-data",
+    "bot": "node services/telegram-bot/bot.js",
+    "bot:whoami": "node services/telegram-bot/whoami.js",
+    "bot:install": "npm --prefix services/telegram-bot install",
     "report": "node services/report-agent.js",
     "report:watch": "node services/report-agent.js --watch",
     "iron-log": "npm --prefix iron-log run dev"

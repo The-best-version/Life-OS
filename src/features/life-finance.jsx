@@ -1,7 +1,26 @@
 import React, { useState } from "react";
-import { Plus, Pencil, Trash2, TrendingUp, Wallet, Coins, Lightbulb } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  TrendingUp,
+  Wallet,
+  Coins,
+  Lightbulb,
+  Scale,
+  ArrowDownLeft,
+} from "lucide-react";
 import { T, Card, Btn, Field, Modal, useUndo } from "../components/life-shared.jsx";
-import { uid, dayKey } from "../state/life-state.mjs";
+import {
+  uid,
+  incomeShape,
+  expenseShape,
+  MONEY_CAP,
+  amountSum,
+  hoursSum,
+  sinceDays,
+  netBalance,
+} from "../state/life-state.mjs";
 
 /* ==================================================================== *
  *  MODULE — flexible income & side ventures
@@ -29,6 +48,10 @@ export function FinanceModule({ state, setState }) {
   const [label, setLabel] = useState("");
   const [hours, setHours] = useState("");
   const [amount, setAmount] = useState("");
+  /* The expense form is two fields and not three — an expense has no hours,
+     and a disabled field beside it would only say so slowly. */
+  const [spentLabel, setSpentLabel] = useState("");
+  const [spentAmount, setSpentAmount] = useState("");
   const [venture, setVenture] = useState(null); // {id?, name, cost, revenue}
   /* Both deletes below reach the toast through here. The bus lives in
      life-shared.jsx precisely so this module can: a delete carved out of
@@ -36,43 +59,48 @@ export function FinanceModule({ state, setState }) {
   const arm = useUndo();
 
   const income = state.income || [];
+  const expenses = state.expenses || [];
   const ventures = state.ventures || [];
 
-  const since = (days) => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - (days - 1));
-    return income.filter((e) => new Date(e.date) >= d);
-  };
-  const week = since(7);
-  const month = since(30);
-  const sum = (list) => list.reduce((n, e) => n + (e.amount || 0), 0);
-  const hoursOf = (list) => list.reduce((n, e) => n + (e.hours || 0), 0);
-  const weekTotal = sum(week);
-  const monthTotal = sum(month);
-  const monthHours = hoursOf(month);
+  /* Every window and every total is read out of the state layer. They used to
+     be four closures in this component, which was fine while this screen was
+     the only thing that asked — the Telegram bot's morning brief asks now,
+     and two copies of «كم صرفت هذا الأسبوع؟» is two answers. */
+  const weekTotal = amountSum(sinceDays(income, 7));
+  const monthTotal = amountSum(sinceDays(income, 30));
+  const monthSpent = amountSum(sinceDays(expenses, 30));
+  const monthHours = hoursSum(sinceDays(income, 30));
   const rate = monthHours ? monthTotal / monthHours : 0;
+  /* The whole ledger, not the month: a balance is what is left, and a
+     balance that forgets everything older than thirty days is not one. */
+  const balance = netBalance(income, expenses);
 
   const addIncome = () => {
     const amt = parseFloat(amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    const hrs = parseFloat(hours);
+    /* `incomeShape` and nothing hand-rolled: the bot writes these rows too,
+       and a second writer with its own idea of the fields is how `date`
+       becomes a timestamp on one side and a day key on the other. */
+    const row = incomeShape({ label, hours, amount: amt });
     setState((s) => ({
       ...s,
-      income: [
-        {
-          id: uid(),
-          date: dayKey(),
-          label: label.trim() || "عمل مرن",
-          hours: Number.isFinite(hrs) && hrs > 0 ? hrs : 0,
-          amount: amt,
-        },
-        ...(s.income || []),
-      ].slice(0, 500),
+      income: [row, ...(s.income || [])].slice(0, MONEY_CAP),
     }));
     setLabel("");
     setHours("");
     setAmount("");
+  };
+
+  const addExpense = () => {
+    const amt = parseFloat(spentAmount);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    const row = expenseShape({ label: spentLabel, amount: amt });
+    setState((s) => ({
+      ...s,
+      expenses: [row, ...(s.expenses || [])].slice(0, MONEY_CAP),
+    }));
+    setSpentLabel("");
+    setSpentAmount("");
   };
 
   /* The whole list as it stood, never the row: an entry put back at the end
@@ -80,6 +108,11 @@ export function FinanceModule({ state, setState }) {
   const removeIncome = (id) => {
     arm("حُذف سجلّ الدخل", { income });
     setState((s) => ({ ...s, income: s.income.filter((e) => e.id !== id) }));
+  };
+
+  const removeExpense = (id) => {
+    arm("حُذف المصروف", { expenses });
+    setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }));
   };
 
   const removeVenture = (id) => {
@@ -104,9 +137,20 @@ export function FinanceModule({ state, setState }) {
   };
 
   const stats = [
-    { label: "هذا الأسبوع", value: weekTotal, tint: T.primary, icon: Coins },
-    { label: "آخر ٣٠ يومًا", value: monthTotal, tint: T.accent, icon: Wallet },
+    { label: "دخل هذا الأسبوع", value: weekTotal, tint: T.primary, icon: Coins },
+    { label: "دخل ٣٠ يومًا", value: monthTotal, tint: T.accent, icon: Wallet },
+    { label: "مصروف ٣٠ يومًا", value: monthSpent, tint: T.ember, icon: ArrowDownLeft },
     { label: "معدّل الساعة", value: rate, tint: T.sky, icon: TrendingUp },
+    /* The only figure on this screen that is allowed to go red. Emerald here
+       is not decoration: money left over is the success state this screen
+       exists to report, and a negative balance is the one number on it worth
+       reacting to today. */
+    {
+      label: "الرصيد",
+      value: balance,
+      tint: balance < 0 ? T.danger : T.primary,
+      icon: Scale,
+    },
   ];
 
   return (
@@ -121,7 +165,7 @@ export function FinanceModule({ state, setState }) {
         </p>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => {
           const Icon = s.icon;
           return (
@@ -220,6 +264,75 @@ export function FinanceModule({ state, setState }) {
                 </span>
                 <button
                   onClick={() => removeIncome(e.id)}
+                  aria-label={`حذف ${e.label}`}
+                  className="shrink-0 rounded p-1 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+
+      <Card className="p-6 sm:p-7">
+        <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
+          تسجيل مصروف
+        </h3>
+        <p className="mt-1.5 text-[11.5px]" style={{ color: T.faint }}>
+          أسرع طريق لهذا السطر هي رسالة واحدة للبوت: «صرفت ٣٥ غداء».
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Field
+            value={spentLabel}
+            onChange={(e) => setSpentLabel(e.target.value)}
+            placeholder="على ماذا — مثال: غداء"
+          />
+          <Field
+            value={spentAmount}
+            onChange={(e) => setSpentAmount(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addExpense()}
+            inputMode="decimal"
+            placeholder="المبلغ"
+            className="sm:max-w-[150px]"
+          />
+          <Btn variant="default" onClick={addExpense} className="shrink-0">
+            <Plus size={15} strokeWidth={3} /> إضافة
+          </Btn>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          {expenses.length === 0 ? (
+            <p
+              className="rounded-xl border border-dashed py-8 text-center text-[11.5px]"
+              style={{ borderColor: T.border, color: T.faint }}
+            >
+              لا مصروف مسجّل بعد
+            </p>
+          ) : (
+            expenses.slice(0, 12).map((e) => (
+              <div
+                key={e.id}
+                className="group flex items-center gap-3 rounded-xl border px-4 py-2.5"
+                style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+              >
+                <span className="min-w-0 flex-1 truncate text-[13px]">{e.label}</span>
+                <span
+                  className="shrink-0 text-[13px] font-extrabold tabular-nums"
+                  dir="ltr"
+                  style={{ color: T.ember }}
+                >
+                  {money(e.amount)}
+                </span>
+                <span
+                  className="shrink-0 text-[10px] tabular-nums"
+                  dir="ltr"
+                  style={{ color: T.faint }}
+                >
+                  {e.date.slice(5)}
+                </span>
+                <button
+                  onClick={() => removeExpense(e.id)}
                   aria-label={`حذف ${e.label}`}
                   className="shrink-0 rounded p-1 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 >

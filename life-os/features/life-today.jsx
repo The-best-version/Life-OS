@@ -1,7 +1,7 @@
 import { ReadLogModal, TopThree, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, PRAYERS, ProgressRing, ReadingCue, T, arDate, clockAt, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
+import { Badge, Btn, Card, Checkbox, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, scoredOf, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
-import { blockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
+import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
 import { AlarmClock, ArrowLeft, CalendarClock, CalendarDays, ClipboardList, Droplets, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, School, Star, Sunrise, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 

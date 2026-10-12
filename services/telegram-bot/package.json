@@ -1,0 +1,17 @@
+{
+  "name": "life-os-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "بوت تيليجرام لـ 2027 Life OS — إدخال سريع من الجوال وموجزَا الصباح والمساء.",
+  "type": "module",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "grammy": "^1.46.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

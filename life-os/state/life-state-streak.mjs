@@ -5,7 +5,7 @@
  *  which is why this is the one domain file that imports from another.
  * --------------------------------------------------------------------- */
 import { rows, isKey, addDays, dayKey, logicalNow, fmtDay, DAY_START_HOUR } from "./life-state-util.mjs";
-import { disciplineOf } from "./life-state-habits.mjs";
+import { disciplineOf, breakerToday } from "./life-state-habits.mjs";
 
 /* How many archive rows are kept, and the discipline a day has to reach to
    bank the streak. */
@@ -100,6 +100,56 @@ export function pctOfRow(row, habits) {
   return disciplineOf(
     roster.map((id) => ({ ...(live.get(id) || { id }), done: done.has(id) })),
   );
+}
+
+/* --- today, written down ----------------------------------------------- *
+ *  Today's archive row, merged onto whatever is already there. The score,
+ *  which habits were kept, which of them on the floor, the roster as it
+ *  stands, the day's holds and falls, and the water — every one of them is
+ *  derived from the state it is handed, so this cannot disagree with the
+ *  ring above it.
+ *
+ *  It lives here rather than inside the effect that used to build it because
+ *  it now has two callers. The app rewrites this row on every discipline
+ *  change; the Telegram bot ticks a habit from a phone and has to write the
+ *  same row, or the archive silently misses every tick made away from the
+ *  laptop. Two writers building one row from two copies of this arithmetic
+ *  is a bug waiting for the day they disagree.
+ *
+ *  Merged, never rebuilt: this row also carries the evening reflection and
+ *  the accountability mirror, and anything else written per-day. Spread the
+ *  previous entry or a single habit toggle erases what was written about the
+ *  day.
+ * -------------------------------------------------------------------- */
+export function stampToday(s) {
+  const today = dayKey();
+  const habits = rows(s.habits);
+  const have = rows(s.history);
+  const prev = have.find((h) => h.date === today);
+  const day = breakerToday(rows(s.badHabits));
+  const next = [
+    ...have.filter((h) => h.date !== today),
+    {
+      ...prev,
+      date: today,
+      pct: disciplineOf(habits),
+      /* Ids rather than labels — twenty Arabic labels a day is most of a
+         megabyte a year, and the label is resolved from the live list when
+         the day is read back. */
+      done: habits.filter((h) => h.done).map((h) => h.id),
+      /* A subset of `done` and never a replacement for it: the score, the
+         streak and the roll call all read `done`, and a tiny tick is a tick
+         to every one of them. This only answers «how». */
+      tiny: habits.filter((h) => h.done && h.tiny).map((h) => h.id),
+      /* The roster as it stood, not just the ticks. Without it a habit added
+         in November shows up as "missed" across every day in October. */
+      all: habits.map((h) => h.id),
+      holds: day.holds,
+      falls: day.falls,
+      water: s.water || 0,
+    },
+  ].slice(-HISTORY_CAP);
+  return { ...s, history: next };
 }
 
 /* --- yesterday, corrected --------------------------------------------- *

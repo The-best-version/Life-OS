@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useContext, useRef } 
 import { createPortal } from "react-dom";
 import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Bed, Undo2, RotateCcw, Quote } from "lucide-react";
 import { uid, STREAK_TARGET, hhmm, GRADES, daysUntil, minsIn, BLOCK_IDS, daysBetween } from "../state/life-state.mjs";
-import { fixHour, prayerTimes } from "../utils/prayer-times.mjs";
+import { fixHour, prayerTimes, PRAYER_ROWS, clockAt } from "../utils/prayer-times.mjs";
 
 /* --- tokens --------------------------------------------------------- *
  *  "Vibrant Deep Slate" — an energetic canvas, not a void. Emerald is
@@ -884,25 +884,27 @@ export const cupWord = (n) => arCount(n, CUP_FORMS);
 
 /* The six rows, in the order of the day. «الشروق» is not a prayer and is
    marked so: it is the end of Fajr's window, which is why it is shown. */
-export const PRAYERS = [
-  { id: "fajr", label: "الفجر", icon: Sunrise, tint: "#5B8CFF" },
-  { id: "sunrise", label: "الشروق", icon: Sun, tint: "#FFB020", mark: true },
-  { id: "dhuhr", label: "الظهر", icon: Sun, tint: "#FF7A45" },
-  { id: "asr", label: "العصر", icon: Sunset, tint: "#FF4D8D" },
-  { id: "maghrib", label: "المغرب", icon: Moon, tint: "#9D5CFF" },
-  { id: "isha", label: "العشاء", icon: MoonStar, tint: "#00C2FF" },
-];
+/* The ids, the Arabic and the tints live in prayer-times.mjs, where the
+   server and the Telegram bot can read them too. Only the icons are added
+   here, and they are fastened onto those same row objects rather than onto
+   copies — `nextPrayer` spreads a row and every card reads `.icon` off
+   whatever these lookups hand back, so a copy would leave half the app
+   holding rows with no icon on them. */
+const PRAYER_ICONS = {
+  fajr: Sunrise,
+  sunrise: Sun,
+  dhuhr: Sun,
+  asr: Sunset,
+  maghrib: Moon,
+  isha: MoonStar,
+};
+export const PRAYERS = PRAYER_ROWS.map((p) =>
+  Object.assign(p, { icon: PRAYER_ICONS[p.id] }),
+);
 
 /* Saudi first, because that is where this is lived. Coordinates are the city
    centre and the offset is standard time — the Kingdom has no DST, so a
    stored number is safe here in a way it would not be in Europe. */
-export const clockAt = (h) => {
-  if (h === null || !Number.isFinite(h)) return "—";
-  const total = Math.round(fixHour(h) * 60);
-  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(
-    total % 60,
-  ).padStart(2, "0")}`;
-};
 
 /* Which prayer is next, and how long until it. Isha is the last row of the
    day, so after it the answer is tomorrow's Fajr — computed from tomorrow's

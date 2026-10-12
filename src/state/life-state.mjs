@@ -10,14 +10,15 @@
  *  the book shelf and the rest each have their own file
  *  (`life-state-habits.mjs`, `life-state-goals.mjs`, `life-state-books.mjs`,
  *  `life-state-tasks.mjs`, `life-state-calendar.mjs`, `life-state-uni.mjs`,
- *  `life-state-streak.mjs`, and the dependency-free `life-state-util.mjs`
- *  every one of them is built on). What stays here is
+ *  `life-state-finance.mjs`, `life-state-streak.mjs`, and the
+ *  dependency-free `life-state-util.mjs` every one of them is built on).
+ *  What stays here is
  *  only what is inherently cross-cutting — the day boundary, `SCHEMA`, the
  *  nav order, the general cue quotes, and `freshState`/`migrate`/`carryOf`/
  *  `rollDay`, which by nature touch every domain's shape at once.
  *
  *  Every other file in the app still imports from `"./life-state.mjs"`
- *  alone — this file re-exports everything the 8 domain files export, so the
+ *  alone — this file re-exports everything the 9 domain files export, so the
  *  split below is invisible to every consumer. Add a field to a domain file
  *  and it is already exported from here; nothing else needs to change.
  *
@@ -76,6 +77,7 @@ import {
   SEED_READS,
 } from "./life-state-books.mjs";
 import { eventShape, placeShape } from "./life-state-calendar.mjs";
+import { incomeShape, expenseShape, MONEY_CAP } from "./life-state-finance.mjs";
 import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 
@@ -286,7 +288,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 26;
+export const SCHEMA = 27;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
@@ -312,6 +314,10 @@ export const freshState = (carry = {}) => ({
   goals: carry.goals || SEED_GOALS(),
   sessions: carry.sessions || [],
   income: carry.income || [],
+  /* What the day cost, beside what it paid. Both carry across a rollover
+     whole — every row is dated, so neither of them belongs to "today" in the
+     first place, exactly like the calendar's events. */
+  expenses: carry.expenses || [],
   ventures: carry.ventures || [],
   badHabits: carry.badHabits || [],
   /* The calendar and the university desk. Every row in both is keyed to a
@@ -693,7 +699,16 @@ export function migrate(saved) {
     navMore,
     history,
     sessions: rows(saved.sessions),
-    income: rows(saved.income),
+    /* Schema 27 gives the money two lists and both of them a shape. No
+       branch is needed for either: an older payload simply arrives with no
+       expenses, which is what it means, and the income rows it does hold go
+       through `incomeShape` on the way in — which is the first time they
+       ever have, so a row hand-edited into a bad amount is normalised here
+       rather than turning every total on the screen into «NaN». Both are
+       bounded: the lists are fed from a phone now, and a list with no
+       ceiling is a payload that grows until a save throws. */
+    income: rows(saved.income).map(incomeShape).slice(0, MONEY_CAP),
+    expenses: rows(saved.expenses).map(expenseShape).slice(0, MONEY_CAP),
     ventures: rows(saved.ventures),
     reading: rows(saved.reading),
     readGoal: Number.isFinite(saved.readGoal)
@@ -734,6 +749,7 @@ export const carryOf = (s) => ({
   goals: s.goals,
   sessions: s.sessions,
   income: s.income,
+  expenses: s.expenses,
   ventures: s.ventures,
   badHabits: s.badHabits,
   events: s.events,
@@ -966,6 +982,7 @@ export {
   firstDay,
   pctOfRow,
   setDayDone,
+  stampToday,
   STREAK_TARGET,
   STREAK_FORGIVE,
   streakRunFrom,
@@ -981,3 +998,16 @@ export {
   habitStreak,
   levelOf,
 } from "./life-state-streak.mjs";
+
+export {
+  MONEY_CAP,
+  INCOME_FALLBACK,
+  EXPENSE_FALLBACK,
+  incomeShape,
+  expenseShape,
+  amountSum,
+  hoursSum,
+  sinceDays,
+  hourRate,
+  netBalance,
+} from "./life-state-finance.mjs";

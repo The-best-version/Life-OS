@@ -16,6 +16,12 @@ out/
 # interrupted mid-flight — it is never something to commit.
 *.tmp
 
+# Secrets. services/telegram-bot/.env holds the bot token and the one chat id
+# it answers; .env.example beside it is the committed copy and carries only
+# placeholders. The bare pattern matches at any depth, deliberately.
+.env
+.env.local
+
 # personal data snapshots — localStorage exports, never committed
 graphify-out/data/
 backups/

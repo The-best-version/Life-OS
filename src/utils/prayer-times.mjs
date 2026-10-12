@@ -103,6 +103,46 @@ export function prayerTimes(place, date) {
     isha: maghrib === null ? null : maghrib + ISHA_GAP_MIN / 60,
   };
 }
+/* --- the five prayers, named ------------------------------------------- *
+ *  The ids `prayerTimes` hands back, with the Arabic each one is called by
+ *  and the tint it is drawn in. Icons are NOT here and must not be: this
+ *  file is imported by the sync server, which has no React and no lucide,
+ *  and one import of an icon component would take the reminders down with
+ *  it. `PRAYERS` in life-shared.jsx fastens the icons onto these very rows —
+ *  the same objects, never copies — exactly as `fastenIcons` does for the
+ *  other icon-carrying tables.
+ *
+ *  They live down here rather than in the view layer because there is a
+ *  third reader now: the Telegram bot's morning brief lists the day's
+ *  prayer times, and a second table of Arabic prayer names is a second
+ *  answer to a question with one.
+ *
+ *  `mark: true` means a moment on the clock rather than a prayer to pray —
+ *  sunrise closes Fajr's window and is shown for that reason alone, which
+ *  is why `nextPrayer` skips it.
+ * ---------------------------------------------------------------------- */
+export const PRAYER_ROWS = [
+  { id: "fajr", label: "الفجر", tint: "#5B8CFF" },
+  { id: "sunrise", label: "الشروق", tint: "#FFB020", mark: true },
+  { id: "dhuhr", label: "الظهر", tint: "#FF7A45" },
+  { id: "asr", label: "العصر", tint: "#FF4D8D" },
+  { id: "maghrib", label: "المغرب", tint: "#9D5CFF" },
+  { id: "isha", label: "العشاء", tint: "#00C2FF" },
+];
+
+/* Decimal hours as a clock reading. Pure, and beside the maths that produces
+   the hours rather than beside the card that draws them — the brief the bot
+   sends reads the same times off the same formatter, and «05:12» on a phone
+   disagreeing with «05:13» on the screen is the one thing a prayer time may
+   never do. An hour the sun never reaches reads «—», never 00:00. */
+export const clockAt = (h) => {
+  if (h === null || !Number.isFinite(h)) return "—";
+  const total = Math.round(fixHour(h) * 60);
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(
+    total % 60,
+  ).padStart(2, "0")}`;
+};
+
 /* The six routine blocks, each anchored to the prayer that opens it. The
    app's GROUPS carry the labels and the colours; this is only the anchoring,
    which is the part the server also needs. «الصباح» opens at Fajr and «قبل

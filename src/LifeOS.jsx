@@ -8,7 +8,7 @@ import { TodayModule } from "./features/life-today.jsx";
 import { MatrixModule, TomorrowModal } from "./features/life-matrix.jsx";
 import { NavGroups, NavMore, NavOrderEditor, BottomTabs, NowStamp, splitNav, NAV } from "./layouts/life-nav.jsx";
 import { SettingsModal } from "./features/life-settings.jsx";
-import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, clockAt, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./components/life-shared.jsx";
+import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./components/life-shared.jsx";
 import { uniKindOf, uniDue, UniModule } from "./features/life-uni.jsx";
 import { TopThree, useHabitTick, ReadLogModal, TaskChip, ReflectionModal } from "./components/life-day.jsx";
 import { FinanceModule } from "./features/life-finance.jsx";
@@ -142,7 +142,7 @@ import {
   Feather,
 } from "lucide-react";
 
-import { blockAt, fixHour, prayerTimes } from "./utils/prayer-times.mjs";
+import { blockAt, clockAt, fixHour, prayerTimes } from "./utils/prayer-times.mjs";
 
 /* --- persistence ------------------------------------------------------ */
 /* Every name this file reads off the storage module, and the list is checked
@@ -212,6 +212,7 @@ import {
   rows,
   SCHEMA,
   setDayDone,
+  stampToday,
   scoredOf,
   streakBaseFrom,
   streakRunFrom,
@@ -1285,31 +1286,15 @@ export default function LifeOS() {
   );
 
   /* archive today's score continuously so analytics never needs a save button.
-     Today's entry is merged, not replaced — it also carries the evening
-     reflection, and rebuilding it from scratch would wipe what was written. */
+     The row itself is built by `stampToday` in the state layer, not here: the
+     Telegram bot ticks a habit from a phone and has to write the same row,
+     and two writers each with their own copy of this merge is a bug waiting
+     for the day they disagree. Everything on the row is derived from the
+     state it is handed, which is why this effect passes nothing — the values
+     below are the dependency keys that say *when* to re-stamp, never what
+     to write. */
   useEffect(() => {
-    setState((s) => {
-      const today = dayKey();
-      const prev = (s.history || []).find((h) => h.date === today);
-      const rest = (s.history || []).filter((h) => h.date !== today);
-      const next = [
-        ...rest,
-        {
-          ...prev,
-          date: today,
-          pct: discipline,
-          done: doneIds,
-          tiny: tinyIds,
-          all: roster,
-          holds: breakerDay.holds,
-          falls: breakerDay.falls,
-          /* Per-day like everything else on this row, so the calendar and
-             the monthly tracker can read it back without a second ledger. */
-          water: state.water || 0,
-        },
-      ].slice(-HISTORY_CAP);
-      return { ...s, history: next };
-    });
+    setState(stampToday);
   }, [
     rollCall,
     tinyCall,
