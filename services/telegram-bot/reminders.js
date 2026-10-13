@@ -27,6 +27,7 @@ import {
   focusShape,
   phaseOf,
   RUN_STALE_MS,
+  dueNotes,
 } from "../../src/state/life-state.mjs";
 import {
   prayerTimes,
@@ -36,7 +37,7 @@ import {
 } from "../../src/utils/prayer-times.mjs";
 import * as F from "./fmt.js";
 import { coachNote } from "./insight.js";
-import { weekReview } from "./ask.js";
+import { weekReview, reviewCard } from "./ask.js";
 
 /* The plan for the day `now` falls in, as real moments. Prayer times are
    computed here because the state layer may not import the solar maths —
@@ -125,6 +126,40 @@ export function textFor(entry, state, now = new Date()) {
 
   if (entry.kind === "weekly") {
     return { text: weekReview(state, now), weekly: true };
+  }
+
+  /* --- one point out of the library ----------------------------------- *
+   *  The second entry here that decides for itself whether to speak, and it
+   *  is quiet most evenings: a shelf whose points are all scheduled weeks
+   *  out has nothing due, and `dueNotes` comes back empty. That silence is
+   *  what makes this one safe to leave switched on — the same bargain the
+   *  coach and the task sweep already keep.
+   *
+   *  One point and never a digest. Five fragments in one bubble is a wall
+   *  nobody recalls anything from, which is the opposite of the exercise;
+   *  the rest are counted out loud and «راجع» brings the next one.
+   * ------------------------------------------------------------------- */
+  if (entry.kind === "review") {
+    const on = dayKey(logicalNow(now));
+    const due = dueNotes(rows(state.books), on);
+    if (!due.length) return null;
+    const [first] = due;
+    return {
+      /* The card is written in `ask.js` and not in `views.js`, for exactly
+         the reason the weekly review is: this file is loaded by the tests
+         with nothing installed, and `views.js` imports grammY for its
+         keyboards. The buttons are the caller's. */
+      text: reviewCard(first.book, first.note, due.length - 1, on),
+      /* The point's own text rides out with the ids: whether the card hid
+         its cue is decided by `noteCue`, and the caller's keyboard has to
+         ask the same question of the same string rather than guessing from
+         the rendered message. */
+      review: {
+        bookId: first.book.id,
+        noteId: first.note.id,
+        text: first.note.text,
+      },
+    };
   }
 
   /* The block that just opened, and the habits of it still unticked. Silent

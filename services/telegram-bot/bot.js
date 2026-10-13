@@ -32,11 +32,24 @@ import * as act from "./actions.js";
 import * as V from "./views.js";
 import { Scheduler, Bell, Snoozer, textFor, quoteFor } from "./reminders.js";
 import { coachReply } from "./insight.js";
-import { answer, weekReview, search } from "./ask.js";
+import {
+  answer,
+  weekReview,
+  search,
+  reviewCard,
+  reviewFull,
+  noteCue,
+} from "./ask.js";
 import { readVoice, VoiceError } from "./voice.js";
-import { line, notesWord } from "./fmt.js";
+import { line, notesWord, pagesWord } from "./fmt.js";
 import { startHealth, maskId } from "./health.js";
-import { BOT_API, URGE_TAGS, botShape } from "../../src/state/life-state.mjs";
+import {
+  BOT_API,
+  URGE_TAGS,
+  botShape,
+  rows,
+  dueNotes,
+} from "../../src/state/life-state.mjs";
 
 const problems = configProblems();
 if (problems.length) {
@@ -231,6 +244,15 @@ const WORDS = new Map(
     ["المدرب", showCoach],
     ["مدرب", showCoach],
     ["وجهني", showCoach],
+    /* The library, by the words it gets asked for by. «راجع» alone is the
+       review — «راجع المحاسبة» is a task and falls through to the parser,
+       because this table is only ever consulted for a message that is one
+       word long. */
+    ["مكتبتي", showShelf],
+    ["المكتبة", showShelf],
+    ["الرف", showShelf],
+    ["راجع", showReview],
+    ["المراجعة", showReview],
     ["الأسبوع", showWeek],
     ["مراجعة", showWeek],
     ["القائمة", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() })],
@@ -244,6 +266,8 @@ bot.command("now", showOpen);
 bot.command("coach", showCoach);
 bot.command("week", showWeek);
 bot.command("focus", showFocus);
+bot.command("books", showShelf);
+bot.command("review", showReview);
 bot.command("menu", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() }));
 bot.command("find", async (ctx) => {
   const q = ctx.match?.trim();
@@ -290,6 +314,73 @@ bot.on("callback_query:data", async (ctx) => {
     if (!pages) return ctx.reply("تمام — العادة مسجّلة، والصفحات تُسجّل وقت ما تجي.");
     return apply(ctx, (s) => act.logReading(s, { pages }), V.savedReading);
   }
+  /* --- the library's buttons ------------------------------------------ *
+   *  Three of them carry a token, for the reason the marks and the goals
+   *  do: Telegram caps callback data at 64 bytes and a book's title blows
+   *  that on its own, so the payload — the pages, the day — waits in memory
+   *  and the button carries the token and the row's id.
+   * ------------------------------------------------------------------- */
+  if (kind === "rdb") {
+    const want = asked.get(arg);
+    if (!want) return stale(ctx);
+    asked.delete(arg);
+    return logPages(ctx, { pages: want.pages, back: want.back, bookId: extra });
+  }
+  if (kind === "nbk") {
+    const want = asked.get(arg);
+    if (!want) return stale(ctx);
+    asked.delete(arg);
+    return logPages(ctx, { addTitle: want.title, pages: want.pages, back: want.back });
+  }
+  if (kind === "bst") {
+    if (!asked.has(arg)) return stale(ctx);
+    asked.delete(arg);
+    return apply(ctx, (s) => act.startBook(s, extra), V.savedBookStart);
+  }
+  if (kind === "bfn") {
+    if (!asked.has(arg)) return stale(ctx);
+    asked.delete(arg);
+    return finishAndAsk(ctx, extra);
+  }
+  if (kind === "rate") {
+    return apply(ctx, (s) => act.rateBook(s, arg, Number(extra) || 0), V.savedBookRate);
+  }
+  if (kind === "nlist") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const book = rows(got.state.books).find((b) => b.id === arg);
+    if (!book) return ctx.reply("⚠️ هذا الكتاب لم يعد على الرف.");
+    return ctx.reply(V.noteList(book));
+  }
+  /* A point, turned into something that gets done. The text is held under a
+     token because a note is longer than a button. */
+  if (kind === "nact") {
+    const want = asked.get(arg);
+    if (!want) return stale(ctx);
+    asked.delete(arg);
+    return apply(ctx, (s) => act.addTask(s, { label: want.label }), V.savedTask);
+  }
+  /* --- the review, in three taps at most ------------------------------ *
+   *  Reveal, then remembered or not. The reveal is a separate message and
+   *  not an edit of the first: the cue stays in the chat above the answer,
+   *  which is what makes scrolling back through an evening's review
+   *  readable at all.
+   * ------------------------------------------------------------------- */
+  if (kind === "rvs") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const book = rows(got.state.books).find((b) => b.id === arg);
+    const note = book ? rows(book.notes).find((n) => n.id === extra) : null;
+    if (!note) return ctx.reply("⚠️ هذي النقطة لم تعد موجودة.");
+    return ctx.reply(reviewFull(book, note), {
+      reply_markup: V.reviewKeys(book, note, false),
+    });
+  }
+  if (kind === "rvk" || kind === "rvf") {
+    return reviewOne(ctx, arg, extra, kind === "rvk");
+  }
+  if (kind === "rev") return showReview(ctx);
+
   if (kind === "top") return apply(ctx, (s) => act.flagToday(s, arg), V.savedTop);
   if (kind === "prep") return apply(ctx, (s) => act.pickTomorrow(s, arg), V.savedPrep);
 
@@ -354,6 +445,7 @@ bot.on("callback_query:data", async (ctx) => {
     if (arg === "coach") return showCoach(ctx);
     if (arg === "week") return showWeek(ctx);
     if (arg === "focus") return showFocus(ctx);
+    if (arg === "books") return showShelf(ctx);
     return ctx.reply(V.HELP);
   }
 });
@@ -380,6 +472,154 @@ async function tickAndMaybeRead(ctx, id, tiny) {
     await ctx.reply(`📖 «${out.book.title}» — كم صفحة؟`, { reply_markup: V.readKeys() });
   }
   return undefined;
+}
+
+/* --- the pages, and the one question worth asking after them ----------- *
+ *  Logging pages is the cheap half. The half this system was missing from a
+ *  phone is the sentence he could still say about them a week later — so the
+ *  write lands first, with its undo, and the question comes after it in its
+ *  own message.
+ *
+ *  It asks and it never waits: nothing is pending, no answer is expected,
+ *  and ignoring it costs him the point and nothing else. Asked once an
+ *  evening — a book that already has a point written on it today has had
+ *  this conversation.
+ * ---------------------------------------------------------------------- */
+async function logPages(ctx, args) {
+  /* A title that is not on the shelf yet is two writes that have to be one:
+     the book is added, marked as the one being read, and the pages land on
+     it — under a single undo, because an undo that took the pages back and
+     left a book nobody chose is half an undo. */
+  const run = args.addTitle
+    ? (s) => act.addAndRead(s, { title: args.addTitle, pages: args.pages, back: args.back })
+    : (s) => act.logReading(s, args);
+  let out;
+  try {
+    out = await withState(run);
+  } catch (e) {
+    const msg = e instanceof DiskError ? e.message : "صار خطأ غير متوقّع. ما كُتب شي.";
+    console.error("reading: " + (e && e.message ? e.message : e));
+    return ctx.reply("⚠️ " + msg);
+  }
+  if (out.refused) return ctx.reply("⚠️ " + out.refused);
+  const keys = out.before ? V.undoKeys(armUndo(out.before)) : null;
+  /* `addAndRead` with no pages is an add and says so — the one shape this
+     function can get back that is not a reading. */
+  if (out.kind === "book") {
+    return ctx.reply(V.savedBookAdd(out), keys ? { reply_markup: keys } : undefined);
+  }
+  await ctx.reply(V.savedReading(out), keys ? { reply_markup: keys } : undefined);
+  if (!out.kept) {
+    await ctx.reply(V.askNote(out), { reply_markup: V.noteAskKeys(out.book) });
+  }
+  return undefined;
+}
+
+/* --- one point, rated ---------------------------------------------------- *
+ *  No undo button under this one, deliberately: what it changed is when the
+ *  point comes back, and «تراجع» on a schedule is a button whose effect
+ *  nobody can see. What goes under it instead is the thing worth doing with
+ *  a point he remembered — turning it into a task.
+ *
+ *  And the next due point follows it, so an evening's review is a flow of
+ *  taps rather than a word typed once per point.
+ * ---------------------------------------------------------------------- */
+async function reviewOne(ctx, bookId, noteId, kept) {
+  let out;
+  try {
+    out = await withState((s) => act.reviewNote(s, bookId, noteId, kept));
+  } catch (e) {
+    const msg = e instanceof DiskError ? e.message : "صار خطأ غير متوقّع. ما كُتب شي.";
+    console.error("review: " + (e && e.message ? e.message : e));
+    return ctx.reply("⚠️ " + msg);
+  }
+  if (out.refused) return ctx.reply("⚠️ " + out.refused);
+  const keys = kept
+    ? V.noteActKeys(hold({ label: `طبّق: ${out.note.text}`.slice(0, 120) }))
+    : null;
+  await ctx.reply(V.savedReview(out), keys ? { reply_markup: keys } : undefined);
+  if (out.left > 0) {
+    const on = out.next.date || undefined;
+    const due = dueNotes(rows(out.next.books), on);
+    if (due.length) await sendReview(ctx.chat.id, due[0], due.length - 1, on);
+  }
+  return undefined;
+}
+
+/* A finish, and the two things only he can answer about a book he has just
+   closed — the stars and the one sentence it came down to. The stars are a
+   keyboard; the sentence is asked for in words, because a lesson typed into
+   a button is a lesson nobody wrote. */
+async function finishAndAsk(ctx, id) {
+  let out;
+  try {
+    out = await withState((s) => act.finishBook(s, id));
+  } catch (e) {
+    const msg = e instanceof DiskError ? e.message : "صار خطأ غير متوقّع. ما كُتب شي.";
+    console.error("finish: " + (e && e.message ? e.message : e));
+    return ctx.reply("⚠️ " + msg);
+  }
+  if (out.refused) return ctx.reply("⚠️ " + out.refused);
+  const keys = out.before ? V.undoKeys(armUndo(out.before)) : null;
+  await ctx.reply(V.savedBookFinish(out), keys ? { reply_markup: keys } : undefined);
+  await ctx.reply("كيف تقيّمه؟", { reply_markup: V.rateKeys(out.book.id) });
+  return undefined;
+}
+
+/* --- the library, and one point out of it ------------------------------ */
+async function showShelf(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(V.shelf(got.state));
+}
+
+/* One due point, as a card with its cue hidden. Asked for by hand it has a
+   floor under it, exactly as `/coach` does: a button pressed that answers
+   with silence reads as a dead bot, so an evening with nothing due says when
+   the next one comes back instead of saying nothing. */
+async function showReview(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  const books = rows(got.state.books);
+  const due = dueNotes(books, got.state.date);
+  if (!due.length) {
+    const soon = nextNote(books);
+    return ctx.reply(
+      [
+        line("✅ ما فيه نقطة مستحقّة الآن."),
+        soon
+          ? line(`أقرب مراجعة ${soon.note.due} — «${soon.book.title}».`)
+          : line("أرسل «فائدة …» بعد قراءتك، وتبدأ الدورة."),
+      ].join("\n"),
+    );
+  }
+  return sendReview(ctx.chat.id, due[0], due.length - 1, got.state.date);
+}
+
+/* The nearest point still ahead, so an evening with nothing due can say when
+   the next one is rather than saying nothing at all. */
+function nextNote(books) {
+  let best = null;
+  for (const b of rows(books)) {
+    for (const n of rows(b.notes)) {
+      if (!n || !n.text || !n.due) continue;
+      if (!best || n.due < best.note.due) best = { book: b, note: n };
+    }
+  }
+  return best;
+}
+
+/* The card, with the cue hidden when there is enough of a point to hide. One
+   place, because the scheduled reminder, the button and `/review` must send
+   the same thing — a review that looks different depending on how it was
+   reached is a review whose buttons he has to re-read every time. */
+function sendReview(chatId, row, left, on) {
+  const { hidden } = noteCue(row.note.text);
+  return bot.api
+    .sendMessage(chatId, reviewCard(row.book, row.note, left, on), {
+      reply_markup: V.reviewKeys(row.book, row.note, hidden),
+    })
+    .catch((e) => console.error("review send: " + (e?.message || e)));
 }
 
 /* --- a day that is already closed -------------------------------------- *
@@ -462,11 +702,70 @@ async function handleText(ctx) {
     return apply(ctx, (s) => act.tickHabit(s, open[0].id), V.savedHabit);
   }
   if (said.kind === "reading") {
-    return apply(
-      ctx,
-      (s) => act.logReading(s, { pages: said.pages, back: said.back }),
-      V.savedReading,
-    );
+    /* No book named is the sentence this feature shipped with and still the
+       common one: it means the book he is reading, and nothing needs asking.
+       A name has to be matched against the shelf, which needs the state. */
+    if (!said.query) return logPages(ctx, { pages: said.pages, back: said.back });
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const found = act.findBooks(got.state.books, said.query);
+    /* Not on the shelf is not a dead end — it is the first sentence this
+       feature will ever meet. One tap adds the book, marks it «أقرأه الآن»
+       and puts the pages on it, as one write with one undo. */
+    if (!found.length) {
+      return ctx.reply(
+        line(`📚 ما لقيت «${said.query}» على الرف. أضيفه وأسجّل عليه ${pagesWord(said.pages)}؟`),
+        {
+          reply_markup: V.newBookKeys(
+            hold({ title: said.query, pages: said.pages, back: said.back }),
+            said.query,
+          ),
+        },
+      );
+    }
+    if (found.length > 1) {
+      return ctx.reply("أيّ كتاب؟", {
+        reply_markup: V.bookKeys(found, "rdb", hold({ pages: said.pages, back: said.back })),
+      });
+    }
+    return logPages(ctx, { pages: said.pages, back: said.back, bookId: found[0].id });
+  }
+  if (said.kind === "book") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    if (said.act === "add") {
+      return apply(ctx, (s) => act.addBook(s, said), V.savedBookAdd);
+    }
+    const found = act.findBooks(got.state.books, said.query);
+    if (!found.length) {
+      /* «ابدأ كتاب …» for a title nobody added is an add and a start, which
+         is what he meant; «خلصت كتاب …» for one is a book this system never
+         saw, and inventing a finished row for it would be inventing a
+         reading it has no record of. */
+      if (said.act === "start") {
+        return apply(
+          ctx,
+          (s) => act.addBook(s, { title: said.query, status: "reading" }),
+          V.savedBookAdd,
+        );
+      }
+      return ctx.reply(`📚 ما لقيت «${said.query}» على الرف. أرسل «أضف كتاب ${said.query}» أولًا.`);
+    }
+    if (found.length > 1) {
+      return ctx.reply("أيّ كتاب؟", {
+        reply_markup: V.bookKeys(found, said.act === "start" ? "bst" : "bfn", hold({ at: Date.now() })),
+      });
+    }
+    if (said.act === "start") {
+      return apply(ctx, (s) => act.startBook(s, found[0].id), V.savedBookStart);
+    }
+    return finishAndAsk(ctx, found[0].id);
+  }
+  if (said.kind === "note") {
+    return apply(ctx, (s) => act.addNote(s, { body: said.body, back: said.back }), V.savedNote);
+  }
+  if (said.kind === "lesson") {
+    return apply(ctx, (s) => act.setLesson(s, { body: said.body }), V.savedLesson);
   }
   if (said.kind === "focus") {
     if (said.act === "status") return showFocus(ctx);
@@ -589,7 +888,7 @@ async function handleText(ctx) {
     const text = answer(got.state, said);
     if (text) return ctx.reply(text, keysOr(answerKeys(said.topic, got)));
     return ctx.reply(
-      "❓ ما فهمت السؤال. اسأل عن: المال، الانتظام، القراءة، التركيز، الصلاة، المهام، الجامعة، الأهداف.",
+      "❓ ما فهمت السؤال. اسأل عن: المال، الانتظام، القراءة، الفوائد، التركيز، الصلاة، المهام، الجامعة، الأهداف.",
       { reply_markup: V.menuKeys() },
     );
   }
@@ -608,6 +907,8 @@ function answerKeys(topic, got) {
   if (topic === "tasks") return V.taskKeys(got.day);
   if (topic === "water") return V.openKeys(got.state, 0);
   if (topic === "read") return V.readKeys();
+  /* The points answer with the one action that fits it: bring one back now. */
+  if (topic === "notes") return new InlineKeyboard().text("🔁 راجع نقطة", "rev:now");
   if (topic === "focus") return V.focusKeys(got.state.focus?.run || null);
   return null;
 }
@@ -726,7 +1027,17 @@ async function deliver(entry) {
           ? V.coachKeys(said.actions)
           : said.habits
             ? V.habitKeys(said.habits, "tick")
-            : new InlineKeyboard();
+            : said.review
+              ? /* The cue is hidden when there is enough of the point to
+                   hide, so the first button is «اكشف» and the rating comes
+                   after it. One place decides that — `noteCue` — and both
+                   this and `/review` read it. */
+                V.reviewKeys(
+                  { id: said.review.bookId },
+                  { id: said.review.noteId },
+                  noteCue(said.review.text).hidden,
+                )
+              : new InlineKeyboard();
 
   /* Every unprompted message gets «لاحقًا». A nudge that cannot be deferred
      is one you mute, and a muted reminder takes the rest of the schedule

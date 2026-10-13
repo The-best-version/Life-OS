@@ -19,6 +19,7 @@ import {
   Filter,
   BellOff,
   Lightbulb,
+  BookOpen,
 } from "lucide-react";
 import {
   T,
@@ -71,6 +72,9 @@ import {
   dayKey,
   BOT_API,
   BOT_PORT,
+  dueNotes,
+  countNotes,
+  REVIEW_STEPS,
 } from "../state/life-state.mjs";
 import { prayerTimes, PRAYER_ROWS, blockTimes, BLOCK_ANCHORS } from "../utils/prayer-times.mjs";
 
@@ -292,7 +296,7 @@ export function BriefTimesCard({ bot, onPatch }) {
  *  has to keep accurate by hand. A custom reminder is a sentence; these are
  *  questions.
  * ---------------------------------------------------------------------- */
-export function PresetRemindersCard({ bot, onPatch }) {
+export function PresetRemindersCard({ bot, onPatch, books = [] }) {
   return (
     <Card className="p-6 sm:p-7">
       <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
@@ -563,6 +567,40 @@ export function PresetRemindersCard({ bot, onPatch }) {
             الرسالة الوحيدة التي لا تتكلّم عن الآن: متوسط الانتظام، الأيام بدون
             تسجيل <strong>معدودة لا مُذوّبة في المتوسط</strong>، أثبت عادة
             وأضعفها، الصفحات، دقائق التركيز، المال، والمستحقّ الأسبوع القادم.
+          </p>
+        </Preset>
+
+        {/* مراجعة الفوائد — the only reminder here that is not about today */}
+        <Preset
+          icon={BookOpen}
+          tint={T.indigo}
+          title="مراجعة الفوائد"
+          on={bot.review.on}
+          onToggle={() => onPatch({ review: { ...bot.review, on: !bot.review.on } })}
+          note={
+            bot.review.on
+              ? `${prettyTime(bot.review.at)} · ${pointPhrase(dueNotes(books).length)} مستحقّة`
+              : "مطفأ"
+          }
+        >
+          <label className="flex items-center gap-2 text-[11.5px]" style={{ color: T.faint }}>
+            الساعة
+            <TimeField
+              value={bot.review.at}
+              onChange={(v) => onPatch({ review: { ...bot.review, at: v } })}
+              aria-label="وقت مراجعة الفوائد"
+              className="max-w-[120px]"
+            />
+          </label>
+          <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
+            نقطة واحدة من كتاب قرأته، بصفحتها، <strong>بإشارة أولًا ثم كشف</strong> —
+            لأن إعادة القراءة ليست استدعاء، والاستدعاء هو الذي يُبقي. تذكّرتها
+            فتتباعد: <span dir="ltr">{REVIEW_STEPS.join(" · ")}</span> يومًا؛
+            نسيتها فتعود غدًا.
+          </p>
+          <p className="mt-1.5 text-[10.5px]" style={{ color: T.faint }}>
+            وفي الليلة التي لا نقطة فيها مستحقّة لا يُرسل شيئًا — وفي مكتبتك الآن{" "}
+            {pointPhrase(countNotes(books))}. واطلبها في أي وقت بكلمة «راجع».
           </p>
         </Preset>
       </div>
@@ -1036,6 +1074,18 @@ const minsToClock = (m) =>
 /* The numeral is dropped for one and two, the same rule `daysPhrase` and
    `tasksPhrase` follow: Arabic's dual already carries the number, and
    «٢ رسالتان» reads as a translation rather than as a sentence. */
+/* A book's points are «فوائد» and never «ملاحظات» — the bot's own wording,
+   kept the same on the screen that schedules them. */
+const POINT_FORMS = ["فائدة", "فائدتان", "فوائد", "فائدة"];
+export const pointPhrase = (n) =>
+  n === 0
+    ? "لا فوائد"
+    : n === 1
+      ? "فائدة واحدة"
+      : n === 2
+        ? "فائدتان"
+        : `${n} ${arCount(n, POINT_FORMS)}`;
+
 const MSG_FORMS = ["رسالة", "رسالتان", "رسائل", "رسالة"];
 export const msgPhrase = (n) =>
   n === 0 ? "لا رسائل" : n === 1 ? "رسالة واحدة" : n === 2 ? "رسالتان" : `${n} ${arCount(n, MSG_FORMS)}`;
@@ -1050,6 +1100,9 @@ function kindName(p, state) {
      checks, one of which may turn out to be silent. */
   if (p.kind === "coach") return "فحص المدرّب";
   if (p.kind === "weekly") return "مراجعة الأسبوع";
+  /* «فحص» for the same reason the coach is: the timer fires, the shelf is
+     read, and on an evening with nothing due nothing is sent. */
+  if (p.kind === "review") return "فحص الفوائد";
   if (p.kind === "block") {
     const anchor = BLOCK_ANCHORS.find((b) => b.id === p.block);
     return anchor ? `عادات ${anchor.label}` : "عادات البلوك";
@@ -1084,6 +1137,12 @@ const PHRASES = [
   ["تمت صلاة العصر", "تسجيل العادة التي تشبه الكلمات"],
   ["اليوم: راجع المحاسبة", "من مهام اليوم الثلاث"],
   ["قرأت ٢٠ صفحة", "يتقدّم الكتاب المعلَّم «أقرأه الآن»"],
+  ["قرأت ١٠ صفحات من سيكولوجية المال", "الكتاب بالاسم — ولو ما كان على الرف يُضاف بضغطة"],
+  ["فائدة المال حرية لا رفاهية", "تُحفظ على الكتاب بصفحتها، وترجع للمراجعة"],
+  ["درس الكتاب …", "الجملة الواحدة التي يُلخّصه"],
+  ["أضف كتاب … · ابدأ كتاب … · خلصت كتاب …", "الرف من الجوّال، مع النجوم بعد الإنهاء"],
+  ["راجع", "نقطة واحدة مستحقّة — بإشارة ثم كشف"],
+  ["مكتبتي", "أين وصل كل كتاب، وكم فائدة تنتظر"],
   ["ابدأ تركيز ٥٠ مراجعة", "جولة تعدّ فعلًا، والجرس يصلك هنا"],
   ["أوقف · وقفة · أكمل · استراحة", "إدارة الجولة من الجوّال"],
   ["ركزت ٤٥ دقيقة على المحاسبة", "جولة عُمِلت بعيدًا عن الشاشة"],
@@ -1273,7 +1332,7 @@ export function BotModule({ state, setState }) {
       />
       <TodayPlanCard bot={bot} state={state} />
       <BriefTimesCard bot={bot} onPatch={patch} />
-      <PresetRemindersCard bot={bot} onPatch={patch} />
+      <PresetRemindersCard bot={bot} onPatch={patch} books={state.books} />
       {/* `state` and not `bot`: a condition is read against the whole day —
           the habits, the three tasks, the cups, the pages, the minutes — and
           the row says whether it would be silent right now. */}

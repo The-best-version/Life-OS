@@ -133,6 +133,28 @@ export const COACH_MAX = 3;
 export const WEEKLY_AT_DEFAULT = "20:30";
 export const WEEKLY_DOW_DEFAULT = 5; // Friday, in Date.getDay() numbering
 
+/* --- the one reminder that is about a book he already closed ----------- *
+ *  Every other entry here is about today: what is still open, what is
+ *  nearly due, how much water. This one is about the twenty pages he read
+ *  three weeks ago, and it exists because reading is the one discipline in
+ *  this app whose whole return arrives *after* the activity is logged. A
+ *  shelf that only counts pages is a shelf that costs the hours and keeps
+ *  the receipts.
+ *
+ *  So one point comes back, on an expanding interval the note itself
+ *  carries (`REVIEW_STEPS` in `life-state-books.mjs`), and the message is
+ *  one point and not a digest: five fragments at once is a wall nobody
+ *  recalls anything from, which is the opposite of the exercise.
+ *
+ *  Silent when nothing is due, like the sweep and the coach — armed
+ *  unconditionally and quiet at the moment it fires, because what is due is
+ *  a question about a day still hours away when the plan is built.
+ *
+ *  Off by default. What the bot may interrupt him for is never a question a
+ *  migration answers.
+ * ---------------------------------------------------------------------- */
+export const REVIEW_AT_DEFAULT = "21:30";
+
 /* --- how often a reminder comes back ----------------------------------- *
  *  Three answers, and the third is the one this list was missing. A weekday
  *  pattern already expressed «كل جمعة» — pick one day and the row is
@@ -364,6 +386,7 @@ export const botShape = (b) => {
   const tasks = obj(b.tasks);
   const coach = obj(b.coach);
   const weekly = obj(b.weekly);
+  const review = obj(b.review);
   const blocks = obj(b.blocks);
   const events = obj(b.events);
   const dow = Number(weekly.dow);
@@ -417,6 +440,13 @@ export const botShape = (b) => {
       on: weekly.on === true,
       at: hhmm(weekly.at, WEEKLY_AT_DEFAULT),
       dow: Number.isInteger(dow) && dow >= 0 && dow <= 6 ? dow : WEEKLY_DOW_DEFAULT,
+    },
+    /* One point out of the library, on its own schedule. Silent when none is
+       due — which is most evenings, and is the whole reason it can be left
+       switched on. */
+    review: {
+      on: review.on === true,
+      at: hhmm(review.at, REVIEW_AT_DEFAULT),
     },
     /* The habits of the block that just opened, silent when none are open.
        Anchored to the prayers like the routine itself, never to the clock. */
@@ -534,6 +564,10 @@ export function planDay(
      the plan is built hours earlier. The bot asks `advise` then, and sends
      nothing when the answer is empty. */
   if (b.coach.on) push("coach", minsIn(b.coach.at));
+  /* Armed unconditionally for the same reason the coach is: whether a point
+     is due tonight is a question about the evening, and the plan is built at
+     four in the morning. The silence is `textFor`'s. */
+  if (b.review.on) push("review", minsIn(b.review.at));
   /* The only entry that is not every day. `dow` is the caller's — the screen
      previewing today and the bot arming today pass the same number. */
   if (b.weekly.on && dow === b.weekly.dow) push("weekly", minsIn(b.weekly.at));

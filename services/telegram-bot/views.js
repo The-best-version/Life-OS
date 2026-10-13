@@ -11,9 +11,14 @@ import {
   scoredOf,
   rows,
   dayKey,
+  daysUntil,
   runLeft,
   phaseOf,
   runRunning,
+  pctOf,
+  pagesLeft,
+  countNotes,
+  dueNotes,
 } from "../../src/state/life-state.mjs";
 import { PRAYER_ROWS, clockAt, prayerTimes } from "../../src/utils/prayer-times.mjs";
 import {
@@ -24,6 +29,8 @@ import {
   spanOf,
   daysWord,
   pagesWord,
+  pointsWord,
+  barRow,
 } from "./fmt.js";
 
 export { num, money, time } from "./fmt.js";
@@ -218,6 +225,9 @@ export const menuKeys = () =>
     .text("🗓️ الأسبوع", "menu:week")
     .row()
     .text("🎧 التركيز", "menu:focus")
+    .text("📚 المكتبة", "menu:books")
+    .row()
+    .text("🔁 راجع فائدة", "rev:now")
     .text("📝 الشرح", "menu:help");
 
 /* What Telegram shows in its own command menu. ASCII names only — Telegram
@@ -229,6 +239,8 @@ export const COMMANDS = [
   { command: "coach", description: "ما يستحق انتباهك الآن" },
   { command: "week", description: "مراجعة الأسبوع" },
   { command: "focus", description: "جولة تركيز — ابدأ أو أوقف" },
+  { command: "books", description: "المكتبة — وأين وصل كل كتاب" },
+  { command: "review", description: "راجع فائدة من كتاب قرأته" },
   { command: "morning", description: "موجز الصباح" },
   { command: "evening", description: "إقفال اليوم" },
   { command: "menu", description: "القائمة" },
@@ -239,14 +251,32 @@ export const COMMANDS = [
 /* --- the new confirmations -------------------------------------------- */
 
 export const savedReading = (out) => {
-  const got = [
-    line(`📖 ${pagesWord(out.pages)} في «${out.book.title}».`),
+  const got = [];
+  /* A book that was only «أنوي قراءته» until this message is a book he has
+     now started, and saying so is what makes «قرأت ١٠ صفحات من X» a complete
+     interaction rather than a silent status change. */
+  if (out.added) got.push(line(`➕ أضفته للرف وعلّمته «أقرأه الآن»: «${out.book.title}»`));
+  else if (out.started) got.push(line(`📗 بدأت «${out.book.title}» — صار «أقرأه الآن».`));
+  got.push(line(`📖 ${pagesWord(out.pages)} في «${out.book.title}».`));
+  got.push(
     line(
       out.total
-        ? `عند صفحة ${num(out.at)} من ${num(out.total)}.`
+        ? `عند صفحة ${num(out.at)} من ${num(out.total)}${out.stand?.pct !== null && out.stand?.pct !== undefined ? ` (${num(out.stand.pct)}٪)` : ""}.`
         : `عند صفحة ${num(out.at)}.`,
     ),
-  ];
+  );
+  /* The one figure that turns a page count into a decision. Only when both
+     numbers exist — a promise built on a missing total is the kind of
+     encouragement that gets a feature switched off. */
+  if (out.stand?.left !== null && out.stand?.left !== undefined) {
+    got.push(
+      line(
+        out.stand.eta
+          ? `باقي ${pagesWord(out.stand.left)} — بهذا المعدّل تنهيه بعد ${daysWord(out.stand.eta)}.`
+          : `باقي ${pagesWord(out.stand.left)}.`,
+      ),
+    );
+  }
   got.push(
     line(
       out.today >= out.goal
@@ -256,6 +286,214 @@ export const savedReading = (out) => {
   );
   return got.join("\n");
 };
+
+/* --- the question that makes the pages worth something ----------------- *
+ *  This is the half the shelf never had from a phone. Twenty pages logged is
+ *  a number; the one line he can say about them a week later is the whole
+ *  return, and the moment to ask for it is the moment he just closed the
+ *  book — not at a laptop, not on a screen he opens on Fridays.
+ *
+ *  It asks and it never blocks: nothing is pending, nothing is waiting for
+ *  an answer, and a silence costs him nothing but the point. The prefix is
+ *  printed because a prompt that does not say how to answer it is a prompt
+ *  answered once.
+ * ---------------------------------------------------------------------- */
+export const askNote = (out) =>
+  [
+    line("✍️ وما أكبر فائدة من قراءة اليوم؟"),
+    line(`أرسلها كذا: «فائدة …» — وتُحفظ على «${out.book.title}» عند صفحة ${num(out.at)}،`),
+    line("وترجع لك بعد يوم، ثم بعد ثلاثة، ثم بعد أسبوع — حتى تصير لك."),
+  ].join("\n");
+
+export const noteAskKeys = (book) =>
+  new InlineKeyboard()
+    .text("📚 فوائد هذا الكتاب", `nlist:${book.id}`)
+    .text("🔁 راجع نقطة", "rev:now");
+
+export const savedNote = (out) =>
+  [
+    line(`✍️ حُفظت على «${out.book.title}»${out.note.page ? ` — صفحة ${num(out.note.page)}` : ""}:`),
+    line(`«${out.note.text}»`),
+    line(`المحفوظ من هذا الكتاب: ${pointsWord(out.count)} · وترجع لك غدًا للمراجعة.`),
+  ].join("\n");
+
+/* A point is worth more as a task than as a sentence, and the only moment
+   anybody would turn it into one is the moment they are looking at it. */
+export const noteActKeys = (token) =>
+  new InlineKeyboard().text("📌 اجعلها مهمة", `nact:${token}`);
+
+export const savedLesson = (out) =>
+  [
+    line(`🪶 درس «${out.book.title}»:`),
+    line(`«${out.book.lesson}»`),
+    out.was ? line(`(وكان: «${out.was}» — والتراجع يرجّعه.)`) : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+/* --- the shelf's own confirmations ------------------------------------- */
+export const savedBookAdd = (out) =>
+  out.act === "already"
+    ? line(`📚 «${out.book.title}» على الرف أصلاً.`)
+    : [
+        line(`➕ أضفته للرف: «${out.row.title}»${out.row.author ? ` — ${out.row.author}` : ""}`),
+        line("وأرسل «ابدأ كتاب …» لتعليمه «أقرأه الآن»، أو سجّل صفحاتك مباشرة."),
+      ].join("\n");
+
+export const savedBookStart = (out) =>
+  [
+    line(`📗 «${out.book.title}» صار «أقرأه الآن».`),
+    out.stand?.at
+      ? line(
+          out.stand.left !== null
+            ? `عند صفحة ${num(out.stand.at)} · باقي ${pagesWord(out.stand.left)}.`
+            : `عند صفحة ${num(out.stand.at)}.`,
+        )
+      : line("وكل «قرأت … صفحة» بعد الآن يتقدّم فيه."),
+  ].join("\n");
+
+export const savedBookFinish = (out) =>
+  [
+    line(`🏁 أنهيت «${out.book.title}»${onDay(out.book.finishedAt) || " اليوم"}.`),
+    out.pages
+      ? line(`سجّلت فيه ${pagesWord(out.pages)} على ${daysWord(out.days)}.`)
+      : line("ما فيه صفحات مسجّلة عليه — والرف يعرف أنك أنهيته."),
+    line(
+      out.notes
+        ? `وعندك منه ${pointsWord(out.notes)} — وترجع لك للمراجعة.`
+        : "وما حفظت منه نقطة واحدة — أرسل «فائدة …» الآن قبل أن تبرد.",
+    ),
+    out.hasLesson ? null : line("وأهم سؤال: «درس الكتاب …» في جملة واحدة؟"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+export const RATE_STARS = [5, 4, 3, 2, 1];
+export const rateKeys = (bookId) => {
+  const kb = new InlineKeyboard();
+  for (const n of RATE_STARS) kb.text("★".repeat(n), `rate:${bookId}:${n}`);
+  return kb;
+};
+
+export const savedBookRate = (out) =>
+  line(
+    out.book.rating
+      ? `${"★".repeat(out.book.rating)} على «${out.book.title}».`
+      : `أُزيل التقييم عن «${out.book.title}».`,
+  );
+
+/* --- choosing which book ----------------------------------------------- *
+ *  The same token arrangement the marks and the goals use: Telegram caps
+ *  callback data at 64 bytes and a book's title blows that on its own, so the
+ *  payload (the pages, the day) stays in memory and the button carries the
+ *  token and the row's id.
+ * ---------------------------------------------------------------------- */
+export function bookKeys(list, act, token, max = 6) {
+  const kb = new InlineKeyboard();
+  for (const b of (list || []).slice(0, max)) {
+    kb.text(`📖 ${b.title}`.slice(0, 40), `${act}:${token}:${b.id}`).row();
+  }
+  return kb;
+}
+
+/* The one button that turns «ما لقيت الكتاب» from a dead end into the first
+   row on the shelf. */
+export const newBookKeys = (token, title) =>
+  new InlineKeyboard().text(`➕ أضف «${title}»`.slice(0, 40), `nbk:${token}`);
+
+/* --- the library, as a glance ------------------------------------------ */
+export function shelf(state) {
+  const books = rows(state.books);
+  if (!books.length) {
+    return line("📚 الرف فاضي. أرسل «أضف كتاب <العنوان>».");
+  }
+  const reading = books.filter((b) => b.status === "reading");
+  const planned = books.filter((b) => b.status === "planned");
+  const done = books.filter((b) => b.status === "finished");
+  const out = [line("📚 المكتبة:"), ""];
+  if (reading.length) {
+    out.push(line("📗 أقرأه الآن:"));
+    for (const b of reading.slice(0, NAME_MAX)) {
+      const pct = pctOf(b);
+      const left = pagesLeft(b);
+      out.push(
+        line(
+          `• ${b.title}${pct === null ? "" : ` — ${barRow("", pct, 100, 8).trim()} ${num(pct)}٪`}`,
+        ),
+      );
+      const bits = [];
+      if (b.page) bits.push(`صفحة ${num(b.page)}`);
+      if (left !== null) bits.push(`باقي ${pagesWord(left)}`);
+      const notes = rows(b.notes).filter((n) => n && n.text).length;
+      if (notes) bits.push(pointsWord(notes));
+      if (bits.length) out.push(line(`   ${bits.join(" · ")}`));
+    }
+    out.push("");
+  }
+  if (planned.length) {
+    out.push(line(`📘 أنوي قراءته (${num(planned.length)}):`));
+    planned.slice(0, NAME_MAX).forEach((b) => out.push(line(`• ${b.title}`)));
+    const rest = planned.length - NAME_MAX;
+    if (rest > 0) out.push(line(`و${num(rest)} غيرها`));
+    out.push("");
+  }
+  out.push(
+    line(
+      done.length
+        ? `🏁 أنهيت ${num(done.length)} — وفي المكتبة ${pointsWord(countNotes(books))}.`
+        : `🏁 ما أنهيت كتابًا بعد — وفي المكتبة ${pointsWord(countNotes(books))}.`,
+    ),
+  );
+  const due = dueNotes(books).length;
+  if (due) out.push(line(`🔁 و${pointsWord(due)} تنتظر المراجعة — أرسل «راجع».`));
+  return out.join("\n");
+}
+
+/* The card itself — the cue, the book, the page — is written in `ask.js`,
+   because the scheduled reminder builds it and `reminders.js` has to stay
+   loadable by the tests with nothing installed. Only the buttons are here. */
+export function reviewKeys(book, note, hidden) {
+  const kb = new InlineKeyboard();
+  if (hidden) return kb.text("👁️ اكشف الفائدة", `rvs:${book.id}:${note.id}`);
+  return kb
+    .text("✅ تذكّرتها", `rvk:${book.id}:${note.id}`)
+    .text("🔁 ما تذكّرتها", `rvf:${book.id}:${note.id}`);
+}
+
+export const savedReview = (out) =>
+  [
+    line(
+      out.kept
+        ? `✅ تمام — ترجع لك بعد ${daysWord(daysUntil(out.note.due) || 1)}.`
+        : "🔁 ترجع لك غدًا — والنسيان ليس فشلًا، هو الجدول.",
+    ),
+    out.left
+      ? line(`وباقي ${pointsWord(out.left)} الليلة — أرسل «راجع».`)
+      : line("وما بقي شي للمراجعة الليلة."),
+  ].join("\n");
+
+/* The points of one book, newest last — the order they were read in, which
+   is the order they make sense in. Ten of them, because a chat bubble with
+   forty points in it is the book desk with worse typography. */
+export const NOTE_SHOW = 10;
+
+export function noteList(book) {
+  const notes = rows(book.notes).filter((n) => n && n.text);
+  if (!notes.length) {
+    return line(`📖 «${book.title}» — ما فيه نقاط بعد. أرسل «فائدة …».`);
+  }
+  const out = [line(`📖 فوائد «${book.title}» (${num(notes.length)}):`), ""];
+  for (const n of notes.slice(-NOTE_SHOW)) {
+    out.push(line(`• ${n.text}${n.page ? ` — ص ${num(n.page)}` : ""}`));
+  }
+  const rest = notes.length - NOTE_SHOW;
+  if (rest > 0) out.push(line(`و${pointsWord(rest)} أقدم — في مكتب الكتاب.`));
+  if (book.lesson) {
+    out.push("");
+    out.push(line(`🪶 الدرس: «${book.lesson}»`));
+  }
+  return out.join("\n");
+}
 
 export const savedFocusStart = (out) =>
   [
@@ -463,6 +701,24 @@ export function morning(state, day, quote) {
     });
   }
 
+  /* Where the book stands, in one line. The brief is the one message he
+     reads every morning, and «باقي ١٤٠ صفحة — بهذا المعدّل سبعة أيام» is the
+     sentence that decides whether tonight has twenty pages in it. */
+  if (day.book) {
+    out.push("");
+    const left = pagesLeft(day.book);
+    out.push(
+      line(
+        `📖 ${day.book.title}${day.book.page ? ` — صفحة ${num(day.book.page)}` : ""}${
+          left !== null ? ` · باقي ${pagesWord(left)}` : ""
+        }`,
+      ),
+    );
+  }
+  if (day.notesDue) {
+    out.push(line(`🔁 و${pointsWord(day.notesDue)} تنتظر المراجعة — «راجع».`));
+  }
+
   if (quote) {
     out.push("");
     out.push(line(`💬 ${quote.text}`));
@@ -483,10 +739,21 @@ export function evening(state, day) {
     ),
   );
   out.push(line(`الماء: ${num(day.water)} من ${num(day.waterGoal)}`));
+  out.push(line(`القراءة: ${num(day.readToday)} من ${num(day.readGoal)} صفحة`));
   out.push(
     line(`المال هذا الأسبوع: دخل ${money(day.earnedWeek)} · مصروف ${money(day.spentWeek)}`),
   );
   out.push("");
+  /* The one thing the evening can still buy back. Pages read and nothing
+     kept from them is the day this whole shelf exists to prevent, and the
+     ask costs a line. */
+  if (day.readToday > 0 && day.book && !day.notesToday) {
+    out.push(line(`✍️ وما أكبر فائدة من ${pagesWord(day.readToday)} اليوم؟ أرسل «فائدة …».`));
+    out.push("");
+  } else if (day.notesToday) {
+    out.push(line(`✍️ وحفظت ${pointsWord(day.notesToday)} من قراءة اليوم.`));
+    out.push("");
+  }
   if (day.openScored.length) {
     out.push(line("باقي عليك — اضغط ما أنجزته:"));
   } else {
@@ -540,7 +807,15 @@ export const HELP = [
   line("• «تمت صلاة العصر» → تسجيل عادة"),
   line("• «كاس ماء» أو «ماء ٣» → عدّاد الماء"),
   line("• «اليوم: راجع المحاسبة» → من مهام اليوم الثلاث"),
-  line("• «قرأت ٢٠ صفحة» → يتقدّم الكتاب الذي تقرأه"),
+  "",
+  line("📚 المكتبة"),
+  line("• «قرأت ١٠ صفحات من سيكولوجية المال» → الكتاب بالاسم، ولو ما كان على الرف يُضاف"),
+  line("• «قرأت ٢٠ صفحة» → الكتاب الذي تقرأه الآن"),
+  line("• «فائدة …» → تُحفظ على الكتاب بصفحتها، وترجع لك للمراجعة"),
+  line("• «درس الكتاب …» → الجملة الواحدة التي يُلخّصه"),
+  line("• «أضف كتاب …» · «ابدأ كتاب …» · «خلصت كتاب …»"),
+  line("• «راجع» أو /review → نقطة واحدة تستحقّ أن تُستدعى الآن"),
+  line("• «مكتبتي» أو /books → أين وصل كل كتاب"),
   "",
   line("🎧 التركيز"),
   line("• «ابدأ تركيز» أو «ابدأ تركيز ٥٠ مراجعة»"),
@@ -579,6 +854,8 @@ export const HELP = [
   line("«يومي» أو /today — حالة اليوم الآن"),
   line("«باقي» أو /now — ما زال مفتوحًا، بأزرار"),
   line("«المدرّب» أو /coach — ما يستحق انتباهك الآن"),
+  line("«مكتبتي» أو /books — الرف وأين وصل كل كتاب"),
+  line("«راجع» أو /review — فائدة ترجع لتبقى"),
   line("«الأسبوع» أو /week — مراجعة الأسبوع"),
   line("«صباح» أو /morning — موجز الصباح"),
   line("«مساء» أو /evening — إقفال اليوم"),

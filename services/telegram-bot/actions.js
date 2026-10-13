@@ -22,6 +22,7 @@ import {
   uid,
   dayKey,
   addDays,
+  clampNum,
   keyToDate,
   expenseShape,
   incomeShape,
@@ -35,6 +36,16 @@ import {
   disciplineOf,
   scoredOf,
   bookForHabit,
+  bookShape,
+  activeBook,
+  noteShape,
+  dueNotes,
+  reviewedNote,
+  readPace,
+  pagesLeft,
+  pctOf,
+  countNotes,
+  NOTE_CAP,
   READ_GOAL_DEFAULT,
   sumPages,
   readStreak,
@@ -255,18 +266,129 @@ export function tickHabit(state, id, tiny = false) {
  *  moment ago names one; otherwise it is whichever book is marked «أقرأه
  *  الآن», which is the same answer `READ_ACTIVE` gives the app.
  * ---------------------------------------------------------------------- */
-export function logReading(state, { pages, habitId = null, back = 0 } = {}) {
+/* --- which book a few typed words mean --------------------------------- *
+ *  The same folded match `findHabits` and `findCourses` use, plus one thing
+ *  neither of them needs: a word-by-word overlap. A habit's label is a
+ *  phrase he wrote himself and types back nearly the same way; a book's
+ *  title is a phrase a publisher wrote, and «سكليوجية المال» for
+ *  «سيكولوجية المال» is the ordinary case rather than the awkward one. A
+ *  substring match misses that outright — but «المال» still lands, and one
+ *  correct word out of two is enough to name a book on a shelf of twenty.
+ *
+ *  Ranked, and only the tied best come back: one hit is an answer, two
+ *  equally good hits are a question. Guessing between «العمل العميق» and
+ *  «العادات الذرية» is how twenty pages land on the wrong book, and the page
+ *  counter is the one number here nobody re-checks.
+ * ---------------------------------------------------------------------- */
+export const BOOK_WORD_MIN = 3;
+
+/* How close two strings are, as the share of two-letter runs they have in
+   common. It is the cheap classical measure and the right one for Arabic
+   typed in a hurry: a dropped letter or a swapped pair costs two bigrams and
+   not the whole word, which is exactly the difference between «سكليوجية» and
+   «سيكولوجية». Spaces are dropped so a missing one does not count as a
+   mismatch. */
+const bigrams = (s) => {
+  const t = String(s).replace(/\s+/g, "");
+  const out = [];
+  for (let i = 0; i < t.length - 1; i += 1) out.push(t.slice(i, i + 2));
+  return out;
+};
+
+export function nearness(a, b) {
+  const A = bigrams(a);
+  const B = bigrams(b);
+  if (!A.length || !B.length) return 0;
+  const pool = new Map();
+  for (const g of A) pool.set(g, (pool.get(g) || 0) + 1);
+  let hit = 0;
+  for (const g of B) {
+    const n = pool.get(g);
+    if (n) {
+      hit += 1;
+      pool.set(g, n - 1);
+    }
+  }
+  return (2 * hit) / (A.length + B.length);
+}
+
+/* How much clearer the best spelling match has to be before it is allowed to
+   settle a tie on its own. «المال» is a whole word of two different titles
+   and nearly equally close to both — that is a question. «سكليوجية المال» is
+   a long way closer to one of them — that is an answer. */
+export const NEAR_MARGIN = 0.15;
+
+export function findBooks(books, query) {
+  const q = fold(query);
+  if (!q) return [];
+  const words = q.split(" ").filter((w) => w.length >= BOOK_WORD_MIN);
+  const score = (b) => {
+    const title = fold(b.title);
+    if (!title) return 0;
+    if (title === q) return 100;
+    if (title.includes(q) || q.includes(title)) return 80;
+    /* Counted in both directions: he may type less than the title («المال»)
+       or more than it («سيكولوجية المال لمورغان»). */
+    const forward = words.filter((w) => title.includes(w)).length;
+    const back = title
+      .split(" ")
+      .filter((w) => w.length >= BOOK_WORD_MIN && q.includes(w)).length;
+    const hits = Math.max(forward, back);
+    return hits ? 40 + hits : 0;
+  };
+  const ranked = rows(books)
+    .map((b) => ({ b, n: score(b), near: nearness(q, fold(b.title)) }))
+    .filter((r) => r.n > 0)
+    .sort((a, z) => z.n - a.n || z.near - a.near);
+  if (!ranked.length) return [];
+  const top = ranked[0].n;
+  const tied = ranked.filter((r) => r.n === top);
+  if (tied.length < 2) return tied.map((r) => r.b);
+  /* A decisively closer spelling wins; a close one stays a question, because
+     a page count landing on the wrong book is the one number nobody ever
+     re-checks. */
+  return tied[0].near - tied[1].near >= NEAR_MARGIN
+    ? [tied[0].b]
+    : tied.map((r) => r.b);
+}
+
+/* How a book's own numbers are read back, once, for every reply that shows
+   them. `pctOf`, `pagesLeft` and `readPace` are the state layer's; this only
+   gathers them so three confirmations cannot each gather a different three. */
+export function bookStand(book, state) {
+  const pace = readPace(book, state.reading);
+  return {
+    book,
+    at: parseInt(book.page, 10) || 0,
+    total: parseInt(book.pages, 10) > 0 ? parseInt(book.pages, 10) : null,
+    pct: pctOf(book),
+    left: pagesLeft(book),
+    perDay: pace.perDay,
+    /* Days to the last page at the pace of the last fortnight, or null when
+       either number does not exist. A promise built on a number that is not
+       there is the one kind of encouragement that gets a feature muted. */
+    eta: pace.days,
+    notes: rows(book.notes).filter((n) => n && n.text).length,
+  };
+}
+
+export function logReading(state, { pages, habitId = null, bookId = null, back = 0 } = {}) {
   const n = Math.round(Number(pages) || 0);
   if (n < 1) return { refused: "كم صفحة؟ مثال: «قرأت ٢٠ صفحة»." };
   const books = rows(state.books);
   const habit = habitId ? rows(state.habits).find((h) => h.id === habitId) : null;
+  /* Named, then the ticked habit's, then the active one. The caller resolves
+     a name into an id before this is reached — matching needs the shelf and
+     asking «أيّ كتاب؟» needs a keyboard, and neither belongs in a pure
+     mutation. */
   const book =
+    (bookId && books.find((b) => b.id === bookId)) ||
     (habit && bookForHabit(habit, books)) ||
-    books.find((b) => b.status === "reading") ||
+    activeBook(books) ||
     null;
   if (!book) {
     return {
-      refused: "ما فيه كتاب معلّم «أقرأه الآن» على الرف — علّم واحدًا من المكتبة أولًا.",
+      refused: "ما فيه كتاب معلّم «أقرأه الآن» على الرف — أرسل «أضف كتاب <العنوان>» أو علّم واحدًا من المكتبة.",
     };
   }
   const total = parseInt(book.pages, 10);
@@ -281,10 +403,28 @@ export function logReading(state, { pages, habitId = null, back = 0 } = {}) {
   const row = { id: uid(), date: on, bookId: book.id, habitId: habit?.id || null, pages: n };
   const goal = Number.isFinite(+state.readGoal) ? +state.readGoal : READ_GOAL_DEFAULT;
   const reading = [...rows(state.reading), row];
+  /* Pages landing on a book he had only *planned* mean he started it, and
+     pages landing on any book mean it is the one he is reading now — so it
+     moves to the head of the shelf.
+   *
+   *  That matters beyond tidiness: «أقرأه الآن» is not exclusive on the
+   *  shelf, every reader of it takes the first match (`activeBook`), and the
+   *  next sentence is usually «فائدة …» with no book named in it. Without
+   *  this, a point from tonight's reading lands on whichever book happens to
+   *  sit earlier in the array. Book order carries no other meaning — the
+   *  shelf has filters and a desk, and no hand ordering to overwrite. */
+  const moved = {
+    ...book,
+    page: String(next),
+    status: book.status === "planned" ? "reading" : book.status,
+  };
+  const rest = books.filter((b) => b.id !== book.id);
+  const after = [moved, ...rest];
   return {
     kind: "reading",
     row,
-    book: { ...book, page: String(next) },
+    book: moved,
+    started: book.status === "planned",
     pages: n,
     at: next,
     total: Number.isFinite(total) && total > 0 ? total : null,
@@ -292,12 +432,234 @@ export function logReading(state, { pages, habitId = null, back = 0 } = {}) {
     on,
     today: sumPages(reading.filter((r) => r.date === dayKey())),
     streak: readStreak(reading, goal),
-    next: {
-      ...state,
-      reading,
-      books: books.map((b) => (b.id === book.id ? { ...b, page: String(next) } : b)),
-    },
+    stand: bookStand(moved, { ...state, reading }),
+    /* Points already written on this book today. The question «وما أكبر
+       فائدة؟» is asked once an evening and not after every message: a prompt
+       that arrives after the thing was done is the prompt that teaches you
+       to stop reading them. */
+    kept: rows(book.notes).filter((n) => n && n.text && n.at === on).length,
+    next: { ...state, reading, books: after },
     before: { reading: state.reading, books: state.books },
+  };
+}
+
+/* --- the shelf, from a phone ------------------------------------------- *
+ *  A book is added where the reading actually starts — standing in a shop,
+ *  halfway through somebody's recommendation — and never at a laptop with
+ *  the vault open. `bookShape` writes the row, like every other row here.
+ * ---------------------------------------------------------------------- */
+/* A bound, because this list is fed from a phone now. The shelf's own add
+   form has never had one and does not need one: a hundred and twenty books
+   is a decade of reading, and a list with no ceiling is a payload that grows
+   until a save throws. */
+export const BOOK_CAP = 120;
+
+export function addBook(state, { title, author = "", status = "planned" } = {}) {
+  const name = String(title ?? "").trim();
+  if (!name) return { refused: "اكتب عنوان الكتاب. مثال: «أضف كتاب سيكولوجية المال»." };
+  const books = rows(state.books);
+  if (books.length >= BOOK_CAP) {
+    return { refused: `الرف وصل ${BOOK_CAP} كتابًا — احذف واحدًا من المكتبة أولًا.` };
+  }
+  /* An existing title is not an error and not a second row: «أضف كتاب X» for
+     a book already on the shelf is almost always him reaching for it, so the
+     row he has is handed back and nothing is written. */
+  const already = findBooks(books, name);
+  if (already.length === 1) return { kind: "book", act: "already", book: already[0] };
+  const row = bookShape({ id: uid(), title: name, author: String(author || "").trim(), status });
+  return {
+    kind: "book",
+    act: "add",
+    row,
+    book: row,
+    next: { ...state, books: [row, ...books] },
+    before: { books: state.books },
+  };
+}
+
+/* «أقرأه الآن», and the head of the shelf with it — the same reason a logged
+   page moves a book up: the first `reading` row is what every reader of the
+   active book takes. */
+export function startBook(state, id) {
+  const books = rows(state.books);
+  const book = books.find((b) => b.id === id);
+  if (!book) return { refused: "هذا الكتاب لم يعد على الرف." };
+  const moved = { ...book, status: "reading", finishedAt: null };
+  return {
+    kind: "book",
+    act: "start",
+    book: moved,
+    stand: bookStand(moved, state),
+    next: { ...state, books: [moved, ...books.filter((b) => b.id !== id)] },
+    before: { books: state.books },
+  };
+}
+
+/* Finishing stamps the date once, exactly as the shelf does — and hands back
+   what the book cost and gave, because that is the one moment the question
+   «was it worth it?» is actually live. */
+export function finishBook(state, id, on = dayKey()) {
+  const books = rows(state.books);
+  const book = books.find((b) => b.id === id);
+  if (!book) return { refused: "هذا الكتاب لم يعد على الرف." };
+  if (book.status === "finished") {
+    return { refused: `«${book.title}» مسجّل منتهيًا أصلاً${book.finishedAt ? ` — ${book.finishedAt}` : ""}.` };
+  }
+  const log = rows(state.reading).filter((r) => r.bookId === id);
+  const done = { ...book, status: "finished", finishedAt: book.finishedAt || on };
+  return {
+    kind: "book",
+    act: "finish",
+    book: done,
+    /* What the log actually holds for it: the pages recorded through this
+       system, the days they were spread over, and the points kept. */
+    pages: sumPages(log),
+    days: new Set(log.map((r) => r.date)).size,
+    notes: rows(book.notes).filter((n) => n && n.text).length,
+    hasLesson: !!String(book.lesson || "").trim(),
+    next: { ...state, books: books.map((b) => (b.id === id ? done : b)) },
+    before: { books: state.books },
+  };
+}
+
+export function rateBook(state, id, stars) {
+  const books = rows(state.books);
+  const book = books.find((b) => b.id === id);
+  if (!book) return { refused: "هذا الكتاب لم يعد على الرف." };
+  const n = Math.round(clampNum(stars, 0, 5, 0));
+  const rated = { ...book, rating: n };
+  return {
+    kind: "book",
+    act: "rate",
+    book: rated,
+    next: { ...state, books: books.map((b) => (b.id === id ? rated : b)) },
+    before: { books: state.books },
+  };
+}
+
+/* --- a title that is not on the shelf yet ------------------------------ *
+ *  «قرأت ٢٠ صفحة من سيكولوجية المال» for a book nobody has added is the most
+ *  likely first sentence this feature will ever meet, and refusing it with
+ *  «ما لقيت الكتاب» is a dead end that costs him the log. So the two writes
+ *  are one: the book is added, marked as the one being read, and the pages
+ *  go straight onto it.
+ *
+ *  One `before`, holding both arrays as they stood: an undo that put the
+ *  pages back and left a book nobody chose on the shelf would be half an
+ *  undo, which is worse than none.
+ * ---------------------------------------------------------------------- */
+export function addAndRead(state, { title, pages = 0, back = 0 } = {}) {
+  const added = addBook(state, { title, status: "reading" });
+  if (added.refused) return added;
+  const book = added.book;
+  const base = added.next || state;
+  if (!pages) {
+    return { ...added, act: "start", before: { books: state.books } };
+  }
+  const out = logReading(base, { pages, bookId: book.id, back });
+  if (out.refused) return out;
+  return {
+    ...out,
+    added: book,
+    before: { books: state.books, reading: state.reading },
+  };
+}
+
+/* --- what the book gave ------------------------------------------------ *
+ *  A point, onto the book the pages last went into, carrying the page it was
+ *  read at. `noteShape` writes it — the same function the book desk writes
+ *  through — so a point typed on a phone enters the review rotation on
+ *  exactly the same terms as one typed on the laptop.
+ * ---------------------------------------------------------------------- */
+export function addNote(state, { body, bookId = null, back = 0 } = {}) {
+  const text = String(body ?? "").trim();
+  if (!text) return { refused: "اكتب الفائدة بعد الكلمة. مثال: «فائدة المال حرية لا رفاهية»." };
+  const books = rows(state.books);
+  const book =
+    (bookId && books.find((b) => b.id === bookId)) || activeBook(books) || null;
+  if (!book) {
+    return {
+      refused: "ما فيه كتاب معلّم «أقرأه الآن» — الفائدة تحتاج كتابًا تُكتب عليه.",
+    };
+  }
+  const notes = rows(book.notes);
+  if (notes.length >= NOTE_CAP) {
+    return { refused: `«${book.title}» وصل ${NOTE_CAP} نقطة — احذف واحدة من مكتب الكتاب.` };
+  }
+  /* Due tomorrow rather than left empty: a point written tonight is one he
+     has just read, and the first return is worth something only after a
+     night's sleep. An empty `due` would put it in this evening's own nudge. */
+  const note = noteShape({
+    text,
+    page: book.page ? String(book.page) : "",
+    at: backKey(back),
+    box: 0,
+    due: addDays(backKey(back), 1),
+  });
+  const kept = { ...book, notes: [...notes, note] };
+  return {
+    kind: "note",
+    note,
+    book: kept,
+    count: notes.length + 1,
+    next: { ...state, books: books.map((b) => (b.id === book.id ? kept : b)) },
+    before: { books: state.books },
+  };
+}
+
+/* The one sentence a whole book came down to. One field and not a list, so
+   it is set and not appended — and the previous one rides out on `before`
+   like every other array this file replaces. */
+export function setLesson(state, { body, bookId = null } = {}) {
+  const text = String(body ?? "").trim();
+  if (!text) return { refused: "اكتب الدرس بعد الكلمة." };
+  const books = rows(state.books);
+  const book =
+    (bookId && books.find((b) => b.id === bookId)) ||
+    activeBook(books) ||
+    books.find((b) => b.status === "finished") ||
+    null;
+  if (!book) return { refused: "ما فيه كتاب على الرف يُكتب عليه الدرس." };
+  const kept = { ...book, lesson: text };
+  return {
+    kind: "lesson",
+    book: kept,
+    was: String(book.lesson || ""),
+    next: { ...state, books: books.map((b) => (b.id === book.id ? kept : b)) },
+    before: { books: state.books },
+  };
+}
+
+/* --- a point, come back around ----------------------------------------- *
+ *  `kept` is «تذكّرتها»: the gap to the next return widens. Forgotten sends
+ *  it back to the bottom of the ladder, which is the whole mechanism —
+ *  nothing here decides the spacing, `reviewedNote` in the state layer owns
+ *  it, because the book desk shows the same schedule.
+ * ---------------------------------------------------------------------- */
+export function reviewNote(state, bookId, noteId, kept, on = dayKey()) {
+  const books = rows(state.books);
+  const book = books.find((b) => b.id === bookId);
+  if (!book) return { refused: "هذا الكتاب لم يعد على الرف." };
+  const note = rows(book.notes).find((n) => n.id === noteId);
+  if (!note) return { refused: "هذي النقطة لم تعد في مكتب الكتاب." };
+  const after = reviewedNote(note, kept, on);
+  const kept2 = {
+    ...book,
+    notes: rows(book.notes).map((n) => (n.id === noteId ? after : n)),
+  };
+  const books2 = books.map((b) => (b.id === bookId ? kept2 : b));
+  return {
+    kind: "review",
+    book: kept2,
+    note: after,
+    was: note,
+    kept: !!kept,
+    /* What is still waiting after this one, so the reply can say whether the
+       evening's review is over. Read off the new shelf, never the old. */
+    left: dueNotes(books2, on).length,
+    total: countNotes(books2),
+    next: { ...state, books: books2 },
+    before: { books: state.books },
   };
 }
 
@@ -927,6 +1289,20 @@ export function dayAt(state) {
     spentWeek: amountSum(rows(state.expenses).filter((e) => e.date >= weekAgo(state.date))),
     earnedWeek: amountSum(rows(state.income).filter((e) => e.date >= weekAgo(state.date))),
     balance: netBalance(state.income, state.expenses),
+    /* The library, as the briefs need it. Read here with everything else the
+       day is made of, so the two briefs and «يومي» cannot each count the
+       day's pages their own way. */
+    book: activeBook(rows(state.books)),
+    readToday: sumPages(rows(state.reading).filter((r) => r.date === state.date)),
+    readGoal: Number.isFinite(+state.readGoal) ? +state.readGoal : READ_GOAL_DEFAULT,
+    notesDue: dueNotes(rows(state.books), state.date).length,
+    /* Points written today, so the evening asks for one only on an evening
+       that has none. A prompt that arrives after the thing was already done
+       is the prompt that teaches you to stop reading them. */
+    notesToday: rows(state.books).reduce(
+      (n, b) => n + rows(b.notes).filter((x) => x && x.text && x.at === state.date).length,
+      0,
+    ),
   };
 }
 

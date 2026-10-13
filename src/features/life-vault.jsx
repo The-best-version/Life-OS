@@ -1,5 +1,5 @@
 import { Btn, Card, Field, Modal, StarRating, T, countedWord, shrinkImage, useUndo } from "../components/life-shared.jsx";
-import { bookShape, dayKey, goalPct, pctOf, readStreak, rows, sumPages, uid } from "../state/life-state.mjs";
+import { addDays, bookShape, dayKey, goalPct, noteDue, noteShape, pctOf, readStreak, rows, sumPages, uid } from "../state/life-state.mjs";
 import { CheckCheck, ChevronDown, ChevronUp, Copy, ImagePlus, NotebookPen, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -583,12 +583,25 @@ function BookDesk({ book, log = [], onClose, onPatch }) {
   const notes = book.notes || [];
   const meta = BOOK_STATUS[book.status] || BOOK_STATUS.planned;
 
+  /* Through `noteShape`, like every other row in this app is written by its
+     shape. It is what puts the point into the review rotation — `due`
+     tomorrow, box zero — and a point typed here has to enter it on exactly
+     the same terms as one sent from the phone, or the half of the library
+     written at a laptop would quietly never come back. */
   const addNote = () => {
     const text = draft.text.trim();
     if (!text) return;
     onPatch({
       ...book,
-      notes: [...notes, { id: uid(), text, page: draft.page.trim() }],
+      notes: [
+        ...notes,
+        noteShape({
+          text,
+          page: draft.page.trim(),
+          at: dayKey(),
+          due: addDays(dayKey(), 1),
+        }),
+      ],
     });
     setDraft({ text: "", page: "" });
   };
@@ -857,9 +870,33 @@ function BookDesk({ book, log = [], onClose, onPatch }) {
                   >
                     {n.page ? `ص ${n.page}` : i + 1}
                   </span>
-                  <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-white/75">
-                    {n.text}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] leading-relaxed text-white/75">
+                      {n.text}
+                    </p>
+                    {/* Where the point stands in its own rotation. One line,
+                        because the schedule is the whole reason a point is
+                        worth writing down and a desk that hides it is a desk
+                        that reads as a notepad. */}
+                    <p className="mt-1 text-[9.5px]" style={{ color: T.faint }}>
+                      {noteDue(n) ? (
+                        <span style={{ color: T.accent }}>◔ مستحقّة للمراجعة</span>
+                      ) : (
+                        <span>
+                          تعود <span dir="ltr">{n.due}</span>
+                        </span>
+                      )}
+                      {n.box
+                        ? ` · ${
+                            n.box === 1
+                              ? "مراجعة واحدة"
+                              : n.box === 2
+                                ? "مراجعتان"
+                                : `${n.box} مراجعات`
+                          }`
+                        : ""}
+                    </p>
+                  </div>
                   <button
                     onClick={() => moveNote(n.id, "up")}
                     disabled={i === 0}

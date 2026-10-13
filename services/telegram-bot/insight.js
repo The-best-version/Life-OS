@@ -50,6 +50,10 @@ import {
   READ_GOAL_DEFAULT,
   readStreak,
   bookForHabit,
+  activeBook,
+  dueNotes,
+  stalledDays,
+  pagesLeft,
   focusShape,
   focusDay,
   focusStreak,
@@ -73,6 +77,7 @@ import {
   pagesWord,
   habitsWord,
   tasksWord,
+  pointsWord,
 } from "./fmt.js";
 
 /* --- ranks ------------------------------------------------------------- *
@@ -94,6 +99,12 @@ const RANK = {
   reflect: 58, // the day fell short and nothing was written about why
   read: 60,
   focus: 65,
+  /* Both of these are about a book rather than about a day, so they rank
+     below everything the day is still deciding — and `review` above
+     `stalled` because recalling what a finished book gave is worth more
+     than restarting one that stopped. */
+  review: 66,
+  stalled: 67,
   water: 70,
   money: 80,
 };
@@ -147,6 +158,14 @@ export function readDay(state, now = new Date()) {
     readGoal,
     readToday,
     readRun: readStreak(s.reading, readGoal),
+    /* The library's own two facts: what is waiting to be recalled, and
+       whether the book on the desk has moved at all. */
+    due: dueNotes(rows(s.books), today),
+    onDesk: activeBook(rows(s.books)),
+    stalled: (() => {
+      const b = activeBook(rows(s.books));
+      return b ? stalledDays(s.reading, b.id, today) : null;
+    })(),
     focus,
     focusToday: focusDay(s.sessions, today),
     focusRun: focusStreak(s.sessions, focus.goal),
@@ -459,6 +478,58 @@ export const readBehind = (d) => {
   );
 };
 
+/* --- the points waiting to come back ----------------------------------- *
+ *  The one observation here that is not about today at all. Everything else
+ *  this engine says is about a day in progress; this is about the twenty
+ *  pages he read three weeks ago and what is left of them.
+ *
+ *  It only speaks in the evening, and only once there are enough waiting to
+ *  be worth a sitting: a single due point is what the scheduled review is
+ *  for, and the coach naming it as a problem would be the coach competing
+ *  with the thing that already handles it.
+ * ---------------------------------------------------------------------- */
+export const REVIEW_PILE = 3;
+export const notesWaiting = (d) => {
+  if (!d.evening) return null;
+  const n = d.due.length;
+  if (n < REVIEW_PILE) return null;
+  return say(
+    "review",
+    RANK.review,
+    [
+      line(`🔁 ${pointsWord(n)} من كتبك تنتظر المراجعة.`),
+      line("واحدة تكفي الليلة — الفائدة التي لا ترجع، تُنسى."),
+    ].join("\n"),
+    [{ label: "🔁 راجع واحدة", data: "rev:now" }],
+  );
+};
+
+/* --- a book nobody closed and nobody opened ---------------------------- *
+ *  «أقرأه الآن» on a book that has not moved in a fortnight is the most
+ *  common way reading stops: not a decision, just a shelf that quietly
+ *  stopped being true. Said once, with the smallest door — ten pages — and
+ *  never as a verdict on the day.
+ * ---------------------------------------------------------------------- */
+export const STALL_DAYS = 10;
+export const bookStalled = (d) => {
+  if (!d.onDesk || d.readToday > 0) return null;
+  if (d.stalled === null || d.stalled < STALL_DAYS) return null;
+  const left = pagesLeft(d.onDesk);
+  return say(
+    "stalled",
+    RANK.stalled,
+    [
+      line(`📕 «${d.onDesk.title}» ما تحرّك ${daysWord(d.stalled)}.`),
+      line(
+        left !== null
+          ? `باقي ${pagesWord(left)} — أو انقله إلى «أنهيته» وأرِح الرف.`
+          : "عشر صفحات ترجعه، أو انقله من «أقرأه الآن».",
+      ),
+    ].join("\n"),
+    [10, 20].map((n) => ({ label: `📖 +${n}`, data: `read:${n}` })),
+  );
+};
+
 /* --- the focus goal ---------------------------------------------------- */
 export const focusBehind = (d) => {
   if (!d.focus.goal) return null;
@@ -564,6 +635,8 @@ const CHECKS = [
   reflectMissing,
   readBehind,
   focusBehind,
+  notesWaiting,
+  bookStalled,
   waterBehind,
   spendSpike,
 ];

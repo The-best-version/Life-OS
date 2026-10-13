@@ -35,6 +35,13 @@ import {
   READ_GOAL_DEFAULT,
   readStreak,
   sumPages,
+  activeBook,
+  pagesLeft,
+  readPace,
+  dueNotes,
+  countNotes,
+  notesSince,
+  stalledDays,
   sinceDays,
   amountSum,
   hourRate,
@@ -70,6 +77,7 @@ import {
   habitsWord,
   tasksWord,
   roundsWord,
+  pointsWord,
   sparkline,
   DOW,
 } from "./fmt.js";
@@ -174,7 +182,7 @@ const askRead = (s) => {
   const today = rows(s.reading).filter((r) => r.date === dayKey());
   const pages = sumPages(today);
   const run = readStreak(s.reading, goal);
-  const book = rows(s.books).find((b) => b.status === "reading");
+  const book = activeBook(s.books);
   const out = [line(`📖 اليوم ${pagesWord(pages)} من هدف ${num(goal)}.`)];
   if (run) out.push(line(`والسلسلة ${daysWord(run)} بلغت فيها الهدف.`));
   if (book) {
@@ -187,11 +195,122 @@ const askRead = (s) => {
         }`,
       ),
     );
+    /* What is left and what the pace promises — the two figures that answer
+       «وين وصلت؟» as a decision rather than as a bookmark. */
+    const left = pagesLeft(book);
+    const pace = readPace(book, s.reading);
+    if (left !== null) {
+      out.push(
+        line(
+          pace.days
+            ? `باقي ${pagesWord(left)} — بهذا المعدّل تنهيه بعد ${daysWord(pace.days)}.`
+            : `باقي ${pagesWord(left)}.`,
+        ),
+      );
+    }
+    const stalled = stalledDays(s.reading, book.id);
+    if (stalled !== null && stalled >= 3) {
+      out.push(line(`وآخر صفحة سجّلتها فيه قبل ${daysWord(stalled)}.`));
+    }
+    const notes = rows(book.notes).filter((n) => n && n.text).length;
+    if (notes) out.push(line(`وعندك منه ${pointsWord(notes)}.`));
   } else {
     out.push(line("ما فيه كتاب معلّم «أقرأه الآن» على الرف."));
   }
+  const due = dueNotes(s.books).length;
+  if (due) out.push(line(`🔁 و${pointsWord(due)} تنتظر المراجعة — «راجع».`));
   return out.join("\n");
 };
+
+/* --- the points, and what is waiting ----------------------------------- *
+ *  A shelf answers «كم صفحة؟» already. This answers the question the pages
+ *  were read for: what did they actually leave behind, and how much of it is
+ *  due to come back.
+ * ---------------------------------------------------------------------- */
+export const NOTES_ASK_SHOW = 5;
+
+const askNotes = (s) => {
+  const books = rows(s.books);
+  const all = [];
+  for (const b of books) {
+    for (const n of rows(b.notes)) {
+      if (n && n.text) all.push({ book: b, note: n });
+    }
+  }
+  if (!all.length) {
+    return [
+      line("✍️ ما فيه فوائد محفوظة بعد."),
+      line("أرسل «فائدة …» بعد أي قراءة — تُحفظ على الكتاب بصفحتها وترجع لك."),
+    ].join("\n");
+  }
+  const due = dueNotes(books);
+  const out = [line(`✍️ في المكتبة ${pointsWord(all.length)} · و${pointsWord(due.length)} تنتظر المراجعة.`), ""];
+  /* Newest first here, unlike the book desk's own list: the question «وش
+     الفوائد؟» asked in a chat is nearly always about what was read lately. */
+  for (const { book, note } of all.slice(-NOTES_ASK_SHOW).reverse()) {
+    out.push(line(`• ${note.text}`));
+    out.push(line(`   ↳ ${book.title}${note.page ? ` — ص ${num(note.page)}` : ""}`));
+  }
+  if (due.length) out.push("");
+  if (due.length) out.push(line("أرسل «راجع» لتبدأ بواحدة."));
+  return out.join("\n");
+};
+
+/* --- a point, come back around ----------------------------------------- *
+ *  The cue first and the point behind a tap, which is the difference between
+ *  reading a note again and *recalling* it — and recall is the whole
+ *  mechanism. A short point has nothing to hide and is shown whole: a cue
+ *  that is the entire sentence is a quiz with the answer printed on it.
+ *
+ *  Here rather than in `views.js` for the same reason `weekReview` is: the
+ *  scheduled reminder builds this card, and `reminders.js` must stay
+ *  loadable by `node --test` with nothing installed. The buttons under it
+ *  are `views.js`'s.
+ * ---------------------------------------------------------------------- */
+export const CUE_WORDS = 4;
+export const CUE_MIN = 9;
+
+export function noteCue(text) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length < CUE_MIN) return { cue: words.join(" "), hidden: false };
+  return { cue: words.slice(0, CUE_WORDS).join(" ") + " …", hidden: true };
+}
+
+export function reviewCard(book, note, left = 0, on = dayKey()) {
+  const { cue, hidden } = noteCue(note.text);
+  /* `daysUntil(a, b)` counts forward from `b` to `a`, so this is how many
+     days ago it was written — positive for every point but today's. */
+  const age = note.at ? daysUntil(on, note.at) : null;
+  const out = [
+    line(`🔁 نقطة من «${book.title}»${note.page ? ` — صفحة ${num(note.page)}` : ""}`),
+  ];
+  if (Number.isFinite(age) && age > 0) out.push(line(`كتبتها قبل ${daysWord(age)}.`));
+  out.push("");
+  out.push(line(hidden ? `«${cue}»` : `«${note.text}»`));
+  out.push("");
+  out.push(
+    line(
+      hidden
+        ? "اذكرها بتمامها، ثم اكشفها."
+        : note.box
+          ? `مراجعتها رقم ${num(note.box + 1)} — تذكّرتها؟`
+          : "أول مراجعة — تذكّرتها؟",
+    ),
+  );
+  if (left > 0) out.push(line(`و${pointsWord(left)} غيرها تنتظر.`));
+  return out.join("\n");
+}
+
+/* The revealed point, in full and never trimmed — this is the one message
+   whose whole content is the thing he is trying to keep. */
+export const reviewFull = (book, note) =>
+  [
+    line(`📖 «${book.title}»${note.page ? ` — صفحة ${num(note.page)}` : ""}`),
+    "",
+    line(`«${note.text}»`),
+    "",
+    line("كانت حاضرة؟"),
+  ].join("\n");
 
 /* --- the focus --------------------------------------------------------- */
 const askFocus = (s) => {
@@ -389,6 +508,7 @@ export function answer(state, { topic, days = ASK_DAYS } = {}, now = new Date())
   if (topic === "discipline") return askDiscipline(s);
   if (topic === "month") return askMonth(s);
   if (topic === "read") return askRead(s);
+  if (topic === "notes") return askNotes(s);
   if (topic === "focus") return askFocus(s);
   if (topic === "prayer") return askPrayer(s, now);
   if (topic === "tasks") return askTasks(s);
@@ -561,6 +681,28 @@ export function weekReview(state, now = new Date()) {
   out.push("");
   const pages = sumPages(rows(s.reading).filter((r) => r.date >= from));
   out.push(line(`📖 القراءة: ${pagesWord(pages)} · هدف اليوم ${num(goal)} · السلسلة ${num(readStreak(s.reading, goal))}`));
+  /* What the week's pages left behind. Pages are the effort and the points
+     are the return, and a review that reports only the first is a review of
+     a habit rather than of a discipline. */
+  const kept = notesSince(s.books, from);
+  const waiting = dueNotes(s.books).length;
+  out.push(
+    line(
+      kept
+        ? `✍️ وحفظت ${pointsWord(kept)} هذا الأسبوع — ${pointsWord(countNotes(s.books))} في المكتبة كلها.`
+        : pages > 0
+          ? "✍️ ولا فائدة واحدة محفوظة من صفحات الأسبوع — «فائدة …» بعد كل قراءة."
+          : "✍️ ما فيه فوائد محفوظة هذا الأسبوع.",
+    ),
+  );
+  if (waiting) out.push(line(`🔁 و${pointsWord(waiting)} تنتظر المراجعة — «راجع».`));
+  /* A book marked «أقرأه الآن» that nothing has moved. The most common way
+     reading stops is not a decision, it is a fortnight nobody noticed. */
+  const onDesk = activeBook(s.books);
+  const stalled = onDesk ? stalledDays(s.reading, onDesk.id) : null;
+  if (stalled !== null && stalled >= 7) {
+    out.push(line(`📕 و«${onDesk.title}» متوقّف ${daysWord(stalled)} — عشر صفحات تكفي لإعادته.`));
+  }
   const mins = sessionMinutes(sessionsSince(s.sessions, 7, today));
   out.push(line(`🎧 التركيز: ${spanOf(mins)} في ${roundsWord(rows(sessionsSince(s.sessions, 7, today)).length)}${focus.goal ? ` · الهدف اليومي ${spanOf(focus.goal)}` : ""}`));
   out.push(

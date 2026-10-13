@@ -136,12 +136,60 @@ const RULES = [
     words: ["تمت", "تم", "خلصت", "أنجزت", "أنهيت", "سويت", "صليت", "أديت"],
   },
   {
-    /* Pages read, straight onto the active book. `amount: true` because
+    /* Pages read, and the book they went into. `amount: true` because
        «قرأت كتابًا جميلًا» is a thought and not a log — with no number there
-       is nothing to add to the counter. */
+       is nothing to add to the counter.
+     *
+     *  Whatever is left after the number is read as the book's name, which
+     *  is how the sentence is actually typed: «قريت ١٠ صفحات من سيكولوجية
+     *  المال». Nothing is required — with no name left it is the active book,
+     *  exactly as before. */
     kind: "reading",
     amount: true,
-    words: ["قرأت", "قريت", "صفحات", "صفحة"],
+    words: ["قرأت", "قريت", "صفحات", "صفحة", "قرأت من", "قريت من"],
+  },
+  /* --- the shelf, by verb ---------------------------------------------- *
+   *  Three two-word triggers, and they have to be two words: «خلصت» alone is
+   *  the habit verb, and `TRIGGERS` sorts every word longest-first across
+   *  every rule — so «خلصت كتاب» is tried before «خلصت» and the shelf wins
+   *  the sentence that was about a book.
+   * -------------------------------------------------------------------- */
+  {
+    kind: "book",
+    act: "finish",
+    words: [
+      "خلصت كتاب", "خلصت الكتاب", "أنهيت كتاب", "انهيت كتاب", "أنهيت الكتاب",
+      "كملت كتاب", "ختمت كتاب", "ختمت الكتاب",
+    ],
+  },
+  {
+    kind: "book",
+    act: "start",
+    words: ["ابدأ كتاب", "أبدأ كتاب", "بدأت كتاب", "بديت كتاب", "صرت أقرأ", "صرت اقرأ"],
+  },
+  {
+    kind: "book",
+    act: "add",
+    words: [
+      "أضف كتاب", "اضف كتاب", "ضيف كتاب", "كتاب جديد",
+      "أضف للمكتبة", "اضف للمكتبة", "أبغى أقرأ", "ابغى اقرأ",
+    ],
+  },
+  /* --- what the book actually gave ------------------------------------- *
+   *  The point of reading, and the thing this system was storing nowhere
+   *  that a phone could reach. It lands on the book the pages last went
+   *  into, with the page it was on — so «من أين جاءت هذه الفائدة؟» is
+   *  answered without being asked.
+   * -------------------------------------------------------------------- */
+  {
+    kind: "note",
+    words: ["فائدة", "الفائدة", "استفدت", "تعلمت", "اقتباس", "فايدة"],
+  },
+  /* The one sentence a whole book comes down to — `book.lesson`, one field
+     and not a list, which is why it has its own verb. */
+  {
+    kind: "lesson",
+    words: ["درس الكتاب", "خلاصة الكتاب", "أهم درس", "اهم درس", "الدرس من الكتاب"],
   },
   /* --- the focus desk, by verb --------------------------------------- *
    *  Five rules and not one with a sub-grammar, because `TRIGGERS` already
@@ -405,7 +453,11 @@ const TOPICS = [
   ["earn", ["دخلي", "كسبت", "ربحت", "أرباحي", "ارباحي", "قبضت", "دخل"]],
   ["money", ["الرصيد", "رصيدي", "رصيد", "فلوس", "الميزانية", "المال", "مالي"]],
   ["prayer", ["الصلاة", "الصلوات", "صلاة", "الأذان", "أذان", "الفجر", "الظهر", "العصر", "المغرب", "العشاء"]],
-  ["read", ["القراءة", "قراءتي", "قراءة", "الكتاب", "كتابي", "كتاب", "صفحات", "وصلت"]],
+  /* Before `read`, and that order is load-bearing: «كم فائدة كتبت من
+     الكتاب؟» is a question about the points and not about the pages, and the
+     reading subjects would swallow it on the word «الكتاب». */
+  ["notes", ["فائدة", "الفائدة", "فوائد", "الفوائد", "فوائدي", "ملاحظاتي", "الملاحظات", "اقتباسات", "النقاط"]],
+  ["read", ["القراءة", "قراءتي", "قراءة", "الكتاب", "كتابي", "كتاب", "صفحات", "وصلت", "المكتبة", "الرف"]],
   ["focus", ["التركيز", "تركيزي", "تركيز", "بومودورو", "الجولات", "العمل العميق"]],
   ["uni", ["الجامعة", "محاضرات", "محاضرة", "الاختبار", "اختبارات", "اختبار", "المواد", "جدولي", "الجدول"]],
   ["goals", ["أهدافي", "اهدافي", "أهداف", "هدفي", "الخزنة", "الربع"]],
@@ -512,11 +564,69 @@ const clean = (s) =>
     .replace(LEAD_FILLER, "")
     .trim();
 
+/* --- a book's name, out of a sentence about reading --------------------- *
+ *  «قريت كتاب اليوم سيكولوجية المال خلصت ١٠ صفحات» is how this gets typed,
+ *  and the title inside it is everything that is not the scaffolding around
+ *  it. So the scaffolding is named — the word «كتاب», the unit, the day
+ *  word, the verb he repeated at the end — and whatever survives is the
+ *  name the shelf is searched with.
+ *
+ *  Whole words only, and the list is deliberately short. A title is the one
+ *  string in this file that nobody but a publisher wrote, and a stripper
+ *  that guesses eats «من الصفر إلى المليون» down to «الصفر المليون». «من»
+ *  and «في» are left to `clean`, which only ever strips them at the front.
+ *
+ *  Folding on both sides is what makes one entry cover «صفحه» and «صفحة»,
+ *  and it is for matching only — the surviving words come back exactly as he
+ *  typed them, because the title is then shown back to him.
+ * ---------------------------------------------------------------------- */
+const BOOK_NOISE = new Set(
+  [
+    "كتاب", "الكتاب", "كتابي", "كتابا", "كتب",
+    "صفحة", "صفحات", "صفحه", "صفحتين", "ص",
+    "اليوم", "امس", "أمس", "خلصت", "قرأت", "قريت", "وصلت",
+  ].map(fold),
+);
+
+export const bookQuery = (text) =>
+  clean(
+    String(text ?? "")
+      .split(/\s+/)
+      .filter((w) => w && !BOOK_NOISE.has(fold(w)))
+      .join(" "),
+  );
+
+/* A title and the author beside it, when he wrote one. Only the explicit
+   separators — «تأليف» and a dash — are read as one: Arabic's «لـ» prefix is
+   a letter away from the first letter of half the names there are, and a
+   splitter that guessed would file «لمورغان» as the title's last word about
+   as often as it got it right. */
+const BY = /\s+(?:تأليف|للكاتب|للمؤلف|[-–—])\s+/u;
+export function titleAuthor(text) {
+  const body = clean(text);
+  const m = BY.exec(body);
+  if (!m) return { title: body, author: "" };
+  return {
+    title: body.slice(0, m.index).trim(),
+    author: body.slice(m.index + m[0].length).trim(),
+  };
+}
+
 /* --- the one entry point ---------------------------------------------- */
 /* Which readings can carry a date that is not today. A task has no date of
    its own and a habit's day is the archive's business, not a row's — so
    «أمس» in front of either is simply part of what he wrote. */
-const BACKDATABLE = new Set(["expense", "income", "reading", "focus", "habit", "untick"]);
+const BACKDATABLE = new Set([
+  "expense",
+  "income",
+  "reading",
+  "focus",
+  "habit",
+  "untick",
+  /* A point carries the day it was written, so «أمس فائدة …» lands on
+     yesterday's square like a backdated expense does. */
+  "note",
+]);
 
 export function parse(raw) {
   const text = String(raw ?? "").trim();
@@ -575,12 +685,38 @@ export function parse(raw) {
          nothing to match against there is nothing to tick. */
       if (q) return { kind: "habit", query: q, text };
     } else if (rule.kind === "reading") {
-      const { amount } = amounts(tail);
+      const { amount, rest } = amounts(tail);
       /* Bounded, because «قرأت 2000» is a typo and a page counter that
          accepts it is a book marked finished by a slip of the thumb. */
       if (amount >= 1 && amount <= PAGES_MAX) {
-        return { kind: "reading", pages: Math.round(amount), text };
+        return {
+          kind: "reading",
+          pages: Math.round(amount),
+          /* Empty is a complete answer and means the active book — which is
+             what every one of these sentences meant before a name could be
+             written in them. */
+          query: bookQuery(rest),
+          text,
+        };
       }
+    } else if (rule.kind === "book") {
+      if (rule.act === "add") {
+        /* The title is stored as he typed it, so it is `clean` and not
+           `bookQuery` here: the noise stripper exists to *search* the shelf,
+           and a title it trimmed a word off is a row he has to go and fix. */
+        const { title, author } = titleAuthor(tail);
+        if (title) return { kind: "book", act: "add", title, author, text };
+      } else {
+        const q = bookQuery(tail);
+        if (q) return { kind: "book", act: rule.act, query: q, text };
+      }
+    } else if (rule.kind === "note") {
+      const body = clean(tail);
+      /* «فائدة» on its own is not a point, it is the beginning of one. */
+      if (body) return { kind: "note", body, text };
+    } else if (rule.kind === "lesson") {
+      const body = clean(tail);
+      if (body) return { kind: "lesson", body, text };
     } else if (rule.kind === "focus") {
       const { amount, rest } = amounts(tail);
       const minutes = amount >= 1 && amount <= MINUTES_MAX ? Math.round(amount) : 0;

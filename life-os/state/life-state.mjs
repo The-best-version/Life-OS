@@ -298,7 +298,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 30;
+export const SCHEMA = 31;
 
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
@@ -576,11 +576,15 @@ export function migrate(saved) {
 
   /* Schema 10 gave every book a workspace. Run the existing rows through
      bookShape so the new fields appear with sane defaults — spread last is
-     wrong here, the saved values must win over the defaults. */
-  let books = rows(saved.books).map((b) => ({
-    ...bookShape(b),
-    notes: rows(b.notes),
-  }));
+     wrong here, the saved values must win over the defaults.
+   *
+   *  Schema 31 gives every *point* a schedule, and `bookShape` is where the
+   *  notes are shaped now — which is why this no longer reaches past it to
+   *  carry `notes` through raw. There is no branch to write: a point with no
+   *  `due` is read as waiting, which is what a point nobody has reviewed
+   *  actually is, so an older shelf arrives with its whole backlog in the
+   *  rotation and nothing was guessed on anybody's behalf. */
+  let books = rows(saved.books).map(bookShape);
 
   /* Schema 11 links habits to books. Existing habits are ordinary unless
      they are the reading one, which is pointed at the active book so the
@@ -975,6 +979,10 @@ export {
   openingWindow,
 } from "./life-state-goals.mjs";
 
+/* The library, plus its memory: a point carries the day it comes back on,
+   so the shelf is something the reading is kept *in* rather than only
+   logged to. (A comment inside the braces below hides the name after it
+   from `tests/split.test.mjs`, which reads these blocks as text.) */
 export {
   READ_ACTIVE,
   READ_GOAL_DEFAULT,
@@ -987,6 +995,21 @@ export {
   sumPages,
   readStreak,
   pctOf,
+  noteShape,
+  noteDue,
+  dueNotes,
+  reviewedNote,
+  countNotes,
+  notesSince,
+  REVIEW_STEPS,
+  NOTE_MAX,
+  NOTE_CAP,
+  activeBook,
+  pagesLeft,
+  lastReadOn,
+  stalledDays,
+  readPace,
+  PACE_WINDOW,
 } from "./life-state-books.mjs";
 
 export {
@@ -1079,6 +1102,7 @@ export {
   COACH_MAX,
   WEEKLY_AT_DEFAULT,
   WEEKLY_DOW_DEFAULT,
+  REVIEW_AT_DEFAULT,
   REMINDER_REPEATS,
   REMINDER_REPEAT_IDS,
   repeatMeta,

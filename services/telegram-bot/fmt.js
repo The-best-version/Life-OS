@@ -80,6 +80,11 @@ export const habitsWord = forms("عادة", "عادتان", "عادات", "عا�
 export const tasksWord = forms("مهمة", "مهمتان", "مهام", "مهمة");
 export const roundsWord = forms("جولة", "جولتان", "جولات", "جولة");
 export const notesWord = forms("ملاحظة", "ملاحظتان", "ملاحظات", "ملاحظة");
+/* A book's own points are «فوائد» and not «ملاحظات», and the difference is
+   not decoration: the coach's observations are notes *about* a day, and a
+   point kept from a book is the thing the reading was for. One word per
+   thing, so a count never reads as the other one. */
+export const pointsWord = forms("فائدة", "فائدتان", "فوائد", "فائدة");
 export const cupsWord = forms("كوب", "كوبان", "أكواب", "كوبًا");
 
 /* Minutes as hours and minutes, when there are enough of them to be worth
