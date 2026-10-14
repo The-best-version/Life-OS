@@ -72,6 +72,7 @@ const LOCAL_SPEC = /from\s*["'](\.[^"']+)["']/g;
    (life-state-streak.mjs reads `disciplineOf` off life-state-habits.mjs),
    consumers of this same split in their own right. */
 const MODULES = [
+  "life-config.js",
   "features/life-settings.jsx",
   "layouts/life-nav.jsx",
   "features/life-matrix.jsx",
@@ -106,6 +107,7 @@ const MODULES = [
   "state/life-state-focus.mjs",
 ];
 const CONSUMERS = [
+  "life-config.js",
   "features/life-settings.jsx",
   "layouts/life-nav.jsx",
   "features/life-matrix.jsx",

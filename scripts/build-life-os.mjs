@@ -75,6 +75,7 @@ const scanned = [
   "layouts/life-styles.jsx",
 ];
 const shipped = [
+  "life-config.js",
   "features/life-settings.jsx",
   "layouts/life-nav.jsx",
   "features/life-matrix.jsx",

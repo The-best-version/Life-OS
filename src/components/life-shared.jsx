@@ -3,70 +3,43 @@ import { createPortal } from "react-dom";
 import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Bed, Undo2, RotateCcw, Quote } from "lucide-react";
 import { uid, STREAK_TARGET, hhmm, GRADES, daysUntil, minsIn, BLOCK_IDS, daysBetween } from "../state/life-state.mjs";
 import { fixHour, prayerTimes, PRAYER_ROWS, clockAt } from "../utils/prayer-times.mjs";
+import { T, GLASS } from "../life-config.js";
 
 /* --- tokens --------------------------------------------------------- *
- *  "Vibrant Deep Slate" — an energetic canvas, not a void. Emerald is
- *  reserved for success (a done habit, a banked streak); Electric Coral
- *  drives every primary call to action; amber marks achievement.
- * -------------------------------------------------------------------- */
-export const T = {
-  /* Warm charcoal, not blue slate. A blue-grey ground plus muted accents is
-     exactly the palette of a trading terminal — warmth is what makes this
-     read as a place to live rather than a dashboard to monitor. */
-  bg: "#1C141A",
-  bgDeep: "#150E13",
-  bgLift: "#241A20",
-  /* Any surface that sits on the sky reads this, never a fixed white
-     alpha — at noon a 0.07 white fill is a pale blue smear. */
-  card: "var(--los-veil, rgba(255,255,255,0.07))",
-  cardSolid: "#241A20",
-  border: "rgba(255,255,255,0.18)",
-  borderStrong: "rgba(255,255,255,0.24)",
-  fg: "#FDF8F6",
-  muted: "rgba(253,248,246,0.58)",
-  faint: "rgba(253,248,246,0.34)",
-  primary: "#10B981",
-  primaryLift: "#34D399",
-  cta: "#FF5722",
-  ctaLift: "#FF8A50",
-  accent: "#FFB020",
-  violet: "#9D5CFF",
-  sky: "#00C2FF",
-  rose: "#FF4D8D",
-  indigo: "#5B8CFF",
-  ember: "#FF7A45",
-  danger: "#FF3B5C",
-};
+ *  Both colour tokens now live in `src/life-config.js` — one file to open
+ *  from VS Code to retint the whole app. Re-exported here, unchanged (and
+ *  bound locally, since this file reads `T.*`/`GLASS.*` itself below), so
+ *  every existing `import { T, GLASS } from "./life-shared.jsx"` across the
+ *  project keeps working without touching a single call site. */
+export { T, GLASS };
 
-/* Frosted glass, not a flat tint: a diagonal sheen falling to transparent,
-   a brighter rim, and an inset top highlight standing in for the lit edge
-   of a real pane of glass. */
-export const GLASS = {
-  /* Set by the sky phase on the root: cards darken as the sky brightens,
-     or white type loses its contrast against a noon horizon. */
-  backgroundColor: "var(--los-veil, rgba(255,255,255,0.055))",
-  /* The sheen is warm, not neutral white: a trace of coral at the lit
-     corner and violet at the shaded one, so a card picks up the ground's
-     colour instead of sitting on it as a grey pane. */
-  backgroundImage:
-    "linear-gradient(135deg, rgba(255,150,110,0.11) 0%, rgba(255,255,255,0.045) 42%, rgba(157,92,255,0.05) 100%)",
-  borderColor: "rgba(255,225,210,0.18)",
-  /* 12px, not 22px. The blur is recomputed on every frame a card moves over
-     the fixed sky — which is every frame of every scroll — and the cost
-     scales with the radius. Behind a veil this dark the two are hard to tell
-     apart, so the cheaper one is the honest default. */
-  backdropFilter: "blur(12px) saturate(150%)",
-  /* سلّم ارتفاع لا ظلّ واحد. الإحساس الثلاثي الأبعاد يأتي من ثلاث
-     مسافات مختلفة في وقت واحد: ظلّ تماسّ ضيّق يثبّت الحافة على السماء،
-     وظلّ متوسّط يرفع البطاقة، وظلّ واسع خفيف هو الضوء المحيط. وإضاءة
-     داخلية من الأعلى مع ظلّ داخلي من الأسفل هما ما يجعل اللوح يبدو
-     سميكًا — حافّة مضاءة وحدها تبدو خطًّا مرسومًا.
-
-     الظلال رخيصة: تُرسم ولا تُعاد عيّنة السماء من أجلها، بخلاف
-     backdrop-filter. ولهذا العمق هنا ولا في زيادة نصف قطر الضبابة. */
-  boxShadow:
-    "inset 0 1px 0 0 rgba(255,240,230,0.16), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 1px 2px -1px rgba(0,0,0,0.55), 0 8px 18px -10px rgba(0,0,0,0.55), 0 30px 64px -34px rgba(0,0,0,0.92), 0 0 0 1px rgba(255,87,34,0.05)",
-};
+/* --- config-driven block safety -------------------------------------- *
+ *  Wraps one block rendered off a life-config.js order array (`todayBlocks`,
+ *  `routineBlocks`). A typo'd key already renders nothing — `registry[key]`
+ *  is simply `undefined` — but a block that *throws* (a prop it expected
+ *  renamed, a removed field) must not take the whole screen down with it.
+ *  `getDerivedStateFromError` is the one thing a function component cannot
+ *  do, so this stays a class. Silent on break: a half-broken screen that
+ *  still shows the other nine blocks is the point of config-driven order in
+ *  the first place. */
+export class ConfigBlockBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { broken: false };
+  }
+  static getDerivedStateFromError() {
+    return { broken: true };
+  }
+  componentDidCatch(error) {
+    if (typeof console !== "undefined") {
+      console.error("[life-config] كتلة معطوبة ولم تُعرض:", error);
+    }
+  }
+  render() {
+    if (this.state.broken) return null;
+    return this.props.children ?? null;
+  }
+}
 
 export function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(

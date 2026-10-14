@@ -1,6 +1,7 @@
 import { HorizonRow, clockLabel, horizonClock } from "./life-goals.jsx";
 import { ReadLogModal, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, Field, GLASS, GROUPS, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
+import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Field, GLASS, GROUPS, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
+import { routineBlocks } from "../life-config.js";
 import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, currentQuarter, goalShape, habitShape, habitStreak, historyIndex, isGap, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
 import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MessageSquareQuote, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -137,377 +138,99 @@ export function RoutineModule({
       ? { color: "#B45309", glow: "none", animate: false }
       : { color: "rgba(255,255,255,0.22)", glow: "none", animate: false };
 
-  return (
-    <div className="space-y-8">
+  /* ==================================================================== *
+   * ترتيب أقسام شاشة «الروتين اليومي» يُضبط الآن من src/life-config.js
+   * (مصفوفة routineBlocks) — افتح ذلك الملف لتحريك قسم أو إخفاءه، لا هذا
+   * الملف. الكتل الست المرتبطة بالصلاة داخل habitGrid ترتيبها ثابت دائمًا
+   * (BLOCK_IDS في state/life-state-habits.mjs) حتى لو حرّكت هذا السطر —
+   * اليوم لا يجري بترتيبين. ConfigBlockBoundary يحمي الشاشة إن كان مفتاح
+   * مكتوبًا خطأ أو قسم انكسر: يختفي ذلك القسم وحده لا الشاشة كلها.
+   * ==================================================================== */
+  const blockRegistry = {
+    cueImage: (
       <CueImageCard
         src={state.cueImage}
         onChange={(dataUrl) => setState((s) => ({ ...s, cueImage: dataUrl }))}
       />
+    ),
+    dailyQuote: (
+      <RoutineQuoteBlock
+        quote={quote}
+        onShuffle={onShuffleQuote}
+        onManage={() => setQuotesOpen(true)}
+      />
+    ),
+    scoreHeader: (
+      <RoutineScoreBlock
+        dateLabel={dateLabel}
+        savedAt={savedAt}
+        diskAt={diskAt}
+        diskStuck={diskStuck}
+        core={core}
+        coreDone={coreDone}
+        extra={extra}
+        extraDone={extraDone}
+        done={done}
+        totalHabits={state.habits.length}
+        discipline={discipline}
+        coreNote={coreNote}
+        flame={flame}
+        streak={streak}
+        reflected={reflected}
+        prepped={prepped}
+        mirror={mirror}
+        onOpenReflect={onOpenReflect}
+        onOpenTomorrow={onOpenTomorrow}
+        onOpenFix={onOpenFix}
+        onOpenMirror={onOpenMirror}
+        onAddHabit={() => setEditing({ label: "", group: "morning", book: null, min: "" })}
+        onPickCore={() => setPicking(true)}
+      />
+    ),
+    /* العدّاد بجانب العادات لأن ما تحته هو ما يستهلك الأيام التي يعدّها —
+       عدّاد في شاشة وحده رقم يُزار لا يُشعَر به. */
+    goalsCountdown: <CountdownStrip state={state} onGo={onGoGoals} />,
+    habitGrid: (
+      <RoutineHabitsBlock
+        habits={state.habits}
+        books={state.books}
+        archive={archive}
+        dragging={dragging}
+        overGroup={overGroup}
+        onDragStart={(id) => setDragging(id)}
+        onDragEnd={() => {
+          setDragging(null);
+          setOverGroup(null);
+        }}
+        onDragOverGroup={(id) => setOverGroup(id)}
+        onDragLeaveGroup={() => setOverGroup(null)}
+        onDropGroup={(dragId, groupId) => moveToGroup(dragId, groupId)}
+        onReorder={reorder}
+        onNudge={nudge}
+        onToggleCore={toggleCore}
+        onToggle={(id) => toggle(id)}
+        onToggleTiny={(id) => toggle(id, true)}
+        onEdit={(h) =>
+          setEditing({
+            id: h.id,
+            label: h.label,
+            group: h.group,
+            book: h.book || null,
+            min: h.min || "",
+          })
+        }
+        onDelete={remove}
+      />
+    ),
+  };
 
-      {/* daily cue — tap for the next one. The card is a div with a full-area
-          button layered under the content, not a <button> itself: the manage
-          control lives here too, and a button inside a button is invalid. */}
-      <Card className="los-cue group relative overflow-hidden p-6 text-center transition-all duration-300 sm:p-7">
-        <button
-          type="button"
-          onClick={onShuffleQuote}
-          title="اضغط لاقتباس آخر"
-          aria-label="اقتباس آخر"
-          className="absolute inset-0 z-0 cursor-pointer"
-        />
-        <div
-          className="pointer-events-none absolute -top-24 right-1/3 h-56 w-56 rounded-full opacity-30 blur-3xl transition-opacity duration-500 group-hover:opacity-50"
-          style={{ background: T.accent }}
-        />
-        <div
-          className="pointer-events-none absolute -bottom-20 left-1/4 h-48 w-48 rounded-full opacity-25 blur-3xl"
-          style={{ background: T.rose }}
-        />
-        <button
-          type="button"
-          onClick={() => setQuotesOpen(true)}
-          aria-label="تحرير عبارات التحفيز"
-          title="تحرير عبارات التحفيز"
-          className="absolute left-3 top-3 z-20 rounded-lg border p-1.5 transition-all duration-200 hover:scale-105"
-          style={{
-            borderColor: `${T.accent}3D`,
-            background: `${T.accent}14`,
-            color: T.accent,
-          }}
-        >
-          <MessageSquareQuote size={14} />
-        </button>
-        <div className="pointer-events-none relative z-10">
-          <Quote
-            size={20}
-            className="mx-auto mb-2 opacity-45"
-            style={{ color: T.accent }}
-          />
-          {quote ? (
-            <>
-              <p
-                key={quote.text}
-                className="los-in mx-auto max-w-2xl text-[15px] font-bold leading-relaxed sm:text-lg"
-                style={{ color: T.fg }}
-              >
-                {quote.text}
-              </p>
-              <p className="mt-2 text-xs" style={{ color: T.accent }}>
-                — {quote.author}
-              </p>
-            </>
-          ) : (
-            <p className="text-[13px]" style={{ color: T.muted }}>
-              لا عبارات بعد — اضغط زر التحرير لإضافة أول عبارة.
-            </p>
-          )}
-          <span
-            className="mt-3 inline-flex items-center gap-1.5 text-[10.5px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-            style={{ color: T.faint }}
-          >
-            <RotateCcw size={11} /> اضغط لاقتباس آخر
-          </span>
-        </div>
-      </Card>
-
-      {/* score */}
-      <Card className="flex flex-col items-center gap-7 p-6 sm:p-7 lg:flex-row lg:justify-between">
-        <div className="text-center lg:text-right">
-          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">الروتين اليومي</h2>
-          <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
-            <CalendarDays size={13} /> {dateLabel}
-          </p>
-          <SaveStamp at={savedAt} diskAt={diskAt} diskStuck={diskStuck} />
-          {core.length ? (
-            <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
-              <span className="font-extrabold" style={{ color: T.accent }}>
-                <span dir="ltr" className="tabular-nums">
-                  {coreDone} / {core.length}
-                </span>{" "}
-                أساسيات
-              </span>
-              {extra.length > 0 && (
-                <>
-                  {" · إضافي "}
-                  <span dir="ltr" className="tabular-nums">
-                    {extraDone} / {extra.length}
-                  </span>
-                </>
-              )}
-              . المؤشر يقيس أساسياتك وحدها — وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
-            </p>
-          ) : (
-            <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
-              {done} من {state.habits.length} عادة. المؤشر يمتلئ مع كل علامة —
-              وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
-            </p>
-          )}
-
-          {/* The invitation, shown only while there is no core. It sits here
-              rather than in settings because this is the sentence it is
-              arguing with: the percentage directly above it is the one that
-              counts eighteen habits and calls three of them a failure. */}
-          {!core.length && (
-            <button
-              onClick={() => setPicking(true)}
-              className="los-in mt-3 flex w-full max-w-sm items-start gap-2.5 rounded-xl border px-3.5 py-3 text-right transition-all duration-200"
-              style={{
-                borderColor: `${T.accent}3D`,
-                background: `${T.accent}12`,
-              }}
-            >
-              <Star size={15} className="mt-0.5 shrink-0" style={{ color: T.accent }} />
-              <span>
-                <span className="block text-[12px] font-extrabold" style={{ color: T.accent }}>
-                  اختر أساسياتك
-                </span>
-                <span className="mt-1 block text-[11px] leading-relaxed text-white/45">
-                  حتى {CORE_CAP} عادات تحسب نسبتك وحدها، والباقي إضافي. ثلاث
-                  عادات حقيقية من {state.habits.length} تقرأ الآن{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {state.habits.length
-                      ? Math.round((3 / state.habits.length) * 100)
-                      : 0}
-                    %
-                  </span>
-                  .
-                </span>
-              </span>
-            </button>
-          )}
-
-          {coreNote !== null && (
-            <p
-              className="los-in mt-3 max-w-sm rounded-xl border px-3.5 py-2.5 text-[11px] leading-relaxed"
-              style={{
-                borderColor: `${T.ember}4D`,
-                background: `${T.ember}14`,
-                color: T.ember,
-              }}
-            >
-              {CORE_CAP} أساسيات تكفي. أزل نجمة قبل أن تضيف أخرى — الحدّ هو ما
-              يجعلها أساسيات.
-            </p>
-          )}
-          <div className="mt-4 flex items-center justify-center gap-3 lg:justify-start">
-            <div
-              className="flex items-center gap-2 rounded-xl border px-4 py-2"
-              style={{ borderColor: T.border }}
-            >
-              <Flame
-                size={22}
-                className={flame.animate ? "los-flame" : ""}
-                style={{
-                  color: flame.color,
-                  filter: flame.glow,
-                  transition: "all .5s ease",
-                }}
-              />
-              <span className="text-xl font-extrabold tabular-nums">{streak}</span>
-              <span className="text-[11px] text-white/35">{countedWord(streak)}</span>
-            </div>
-            <Btn
-              variant="default"
-              size="sm"
-              onClick={() =>
-                setEditing({ label: "", group: "morning", book: null, min: "" })
-              }
-            >
-              <Plus size={14} strokeWidth={3} /> عادة جديدة
-            </Btn>
-            {/* The evening prompt comes on its own, but only inside its
-                window and only on a day that fell short. This is how you
-                reach it the rest of the time — and how you reopen what you
-                already wrote to read or change it. */}
-            <button
-              onClick={onOpenReflect}
-              title="وقفة آخر اليوم"
-              aria-label="وقفة آخر اليوم"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
-              style={{
-                borderColor: reflected ? `${T.cta}80` : `${T.cta}3D`,
-                background: reflected ? `${T.cta}24` : `${T.cta}0F`,
-                color: T.cta,
-                boxShadow: reflected ? `0 0 18px -6px ${T.cta}` : "none",
-              }}
-            >
-              <MessageSquareQuote size={16} strokeWidth={2} />
-            </button>
-            {/* «اليوم» only invites it in the evening window, which is the
-                right default and the wrong only door — the three can be
-                chosen at any hour, and a prep already written has to be
-                re-readable. Lit once tomorrow has its three. */}
-            <button
-              onClick={onOpenTomorrow}
-              title="جهّز غدك"
-              aria-label="جهّز غدك"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
-              style={{
-                borderColor: prepped ? `${T.violet}80` : `${T.violet}3D`,
-                background: prepped ? `${T.violet}24` : `${T.violet}0F`,
-                color: T.violet,
-                boxShadow: prepped ? `0 0 18px -6px ${T.violet}` : "none",
-              }}
-            >
-              <Sunrise size={16} strokeWidth={2} />
-            </button>
-            {/* Open for as long as today is today. A day missed because the
-                app was never opened is the one failure the app itself caused,
-                and it has to be answerable. */}
-            <button
-              onClick={onOpenFix}
-              title="عدّل أمس"
-              aria-label="عدّل أمس"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
-              style={{
-                borderColor: `${T.violet}3D`,
-                background: `${T.violet}0F`,
-                color: T.violet,
-              }}
-            >
-              <History size={16} strokeWidth={2} />
-            </button>
-            <button
-              onClick={onOpenMirror}
-              title="مرآة المحاسبة"
-              aria-label="مرآة المحاسبة"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
-              style={{
-                borderColor: mirror ? `${T.danger}80` : `${T.danger}3D`,
-                background: mirror ? `${T.danger}24` : `${T.danger}0F`,
-                color: T.danger,
-                boxShadow: mirror ? `0 0 18px -6px ${T.danger}` : "none",
-              }}
-            >
-              <ScanFace size={16} strokeWidth={2} />
-            </button>
-          </div>
-        </div>
-        <ProgressRing value={discipline} size={176} />
-      </Card>
-
-      {/* The habits below are what spend the days this counts, so the two sit
-          together — a countdown on a screen of its own is a number you visit,
-          not one you feel. */}
-      <CountdownStrip state={state} onGo={onGoGoals} />
-
-      {/* habit groups */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {GROUPS.map((g) => {
-          const list = state.habits.filter((h) => h.group === g.id);
-          const gDone = list.filter((h) => h.done).length;
-          const Icon = g.icon;
-          return (
-            <Card
-              key={g.id}
-              className="p-5 transition-all duration-200"
-              style={
-                overGroup === g.id
-                  ? { borderColor: `${T.cta}80`, boxShadow: `0 0 0 1px ${T.cta}4D, ${GLASS.boxShadow}` }
-                  : undefined
-              }
-              onDragOver={(e) => {
-                if (!dragging) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                setOverGroup(g.id);
-              }}
-              onDragLeave={(e) => {
-                if (e.currentTarget.contains(e.relatedTarget)) return;
-                setOverGroup(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setOverGroup(null);
-                const id = e.dataTransfer.getData("text/plain");
-                if (id) moveToGroup(id, g.id);
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border"
-                  style={{
-                    borderColor: `${g.tint}33`,
-                    background: `${g.tint}14`,
-                    color: g.tint,
-                  }}
-                >
-                  <Icon size={18} strokeWidth={1.9} />
-                </span>
-                <h3 className="text-[15px] font-bold">{g.label}</h3>
-                <span className="mr-auto text-[11px] tabular-nums text-white/30">
-                  {gDone}/{list.length}
-                </span>
-              </div>
-
-              <div
-                className="mt-3.5 h-1 w-full overflow-hidden rounded-full"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: list.length ? `${(gDone / list.length) * 100}%` : "0%",
-                    backgroundImage:
-                      gDone === list.length && list.length
-                        ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
-                        : `linear-gradient(90deg, ${g.tint}, ${g.tint}AA)`,
-                    boxShadow: `0 0 12px ${
-                      gDone === list.length && list.length ? T.primary : g.tint
-                    }99`,
-                  }}
-                />
-              </div>
-
-              <div className="mt-2 space-y-0.5">
-                {list.length === 0 ? (
-                  <p className="py-3 text-center text-[11px] text-white/25">
-                    {dragging
-                      ? "أفلت هنا لنقل العادة إلى هذه الفترة"
-                      : "لا عادات في هذه الفترة بعد"}
-                  </p>
-                ) : (
-                  list.map((h, idx) => (
-                    <HabitRow
-                      key={h.id}
-                      habit={h}
-                      linkedBook={bookForHabit(h, state.books)}
-                      streak={habitStreak(archive, h.id)}
-                      first={idx === 0}
-                      last={idx === list.length - 1}
-                      dragging={dragging}
-                      onDragStart={() => setDragging(h.id)}
-                      onDragEnd={() => {
-                        setDragging(null);
-                        setOverGroup(null);
-                      }}
-                      onDrop={(dragId) => reorder(dragId, h.id)}
-                      onNudge={(dir) => nudge(h.id, dir)}
-                      onToggleCore={() => toggleCore(h.id)}
-                      onToggle={() => toggle(h.id)}
-                      onToggleTiny={() => toggle(h.id, true)}
-                      onEdit={() =>
-                        /* `book` has to be seeded here: the form writes
-                           `book: editing.book || null` on save, so opening it
-                           without the current link silently unlinks a reading
-                           habit the moment its name is corrected. */
-                        setEditing({
-                          id: h.id,
-                          label: h.label,
-                          group: h.group,
-                          book: h.book || null,
-                          min: h.min || "",
-                        })
-                      }
-                      onDelete={() => remove(h.id)}
-                    />
-                  ))
-                )}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+  return (
+    <div className="space-y-8">
+      {routineBlocks
+        .filter((b) => b.visible !== false)
+        .map((b) => (
+          <ConfigBlockBoundary key={b.key}>{blockRegistry[b.key] ?? null}</ConfigBlockBoundary>
+        ))}
 
       <ReadLogModal
         open={!!logging}
@@ -665,6 +388,401 @@ export function RoutineModule({
     </div>
   );
 }
+/* عبارة اليوم التحفيزية — بطاقة قائمة بذاتها، تأخذ العبارة وبابين: التبديل
+   والتحرير. مرتبطة بشاشة الروتين وحدها، وتُستدعى من routineBlocks عبر
+   المفتاح dailyQuote. */
+function RoutineQuoteBlock({ quote, onShuffle, onManage }) {
+  return (
+    <Card className="los-cue group relative overflow-hidden p-6 text-center transition-all duration-300 sm:p-7">
+      <button
+        type="button"
+        onClick={onShuffle}
+        title="اضغط لاقتباس آخر"
+        aria-label="اقتباس آخر"
+        className="absolute inset-0 z-0 cursor-pointer"
+      />
+      <div
+        className="pointer-events-none absolute -top-24 right-1/3 h-56 w-56 rounded-full opacity-30 blur-3xl transition-opacity duration-500 group-hover:opacity-50"
+        style={{ background: T.accent }}
+      />
+      <div
+        className="pointer-events-none absolute -bottom-20 left-1/4 h-48 w-48 rounded-full opacity-25 blur-3xl"
+        style={{ background: T.rose }}
+      />
+      <button
+        type="button"
+        onClick={onManage}
+        aria-label="تحرير عبارات التحفيز"
+        title="تحرير عبارات التحفيز"
+        className="absolute left-3 top-3 z-20 rounded-lg border p-1.5 transition-all duration-200 hover:scale-105"
+        style={{
+          borderColor: `${T.accent}3D`,
+          background: `${T.accent}14`,
+          color: T.accent,
+        }}
+      >
+        <MessageSquareQuote size={14} />
+      </button>
+      <div className="pointer-events-none relative z-10">
+        <Quote
+          size={20}
+          className="mx-auto mb-2 opacity-45"
+          style={{ color: T.accent }}
+        />
+        {quote ? (
+          <>
+            <p
+              key={quote.text}
+              className="los-in mx-auto max-w-2xl text-[15px] font-bold leading-relaxed sm:text-lg"
+              style={{ color: T.fg }}
+            >
+              {quote.text}
+            </p>
+            <p className="mt-2 text-xs" style={{ color: T.accent }}>
+              — {quote.author}
+            </p>
+          </>
+        ) : (
+          <p className="text-[13px]" style={{ color: T.muted }}>
+            لا عبارات بعد — اضغط زر التحرير لإضافة أول عبارة.
+          </p>
+        )}
+        <span
+          className="mt-3 inline-flex items-center gap-1.5 text-[10.5px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          style={{ color: T.faint }}
+        >
+          <RotateCcw size={11} /> اضغط لاقتباس آخر
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+/* العنوان، التاريخ، طابع الحفظ، نسبة الأساسيات، حلقة الانضباط، وأزرار
+   الوقفة المسائية وجهّز غدك وعدّل أمس ومرآة المحاسبة. أكبر الأقسام، ولا
+   يحتفظ بأي حالة خاصة به — كل ما يحتاجه وصل في الخصائص. */
+function RoutineScoreBlock({
+  dateLabel,
+  savedAt,
+  diskAt,
+  diskStuck,
+  core,
+  coreDone,
+  extra,
+  extraDone,
+  done,
+  totalHabits,
+  discipline,
+  coreNote,
+  flame,
+  streak,
+  reflected,
+  prepped,
+  mirror,
+  onOpenReflect,
+  onOpenTomorrow,
+  onOpenFix,
+  onOpenMirror,
+  onAddHabit,
+  onPickCore,
+}) {
+  return (
+    <Card className="flex flex-col items-center gap-7 p-6 sm:p-7 lg:flex-row lg:justify-between">
+      <div className="text-center lg:text-right">
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">الروتين اليومي</h2>
+        <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
+          <CalendarDays size={13} /> {dateLabel}
+        </p>
+        <SaveStamp at={savedAt} diskAt={diskAt} diskStuck={diskStuck} />
+        {core.length ? (
+          <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
+            <span className="font-extrabold" style={{ color: T.accent }}>
+              <span dir="ltr" className="tabular-nums">
+                {coreDone} / {core.length}
+              </span>{" "}
+              أساسيات
+            </span>
+            {extra.length > 0 && (
+              <>
+                {" · إضافي "}
+                <span dir="ltr" className="tabular-nums">
+                  {extraDone} / {extra.length}
+                </span>
+              </>
+            )}
+            . المؤشر يقيس أساسياتك وحدها — وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
+          </p>
+        ) : (
+          <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/35">
+            {done} من {totalHabits} عادة. المؤشر يمتلئ مع كل علامة —
+            وعند ٨٠٪ يُحتسب اليوم في سلسلتك.
+          </p>
+        )}
+
+        {/* The invitation, shown only while there is no core. It sits here
+            rather than in settings because this is the sentence it is
+            arguing with: the percentage directly above it is the one that
+            counts eighteen habits and calls three of them a failure. */}
+        {!core.length && (
+          <button
+            onClick={onPickCore}
+            className="los-in mt-3 flex w-full max-w-sm items-start gap-2.5 rounded-xl border px-3.5 py-3 text-right transition-all duration-200"
+            style={{
+              borderColor: `${T.accent}3D`,
+              background: `${T.accent}12`,
+            }}
+          >
+            <Star size={15} className="mt-0.5 shrink-0" style={{ color: T.accent }} />
+            <span>
+              <span className="block text-[12px] font-extrabold" style={{ color: T.accent }}>
+                اختر أساسياتك
+              </span>
+              <span className="mt-1 block text-[11px] leading-relaxed text-white/45">
+                حتى {CORE_CAP} عادات تحسب نسبتك وحدها، والباقي إضافي. ثلاث
+                عادات حقيقية من {totalHabits} تقرأ الآن{" "}
+                <span dir="ltr" className="tabular-nums">
+                  {totalHabits ? Math.round((3 / totalHabits) * 100) : 0}
+                  %
+                </span>
+                .
+              </span>
+            </span>
+          </button>
+        )}
+
+        {coreNote !== null && (
+          <p
+            className="los-in mt-3 max-w-sm rounded-xl border px-3.5 py-2.5 text-[11px] leading-relaxed"
+            style={{
+              borderColor: `${T.ember}4D`,
+              background: `${T.ember}14`,
+              color: T.ember,
+            }}
+          >
+            {CORE_CAP} أساسيات تكفي. أزل نجمة قبل أن تضيف أخرى — الحدّ هو ما
+            يجعلها أساسيات.
+          </p>
+        )}
+        <div className="mt-4 flex items-center justify-center gap-3 lg:justify-start">
+          <div
+            className="flex items-center gap-2 rounded-xl border px-4 py-2"
+            style={{ borderColor: T.border }}
+          >
+            <Flame
+              size={22}
+              className={flame.animate ? "los-flame" : ""}
+              style={{
+                color: flame.color,
+                filter: flame.glow,
+                transition: "all .5s ease",
+              }}
+            />
+            <span className="text-xl font-extrabold tabular-nums">{streak}</span>
+            <span className="text-[11px] text-white/35">{countedWord(streak)}</span>
+          </div>
+          <Btn variant="default" size="sm" onClick={onAddHabit}>
+            <Plus size={14} strokeWidth={3} /> عادة جديدة
+          </Btn>
+          {/* The evening prompt comes on its own, but only inside its
+              window and only on a day that fell short. This is how you
+              reach it the rest of the time — and how you reopen what you
+              already wrote to read or change it. */}
+          <button
+            onClick={onOpenReflect}
+            title="وقفة آخر اليوم"
+            aria-label="وقفة آخر اليوم"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+            style={{
+              borderColor: reflected ? `${T.cta}80` : `${T.cta}3D`,
+              background: reflected ? `${T.cta}24` : `${T.cta}0F`,
+              color: T.cta,
+              boxShadow: reflected ? `0 0 18px -6px ${T.cta}` : "none",
+            }}
+          >
+            <MessageSquareQuote size={16} strokeWidth={2} />
+          </button>
+          {/* «اليوم» only invites it in the evening window, which is the
+              right default and the wrong only door — the three can be
+              chosen at any hour, and a prep already written has to be
+              re-readable. Lit once tomorrow has its three. */}
+          <button
+            onClick={onOpenTomorrow}
+            title="جهّز غدك"
+            aria-label="جهّز غدك"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+            style={{
+              borderColor: prepped ? `${T.violet}80` : `${T.violet}3D`,
+              background: prepped ? `${T.violet}24` : `${T.violet}0F`,
+              color: T.violet,
+              boxShadow: prepped ? `0 0 18px -6px ${T.violet}` : "none",
+            }}
+          >
+            <Sunrise size={16} strokeWidth={2} />
+          </button>
+          {/* Open for as long as today is today. A day missed because the
+              app was never opened is the one failure the app itself caused,
+              and it has to be answerable. */}
+          <button
+            onClick={onOpenFix}
+            title="عدّل أمس"
+            aria-label="عدّل أمس"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+            style={{
+              borderColor: `${T.violet}3D`,
+              background: `${T.violet}0F`,
+              color: T.violet,
+            }}
+          >
+            <History size={16} strokeWidth={2} />
+          </button>
+          <button
+            onClick={onOpenMirror}
+            title="مرآة المحاسبة"
+            aria-label="مرآة المحاسبة"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
+            style={{
+              borderColor: mirror ? `${T.danger}80` : `${T.danger}3D`,
+              background: mirror ? `${T.danger}24` : `${T.danger}0F`,
+              color: T.danger,
+              boxShadow: mirror ? `0 0 18px -6px ${T.danger}` : "none",
+            }}
+          >
+            <ScanFace size={16} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+      <ProgressRing value={discipline} size={176} />
+    </Card>
+  );
+}
+
+/* شبكة الكتل الست المرتبطة بالصلاة وعاداتها. الترتيب بين الكتل الست نفسها
+   يأتي من GROUPS (أي BLOCK_IDS) ولا يُلمَس من هنا؛ هذا القسم بكامله هو ما
+   يتحرك كوحدة واحدة في routineBlocks. */
+function RoutineHabitsBlock({
+  habits,
+  books,
+  archive,
+  dragging,
+  overGroup,
+  onDragStart,
+  onDragEnd,
+  onDragOverGroup,
+  onDragLeaveGroup,
+  onDropGroup,
+  onReorder,
+  onNudge,
+  onToggleCore,
+  onToggle,
+  onToggleTiny,
+  onEdit,
+  onDelete,
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {GROUPS.map((g) => {
+        const list = habits.filter((h) => h.group === g.id);
+        const gDone = list.filter((h) => h.done).length;
+        const Icon = g.icon;
+        return (
+          <Card
+            key={g.id}
+            className="p-5 transition-all duration-200"
+            style={
+              overGroup === g.id
+                ? { borderColor: `${T.cta}80`, boxShadow: `0 0 0 1px ${T.cta}4D, ${GLASS.boxShadow}` }
+                : undefined
+            }
+            onDragOver={(e) => {
+              if (!dragging) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              onDragOverGroup(g.id);
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget)) return;
+              onDragLeaveGroup();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              onDragLeaveGroup();
+              const id = e.dataTransfer.getData("text/plain");
+              if (id) onDropGroup(id, g.id);
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className="flex h-10 w-10 items-center justify-center rounded-xl border"
+                style={{
+                  borderColor: `${g.tint}33`,
+                  background: `${g.tint}14`,
+                  color: g.tint,
+                }}
+              >
+                <Icon size={18} strokeWidth={1.9} />
+              </span>
+              <h3 className="text-[15px] font-bold">{g.label}</h3>
+              <span className="mr-auto text-[11px] tabular-nums text-white/30">
+                {gDone}/{list.length}
+              </span>
+            </div>
+
+            <div
+              className="mt-3.5 h-1 w-full overflow-hidden rounded-full"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: list.length ? `${(gDone / list.length) * 100}%` : "0%",
+                  backgroundImage:
+                    gDone === list.length && list.length
+                      ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
+                      : `linear-gradient(90deg, ${g.tint}, ${g.tint}AA)`,
+                  boxShadow: `0 0 12px ${
+                    gDone === list.length && list.length ? T.primary : g.tint
+                  }99`,
+                }}
+              />
+            </div>
+
+            <div className="mt-2 space-y-0.5">
+              {list.length === 0 ? (
+                <p className="py-3 text-center text-[11px] text-white/25">
+                  {dragging
+                    ? "أفلت هنا لنقل العادة إلى هذه الفترة"
+                    : "لا عادات في هذه الفترة بعد"}
+                </p>
+              ) : (
+                list.map((h, idx) => (
+                  <HabitRow
+                    key={h.id}
+                    habit={h}
+                    linkedBook={bookForHabit(h, books)}
+                    streak={habitStreak(archive, h.id)}
+                    first={idx === 0}
+                    last={idx === list.length - 1}
+                    dragging={dragging}
+                    onDragStart={() => onDragStart(h.id)}
+                    onDragEnd={onDragEnd}
+                    onDrop={(dragId) => onReorder(dragId, h.id)}
+                    onNudge={(dir) => onNudge(h.id, dir)}
+                    onToggleCore={() => onToggleCore(h.id)}
+                    onToggle={() => onToggle(h.id)}
+                    onToggleTiny={() => onToggleTiny(h.id)}
+                    onEdit={() => onEdit(h)}
+                    onDelete={() => onDelete(h.id)}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 
 
 function HabitRow({

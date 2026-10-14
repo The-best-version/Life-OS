@@ -1,6 +1,7 @@
 import { T } from "../components/life-shared.jsx";
+import { sidebarNav } from "../life-config.js";
 import { GROUP_OF_TAB, MORE_IDS, NAV_GROUPS, NAV_IDS, TAB_BAR, navSplit, orderNavIds, rows } from "../state/life-state.mjs";
-import { BarChart3, Bot, CalendarDays, ChevronDown, ChevronUp, Compass, Flag, GraduationCap, GripVertical, LayoutGrid, Library, ListChecks, Menu, Network, Settings, ShieldOff, Timer, Wallet } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Menu, Settings } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 /* ==================================================================== *
@@ -26,49 +27,46 @@ import React, { useEffect, useState } from "react";
 
 /* --- what the tabs are -------------------------------------------- *
  *  Declared before anything that reads them: `NAV` is built at module
- *  load out of `NAV_META`, so an order that puts the table after the list
+ *  load out of `sidebarNav`, so an order that puts the table after the list
  *  it fills is not a style question — it is a blank page. */
 /* --- navigation ------------------------------------------------------ *
  *  Which tabs exist, and in what order, is `NAV_IDS` in life-state.mjs —
  *  the migration needs that list and cannot import a lucide component. The
- *  label and the icon are here, keyed by the same ids, and the array is built
- *  from the canonical order: a tab added there with no entry here renders
- *  nameless, which is a bug you see on the first open rather than one that
- *  hides in a saved payload.
- * --------------------------------------------------------------------- */
-const NAV_META = {
-  today: { label: "اليوم", short: "اليوم", icon: Compass },
-  routine: { label: "الروتين اليومي", short: "الروتين", icon: ListChecks },
-  agenda: { label: "التقويم", short: "التقويم", icon: CalendarDays },
-  uni: { label: "الجامعة", short: "الجامعة", icon: GraduationCap },
-  matrix: { label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid },
-  deep: { label: "العمل العميق", short: "التركيز", icon: Timer },
-  goals: { label: "أهدافي على ثلاث سنوات", short: "الأهداف", icon: Flag },
-  finance: { label: "الدخل والمشاريع", short: "الدخل", icon: Wallet },
-  vault: { label: "مكتبة الإنجازات", short: "المكتبة", icon: Library },
-  analytics: { label: "التتبع الشهري", short: "التتبع", icon: BarChart3 },
-  breaker: { label: "كاسر العادات", short: "الكسر", icon: ShieldOff },
-  bot: { label: "بوت تيليجرام", short: "البوت", icon: Bot },
-  graph: { label: "خريطة المعرفة", short: "الخريطة", icon: Network },
-};
+ *  label, the icon and the developer's own show/hide switch are
+ *  `sidebarNav` in life-config.js, keyed by the same ids: a tab added to
+ *  `NAV_IDS` with no row there renders nameless, which is a bug you see on
+ *  the first open rather than one that hides in a saved payload.
+ *  `visible: false` there drops a tab from every menu here without ever
+ *  touching `NAV_IDS` or the user's own saved order (`state.navOrder`) —
+ *  those two stay exactly what they always were. */
+const NAV_META = new Map(sidebarNav.map((n) => [n.id, n]));
 
-export const NAV = NAV_IDS.map((id) => ({ id, ...NAV_META[id] }));
+export const NAV = NAV_IDS.filter((id) => NAV_META.get(id)?.visible !== false).map((id) => ({
+  id,
+  ...NAV_META.get(id),
+}));
 
 const NAV_BY_ID = new Map(NAV.map((n) => [n.id, n]));
 
 /* The saved order, resolved to tabs. `orderNavIds` does the hard part —
    dropping an id this build no longer has, appending a tab the saved order
    has never seen, taking a duplicate once — and this only puts the label and
-   the icon back on. */
-const orderedNav = (order) => orderNavIds(order).map((id) => NAV_BY_ID.get(id));
+   the icon back on. A tab hidden in `sidebarNav` is absent from `NAV_BY_ID`
+   and is filtered out here rather than inside `orderNavIds`: the cap and
+   order arithmetic in the state layer stays unaware of developer-only
+   visibility, exactly as it stays unaware of icons. */
+const orderedNav = (order) =>
+  orderNavIds(order)
+    .map((id) => NAV_BY_ID.get(id))
+    .filter(Boolean);
 
 /* His order cut in two, with the labels and the icons put back on each side:
    the tabs that take a row, and the tabs that answer only from «المزيد». */
 export const splitNav = (order, more) => {
   const { main, behind } = navSplit(order, more);
   return {
-    main: main.map((id) => NAV_BY_ID.get(id)),
-    behind: behind.map((id) => NAV_BY_ID.get(id)),
+    main: main.map((id) => NAV_BY_ID.get(id)).filter(Boolean),
+    behind: behind.map((id) => NAV_BY_ID.get(id)).filter(Boolean),
   };
 };
 

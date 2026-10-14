@@ -1,5 +1,6 @@
 import { ReadLogModal, TopThree, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
+import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
+import { todayBlocks } from "../life-config.js";
 import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, scoredOf, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
 import { AlarmClock, ArrowLeft, CalendarClock, CalendarDays, ClipboardList, Droplets, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, School, Star, Sunrise, X, Zap } from "lucide-react";
@@ -164,43 +165,14 @@ export function TodayModule({
   }, [state.tomorrow, state.tasks, state.events, tomorrowOn]);
 
   /* ==================================================================== *
-   * ★ ترتيب صفحة «اليوم» — عدّله من هنا ★
-   *
-   * كل سطر أدناه بطاقة واحدة. لتحريك بطاقة للأعلى أو للأسفل انقل
-   * سطرها، ولإخفائها احذفه أو علّق عليه — لا شيء آخر يحتاج تعديلًا،
-   * لأن أيًا من هذه المكوّنات لا يعرف من فوقه ولا من تحته.
-   *
-   * الترتيب الحالي، من أعلى لأسفل:
-   *   1) ComebackCard           — عند الرجوع بعد انقطاع فقط
-   *   2) DayHeaderCard          — التاريخ والبلوك وحلقة الانضباط
-   *   3) ReadingCue             — عبارة اليوم
-   *   4) PrayerCard + WaterCard — مصفوفة عمودين
-   *   5) TopThree               — مهام اليوم الثلاث
-   *   6) RemainingHabitsCard    — العادات المتبقية
-   *   7) TomorrowPrepCard       — في نافذة المساء وحدها
-   *   8) LecturesCard + NearestDueCard — مصفوفة عمودين
-   *
-   * تعريفات المكوّنات نفسها أسفل هذا الملف، وكلّها مُصدَّرة: يمكنك
-   * نقل أيٍّ منها إلى شاشة أخرى باستيرادها هناك.
-   *
-   * space-y-6 هي المسافة بين البطاقات — غيّر الرقم وحده لتوسيعها.
+   * ترتيب صفحة «اليوم» يُضبط الآن من src/life-config.js (مصفوفة
+   * todayBlocks) — افتح ذلك الملف لتحريك بطاقة أو إخفائها، لا هذا الملف.
+   * السجل (registry) أدناه يربط كل مفتاح في تلك المصفوفة ببطاقته فقط —
+   * لا ترتيب فيه. ConfigBlockBoundary يحمي الشاشة إن كان مفتاح مكتوبًا
+   * خطأ أو بطاقة انكسرت: تختفي تلك البطاقة وحدها لا الشاشة كلها.
    * ==================================================================== */
-  return (
-    <div className="space-y-6">
-      {/* الرجوع بعد انقطاع. يسبق كل شيء لأنه يحلّ محلّ أول جملة يقولها
-          التطبيق لمن غاب أسبوعًا. */}
-      {comeback > 0 && (
-        <ComebackCard
-          state={state}
-          setState={setState}
-          days={comeback}
-          onTick={tick}
-          onTickTiny={(id) => tick(id, true)}
-          onClose={onCloseComeback}
-        />
-      )}
-
-      {/* التاريخ والبلوك المفتوح والصلاة القادمة وحلقة الانضباط. */}
+  const blockRegistry = {
+    dayHeader: (
       <DayHeaderCard
         dateLabel={dateLabel}
         block={g}
@@ -212,16 +184,11 @@ export function TodayModule({
         discipline={discipline}
         onOpenSettings={onOpenSettings}
       />
-
-      {/* عبارة من الكتب — أعلى الصفحة مباشرة تحت شريط التاريخ، فتكون أول
-          ما تقع عليه العين. انقل هذا السطر فوق DayHeaderCard ليصير أول
-          شيء على الإطلاق. */}
-      <ReadingCue list={state.reads} />
-
-      {/* أوقات الصلاة وشرب الماء — جنبًا إلى جنب لأنهما يجيبان السؤال
-          نفسه — «أين أنا من يومي الآن؟» — من جهتين. items-stretch تشدّ
-          البطاقتين لارتفاع واحد. أخرج أيّ سطر منهما من هذا الـ div ليصير
-          بعرض الصفحة كاملًا. */}
+    ),
+    readingCue: <ReadingCue list={state.reads} />,
+    /* بطاقتان جنبًا إلى جنب: أوقات الصلاة وشرب الماء يجيبان السؤال نفسه
+       من جهتين. لتفكيك الزوج عدّل هذا الـ div مباشرة. */
+    prayerWaterGrid: (
       <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
         <PrayerCard place={state.place} onOpenSettings={onOpenSettings} />
         <WaterCard
@@ -235,12 +202,9 @@ export function TodayModule({
           }
         />
       </div>
-
-      {/* المهام الثلاث — نفس المكوّن المشترك لا نسخة منه، وهذه الشاشة
-          هي المكان الوحيد الذي تُعرض فيه. فوق العادات لأن الثلاث هي ما
-          يُحاسَب عليه اليوم، والعادات تجري تحتها. */}
-      <TopThree state={state} setState={setState} />
-
+    ),
+    tasksModule: <TopThree state={state} setState={setState} />,
+    remainingHabits: (
       <RemainingHabitsCard
         block={g}
         open={open}
@@ -251,30 +215,42 @@ export function TodayModule({
         onTick={tick}
         onGo={onGo}
       />
+    ),
+    /* يظهر في نافذة المساء وحدها، حتى لو visible:true في الإعدادات —
+       الإعدادات تعطّله بالكامل فقط، لا تفرض ظهوره خارج نافذته. */
+    tomorrowPrep: evening ? (
+      <TomorrowPrepCard prepared={prepared} on={tomorrowOn} onOpen={onOpenTomorrow} />
+    ) : null,
+    lecturesAndDeadlines: (
+      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+        <LecturesCard dow={dow} sections={sections} ahead={ahead} mins={mins} onGo={onGo} />
+        <NearestDueCard items={nearest} onGo={onGo} />
+      </div>
+    ),
+  };
 
-      {/* يظهر في نافذة المساء وحدها. */}
-      {evening && (
-        <TomorrowPrepCard
-          prepared={prepared}
-          on={tomorrowOn}
-          onOpen={onOpenTomorrow}
+  return (
+    <div className="space-y-6">
+      {/* الرجوع بعد انقطاع. يسبق كل شيء ولا يُضبط من الإعدادات لأنه يحلّ
+          محلّ أول جملة يقولها التطبيق لمن غاب أسبوعًا. */}
+      {comeback > 0 && (
+        <ComebackCard
+          state={state}
+          setState={setState}
+          days={comeback}
+          onTick={tick}
+          onTickTiny={(id) => tick(id, true)}
+          onClose={onCloseComeback}
         />
       )}
 
-      {/* بطاقتان جنبًا إلى جنب على الشاشات العريضة. أخرج أيّ سطر منهما من
-          هذا الـ div ليصير بعرض الصفحة كاملًا. */}
-      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-        <LecturesCard
-          dow={dow}
-          sections={sections}
-          ahead={ahead}
-          mins={mins}
-          onGo={onGo}
-        />
-        <NearestDueCard items={nearest} onGo={onGo} />
-      </div>
+      {todayBlocks
+        .filter((b) => b.visible !== false)
+        .map((b) => (
+          <ConfigBlockBoundary key={b.key}>{blockRegistry[b.key] ?? null}</ConfigBlockBoundary>
+        ))}
 
-      {/* نافذة تسجيل القراءة — ليست بطاقة، لا تنقلها بين الكتل. */}
+      {/* نافذة تسجيل القراءة — ليست بطاقة، لا تُضبط من الإعدادات. */}
       <ReadLogModal
         open={!!logging}
         book={logging ? bookForHabit(logging, state.books) : null}
