@@ -119,13 +119,11 @@ export const NAV_IDS = [
  *  groups are the answer to that and nothing more: a heading and a gap, so
  *  the eye lands on a third of the list instead of all of it.
  *
- *  They are a *view*, not a second ordering. Which tabs take a row and in
- *  what sequence is his — `navOrder` and `navMore` — and that does not stop
- *  being true because the column grew headings: a group lists whichever of
- *  its tabs are out front, in the order he put them, and a tab he pushed
- *  behind «المزيد» answers from there as it always has. So the two never
- *  disagree, and the arrange mode stays one flat list, which is the only
- *  shape in which "move this above that" means anything.
+ *  They are a *view*, not a second ordering. Which tabs exist, their order,
+ *  and whether they show at all now live in one place — `sidebarNav` in
+ *  src/life-config.js — and a group here just lists whichever of its own
+ *  ids that array still shows, in the order that array puts them. There is
+ *  no second order to disagree with it any more.
  *
  *  A tab with no group would silently vanish from the sidebar, so a test
  *  holds these ids against `NAV_IDS`.
@@ -147,69 +145,6 @@ export const GROUP_OF_TAB = new Map(
  * ---------------------------------------------------------------------- */
 export const TAB_BAR = 4;
 
-/* --- the tabs that live behind «المزيد» -------------------------------- *
- *  A tab here still exists, still has a screen and is still reachable — it
- *  simply does not take a row in the main navigation. This is the user's
- *  call and not the app's, exactly like the order is: he pushes a tab back
- *  and pulls it out again from the same editor, and the list is saved with
- *  everything else. `MORE_IDS` is only where that list *starts* — the
- *  knowledge map, which is read occasionally and never on the way through a
- *  day, and which as the fifteenth row was sitting among daily drivers.
- *
- *  A pushed-back tab keeps its place in `navOrder`. That is the whole reason
- *  the two are separate lists: pull it out again and it returns where he put
- *  it rather than at the end, which is where a single list would have left
- *  it after a round trip.
- * ---------------------------------------------------------------------- */
-export const MORE_IDS = ["graph"];
-
-/* The saved order, resolved to ids. An id this build no longer has is
-   dropped, a tab the saved order has never seen joins the end, and a
-   duplicate is taken once — without that last part a hand-edited backup
-   could hide a tab outright. Ids rather than tab objects: the definition of
-   a tab is not this module's business, only which ones there are and in what
-   order the user put them. Every tab is here, the ones behind «المزيد»
-   included; splitting them is `navSplit`'s job and not this one's. */
-export function orderNavIds(order) {
-  const known = new Set(NAV_IDS);
-  const seen = new Set();
-  const out = [];
-  for (const id of Array.isArray(order) ? order : []) {
-    if (known.has(id) && !seen.has(id)) {
-      seen.add(id);
-      out.push(id);
-    }
-  }
-  for (const id of NAV_IDS) if (!seen.has(id)) out.push(id);
-  return out;
-}
-
-/* His order, cut in two: the tabs that take a row in the navigation, and the
-   tabs that only answer from «المزيد». Both come back in the order he set,
-   because `navOrder` holds every tab and this only decides which side of the
-   line each one falls.
-
-   The floor is the point of doing it here. A saved payload — hand-edited, or
-   written by a build where one more tab existed — could push every tab
-   behind the menu and leave a phone with an empty bar and a desktop with an
-   empty sidebar. So tabs are released from the top of his own order until
-   `TAB_BAR` of them are out front, whatever the saved list says. A missing
-   list means the default; an empty one means he pulled them all back out,
-   which is his to do and is not the same thing. */
-export function navSplit(order, more) {
-  const all = orderNavIds(order);
-  const hidden = new Set(
-    (Array.isArray(more) ? more : MORE_IDS).filter((id) => all.includes(id)),
-  );
-  for (const id of all) {
-    if (all.length - hidden.size >= TAB_BAR) break;
-    hidden.delete(id);
-  }
-  return {
-    main: all.filter((id) => !hidden.has(id)),
-    behind: all.filter((id) => hidden.has(id)),
-  };
-}
 
 /* --- daily cue -------------------------------------------------------- */
 export const QUOTES = [
@@ -341,13 +276,6 @@ export const freshState = (carry = {}) => ({
      nothing in either of them belongs to "today" in the first place. */
   events: carry.events || [],
   uni: carry.uni || SEED_UNI(),
-  /* Entirely date-derived inside, so it carries across a rollover whole —
-     the two daily checklists empty themselves by reading today's log row. */
-  navOrder: orderNavIds(carry.navOrder),
-  /* Which of them answer only from «المزيد». Normalised through the same
-     split the screens read, so the floor holds here too and a carried list
-     cannot arrive with the bar emptied. */
-  navMore: navSplit(carry.navOrder, carry.navMore).behind,
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -609,14 +537,6 @@ export function migrate(saved) {
      instead of counted as an unknown cause. */
   const badHabits = rows(saved.badHabits).map(badHabitShape);
 
-  /* Schema 13 lets the user order the tabs. Stored as ids and normalised on
-     the way in, so a payload from a build with different tabs still resolves
-     to a complete, duplicate-free order.
-
-     Schema 21 keeps every tab in this order and adds a second list beside
-     it. Nothing moves here. */
-  let navOrder = orderNavIds(saved.navOrder);
-
   /* Schema 17 adds the calendar and the university desk. An older payload
      has neither and starts them empty; one written by a newer build is run
      back through the shapes, so a row that lost a field to a hand-edited
@@ -631,49 +551,12 @@ export function migrate(saved) {
   const events = rows(saved.events).map(eventShape);
   const uni = saved.uni ? uniShape(saved.uni) : SEED_UNI();
 
-  /* Both are daily screens for a student, so they are placed by hand right
-     after the routine instead of being
-     appended to the end, where a phone buries a tab behind «المزيد». A tab
-     the user has already positioned himself is left exactly where he put
-     it, and becomes the anchor for the next one. */
-  if (from < 17) {
-    let anchor = "routine";
-    for (const id of ["agenda", "uni"]) {
-      if ((saved.navOrder || []).includes(id)) {
-        anchor = id;
-        continue;
-      }
-      const rest = navOrder.filter((x) => x !== id);
-      const at = rest.indexOf(anchor);
-      navOrder =
-        at < 0
-          ? [id, ...rest]
-          : [...rest.slice(0, at + 1), id, ...rest.slice(at + 1)];
-      anchor = id;
-    }
-  }
-
-  /* Schema 22 adds «اليوم», and it is placed at the front by hand rather
-     than appended by `orderNavIds` — the whole point of the screen is that
-     it is the one the app opens on, and a tab appended to the end of a
-     fifteen-tab order opens behind «المزيد» on a phone, which is the
-     opposite. Same reasoning as «مسار التوظيف» in schema 14 and the two
-     tabs in schema 17, and the same guard: a user who has already put it
-     somewhere himself keeps where he put it. */
-  if (from < 22 && !(saved.navOrder || []).includes("today")) {
-    navOrder = ["today", ...navOrder.filter((id) => id !== "today")];
-  }
-
-  /* Schema 21 lets a tab answer from «المزيد» instead of taking a row. A
-     payload from before it has no list, and `navSplit` hands back the
-     default — the knowledge map, which is where this started. A payload that
-     has one keeps it, empty included: an empty list is him having pulled
-     every tab back out, which is a choice and not a missing key.
-
-     `navOrder` is not touched by any of it. A tab behind the menu keeps its
-     place in the order, so pulling it out again puts it back where he had
-     it rather than at the end of the list. */
-  const navMore = navSplit(navOrder, saved.navMore).behind;
+  /* Schema 13 through 22 used to migrate a user-ordered tab list here —
+     navOrder/navMore, placed by hand per schema as new tabs arrived. That
+     whole mechanism moved to a single static array (sidebarNav in
+     src/life-config.js) which already lists every tab in its final order,
+     so an older payload's navOrder/navMore fields are simply never read
+     any more — nothing left here to migrate. */
 
   /* The archive row the whole app writes to. A hole here is the one that
      reaches the render rather than a shape, so it is cleaned here too — and
@@ -704,7 +587,7 @@ export function migrate(saved) {
    *  screen asks. */
   const streakBase = from < 25 ? streakBaseFrom(history) : saved.streakBase;
 
-  const { career: _career, pipeline: _pipeline, prompts: _prompts, reviews: _reviews, ...carried } = saved;
+  const { career: _career, pipeline: _pipeline, prompts: _prompts, reviews: _reviews, navOrder: _navOrder, navMore: _navMore, ...carried } = saved;
   return {
     ...carried,
     schema: SCHEMA,
@@ -718,8 +601,6 @@ export function migrate(saved) {
     badHabits,
     events,
     uni,
-    navOrder,
-    navMore,
     history,
     /* Schema 29 gives a focus round a shape. Every row written before it
        carried a day and a length and nothing else, so `sessionShape` fills
@@ -809,8 +690,6 @@ export const carryOf = (s) => ({
   badHabits: s.badHabits,
   events: s.events,
   uni: s.uni,
-  navOrder: s.navOrder,
-  navMore: s.navMore,
   quotes: s.quotes,
   reads: s.reads,
   reading: s.reading,

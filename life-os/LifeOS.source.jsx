@@ -7,7 +7,7 @@ import { AnalyticsModule, DayRollCall } from "./features/life-analytics.jsx";
 import { RoutineModule, SaveStamp, MirrorModal, EditYesterdayModal } from "./features/life-routine.jsx";
 import { TodayModule } from "./features/life-today.jsx";
 import { MatrixModule, TomorrowModal } from "./features/life-matrix.jsx";
-import { NavGroups, NavMore, NavOrderEditor, BottomTabs, NowStamp, splitNav, NAV } from "./layouts/life-nav.jsx";
+import { NavGroups, BottomTabs, NowStamp, NAV } from "./layouts/life-nav.jsx";
 import { SettingsModal } from "./features/life-settings.jsx";
 import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./components/life-shared.jsx";
 import { uniKindOf, uniDue, UniModule } from "./features/life-uni.jsx";
@@ -35,7 +35,6 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Check,
   Star,
   Flame,
   Quote,
@@ -47,7 +46,6 @@ import {
   Zap,
   Trash,
   Sunrise,
-  GripVertical,
   RotateCcw,
   TrendingUp,
   ImagePlus,
@@ -71,8 +69,6 @@ import {
   Copy,
   CheckCheck,
   ArrowLeft,
-  ChevronUp,
-  ChevronDown,
   MessageSquareQuote,
   ShieldOff,
   ShieldCheck,
@@ -192,13 +188,8 @@ import {
   logicalNow,
   migrate,
   moodOf,
-  MORE_IDS,
   NAV_IDS,
-  navSplit,
-  NAV_GROUPS,
-  GROUP_OF_TAB,
   obj,
-  orderNavIds,
   parentHorizon,
   PILLARS,
   PLACE_BY_ID,
@@ -299,11 +290,12 @@ import {
  *  لا شيء آخر في التطبيق يعرف الجواب، فتغييرٌ هنا يكفي وحده.
  *
  *  ── الأسماء والترتيب والإخفاء ليست هنا ──
- *  لأنها ثلاثة أسئلة مختلفة، ولكلٍّ مكانه:
- *    • أسماء التبويبات وأيقوناتها → NAV_META في layouts/life-nav.jsx
- *    • التبويبات الموجودة أصلًا   → NAV_IDS في state/life-state.mjs
- *    • ترتيبها وأيّها خلف «المزيد» → يملكها المستخدم من داخل التطبيق
- *      (navOrder / navMore)، فلا تُبرمج هنا بحال.
+ *  لأنها سؤال واحد الآن، وجوابه في مكان واحد:
+ *    • أيّ تبويب موجود، واسمه، وأيقونته، وترتيبه، وهل هو مخفي →
+ *      sidebarNav في src/life-config.js — ترتيب الأسطر هناك هو ترتيب
+ *      القائمة الجانبية وشريط الجوال، فورًا وبلا تعارض مع أي تخزين قديم.
+ *    • التبويبات الموجودة أصلًا (البنية التي لا تُحذف) → NAV_IDS في
+ *      state/life-state.mjs، وهي ما يربط كل شاشة بـ SCREENS تحت.
  *
  *  ── كيف تنقل ميزة من صفحة إلى صفحة ──
  *  كل قيمة هنا دالّة تُعيد JSX، فالصفحة تجميعٌ لمكوّنات لا كتلة واحدة.
@@ -318,8 +310,8 @@ import {
  *
  *  ── كيف تضيف تبويبًا جديدًا ──
  *  ثلاثة أسطر، وكلّها يحميها اختبار:
- *    ١. الـ id في NAV_IDS           (state/life-state.mjs)
- *    ٢. الاسم والأيقونة في NAV_META (layouts/life-nav.jsx)
+ *    ١. الـ id في NAV_IDS                 (state/life-state.mjs)
+ *    ٢. الاسم والأيقونة في sidebarNav     (src/life-config.js)
  *    ٣. سطر هنا يربط الـ id بمكوّنه
  *  وتبويب بلا مجموعة في SIDEBAR_GROUPS يختفي من القائمة الجانبية —
  *  اختبار يمسك ذلك قبل أن تراه.
@@ -1026,7 +1018,6 @@ export default function LifeOS() {
   const myRevRef = useRef(0);
   if (myRevRef.current === 0) myRevRef.current = readRev();
   const [settings, setSettings] = useState(false);
-  const [editNav, setEditNav] = useState(false);
   const [reflect, setReflect] = useState(false);
   const [tomorrow, setTomorrow] = useState(false);
   /* How often the evening prompt has shown today and when it may show
@@ -1460,25 +1451,13 @@ export default function LifeOS() {
 
   const go = (id) => setTab(id);
 
-  /* Two lists out of one order: what the navigation shows, and what answers
-     only from «المزيد». Both are his to set, and `navSplit` holds the floor
-     so neither can be emptied past the width of the phone bar. */
-  const { main: navItems, behind: moreItems } = useMemo(
-    () => splitNav(state.navOrder, state.navMore),
-    [state.navOrder, state.navMore],
-  );
-  const setNavOrder = useCallback(
-    (ids) => setState((s) => ({ ...s, navOrder: ids })),
-    [],
-  );
-  const setNavMore = useCallback(
-    (ids) => setState((s) => ({ ...s, navMore: ids })),
-    [],
-  );
-  const resetNav = useCallback(
-    () => setState((s) => ({ ...s, navOrder: NAV_IDS, navMore: MORE_IDS })),
-    [],
-  );
+  /* Two lists cut out of one fixed array: `NAV` is already `sidebarNav`'s
+     own order, filtered to what is visible. `BottomTabs` takes the floor
+     (`TAB_BAR`) itself off the front of it, so the phone bar and the
+     sidebar both read the same literal order with nothing left to resolve
+     at runtime — no saved order, no user-pushed «المزيد» list. */
+  const navItems = NAV;
+  const moreItems = [];
 
   const active = NAV.find((n) => n.id === tab) || NAV[0];
 
@@ -1592,53 +1571,19 @@ export default function LifeOS() {
             )}
           </div>
 
-          {/* Collapsed to icons there is no room to drag or label a row, so
-              the toggle only exists while the labels do. */}
+          {/* Collapsed to icons there is no room for a label. */}
           {!collapsed && (
-            <div className="mb-2 flex items-center justify-between gap-2 px-1">
-              <p className="text-[10px] font-bold" style={{ color: T.faint }}>
-                {editNav ? "رتّب بالأسهم · «للمزيد» يُخفي" : "التنقّل"}
-              </p>
-              <button
-                onClick={() => setEditNav((v) => !v)}
-                aria-pressed={editNav}
-                className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors"
-                style={{
-                  borderColor: editNav ? `${T.primary}59` : T.border,
-                  color: editNav ? T.primary : T.faint,
-                  background: editNav ? `${T.primary}14` : "transparent",
-                }}
-              >
-                {editNav ? <Check size={11} strokeWidth={3} /> : <GripVertical size={11} />}
-                {editNav ? "تم" : "ترتيب"}
-              </button>
-            </div>
+            <p className="mb-2 px-1 text-[10px] font-bold" style={{ color: T.faint }}>
+              التنقّل
+            </p>
           )}
 
-          {editNav && !collapsed ? (
-            <NavOrderEditor
-              order={state.navOrder}
-              more={state.navMore}
-              onChange={setNavOrder}
-              onMore={setNavMore}
-              onReset={resetNav}
-            />
-          ) : (
-            /* Scrolls on its own, and only here. Three headings and four
-               gaps are taller than the flat list was, and on a short laptop
-               screen the bill for that used to be the day indicator and the
-               settings button pushed off the bottom edge. The groups scroll;
-               the wordmark above and the ring below stay put. */
-            <div className="los-scroll -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-              <NavGroups items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
-              <NavMore
-                items={moreItems}
-                tab={tab}
-                onGo={go}
-                showLabels={!collapsed}
-              />
-            </div>
-          )}
+          {/* Order, labels, icons and visibility all come from sidebarNav
+              in src/life-config.js now — there is nothing left here for the
+              user to rearrange, so the editor and its toggle are gone. */}
+          <div className="los-scroll -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+            <NavGroups items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
+          </div>
 
           <div className="mt-auto space-y-3">
             {/* --- the day, at the foot of the column ---------------------

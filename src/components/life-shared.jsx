@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useContext, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Bed, Undo2, RotateCcw, Quote } from "lucide-react";
+import { X, Check, Star, Minus, Plus, Sunrise, Sun, Sunset, Moon, MoonStar, Undo2, RotateCcw, Quote } from "lucide-react";
 import { uid, STREAK_TARGET, hhmm, GRADES, daysUntil, minsIn, BLOCK_IDS, daysBetween } from "../state/life-state.mjs";
 import { fixHour, prayerTimes, PRAYER_ROWS, clockAt } from "../utils/prayer-times.mjs";
-import { T, GLASS } from "../life-config.js";
+import { T, GLASS, routineBlocks } from "../life-config.js";
 
 /* --- tokens --------------------------------------------------------- *
  *  Both colour tokens now live in `src/life-config.js` — one file to open
@@ -783,20 +783,26 @@ export function TimeField({ value, onChange, id, ...rest }) {
 /* --- routine groups -------------------------------------------------- */
 /* The six blocks, drawn. `BLOCK_IDS` in life-state.mjs is the canonical
    order — the one the day runs in and the one `remainingIn` ranks «فاتك»
-   against — and this only fastens the label, the icon and the tint onto
-   each id, exactly like `NAV_META` does for the tabs. A block added there
-   with no entry here renders nameless, which is a bug you see on the first
-   open rather than one that hides in a saved payload. */
-export const BLOCK_META = {
-  morning: { label: "الصباح", icon: Sunrise, tint: "#FFB020" },
-  afternoon: { label: "بعد الظهر", icon: Sun, tint: "#FF7A45" },
-  asr: { label: "بعد العصر", icon: Sunset, tint: "#FF4D8D" },
-  maghrib: { label: "بعد المغرب", icon: Moon, tint: "#9D5CFF" },
-  postisha: { label: "بعد العشاء", icon: MoonStar, tint: "#00C2FF" },
-  night: { label: "قبل النوم", icon: Bed, tint: "#5B8CFF" },
-};
+   against, untouched by anything below. The label, the icon and the tint
+   for each id now live in `routineBlocks` (src/life-config.js) — the same
+   six rows that let the developer move or hide that block's card on the
+   routine screen — so this stays unconditional (it reads every block
+   regardless of `visible`): a block hidden *on that one screen* must not
+   also lose its name on «اليوم»'s header or its roll-call row elsewhere.
+   A block missing from `routineBlocks` entirely falls back to its bare id
+   and a generic icon/tint rather than crashing — life-config.js already
+   warns about that case in the console. */
+const ROUTINE_BLOCK_BY_ID = new Map(routineBlocks.map((b) => [b.key, b]));
 
-export const GROUPS = BLOCK_IDS.map((id) => ({ id, ...BLOCK_META[id] }));
+export const GROUPS = BLOCK_IDS.map((id) => {
+  const b = ROUTINE_BLOCK_BY_ID.get(id);
+  return {
+    id,
+    label: b?.label ?? id,
+    icon: b?.icon ?? Sunrise,
+    tint: b?.tint ?? "#9D5CFF",
+  };
+});
 
 export const GROUP_BY_ID = new Map(GROUPS.map((g) => [g.id, g]));
 

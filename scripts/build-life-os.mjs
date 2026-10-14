@@ -2,6 +2,7 @@
  * Builds LifeOS.jsx into the one self-contained page the shortcut opens.
  *
  *   node scripts/build-life-os.mjs
+ *   node scripts/build-life-os.mjs --watch   (rebuilds on every src/ change)
  *
  * Output: life-os/index.html, plus life-os/LifeOS.source.jsx — the source
  * copied beside the build so the two can never drift apart. Until this
@@ -112,27 +113,6 @@ const shipped = [
 const splitSrc = scanned.map((f) => join(srcDir, f));
 const site = join(root, "life-os");
 const modules = join(root, "iron-log", "node_modules");
-const work = mkdtempSync(join(tmpdir(), "life-os-build-"));
-
-/* The tests first, and the build stops if they fail. There is no CI here and
-   no second pair of eyes: this script is the only thing that runs between a
-   change and the page he opens, so it is the only place a failing test can
-   actually stop something. Skippable with --no-test for the rare case of
-   debugging the build itself. */
-if (!process.argv.includes("--no-test")) {
-  try {
-    execFileSync(process.execPath, ["--test", "tests/*.test.mjs"], {
-      cwd: root,
-      stdio: "inherit",
-    });
-  } catch {
-    console.error(
-      "\nBuild stopped: the tests failed. Fix them, or run with --no-test if you\n" +
-        "are debugging the build itself — but then nothing is checking the state.",
-    );
-    process.exit(1);
-  }
-}
 
 const esbuild = await import(pathToFileURL(join(modules, "esbuild", "lib", "main.js")).href);
 
@@ -160,71 +140,101 @@ const REACT_EXPORTS = [
   "forwardRef",
 ];
 
-try {
-  // 1. The shims React resolves to.
-  const shim = (name, body) => {
-    const file = join(work, name);
-    writeFileSync(file, body, "utf8");
-    return file;
-  };
-  const reactShim = shim(
-    "react-shim.js",
-    "const R = window.React;\nexport default R;\n" +
-      REACT_EXPORTS.map((n) => `export const ${n} = R.${n};`).join("\n") +
-      "\n",
-  );
-  const domShim = shim(
-    "react-dom-shim.js",
-    "const D = window.ReactDOM;\nexport default D;\n" +
-      ["createPortal", "flushSync", "render", "createRoot", "hydrateRoot"]
-        .map((n) => `export const ${n} = D.${n};`)
-        .join("\n") +
-      "\n",
-  );
-  const clientShim = shim(
-    "react-dom-client-shim.js",
-    "const D = window.ReactDOM;\nexport default D;\nexport const createRoot = D.createRoot;\nexport const hydrateRoot = D.hydrateRoot;\n",
-  );
+/* One build, start to finish — tests, bundle, CSS, the one HTML file. Called
+   once for a plain run, and again on every change under `--watch`, which is
+   why it owns its own temp dir instead of sharing one across calls: a watch
+   run that crashed mid-build must not leave the NEXT run writing into a
+   directory the previous `finally` already deleted out from under it. */
+async function runOnce() {
+  const work = mkdtempSync(join(tmpdir(), "life-os-build-"));
 
-  // 2. The bundle.
-  const built = await esbuild.build({
-    entryPoints: [src],
-    bundle: true,
-    write: false,
-    minify: true,
-    format: "iife",
-    target: "es2020",
-    jsx: "transform",
-    jsxFactory: "React.createElement",
-    jsxFragment: "React.Fragment",
-    loader: { ".jsx": "jsx" },
-    nodePaths: [modules], // lucide-react lives over in iron-log
-    alias: { react: reactShim, "react-dom": domShim, "react-dom/client": clientShim },
-    define: { "process.env.NODE_ENV": '"production"' },
-    legalComments: "none",
-  });
-  const js = built.outputFiles[0].text;
+  /* The tests first, and the build stops if they fail. There is no CI here
+     and no second pair of eyes: this script is the only thing that runs
+     between a change and the page he opens, so it is the only place a
+     failing test can actually stop something. Skippable with --no-test for
+     the rare case of debugging the build itself.
+       Under `--watch` a failing test must not kill the watcher — the next
+     save has to get its own chance — so this throws instead of exiting, and
+     only the top-level, non-watch call below turns that throw into exit 1. */
+  if (!process.argv.includes("--no-test")) {
+    try {
+      execFileSync(process.execPath, ["--test", "tests/*.test.mjs"], {
+        cwd: root,
+        stdio: "inherit",
+      });
+    } catch {
+      throw new Error(
+        "Build stopped: the tests failed. Fix them, or run with --no-test if you" +
+          " are debugging the build itself — but then nothing is checking the state.",
+      );
+    }
+  }
 
-  // 3. The exact CSS these class names need — scanned off every source
-  //    file, the split ones included, or a class used only in life-uni.jsx
-  //    comes out of the build silently absent and the university desk
-  //    renders unstyled with nothing in any log to say why.
-  for (const f of [src, ...splitSrc]) copyFileSync(f, join(work, basename(f)));
-  writeFileSync(
-    join(work, "tailwind.config.js"),
-    "module.exports = { content: ['./*.jsx'], theme: { extend: {} }, plugins: [] };\n",
-    "utf8",
-  );
-  writeFileSync(join(work, "in.css"), "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n", "utf8");
-  execFileSync(
-    process.execPath,
-    [join(modules, "tailwindcss", "lib", "cli.js"), "-c", "tailwind.config.js", "-i", "in.css", "-o", "out.css", "--minify"],
-    { cwd: work, stdio: "inherit" },
-  );
-  const css = readFileSync(join(work, "out.css"), "utf8").replace(/^﻿/, "");
+  try {
+    // 1. The shims React resolves to.
+    const shim = (name, body) => {
+      const file = join(work, name);
+      writeFileSync(file, body, "utf8");
+      return file;
+    };
+    const reactShim = shim(
+      "react-shim.js",
+      "const R = window.React;\nexport default R;\n" +
+        REACT_EXPORTS.map((n) => `export const ${n} = R.${n};`).join("\n") +
+        "\n",
+    );
+    const domShim = shim(
+      "react-dom-shim.js",
+      "const D = window.ReactDOM;\nexport default D;\n" +
+        ["createPortal", "flushSync", "render", "createRoot", "hydrateRoot"]
+          .map((n) => `export const ${n} = D.${n};`)
+          .join("\n") +
+        "\n",
+    );
+    const clientShim = shim(
+      "react-dom-client-shim.js",
+      "const D = window.ReactDOM;\nexport default D;\nexport const createRoot = D.createRoot;\nexport const hydrateRoot = D.hydrateRoot;\n",
+    );
 
-  // 4. One file.
-  const head = `<!doctype html>
+    // 2. The bundle.
+    const built = await esbuild.build({
+      entryPoints: [src],
+      bundle: true,
+      write: false,
+      minify: true,
+      format: "iife",
+      target: "es2020",
+      jsx: "transform",
+      jsxFactory: "React.createElement",
+      jsxFragment: "React.Fragment",
+      loader: { ".jsx": "jsx" },
+      nodePaths: [modules], // lucide-react lives over in iron-log
+      alias: { react: reactShim, "react-dom": domShim, "react-dom/client": clientShim },
+      define: { "process.env.NODE_ENV": '"production"' },
+      legalComments: "none",
+    });
+    const js = built.outputFiles[0].text;
+
+    // 3. The exact CSS these class names need — scanned off every source
+    //    file, the split ones included, or a class used only in life-uni.jsx
+    //    comes out of the build silently absent and the university desk
+    //    renders unstyled with nothing in any log to say why.
+    for (const f of [src, ...splitSrc]) copyFileSync(f, join(work, basename(f)));
+    writeFileSync(
+      join(work, "tailwind.config.js"),
+      "module.exports = { content: ['./*.jsx'], theme: { extend: {} }, plugins: [] };\n",
+      "utf8",
+    );
+    writeFileSync(join(work, "in.css"), "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n", "utf8");
+    execFileSync(
+      process.execPath,
+      [join(modules, "tailwindcss", "lib", "cli.js"), "-c", "tailwind.config.js", "-i", "in.css", "-o", "out.css", "--minify"],
+      { cwd: work, stdio: "inherit" },
+    );
+    const css = readFileSync(join(work, "out.css"), "utf8").replace(/^﻿/, "");
+
+    // 4. One file.
+    const head = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
@@ -241,7 +251,7 @@ try {
 <style>
 `;
 
-  const mid = `</style>
+    const mid = `</style>
 </head>
 <body>
 <div id="root"><div id="boot">2027 LIFE OS</div></div>
@@ -257,30 +267,81 @@ try {
 <script>
 `;
 
-  const tail = `</script>
+    const tail = `</script>
 </body>
 </html>
 `;
 
-  //    Joined, never String.replace: a bundle used as a replacement string
-  //    has its $& and $' read as substitution patterns and comes out quietly
-  //    corrupted.
-  mkdirSync(site, { recursive: true });
-  writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
-  copyFileSync(src, join(site, "LifeOS.source.jsx"));
-  /* The folders come with them: the published copy has to be a source that
-     actually builds, and LifeOS.source.jsx imports "./features/…". */
-  for (const f of shipped) {
-    const to = join(site, f);
-    mkdirSync(dirname(to), { recursive: true });
-    copyFileSync(join(srcDir, f), to);
-  }
+    //    Joined, never String.replace: a bundle used as a replacement string
+    //    has its $& and $' read as substitution patterns and comes out quietly
+    //    corrupted.
+    mkdirSync(site, { recursive: true });
+    writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
+    copyFileSync(src, join(site, "LifeOS.source.jsx"));
+    /* The folders come with them: the published copy has to be a source that
+       actually builds, and LifeOS.source.jsx imports "./features/…". */
+    for (const f of shipped) {
+      const to = join(site, f);
+      mkdirSync(dirname(to), { recursive: true });
+      copyFileSync(join(srcDir, f), to);
+    }
 
-  const kb = (n) => (n / 1024).toFixed(0) + " KB";
-  console.log(`\nlife-os/index.html          css ${kb(css.length)}   js ${kb(js.length)}`);
-  console.log("life-os/LifeOS.source.jsx   in step with LifeOS.jsx");
-} finally {
+    const kb = (n) => (n / 1024).toFixed(0) + " KB";
+    console.log(`\nlife-os/index.html          css ${kb(css.length)}   js ${kb(js.length)}`);
+    console.log("life-os/LifeOS.source.jsx   in step with LifeOS.jsx");
+  } finally {
+    try {
+      rmSync(work, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+/* --watch: rebuild on every change under src/, so editing src/life-config.js
+   (or anything else) in VS Code and hitting Ctrl+S is enough — no second
+   terminal command between a save and the page he reloads (he still reloads
+   the page himself; there is no live-reload socket here, only a build that
+   no longer needs typing). It still runs the full test suite on every
+   rebuild: a config file is still code, and the whole point of running the
+   tests first is that they are what stops a broken change — in watch mode
+   exactly as in a one-shot build.
+     `fs.watch` with `recursive: true` is a Windows-native capability (and
+   this app ships on Windows only), so no extra dependency and no polling.
+   Debounced, because saving a file is not always one write — some editors
+   write a temp file and rename it, which is two events a millisecond apart
+   for one save. A build that throws (a failing test, a bad import) is
+   caught and logged so the watcher keeps running for the next save, rather
+   than the whole process dying on the first red test. */
+async function watch() {
+  console.log(
+    "⏱  يراقب src/ للتغييرات — عدّل ملفًا واحفظه (Ctrl+S)، والبناء يُعاد تلقائيًا.\n   Ctrl+C للإيقاف.\n",
+  );
   try {
-    rmSync(work, { recursive: true, force: true });
-  } catch {}
+    await runOnce();
+  } catch (e) {
+    console.error("\n" + e.message);
+  }
+  const { watch: fsWatch } = await import("node:fs");
+  let timer = null;
+  fsWatch(srcDir, { recursive: true }, (_event, filename) => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      console.log(`\n[watch] ${filename ?? "ملف"} تغيّر — إعادة البناء...`);
+      try {
+        await runOnce();
+      } catch (e) {
+        console.error("\n" + e.message);
+      }
+    }, 250);
+  });
+}
+
+if (process.argv.includes("--watch")) {
+  await watch();
+} else {
+  try {
+    await runOnce();
+  } catch (e) {
+    console.error("\n" + e.message);
+    process.exit(1);
+  }
 }

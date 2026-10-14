@@ -24,11 +24,8 @@ import {
   CORE_CAP,
   TOP_TASK_CAP,
   DAY_START_HOUR,
-  MORE_IDS,
   TAB_BAR,
   NAV_IDS,
-  navSplit,
-  orderNavIds,
   dayKey,
   yesterdayKey,
   fmtDay,
@@ -483,85 +480,6 @@ test("yesterdayKey is the day before dayKey", () => {
 });
 
 /* ===================================================================== *
- *  the tabs
- * ===================================================================== */
-
-test("orderNavIds keeps the saved order, drops the unknown, appends the new", () => {
-  const saved = ["graph", "routine", "not-a-tab", "graph"];
-  const out = orderNavIds(saved);
-  assert.equal(out[0], "graph");
-  assert.equal(out[1], "routine");
-  assert.equal(out.length, NAV_IDS.length, "a tab was hidden or doubled");
-  assert.equal(new Set(out).size, out.length, "a tab appears twice");
-  for (const id of NAV_IDS) assert.ok(out.includes(id), id + " is unreachable");
-});
-
-test("orderNavIds survives junk", () => {
-  for (const junk of [null, undefined, 7, "routine", [null, 3]]) {
-    assert.deepEqual(orderNavIds(junk), NAV_IDS);
-  }
-});
-
-/* Which tabs answer only from «المزيد» is his, like the order is. The two
-   are separate lists on purpose: a pushed-back tab keeps its place, so
-   pulling it out again returns it there and not to the end. */
-test("navSplit sends the named tabs behind «المزيد» and keeps the rest in order", () => {
-  const order = ["routine", "graph", "agenda", "uni", "matrix"];
-  const { main, behind } = navSplit(order, ["graph"]);
-  assert.deepEqual(behind, ["graph"]);
-  assert.deepEqual(main.slice(0, 4), ["routine", "agenda", "uni", "matrix"]);
-  assert.equal(
-    main.length + behind.length,
-    NAV_IDS.length,
-    "a tab fell off both sides",
-  );
-  for (const id of NAV_IDS)
-    assert.ok(main.includes(id) || behind.includes(id), id + " is unreachable");
-});
-
-test("navSplit defaults to MORE_IDS, and an empty list is a choice", () => {
-  for (const missing of [null, undefined, 7, "graph"]) {
-    assert.deepEqual(navSplit(null, missing).behind, MORE_IDS);
-  }
-  assert.deepEqual(navSplit(null, []).behind, [], "he pulled them all back");
-});
-
-test("navSplit never leaves the phone bar short", () => {
-  /* Everything pushed back — a hand-edited payload, or a build with one tab
-     more. The bar must still have four, taken from the top of his order. */
-  const order = orderNavIds(null);
-  const { main, behind } = navSplit(order, order.slice());
-  assert.equal(main.length, TAB_BAR, "the bar came up short or over-filled");
-  assert.deepEqual(main, order.slice(0, TAB_BAR), "it did not take his first four");
-  assert.equal(main.length + behind.length, NAV_IDS.length);
-});
-
-test("navSplit ignores a tab this build no longer has", () => {
-  const { main, behind } = navSplit(null, ["graph", "not-a-tab"]);
-  assert.deepEqual(behind, ["graph"]);
-  assert.ok(!main.includes("not-a-tab"));
-});
-
-test("migrate hands a schema-20 payload the default «المزيد» list, untouched order", () => {
-  const order = ["routine", "graph", "agenda", "uni", "matrix"];
-  const out = migrate({ schema: 20, navOrder: order });
-  assert.deepEqual(out.navMore, MORE_IDS, "the map did not move behind المزيد");
-  /* «اليوم» is placed at the front by schema 22 — see its own test. Every
-     tab he had ordered keeps its place behind it. */
-  assert.deepEqual(
-    out.navOrder.slice(0, 6),
-    ["today", ...order],
-    "a tab lost its place in the order",
-  );
-  assert.equal(out.navOrder.length, NAV_IDS.length, "a tab left the order");
-});
-
-test("migrate keeps a list he has already set, empty included", () => {
-  assert.deepEqual(migrate({ schema: 21, navMore: ["vault"] }).navMore, ["vault"]);
-  assert.deepEqual(migrate({ schema: 21, navMore: [] }).navMore, []);
-});
-
-/* ===================================================================== *
  *  the shapes that everything else is built out of
  * ===================================================================== */
 
@@ -741,35 +659,6 @@ test("minsIn reads a clock and refuses a half-typed one", () => {
   assert.equal(minsIn(""), null);
   assert.equal(minsIn("8"), null);
   assert.equal(minsIn(undefined), null);
-});
-
-test("«اليوم» is the first tab, and migrate puts it at the front", () => {
-  assert.equal(NAV_IDS[0], "today");
-  /* Appended by `orderNavIds` it would land sixteenth, which on a phone is
-     behind «المزيد» — the opposite of a screen whose whole job is to be the
-     one the app opens on. */
-  const out = migrate({ schema: 21, navOrder: ["routine", "goals", "uni"] });
-  assert.equal(out.navOrder[0], "today");
-  assert.deepEqual(
-    out.navOrder.slice(1, 4),
-    ["routine", "goals", "uni"],
-    "placing the new tab reshuffled the order he set",
-  );
-  assert.equal(out.navOrder.length, NAV_IDS.length);
-  assert.ok(!out.navMore.includes("today"), "the landing screen must not hide");
-});
-
-test("migrate leaves «اليوم» where he has already put it", () => {
-  const order = ["routine", "today", "uni"];
-  const out = migrate({ schema: 21, navOrder: order });
-  assert.deepEqual(out.navOrder.slice(0, 3), order);
-});
-
-test("«اليوم» takes a row on the phone bar", () => {
-  /* It is the landing screen: if it can be pushed out of the four the bar
-     shows, the app opens on a screen with no way back to itself. */
-  const { main } = navSplit(null, null);
-  assert.ok(main.slice(0, TAB_BAR).includes("today"));
 });
 
 /* ===================================================================== *

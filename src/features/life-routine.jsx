@@ -1,7 +1,7 @@
 import { HorizonRow, clockLabel, horizonClock } from "./life-goals.jsx";
 import { ReadLogModal, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Field, GLASS, GROUPS, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
-import { routineBlocks } from "../life-config.js";
+import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Field, GLASS, GROUPS, GROUP_BY_ID, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
+import { cardTitles, routineBlocks } from "../life-config.js";
 import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, currentQuarter, goalShape, habitShape, habitStreak, historyIndex, isGap, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
 import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MessageSquareQuote, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -140,11 +140,12 @@ export function RoutineModule({
 
   /* ==================================================================== *
    * ترتيب أقسام شاشة «الروتين اليومي» يُضبط الآن من src/life-config.js
-   * (مصفوفة routineBlocks) — افتح ذلك الملف لتحريك قسم أو إخفاءه، لا هذا
-   * الملف. الكتل الست المرتبطة بالصلاة داخل habitGrid ترتيبها ثابت دائمًا
-   * (BLOCK_IDS في state/life-state-habits.mjs) حتى لو حرّكت هذا السطر —
-   * اليوم لا يجري بترتيبين. ConfigBlockBoundary يحمي الشاشة إن كان مفتاح
-   * مكتوبًا خطأ أو قسم انكسر: يختفي ذلك القسم وحده لا الشاشة كلها.
+   * (مصفوفة routineBlocks) — افتح ذلك الملف لتحريك قسم أو إخفاءه، أو لنقل
+   * إحدى الكتل الست المرتبطة بالصلاة قبل أو بعد أيّ قسم آخر بحرية كاملة.
+   * ترتيبها الزمني الفعلي (أيّ بلوك "مفتوح الآن") يبقى محكومًا بأوقات
+   * الصلاة الحقيقية ولا يتأثر بهذا الترتيب البصري — راجع التحذير أعلى
+   * routineBlocks في ذلك الملف. ConfigBlockBoundary يحمي الشاشة إن كان
+   * مفتاح مكتوبًا خطأ أو قسم انكسر: يختفي ذلك القسم وحده لا الشاشة كلها.
    * ==================================================================== */
   const blockRegistry = {
     cueImage: (
@@ -162,6 +163,7 @@ export function RoutineModule({
     ),
     scoreHeader: (
       <RoutineScoreBlock
+        title={cardTitles.routineTitle}
         dateLabel={dateLabel}
         savedAt={savedAt}
         diskAt={diskAt}
@@ -190,8 +192,19 @@ export function RoutineModule({
     /* العدّاد بجانب العادات لأن ما تحته هو ما يستهلك الأيام التي يعدّها —
        عدّاد في شاشة وحده رقم يُزار لا يُشعَر به. */
     goalsCountdown: <CountdownStrip state={state} onGo={onGoGoals} />,
-    habitGrid: (
-      <RoutineHabitsBlock
+  };
+
+  /* كل مفتاح آخر في routineBlocks (morning, afternoon, asr, maghrib,
+     postisha, night) هو بلوك صلاة — بطاقته الواحدة، لا الشبكة كلها، لأنها
+     أصبحت أسطرًا مستقلة يتحرك كل واحد منها بمفرده. مفتاح لا يطابق بلوكًا
+     حقيقيًا (خطأ مطبعي) يُترك بلا تسجيل، فتُعرضه ConfigBlockBoundary فراغًا
+     بصمت بدل أن يكسر الشاشة. */
+  for (const b of routineBlocks) {
+    if (b.key in blockRegistry) continue;
+    if (!GROUP_BY_ID.has(b.key)) continue;
+    blockRegistry[b.key] = (
+      <RoutineHabitBlockCard
+        blockId={b.key}
         habits={state.habits}
         books={state.books}
         archive={archive}
@@ -221,8 +234,8 @@ export function RoutineModule({
         }
         onDelete={remove}
       />
-    ),
-  };
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -462,6 +475,7 @@ function RoutineQuoteBlock({ quote, onShuffle, onManage }) {
    الوقفة المسائية وجهّز غدك وعدّل أمس ومرآة المحاسبة. أكبر الأقسام، ولا
    يحتفظ بأي حالة خاصة به — كل ما يحتاجه وصل في الخصائص. */
 function RoutineScoreBlock({
+  title,
   dateLabel,
   savedAt,
   diskAt,
@@ -489,7 +503,7 @@ function RoutineScoreBlock({
   return (
     <Card className="flex flex-col items-center gap-7 p-6 sm:p-7 lg:flex-row lg:justify-between">
       <div className="text-center lg:text-right">
-        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">الروتين اليومي</h2>
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">{title}</h2>
         <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
           <CalendarDays size={13} /> {dateLabel}
         </p>
@@ -656,10 +670,12 @@ function RoutineScoreBlock({
   );
 }
 
-/* شبكة الكتل الست المرتبطة بالصلاة وعاداتها. الترتيب بين الكتل الست نفسها
-   يأتي من GROUPS (أي BLOCK_IDS) ولا يُلمَس من هنا؛ هذا القسم بكامله هو ما
-   يتحرك كوحدة واحدة في routineBlocks. */
-function RoutineHabitsBlock({
+/* بطاقة بلوك صلاة واحد وعاداته. كل بلوك من الستة أصبح قسمًا مستقلًا تمامًا
+   في routineBlocks (src/life-config.js) — اسمه وأيقونته ولونه هناك، وهذا
+   المكوّن يرسم بطاقة واحدة فقط لما يُعطى من `blockId`، فيتحرك كل بلوك
+   بمفرده في ترتيب الشاشة. */
+function RoutineHabitBlockCard({
+  blockId,
   habits,
   books,
   archive,
@@ -678,110 +694,105 @@ function RoutineHabitsBlock({
   onEdit,
   onDelete,
 }) {
+  const g = groupOf(blockId);
+  const list = habits.filter((h) => h.group === g.id);
+  const gDone = list.filter((h) => h.done).length;
+  const Icon = g.icon;
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      {GROUPS.map((g) => {
-        const list = habits.filter((h) => h.group === g.id);
-        const gDone = list.filter((h) => h.done).length;
-        const Icon = g.icon;
-        return (
-          <Card
-            key={g.id}
-            className="p-5 transition-all duration-200"
-            style={
-              overGroup === g.id
-                ? { borderColor: `${T.cta}80`, boxShadow: `0 0 0 1px ${T.cta}4D, ${GLASS.boxShadow}` }
-                : undefined
-            }
-            onDragOver={(e) => {
-              if (!dragging) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-              onDragOverGroup(g.id);
-            }}
-            onDragLeave={(e) => {
-              if (e.currentTarget.contains(e.relatedTarget)) return;
-              onDragLeaveGroup();
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              onDragLeaveGroup();
-              const id = e.dataTransfer.getData("text/plain");
-              if (id) onDropGroup(id, g.id);
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-10 w-10 items-center justify-center rounded-xl border"
-                style={{
-                  borderColor: `${g.tint}33`,
-                  background: `${g.tint}14`,
-                  color: g.tint,
-                }}
-              >
-                <Icon size={18} strokeWidth={1.9} />
-              </span>
-              <h3 className="text-[15px] font-bold">{g.label}</h3>
-              <span className="mr-auto text-[11px] tabular-nums text-white/30">
-                {gDone}/{list.length}
-              </span>
-            </div>
+    <Card
+      className="p-5 transition-all duration-200"
+      style={
+        overGroup === g.id
+          ? { borderColor: `${T.cta}80`, boxShadow: `0 0 0 1px ${T.cta}4D, ${GLASS.boxShadow}` }
+          : undefined
+      }
+      onDragOver={(e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onDragOverGroup(g.id);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget)) return;
+        onDragLeaveGroup();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDragLeaveGroup();
+        const id = e.dataTransfer.getData("text/plain");
+        if (id) onDropGroup(id, g.id);
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-10 w-10 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: `${g.tint}33`,
+            background: `${g.tint}14`,
+            color: g.tint,
+          }}
+        >
+          <Icon size={18} strokeWidth={1.9} />
+        </span>
+        <h3 className="text-[15px] font-bold">{g.label}</h3>
+        <span className="mr-auto text-[11px] tabular-nums text-white/30">
+          {gDone}/{list.length}
+        </span>
+      </div>
 
-            <div
-              className="mt-3.5 h-1 w-full overflow-hidden rounded-full"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: list.length ? `${(gDone / list.length) * 100}%` : "0%",
-                  backgroundImage:
-                    gDone === list.length && list.length
-                      ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
-                      : `linear-gradient(90deg, ${g.tint}, ${g.tint}AA)`,
-                  boxShadow: `0 0 12px ${
-                    gDone === list.length && list.length ? T.primary : g.tint
-                  }99`,
-                }}
-              />
-            </div>
+      <div
+        className="mt-3.5 h-1 w-full overflow-hidden rounded-full"
+        style={{ background: "rgba(255,255,255,0.06)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: list.length ? `${(gDone / list.length) * 100}%` : "0%",
+            backgroundImage:
+              gDone === list.length && list.length
+                ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
+                : `linear-gradient(90deg, ${g.tint}, ${g.tint}AA)`,
+            boxShadow: `0 0 12px ${
+              gDone === list.length && list.length ? T.primary : g.tint
+            }99`,
+          }}
+        />
+      </div>
 
-            <div className="mt-2 space-y-0.5">
-              {list.length === 0 ? (
-                <p className="py-3 text-center text-[11px] text-white/25">
-                  {dragging
-                    ? "أفلت هنا لنقل العادة إلى هذه الفترة"
-                    : "لا عادات في هذه الفترة بعد"}
-                </p>
-              ) : (
-                list.map((h, idx) => (
-                  <HabitRow
-                    key={h.id}
-                    habit={h}
-                    linkedBook={bookForHabit(h, books)}
-                    streak={habitStreak(archive, h.id)}
-                    first={idx === 0}
-                    last={idx === list.length - 1}
-                    dragging={dragging}
-                    onDragStart={() => onDragStart(h.id)}
-                    onDragEnd={onDragEnd}
-                    onDrop={(dragId) => onReorder(dragId, h.id)}
-                    onNudge={(dir) => onNudge(h.id, dir)}
-                    onToggleCore={() => onToggleCore(h.id)}
-                    onToggle={() => onToggle(h.id)}
-                    onToggleTiny={() => onToggleTiny(h.id)}
-                    onEdit={() => onEdit(h)}
-                    onDelete={() => onDelete(h.id)}
-                  />
-                ))
-              )}
-            </div>
-          </Card>
-        );
-      })}
-    </div>
+      <div className="mt-2 space-y-0.5">
+        {list.length === 0 ? (
+          <p className="py-3 text-center text-[11px] text-white/25">
+            {dragging
+              ? "أفلت هنا لنقل العادة إلى هذه الفترة"
+              : "لا عادات في هذه الفترة بعد"}
+          </p>
+        ) : (
+          list.map((h, idx) => (
+            <HabitRow
+              key={h.id}
+              habit={h}
+              linkedBook={bookForHabit(h, books)}
+              streak={habitStreak(archive, h.id)}
+              first={idx === 0}
+              last={idx === list.length - 1}
+              dragging={dragging}
+              onDragStart={() => onDragStart(h.id)}
+              onDragEnd={onDragEnd}
+              onDrop={(dragId) => onReorder(dragId, h.id)}
+              onNudge={(dir) => onNudge(h.id, dir)}
+              onToggleCore={() => onToggleCore(h.id)}
+              onToggle={() => onToggle(h.id)}
+              onToggleTiny={() => onToggleTiny(h.id)}
+              onEdit={() => onEdit(h)}
+              onDelete={() => onDelete(h.id)}
+            />
+          ))
+        )}
+      </div>
+    </Card>
   );
 }
+
 
 
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node scripts/build-life-os.mjs && wscript \"services/launchers/run-life-os.vbs\"",
     "build": "node scripts/build-life-os.mjs",
+    "build:watch": "node scripts/build-life-os.mjs --watch",
     "test": "node --test \"tests/*.test.mjs\"",
     "open": "wscript \"services/launchers/run-life-os.vbs\"",
     "serve": "node services/local-sync-server.js",

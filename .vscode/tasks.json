@@ -31,6 +31,15 @@
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
     },
     {
+      "label": "مراقبة وبناء تلقائي (watch)",
+      "detail": "يعيد البناء وحده عند حفظ أي ملف تحت src/ — عدّل life-config.js واحفظ، ولا تشغّل أمر بناء بنفسك",
+      "type": "npm",
+      "script": "build:watch",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
       "label": "خادم تجريبي (منفذ 47699)",
       "detail": "نسخة مؤقتة ببيانات منفصلة — لا تلمس حالتك الحقيقية",
       "type": "npm",

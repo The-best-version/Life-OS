@@ -1,8 +1,7 @@
-import { NavOrderEditor } from "../layouts/life-nav.jsx";
 import { Btn, Modal, NumStep, T, cupWord } from "../components/life-shared.jsx";
-import { MORE_IDS, NAV_IDS, PLACES, PLACE_BY_ID, SCHEMA, WATER_GOAL_MAX, clampGoal, dayKey, migrate, placeShape, rollDay } from "../state/life-state.mjs";
+import { PLACES, PLACE_BY_ID, SCHEMA, WATER_GOAL_MAX, clampGoal, dayKey, migrate, placeShape, rollDay } from "../state/life-state.mjs";
 import { DataHealth, RecoveryModal } from "./life-tools.jsx";
-import { Archive, ChevronDown, ChevronUp, Download, Droplets, GripVertical, MapPin, Upload } from "lucide-react";
+import { Archive, Download, Droplets, MapPin, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
 /* ==================================================================== *
@@ -20,7 +19,6 @@ export function SettingsModal({
 }) {
   const fileRef = useRef(null);
   const [note, setNote] = useState(null); // {ok, text}
-  const [ordering, setOrdering] = useState(false);
   const [recovering, setRecovering] = useState(false);
 
   const exportData = () => {
@@ -214,41 +212,6 @@ export function SettingsModal({
           </div>
         </div>
 
-        {/* The sidebar's own reorder toggle is desktop-only, so this is the
-            single path a phone has to its tab order. */}
-        <div
-          className="rounded-2xl border p-3"
-          style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-        >
-          <button
-            onClick={() => setOrdering((v) => !v)}
-            aria-expanded={ordering}
-            className="flex w-full items-center gap-2 text-right"
-          >
-            {ordering ? (
-              <ChevronUp size={14} style={{ color: T.accent }} />
-            ) : (
-              <ChevronDown size={14} style={{ color: T.accent }} />
-            )}
-            <span className="flex-1 text-[12.5px] font-bold" style={{ color: T.accent }}>
-              ترتيب التبويبات
-            </span>
-            <GripVertical size={13} style={{ color: T.faint }} />
-          </button>
-          {ordering && (
-            <div className="los-in mt-3">
-              <NavOrderEditor
-                order={state.navOrder}
-                more={state.navMore}
-                onChange={(ids) => setState((s) => ({ ...s, navOrder: ids }))}
-                onMore={(ids) => setState((s) => ({ ...s, navMore: ids }))}
-                onReset={() =>
-                  setState((s) => ({ ...s, navOrder: NAV_IDS, navMore: MORE_IDS }))
-                }
-              />
-            </div>
-          )}
-        </div>
 
         <DataHealth
           open={open}

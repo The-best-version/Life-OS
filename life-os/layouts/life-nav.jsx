@@ -1,74 +1,41 @@
 import { T } from "../components/life-shared.jsx";
 import { sidebarNav } from "../life-config.js";
-import { GROUP_OF_TAB, MORE_IDS, NAV_GROUPS, NAV_IDS, TAB_BAR, navSplit, orderNavIds, rows } from "../state/life-state.mjs";
-import { ChevronDown, ChevronUp, GripVertical, Menu, Settings } from "lucide-react";
+import { GROUP_OF_TAB, NAV_GROUPS, NAV_IDS, TAB_BAR } from "../state/life-state.mjs";
+import { Menu, Settings } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 /* ==================================================================== *
- * THE NAVIGATION — the sidebar, the phone bar and the order editor
+ * THE NAVIGATION — the sidebar and the phone bar
  *
- * `NAV_META` fastens the label, the short label and the icon onto the
- * canonical `NAV_IDS`, and everything below is a view over the order the user
- * owns. Declaration order matters here and nowhere else in this file: `NAV`
- * is built at module load out of `NAV_META`, so putting the table after the
- * list it fills is not a style question, it is a blank page.
+ * `sidebarNav` in src/life-config.js is the single, absolute source for a
+ * tab's label, its icon, whether it is shown at all, AND the order it
+ * appears in — the literal order of that array, top to bottom. There is no
+ * second order layered on top of it any more: dragging a tab used to let
+ * the user override this at runtime (`state.navOrder`/`state.navMore`,
+ * the old `NavOrderEditor`), and that whole mechanism is gone — a saved
+ * profile's old `navOrder`/`navMore` fields are simply never read, so
+ * nothing in storage can ever disagree with what is written here.
  *
- * The sidebar is grouped and the phone bar is not, because they are solving
- * different problems — twelve rows in a column need dividing, four tabs in a
- * row do not.
- *
- * `NavOrderEditor` arms `draggable` from the grip alone. A button inside a
- * draggable element never fires a click: Chrome reads the press as the start
- * of a drag the moment the pointer moves a pixel, so the control works for a
- * perfectly still hand and is dead for every other one. This editor shipped
- * that way once.
+ * The sidebar is grouped and the phone bar is not, because they are
+ * solving different problems — twelve rows in a column need dividing,
+ * four tabs in a row do not. Both read the same `NAV` array below.
  * ==================================================================== */
 
-
 /* --- what the tabs are -------------------------------------------- *
- *  Declared before anything that reads them: `NAV` is built at module
- *  load out of `sidebarNav`, so an order that puts the table after the list
- *  it fills is not a style question — it is a blank page. */
-/* --- navigation ------------------------------------------------------ *
- *  Which tabs exist, and in what order, is `NAV_IDS` in life-state.mjs —
- *  the migration needs that list and cannot import a lucide component. The
- *  label, the icon and the developer's own show/hide switch are
- *  `sidebarNav` in life-config.js, keyed by the same ids: a tab added to
- *  `NAV_IDS` with no row there renders nameless, which is a bug you see on
- *  the first open rather than one that hides in a saved payload.
- *  `visible: false` there drops a tab from every menu here without ever
- *  touching `NAV_IDS` or the user's own saved order (`state.navOrder`) —
- *  those two stay exactly what they always were. */
-const NAV_META = new Map(sidebarNav.map((n) => [n.id, n]));
+ *  `NAV_IDS` in life-state.mjs is still the list of tabs that structurally
+ *  exist (it is what `SCREENS` in LifeOS.jsx keys off, and the migration
+ *  needs it with no lucide import). `sidebarNav` must have a row for every
+ *  one of them or a tab renders nameless — `life-config.js` warns in the
+ *  console, at load, if one is missing.
+ *
+ *  `NAV` is `sidebarNav` itself, filtered to `visible !== false` and to
+ *  ids `NAV_IDS` still recognises — in `sidebarNav`'s own order. Move a
+ *  line in that file and `NAV`'s order moves with it on the next save,
+ *  nothing else to recompute. */
+export const NAV = sidebarNav
+  .filter((n) => n.visible !== false && NAV_IDS.includes(n.id))
+  .map((n) => ({ ...n }));
 
-export const NAV = NAV_IDS.filter((id) => NAV_META.get(id)?.visible !== false).map((id) => ({
-  id,
-  ...NAV_META.get(id),
-}));
-
-const NAV_BY_ID = new Map(NAV.map((n) => [n.id, n]));
-
-/* The saved order, resolved to tabs. `orderNavIds` does the hard part —
-   dropping an id this build no longer has, appending a tab the saved order
-   has never seen, taking a duplicate once — and this only puts the label and
-   the icon back on. A tab hidden in `sidebarNav` is absent from `NAV_BY_ID`
-   and is filtered out here rather than inside `orderNavIds`: the cap and
-   order arithmetic in the state layer stays unaware of developer-only
-   visibility, exactly as it stays unaware of icons. */
-const orderedNav = (order) =>
-  orderNavIds(order)
-    .map((id) => NAV_BY_ID.get(id))
-    .filter(Boolean);
-
-/* His order cut in two, with the labels and the icons put back on each side:
-   the tabs that take a row, and the tabs that answer only from «المزيد». */
-export const splitNav = (order, more) => {
-  const { main, behind } = navSplit(order, more);
-  return {
-    main: main.map((id) => NAV_BY_ID.get(id)).filter(Boolean),
-    behind: behind.map((id) => NAV_BY_ID.get(id)).filter(Boolean),
-  };
-};
 
 /* One row of the sidebar. The active state is carried by four things at
    once — a warm gradient, a lit border, an ambient glow under the row and a
@@ -146,8 +113,8 @@ function NavList({ items, tab, onGo, showLabels }) {
 export function NavGroups({ items, tab, onGo, showLabels }) {
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
-    rows: items.filter((n) => GROUP_OF_TAB.get(n.id) === g.id),
-  })).filter((g) => g.rows.length);
+    tabsIn: items.filter((n) => GROUP_OF_TAB.get(n.id) === g.id),
+  })).filter((g) => g.tabsIn.length);
 
   /* A tab whose id is in no group would otherwise be dropped from the
      sidebar without a sound. Listed last, under a heading that says so. */
@@ -187,7 +154,7 @@ export function NavGroups({ items, tab, onGo, showLabels }) {
               />
             )
           )}
-          <NavList items={g.rows} tab={tab} onGo={onGo} showLabels={showLabels} />
+          <NavList items={g.tabsIn} tab={tab} onGo={onGo} showLabels={showLabels} />
         </div>
       ))}
       {loose.length > 0 && (
@@ -203,240 +170,6 @@ export function NavGroups({ items, tab, onGo, showLabels }) {
           <NavList items={loose} tab={tab} onGo={onGo} showLabels={showLabels} />
         </div>
       )}
-    </div>
-  );
-}
-
-/* The sidebar's own «المزيد». The phone bar has had one since there were
-   more tabs than fit a row; the desktop list had nowhere to put a tab that
-   belongs to the app without belonging to the day, so it gets the same
-   disclosure. Closed by default and lit when the tab inside it is the one on
-   screen, because a collapsed group that hides the current screen with no
-   mark on it reads as the nav having lost it. Collapsed to icons the label
-   goes and the row keeps its tooltip, like every other row up there. */
-export function NavMore({ items, tab, onGo, showLabels }) {
-  const inside = items.some((n) => n.id === tab);
-  const [open, setOpen] = useState(inside);
-
-  if (!items.length) return null;
-
-  return (
-    <div className="mt-1.5 flex flex-col gap-1.5">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        title={showLabels ? undefined : "المزيد"}
-        className="los-nav flex items-center gap-3 rounded-xl border px-3 py-2.5 text-right transition-all duration-200"
-        style={{
-          borderColor: inside && !open ? `${T.cta}66` : "transparent",
-          background:
-            inside && !open
-              ? `linear-gradient(135deg, ${T.cta}2E, ${T.cta}0F)`
-              : "transparent",
-          color: inside && !open ? T.ctaLift : T.muted,
-        }}
-      >
-        <Menu size={18} strokeWidth={1.9} className="shrink-0" />
-        {showLabels && (
-          <>
-            <span className="truncate text-[13.5px] font-bold">المزيد</span>
-            <span className="mr-auto shrink-0 text-white/30">
-              {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </span>
-          </>
-        )}
-      </button>
-
-      {open && (
-        <div className={showLabels ? "pr-3" : ""}>
-          <NavList items={items} tab={tab} onGo={onGo} showLabels={showLabels} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* Reordering the nav itself, and deciding which tabs take a row at all.
-   Drag for the mouse and ↑/↓ for a finger, the same pairing the habit list
-   uses and for the same reason: HTML5 drag never fires on touch, so the
-   arrows are the only path that works on a phone. The cut line is not
-   decoration — the order also decides which four tabs reach the mobile bar,
-   and that consequence is invisible from a desktop.
-
-   Every tab is listed, pushed-back ones included and in their own place,
-   because that place is what they come back to. The eye on each row is the
-   push: it sends a tab behind «المزيد» and fetches it out again. The last
-   four out front cannot be pushed — the bar needs them — and they say so on
-   the button rather than failing silently when it is pressed. */
-export function NavOrderEditor({ order, more, onChange, onMore, onReset }) {
-  const [dragging, setDragging] = useState(null);
-  const [over, setOver] = useState(null);
-  /* Which row is allowed to start a drag right now, and it is only ever the
-     one whose grip is under the finger. A row that is `draggable` outright
-     swallows the clicks of the buttons inside it: Chrome reads the press on
-     the button as the start of a drag the moment the pointer moves a pixel,
-     the drag is then cancelled because nothing was dropped, and no click
-     event is ever fired — a button that works on a perfectly still hand and
-     does nothing on any other. The grip arms it, the drag disarms it. */
-  const [grip, setGrip] = useState(null);
-  const items = orderedNav(order);
-  const ids = items.map((n) => n.id);
-  const behind = new Set(navSplit(order, more).behind);
-  const atFloor = ids.length - behind.size <= TAB_BAR;
-  const pristine =
-    ids.join() === NAV_IDS.join() &&
-    behind.size === MORE_IDS.length &&
-    MORE_IDS.every((id) => behind.has(id));
-
-  /* The divider goes after the fourth tab that actually takes a row — the
-     pushed-back ones never reach the bar, so counting raw positions would
-     draw the line in the wrong place the moment one of them sits above it. */
-  const mainIds = ids.filter((id) => !behind.has(id));
-  const cutAfter = mainIds.length > TAB_BAR ? mainIds[TAB_BAR - 1] : null;
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      {items.map((n, i) => {
-        const Icon = n.icon;
-        const isOver = over === n.id && dragging && dragging !== n.id;
-        const hidden = behind.has(n.id);
-        const stuck = !hidden && atFloor; // the bar still needs this one
-        return (
-          <React.Fragment key={n.id}>
-            <div
-              draggable={grip === n.id}
-              onDragStart={(e) => {
-                e.dataTransfer.setData("text/plain", n.id);
-                e.dataTransfer.effectAllowed = "move";
-                setDragging(n.id);
-              }}
-              onDragEnd={() => {
-                setDragging(null);
-                setOver(null);
-                setGrip(null);
-              }}
-              onDragOver={(e) => {
-                if (!dragging || dragging === n.id) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                setOver(n.id);
-              }}
-              onDragLeave={() => setOver((o) => (o === n.id ? null : o))}
-              /* Belt and braces on the disarm: a press on the grip that ends
-                 anywhere in the row, or wanders out of it, puts `draggable`
-                 back. A row left armed is a row whose buttons stop clicking,
-                 which is the whole fault this guards against. */
-              onMouseUp={() => setGrip(null)}
-              onMouseLeave={() => setGrip(null)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setOver(null);
-                const id = e.dataTransfer.getData("text/plain");
-                if (id) onChange(moveBefore(ids, id, n.id));
-              }}
-              className="flex items-center gap-2 rounded-xl border px-2 py-2 transition-all duration-200"
-              style={{
-                borderColor: isOver ? T.cta : T.border,
-                background: isOver ? `${T.cta}1F` : "rgba(255,255,255,0.04)",
-                opacity: dragging === n.id ? 0.4 : hidden ? 0.55 : 1,
-              }}
-            >
-              <span
-                aria-hidden="true"
-                onMouseDown={() => setGrip(n.id)}
-                onMouseUp={() => setGrip(null)}
-                className="shrink-0 text-white/25"
-                style={{ cursor: "grab" }}
-              >
-                <GripVertical size={13} />
-              </span>
-              <Icon size={15} strokeWidth={1.9} className="shrink-0" style={{ color: T.muted }} />
-              {/* The short label here, not the long one: the row carries a
-                  grip, a button with a word on it and two arrows inside a
-                  sidebar, and the full «أهدافي على ثلاث سنوات» truncated to
-                  three letters tells you less than «الأهداف» whole. */}
-              <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-white/80">
-                {n.short}
-              </span>
-              {/* A word, not a glyph. This was a bare ☰ for one build and it
-                  sat in the same row as the drag grip, which is also two
-                  short lines at 13px — so the control that moves a tab was
-                  indistinguishable from the one that does nothing when you
-                  click it. The button says which way it goes. */}
-              <button
-                onClick={() =>
-                  onMore(
-                    hidden
-                      ? [...behind].filter((id) => id !== n.id)
-                      : [...behind, n.id],
-                  )
-                }
-                disabled={stuck}
-                aria-pressed={hidden}
-                title={
-                  stuck
-                    ? "شريط الجوال يحتاج أربعة تبويبات — أعِد واحدًا من «المزيد» أولًا"
-                    : hidden
-                      ? `إعادة ${n.label} إلى القائمة`
-                      : `نقل ${n.label} إلى «المزيد»`
-                }
-                className="shrink-0 rounded-lg border px-2 py-1 text-[9.5px] font-bold transition-all disabled:pointer-events-none disabled:opacity-25"
-                style={{
-                  color: hidden ? T.accent : T.faint,
-                  borderColor: hidden ? `${T.accent}59` : T.border,
-                  backgroundColor: hidden ? `${T.accent}1A` : "transparent",
-                }}
-              >
-                {hidden ? "للقائمة" : "للمزيد"}
-              </button>
-              <button
-                onClick={() => onChange(nudgeInList(ids, n.id, "up"))}
-                disabled={i === 0}
-                aria-label={`تحريك ${n.label} لأعلى`}
-                className="shrink-0 rounded p-1 text-white/30 transition-all hover:text-white/80 disabled:pointer-events-none disabled:opacity-20"
-              >
-                <ChevronUp size={13} />
-              </button>
-              <button
-                onClick={() => onChange(nudgeInList(ids, n.id, "down"))}
-                disabled={i === items.length - 1}
-                aria-label={`تحريك ${n.label} لأسفل`}
-                className="shrink-0 rounded p-1 text-white/30 transition-all hover:text-white/80 disabled:pointer-events-none disabled:opacity-20"
-              >
-                <ChevronDown size={13} />
-              </button>
-            </div>
-
-            {n.id === cutAfter && (
-              <div className="flex items-center gap-2 py-0.5">
-                <span
-                  className="h-px flex-1"
-                  style={{ background: `${T.accent}4D` }}
-                />
-                <span
-                  className="shrink-0 text-[9.5px] font-bold"
-                  style={{ color: T.accent }}
-                >
-                  آخر ما يظهر على شريط الجوال
-                </span>
-                <span
-                  className="h-px flex-1"
-                  style={{ background: `${T.accent}4D` }}
-                />
-              </div>
-            )}
-          </React.Fragment>
-        );
-      })}
-
-      <button
-        onClick={onReset}
-        disabled={pristine}
-        className="mt-1 self-start rounded-lg px-2 py-1 text-[10.5px] transition-colors hover:text-white/70 disabled:pointer-events-none disabled:opacity-30"
-        style={{ color: T.faint }}
-      >
-        استعادة الترتيب الأصلي
-      </button>
     </div>
   );
 }
@@ -624,23 +357,3 @@ export function NowStamp({ compact = false }) {
     </div>
   );
 }
-
-/* Reordering by id, shared by the drag path and the arrows. Kept generic
-   because the habit list already has its own group-aware versions — these
-   two are for a flat list of ids and nothing else. */
-const moveBefore = (ids, dragId, targetId) => {
-  if (dragId === targetId) return ids;
-  const rest = ids.filter((i) => i !== dragId);
-  const at = rest.indexOf(targetId);
-  return at < 0 ? ids : [...rest.slice(0, at), dragId, ...rest.slice(at)];
-};
-
-const nudgeInList = (ids, id, dir) => {
-  const i = ids.indexOf(id);
-  const j = i + (dir === "up" ? -1 : 1);
-  if (i < 0 || j < 0 || j >= ids.length) return ids;
-  const next = ids.slice();
-  next[i] = ids[j];
-  next[j] = ids[i];
-  return next;
-};
