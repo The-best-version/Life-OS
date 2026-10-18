@@ -1,6 +1,6 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
 import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
-import { AlertTriangle, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 export function GoalsModule({ state, setState }) {
@@ -16,6 +16,10 @@ export function GoalsModule({ state, setState }) {
      حقل آخر وأنت بعدها داخل نفس الجلسة لا يُطوي القسم تحتك. */
   const [newGoalId, setNewGoalId] = useState(null);
   const [orphansOnly, setOrphansOnly] = useState(false);
+  /* بحث عبر كل الأهداف بلا اعتبار للأفق أو الربع أو السنة المختارة — ٣٧
+     هدفًا من البذرة وحدها كفيلة بجعل التنقّل اليدوي بين الأرباع أبطأ من
+     كتابة كلمة. فارغ يعني «اعرض حسب الأفق كالعادة». */
+  const [query, setQuery] = useState("");
 
   const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
   const byId = useMemo(() => new Map(all.map((g) => [g.id, g])), [all]);
@@ -55,6 +59,13 @@ export function GoalsModule({ state, setState }) {
   );
   const shown = orphansOnly ? orphans : scoped;
 
+  /* البحث يتجاوز نطاق الأفق/الربع/السنة كليًا — هدف يسكن ربعًا غير الظاهر
+     حاليًا يجب أن يظهر أيضًا، وإلا كان بحثًا داخل ما تراه أصلًا لا بحثًا
+     حقيقيًا. غير فعّال (null) حين الحقل فارغ، فتبقى بقية الشاشة كالمعتاد. */
+  const q = query.trim();
+  const searchResults = q ? all.filter((g) => g.text.includes(q)) : null;
+  const pillarSource = searchResults || shown;
+
   const done = scoped.filter((g) => g.done).length;
   const pct = scoped.length
     ? Math.round(scoped.reduce((n, g) => n + goalPct(g, all, state.habits || []), 0) / scoped.length)
@@ -93,12 +104,12 @@ export function GoalsModule({ state, setState }) {
     }));
   };
 
-  const add = () => {
+  const add = (pillarOverride) => {
     const row = goalShape({
       horizon,
       quarter,
       year: year < YEAR_MIN ? YEAR_MIN : year,
-      pillar: shown[0]?.pillar || "faith",
+      pillar: pillarOverride || shown[0]?.pillar || "faith",
     });
     setState((s) => ({ ...s, goals: [...(s.goals || []), row] }));
     setDeskId(row.id);
@@ -136,7 +147,7 @@ export function GoalsModule({ state, setState }) {
             </p>
             
             <div className="flex flex-wrap items-center gap-3">
-              <Btn variant="default" size="sm" onClick={add} className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
+              <Btn variant="default" size="sm" onClick={() => add()} className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
                 <Plus size={16} strokeWidth={3} /> هدف جديد
               </Btn>
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
@@ -163,6 +174,19 @@ export function GoalsModule({ state, setState }) {
       />
 
       <GoalAnalysisDashboard goals={all} habits={state.habits || []} />
+
+      <UpcomingDeadlinesCard goals={all} />
+
+      <div className="relative">
+        <Search size={16} className="absolute top-1/2 right-4 -translate-y-1/2 text-white/30" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="ابحث في كل أهدافك — بلا اعتبار للأفق أو الربع المختار..."
+          className="w-full rounded-2xl border bg-white/[0.02] py-3 pr-11 pl-4 text-[13px] outline-none transition-colors focus:border-white/30"
+          style={{ borderColor: T.border, color: T.fg }}
+        />
+      </div>
 
       <CountdownCard
         all={all}
@@ -209,15 +233,24 @@ export function GoalsModule({ state, setState }) {
                 (g) => g.horizon === "quarter" && g.quarter === q.id && g.year === year,
               );
               const hit = list.filter((g) => g.done).length;
+              /* إشارة على الربع كله قبل فتحه — لا بعد ما تفتح أهدافه وتقارنها
+                 يدويًا. تُقرأ فقط على التبويبات غير المختارة: التبويب المختار
+                 له تمييزه الخاص أصلًا (الخلفية البيضاء)، وتلوين حدّه فوقها
+                 يتزاحم معه بدل أن يضيف إشارة جديدة. */
+              const open = list.filter((g) => !g.done);
+              const behindCount = open.filter((g) => goalPace(g, all).pace?.state === "behind").length;
+              const allAhead = open.length > 0 && open.every((g) => goalPace(g, all).pace?.state === "ahead");
+              const quarterTint = behindCount > 0 ? T.danger : allAhead ? T.primary : null;
               return (
                 <button
                   key={q.id}
                   onClick={() => setQuarter(q.id)}
                   className={`group relative overflow-hidden rounded-2xl border p-4 text-right transition-all duration-300 ${
-                    on 
-                      ? "bg-white/10 border-white/20 shadow-lg" 
+                    on
+                      ? "bg-white/10 border-white/20 shadow-lg"
                       : "bg-white/[0.02] border-transparent hover:bg-white/5"
                   }`}
+                  style={quarterTint && !on ? { borderInlineStart: `3px solid ${quarterTint}` } : undefined}
                 >
                   {on && <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />}
                   <div className="flex items-center justify-between mb-1">
@@ -252,7 +285,7 @@ export function GoalsModule({ state, setState }) {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {PILLARS.map((p) => {
-          const list = shown.filter((g) => g.pillar === p.id);
+          const list = pillarSource.filter((g) => g.pillar === p.id);
           const hit = list.filter((g) => g.done).length;
           const complete = list.length > 0 && hit === list.length;
           const Icon = p.icon;
@@ -293,10 +326,23 @@ export function GoalsModule({ state, setState }) {
 
               <div className="p-4 flex-1 flex flex-col gap-3">
                 {list.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 opacity-40">
+                  <div className="flex flex-col items-center justify-center py-8">
                     <Sparkles size={24} className="mb-3 text-white/20" />
-                    <p className="text-[12px] font-bold text-white/40">لا توجد أهداف هنا بعد</p>
-                    <p className="text-[10px] text-white/30 mt-1">أضف هدفاً لتضيء هذه الركيزة</p>
+                    {searchResults ? (
+                      <p className="text-[12px] font-bold text-white/40">لا نتائج في هذه الركيزة</p>
+                    ) : (
+                      <>
+                        <p className="text-[12px] font-bold text-white/40">لا توجد أهداف هنا بعد</p>
+                        <button
+                          type="button"
+                          onClick={() => add(p.id)}
+                          className="mt-3 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold transition-all"
+                          style={{ borderColor: `${p.tint}50`, color: p.tint, background: `${p.tint}0F` }}
+                        >
+                          <Plus size={12} strokeWidth={3} /> هدف في «{p.label}»
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   list.map((g) => (
@@ -360,6 +406,52 @@ export function GoalsModule({ state, setState }) {
         }}
       />
     </div>
+  );
+}
+
+/* أقرب ثلاثة أهداف لموعدها النهائي، عبر كل الركائز معًا — اللوحة فوقها
+   تقول «هدف واحد متأخر» كرقم مجرّد، وهذه تجيب «أيّه بالضبط» مباشرة بدل
+   فتح الأعمدة الستة والمقارنة يدويًا. */
+function UpcomingDeadlinesCard({ goals }) {
+  const items = useMemo(
+    () =>
+      goals
+        .filter((g) => !g.done)
+        .map((g) => ({ goal: g, left: daysTo(goalEnd(g)) }))
+        .filter((x) => x.left !== null && x.left >= 0)
+        .sort((a, b) => a.left - b.left)
+        .slice(0, 3),
+    [goals],
+  );
+  if (!items.length) return null;
+
+  return (
+    <Card className="p-5">
+      <p className="mb-3 flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.ctaLift }}>
+        <Hourglass size={14} /> الأقرب أجلًا
+      </p>
+      <div className="space-y-2">
+        {items.map(({ goal, left }) => {
+          const p = pillarOf(goal.pillar);
+          return (
+            <div
+              key={goal.id}
+              className="flex items-center gap-3 rounded-xl border p-2.5"
+              style={{ borderColor: T.border, background: "rgba(255,255,255,0.02)" }}
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                style={{ background: `${p.tint}1A`, color: p.tint }}
+              >
+                <p.icon size={13} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-white/85">{goal.text}</span>
+              <DeadlineChip day={goalEnd(goal)} done={false} />
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
