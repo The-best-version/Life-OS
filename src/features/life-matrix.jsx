@@ -1,13 +1,64 @@
 import { TaskChip, TopThree } from "../components/life-day.jsx";
-import { Btn, Card, Field, GLASS, Modal, T, TimeField, arDate, prettyTime, useBurst, useUndo } from "../components/life-shared.jsx";
-import { STEP_MAX, TOP_TASK_CAP, capToday, eventShape, hhmm, prepPickAdd, prepPickDrop, prepPickEvent, prepShape, taskShape, tomorrowKey } from "../state/life-state.mjs";
-import { CalendarPlus, Clock, Footprints, Plus, Target, Trash, X, Zap } from "lucide-react";
+import {
+  Btn,
+  Card,
+  Field,
+  GLASS,
+  Modal,
+  T,
+  TimeField,
+  arDate,
+  prettyTime,
+  useBurst,
+  useUndo,
+} from "../components/life-shared.jsx";
+import {
+  QUADRANT_WIP,
+  STEP_MAX,
+  TOP_TASK_CAP,
+  capToday,
+  dayKey,
+  estimateTotal,
+  eventShape,
+  hhmm,
+  nextOrder,
+  orderedDone,
+  orderedOpen,
+  prepPickAdd,
+  prepPickDrop,
+  prepPickEvent,
+  prepShape,
+  reorderWithin,
+  taskShape,
+  tomorrowKey,
+  wipOf,
+  syncTaskToGoal,
+} from "../state/life-state.mjs";
+import {
+  AlertTriangle,
+  CalendarPlus,
+  Clock,
+  Footprints,
+  Plus,
+  Sun,
+  Target,
+  Trash,
+  X,
+  Zap,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+
+/* The sun's colour, matching the one in life-day.jsx — the sky-400 from
+   Tailwind. Kept as a literal here (not imported) so this file has no
+   dependency on the extras card just for one hex. */
+const SKY = "#38bdf8";
 
 export function MatrixModule({ state, setState }) {
   const [draft, setDraft] = useState("");
   const [draftQ, setDraftQ] = useState("q2");
+  const [draftGoal, setDraftGoal] = useState(""); // <--- حالة جديدة لاختيار الهدف
   const [over, setOver] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
   const [capHit, fireCapHit] = useBurst(2800);
   const arm = useUndo();
 
@@ -16,23 +67,35 @@ export function MatrixModule({ state, setState }) {
     if (!text) return;
     setState((s) => ({
       ...s,
-      /* Through the one shape, so the matrix's form and the evening prep's
-         cannot drift into writing two different kinds of task. */
-      tasks: [...s.tasks, taskShape({ text, quadrant: draftQ })],
+      tasks: [
+        ...s.tasks,
+        taskShape({
+          text,
+          quadrant: draftQ,
+          linkedGoalId: draftGoal || null, // <--- حفظ الهدف المرتبط
+          createdAt: dayKey(),
+          order: nextOrder(s.tasks, draftQ),
+        }),
+      ],
     }));
     setDraft("");
+    setDraftGoal("");
   };
 
+  // 👇 التعديل الجوهري: تحديث نسبة الهدف عند إنجاز المهمة
   const patch = (id, p) =>
-    setState((s) => ({
-      ...s,
-      tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...p } : t)),
-    }));
+    setState((s) => {
+      const task = s.tasks.find((t) => t.id === id);
+      const nextGoals = (task && task.linkedGoalId && p.done !== undefined)
+        ? syncTaskToGoal(s.goals, task.linkedGoalId, p.done)
+        : s.goals;
+      return {
+        ...s,
+        tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...p } : t)),
+        goals: nextGoals,
+      };
+    });
 
-  /* The cap is the whole point of the rule, so a fourth pick is refused
-     outright rather than quietly hidden — and it says why. `capToday`
-     re-asserts it on the way out, because this is no longer the only door:
-     the evening prep promotes three of its own at the rollover. */
   const promote = (id) => {
     const t = state.tasks.find((x) => x.id === id);
     if (!t || t.today) return;
@@ -42,25 +105,58 @@ export function MatrixModule({ state, setState }) {
     }
     setState((s) => ({
       ...s,
-      tasks: capToday(s.tasks.map((x) => (x.id === id ? { ...x, today: true } : x))),
+      tasks: capToday(
+        s.tasks.map((x) =>
+          x.id === id ? { ...x, today: true, scheduled: false } : x,
+        ),
+      ),
     }));
   };
 
   const toggleToday = (t) =>
     t.today ? patch(t.id, { today: false }) : promote(t.id);
 
+  const toggleScheduled = (t) =>
+    t.scheduled
+      ? patch(t.id, { scheduled: false })
+      : patch(t.id, { scheduled: true, today: false });
+
   const remove = (id) => {
     arm("حُذفت المهمة", { tasks: state.tasks });
     setState((s) => ({ ...s, tasks: s.tasks.filter((t) => t.id !== id) }));
   };
 
-  const onDrop = (zone) => (e) => {
+  const onDropQuadrant = (zone) => (e) => {
     e.preventDefault();
-    const id = e.dataTransfer.getData("text/plain");
+    const id = e.dataTransfer.getData("text/plain") || draggingId;
     setOver(null);
+    setDraggingId(null);
     if (!id) return;
-    if (zone === "today") promote(id);
-    else patch(id, { quadrant: zone, today: false });
+    if (zone === "today") {
+      promote(id);
+      return;
+    }
+    setState((s) => {
+      const t = s.tasks.find((x) => x.id === id);
+      if (!t || t.quadrant === zone) return s;
+      const order = nextOrder(s.tasks, zone);
+      return {
+        ...s,
+        tasks: s.tasks.map((x) =>
+          x.id === id ? { ...x, quadrant: zone, today: false, order } : x,
+        ),
+      };
+    });
+  };
+
+  const onDropTask = (targetId) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = e.dataTransfer.getData("text/plain") || draggingId;
+    setOver(null);
+    setDraggingId(null);
+    if (!id || id === targetId) return;
+    setState((s) => ({ ...s, tasks: reorderWithin(s.tasks, id, targetId) }));
   };
 
   const dragProps = (zone) => ({
@@ -70,18 +166,20 @@ export function MatrixModule({ state, setState }) {
       if (over !== zone) setOver(zone);
     },
     onDragLeave: () => setOver((o) => (o === zone ? null : o)),
-    onDrop: onDrop(zone),
+    onDrop: onDropQuadrant(zone),
   });
 
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-20">
       <Card className="p-6 sm:p-7">
-        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">مصفوفة المهام</h2>
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+          مصفوفة المهام
+        </h2>
         <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
-          صنّف كل مهمة بصدق، ثم ارفع ثلاثًا فقط إلى «أهم ٣ مهام» — بالسحب أو
-          بأيقونة الهدف
-          <Target size={12} className="mx-1 inline" /> على الجوال.
+          صنّف كل مهمة بصدق، ثم ارفع ثلاثًا فقط إلى «أهم ٣ مهام» بأيقونة الهدف{" "}
+          <Target size={12} className="mx-0.5 inline" /> — والباقي لليوم بأيقونة
+          الشمس <span aria-hidden="true">☀️</span> — أو اتركه في المخزن هنا.
+          أعطِ كل مهمة وقتها المتوقع وتاريخها، وستعرف كم ساعة أمامك فعلًا.
         </p>
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -92,7 +190,7 @@ export function MatrixModule({ state, setState }) {
             onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="مهمة جديدة…"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select
               value={draftQ}
               onChange={(e) => setDraftQ(e.target.value)}
@@ -106,6 +204,19 @@ export function MatrixModule({ state, setState }) {
                 </option>
               ))}
             </select>
+            {/* 👇 قائمة اختيار الهدف عند الإضافة 👇 */}
+            <select
+              value={draftGoal}
+              onChange={(e) => setDraftGoal(e.target.value)}
+              aria-label="الهدف المرتبط"
+              className="rounded-xl border bg-transparent px-3 py-2.5 text-xs outline-none"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              <option value="" style={{ background: T.cardSolid }}>— ربط بهدف —</option>
+              {(state.goals || []).filter(g => !g.done).map(g => (
+                <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>{g.text}</option>
+              ))}
+            </select>
             <Btn variant="default" onClick={add} className="shrink-0">
               <Plus size={15} strokeWidth={3} /> إضافة
             </Btn>
@@ -113,7 +224,6 @@ export function MatrixModule({ state, setState }) {
         </div>
       </Card>
 
-      {/* the drop target that matters */}
       <div
         {...dragProps("today")}
         className="rounded-2xl transition-all duration-200"
@@ -138,119 +248,237 @@ export function MatrixModule({ state, setState }) {
         </p>
       )}
 
-      {/* four quadrants */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {QUADRANTS.map((q) => {
-          const list = state.tasks.filter((t) => t.quadrant === q.id);
-          const Icon = q.icon;
-          return (
-            <Card
-              key={q.id}
-              {...dragProps(q.id)}
-              className="flex min-h-[200px] flex-col p-5 transition-all duration-200"
-              style={{
-                ...GLASS,
-                borderColor: over === q.id ? `${q.tint}B3` : T.border,
-                backgroundColor: over === q.id ? `${q.tint}2E` : T.card,
-                boxShadow:
-                  over === q.id
-                    ? `0 0 0 1px ${q.tint}59, ${GLASS.boxShadow}`
-                    : GLASS.boxShadow,
-              }}
-            >
-              <div className="flex items-start gap-3">
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
-                  style={{
-                    borderColor: `${q.tint}33`,
-                    background: `${q.tint}14`,
-                    color: q.tint,
-                  }}
-                >
-                  <Icon size={16} strokeWidth={2} />
-                </span>
-                <div className="min-w-0">
-                  <h3 className="text-[14.5px] font-bold" style={{ color: q.tint }}>
-                    {q.label}
-                  </h3>
-                  <p className="text-[10.5px] text-white/35">{q.action}</p>
-                </div>
-                <span className="mr-auto shrink-0 text-[11px] tabular-nums text-white/25">
-                  {list.length}
-                </span>
-              </div>
-
-              <div className="mt-4 flex-1 space-y-2">
-                {list.length === 0 ? (
-                  <p className="py-6 text-center text-[11px] text-white/20">
-                    فارغ
-                  </p>
-                ) : (
-                  list.map((t) => (
-                    <TaskChip
-                      key={t.id}
-                      task={t}
-                      onDragStart={(e) =>
-                        e.dataTransfer.setData("text/plain", t.id)
-                      }
-                      onToggleDone={() => patch(t.id, { done: !t.done })}
-                      onToggleToday={() => toggleToday(t)}
-                      onDelete={() => remove(t.id)}
-                    />
-                  ))
-                )}
-              </div>
-            </Card>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        {QUADRANTS.map((q) => (
+          <QuadrantCard
+            key={q.id}
+            q={q}
+            tasks={state.tasks}
+            goals={state.goals} // <--- تمرير الأهداف لبطاقة المهام
+            over={over === q.id}
+            dragProps={dragProps(q.id)}
+            draggingId={draggingId}
+            onDragStart={setDraggingId}
+            onDragEnd={() => setDraggingId(null)}
+            onDropTask={onDropTask}
+            onPatch={patch}
+            onToggleToday={toggleToday}
+            onToggleScheduled={toggleScheduled}
+            onEdit={(id, fields) => patch(id, fields)}
+            onDelete={remove}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
+function QuadrantCard({
+  q,
+  tasks,
+  goals, // <--- استقبال الأهداف
+  over,
+  dragProps,
+  draggingId,
+  onDragStart,
+  onDragEnd,
+  onDropTask,
+  onPatch,
+  onToggleToday,
+  onToggleScheduled,
+  onEdit,
+  onDelete,
+}) {
+  const [showDone, setShowDone] = useState(false);
+  const open = useMemo(() => orderedOpen(tasks, q.id), [tasks, q.id]);
+  const done = useMemo(() => orderedDone(tasks, q.id), [tasks, q.id]);
+  const est = estimateTotal(tasks, q.id);
+  const wip = wipOf(tasks, q.id);
+  const cap = QUADRANT_WIP[q.id];
+  const Icon = q.icon;
 
-/* ==================================================================== *
- *  جهّز غدك — the three picked the night before
- *
- *  A day's three tasks get chosen the night before or they get chosen at
- *  ten in the morning by whatever shouted loudest. This is the screen that
- *  asks for them, and it owns no store of its own: a pick is a task id out
- *  of the same `state.tasks` the matrix edits, the first step is written
- *  onto that task row, and the hour goes onto the calendar as a real entry
- *  rather than a second copy of a time. `rollDay` then promotes exactly
- *  those three and spends the prep — the arithmetic is `applyPrep` in
- *  life-state.mjs, under test, and nothing here recomputes any of it.
- * ==================================================================== */
+  const wipTone = wip === "chaos" ? T.danger : wip === "crowded" ? T.accent : "transparent";
+
+  return (
+    <Card
+      {...dragProps}
+      className="flex min-h-[200px] min-w-0 flex-col overflow-hidden p-5 transition-all duration-200"
+      style={{
+        ...GLASS,
+        borderColor: over ? `${q.tint}B3` : T.border,
+        backgroundColor: over ? `${q.tint}2E` : T.card,
+        boxShadow: over
+          ? `0 0 0 1px ${q.tint}59, ${GLASS.boxShadow}`
+          : GLASS.boxShadow,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+          style={{
+            borderColor: `${q.tint}33`,
+            background: `${q.tint}14`,
+            color: q.tint,
+          }}
+        >
+          <Icon size={16} strokeWidth={2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[14.5px] font-bold" style={{ color: q.tint }}>
+            {q.label}
+          </h3>
+          <p className="text-[10.5px]" style={{ color: T.faint }}>
+            {q.action}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[11px] font-bold tabular-nums" style={{ color: T.muted }}>
+            {open.length}
+          </span>
+          {est > 0 && (
+            <span
+              className="flex items-center gap-0.5 text-[10px] tabular-nums"
+              style={{ color: T.faint }}
+              title={`مجموع الوقت المتوقع: ${Math.floor(est / 60)} س ${est % 60} د`}
+            >
+              <Clock size={9} />
+              <span dir="ltr">
+                {Math.floor(est / 60)}:{String(est % 60).padStart(2, "0")}
+              </span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {wip !== "calm" && (
+        <p
+          className="mt-3 flex items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10.5px] leading-tight"
+          style={{
+            borderColor: `${wipTone}4D`,
+            background: `${wipTone}12`,
+            color: wipTone,
+          }}
+        >
+          <AlertTriangle size={11} className="mt-[2px] shrink-0" />
+          <span>
+            {wip === "chaos"
+              ? `${open.length} مهمة هنا — هذه ليست قائمة، هذه فوضى. أعد التصنيف أو احذف.`
+              : `تجاوزت ${cap} مهام. حدّد أيهم تُنفَّذ الآن، والباقي أرجئه.`}
+          </span>
+        </p>
+      )}
+
+      <div className="mt-4 flex-1 space-y-2">
+        {open.length === 0 ? (
+          <p
+            className="py-6 text-center text-[11px]"
+            style={{ color: "rgba(255,255,255,0.2)" }}
+          >
+            فارغ
+          </p>
+        ) : (
+          open.map((t) => (
+            <TaskChip
+              key={t.id}
+              task={t}
+              goals={goals} // <--- تمرير الأهداف للـ TaskChip
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", t.id);
+                e.dataTransfer.effectAllowed = "move";
+                onDragStart(t.id);
+              }}
+              onDragEnd={onDragEnd}
+              onDragOver={(e) => {
+                if (draggingId && draggingId !== t.id) e.preventDefault();
+              }}
+              onDrop={onDropTask(t.id)}
+              onToggleDone={() => onPatch(t.id, { done: !t.done })}
+              onToggleToday={() => onToggleToday(t)}
+              onToggleScheduled={() => onToggleScheduled(t)}
+              onEdit={(fields) => onEdit(t.id, fields)}
+              onDelete={() => onDelete(t.id)}
+            />
+          ))
+        )}
+      </div>
+
+      {done.length > 0 && (
+        <div className="mt-3 border-t pt-3" style={{ borderColor: T.border }}>
+          <button
+            onClick={() => setShowDone((v) => !v)}
+            aria-expanded={showDone}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-[10.5px] transition-colors hover:bg-white/5"
+            style={{ color: T.faint }}
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="font-bold" style={{ color: T.primary }}>
+                {done.length}
+              </span>
+              منجزة
+            </span>
+            <span className="text-[9px] opacity-60">
+              {showDone ? "إخفاء" : "إظهار"}
+            </span>
+          </button>
+          {showDone && (
+            <div className="los-in mt-2 space-y-1.5 opacity-60">
+              {done.map((t) => (
+                <TaskChip
+                  key={t.id}
+                  task={t}
+                  goals={goals} // <--- تمرير الأهداف للـ TaskChip
+                  compact
+                  onToggleDone={() => onPatch(t.id, { done: !t.done })}
+                  onToggleToday={() => onToggleToday(t)}
+                  onDelete={() => onDelete(t.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function TomorrowModal({ open, onClose, state, setState }) {
   const arm = useUndo();
   const [capHit, fireCapHit] = useBurst(2800);
   const [draft, setDraft] = useState("");
 
-  /* Recomputed on every render rather than captured when the modal opened:
-     a window left open across 04:00 would otherwise be preparing a day that
-     has already started. */
   const on = tomorrowKey();
   const prep = prepShape(state.tomorrow);
   const picks = prep.for === on ? prep.picks : [];
   const byId = useMemo(
     () => new Map((state.tasks || []).map((t) => [t.id, t])),
-    [state.tasks],
+    [state.tasks]
   );
-  const rowsOf = picks.map((p) => ({ pick: p, task: byId.get(p.task) })).filter((r) => r.task);
+  const rowsOf = picks
+    .map((p) => ({ pick: p, task: byId.get(p.task) }))
+    .filter((r) => r.task);
   const slots = [...Array(TOP_TASK_CAP)].map((_, i) => rowsOf[i] || null);
   const full = rowsOf.length >= TOP_TASK_CAP;
 
-  const pool = (state.tasks || []).filter(
-    (t) => !t.done && !picks.some((p) => p.task === t.id),
-  );
+  const pool = useMemo(() => {
+    const rank = { q1: 0, q2: 1, q3: 2, q4: 3 };
+    return (state.tasks || [])
+      .filter((t) => !t.done && !picks.some((p) => p.task === t.id))
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => {
+        if (!!a.t.scheduled !== !!b.t.scheduled)
+          return a.t.scheduled ? -1 : 1;
+        const ra = rank[a.t.quadrant] ?? 9;
+        const rb = rank[b.t.quadrant] ?? 9;
+        if (ra !== rb) return ra - rb;
+        return a.i - b.i;
+      })
+      .map((x) => x.t);
+  }, [state.tasks, picks]);
 
-  /* The event a pick's hour lives in, looked up rather than remembered. */
   const eventOf = (p) =>
     p.event ? (state.events || []).find((e) => e.id === p.event) || null : null;
 
   const pick = (id) => {
-    /* The cap is refused in `prepPickAdd` whatever this does; the screen's
-       job is only to say why. */
     if (full) {
       fireCapHit();
       return;
@@ -258,21 +486,14 @@ export function TomorrowModal({ open, onClose, state, setState }) {
     setState((s) => ({ ...s, tomorrow: prepPickAdd(s.tomorrow, id, tomorrowKey()) }));
   };
 
-  /* Written straight onto the task row, keystroke by keystroke. Held in
-     local state and committed on close was the other option and is worse:
-     a step typed and then dismissed with Escape is text the user wrote,
-     and this app does not lose that. */
   const setStep = (id, text) =>
     setState((s) => ({
       ...s,
       tasks: (s.tasks || []).map((t) =>
-        t.id === id ? { ...t, step: String(text).slice(0, STEP_MAX) } : t,
+        t.id === id ? { ...t, step: String(text).slice(0, STEP_MAX) } : t
       ),
     }));
 
-  /* An hour is a calendar entry, not a field on the prep. Setting one
-     creates it, changing one moves it, clearing one deletes it — and the
-     pick only ever remembers which entry it is. */
   const setTime = (p, raw) =>
     setState((s) => {
       const time = hhmm(raw);
@@ -284,8 +505,6 @@ export function TomorrowModal({ open, onClose, state, setState }) {
         if (id) events = events.filter((e) => e.id !== id);
         id = null;
       } else if (id && events.some((e) => e.id === id)) {
-        /* Only the two fields this screen owns. A title he rewrote on the
-           calendar is his, and a repeat he set there stays set. */
         events = events.map((e) => (e.id === id ? { ...e, date: day, time } : e));
       } else {
         const ev = eventShape({
@@ -301,9 +520,6 @@ export function TomorrowModal({ open, onClose, state, setState }) {
       return { ...s, events, tomorrow: prepPickEvent(s.tomorrow, p.task, id) };
     });
 
-  /* Removing a pick deletes the calendar entry its hour created, so it is
-     armed like every other destructive button in this tree. The whole
-     arrays go in, never the rows. */
   const drop = (p) => {
     arm("أُزيلت من تجهيز الغد", {
       events: state.events,
@@ -311,15 +527,13 @@ export function TomorrowModal({ open, onClose, state, setState }) {
     });
     setState((s) => ({
       ...s,
-      events: p.event ? (s.events || []).filter((e) => e.id !== p.event) : s.events || [],
+      events: p.event
+        ? (s.events || []).filter((e) => e.id !== p.event)
+        : s.events || [],
       tomorrow: prepPickDrop(s.tomorrow, p.task),
     }));
   };
 
-  /* A task that does not exist yet. Without this, preparing tomorrow at
-     22:00 means going to the matrix first — and a screen that sends you
-     somewhere else to be used is a screen you stop opening. It lands in
-     «مهم غير عاجل» like every other undecided task, through the one shape. */
   const addAndPick = () => {
     const text = draft.trim();
     if (!text) return;
@@ -327,7 +541,11 @@ export function TomorrowModal({ open, onClose, state, setState }) {
       fireCapHit();
       return;
     }
-    const t = taskShape({ text, quadrant: "q2" });
+    const t = taskShape({
+      text,
+      quadrant: "q2",
+      createdAt: dayKey(),
+    });
     setState((s) => ({
       ...s,
       tasks: [...(s.tasks || []), t],
@@ -371,7 +589,10 @@ export function TomorrowModal({ open, onClose, state, setState }) {
               <div
                 key={row.pick.task}
                 className="rounded-2xl border p-3.5"
-                style={{ borderColor: `${T.cta}3D`, backgroundColor: `${T.cta}0A` }}
+                style={{
+                  borderColor: `${T.cta}3D`,
+                  backgroundColor: `${T.cta}0A`,
+                }}
               >
                 <div className="flex items-start gap-2.5">
                   <span
@@ -445,7 +666,10 @@ export function TomorrowModal({ open, onClose, state, setState }) {
               >
                 <span
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-extrabold tabular-nums"
-                  style={{ background: "rgba(255,255,255,0.06)", color: T.faint }}
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    color: T.faint,
+                  }}
                 >
                   {i + 1}
                 </span>
@@ -453,7 +677,7 @@ export function TomorrowModal({ open, onClose, state, setState }) {
                   اختر مهمة من الأسفل.
                 </p>
               </div>
-            ),
+            )
           )}
         </div>
 
@@ -490,7 +714,19 @@ export function TomorrowModal({ open, onClose, state, setState }) {
                         color: "rgba(255,255,255,0.8)",
                       }}
                     >
-                      <Plus size={11} strokeWidth={3} style={{ color: q.tint }} />
+                      {t.scheduled ? (
+                        <Sun
+                          size={11}
+                          strokeWidth={2.6}
+                          style={{ color: SKY }}
+                        />
+                      ) : (
+                        <Plus
+                          size={11}
+                          strokeWidth={3}
+                          style={{ color: q.tint }}
+                        />
+                      )}
                       <span className="truncate">{t.text}</span>
                     </button>
                   );
@@ -524,9 +760,6 @@ export function TomorrowModal({ open, onClose, state, setState }) {
   );
 }
 
-
-
-/* --- Eisenhower quadrants -------------------------------------------- */
 const QUADRANTS = [
   {
     id: "q1",
@@ -557,5 +790,3 @@ const QUADRANTS = [
     icon: Trash,
   },
 ];
-
-

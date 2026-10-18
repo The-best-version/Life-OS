@@ -1,9 +1,21 @@
 import { AR_MONTHS, Badge, Btn, Card, GROUPS, Modal, T, WEEK_LABELS, arDate, dayWord, daysPhrase, fallWord, timesWord } from "../components/life-shared.jsx";
-import { STREAK_TARGET, dayKey, daysBetween, isGap, levelOf, rows } from "../state/life-state.mjs";
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Feather, Flame, HeartCrack, Hourglass, ListChecks, ShieldCheck, Star, TrendingUp, X } from "lucide-react";
+import { STREAK_TARGET, DAILY_GOAL_DEFAULT, DAILY_GOAL_MIN, DAILY_GOAL_MAX, clampDailyGoal, dayKey, daysBetween, habitStreak, historyIndex, isGap, levelOf, rows } from "../state/life-state.mjs";
+import { CalendarDays, CalendarRange, Check, ChevronLeft, ChevronRight, Feather, Flame, HeartCrack, Hourglass, ListChecks, ShieldCheck, Sparkles, Star, Target, TrendingDown, TrendingUp, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
-export function AnalyticsModule({ state, discipline, streak }) {
+const WEEK_FULL = [
+  "السبت",
+  "الأحد",
+  "الاثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+];
+
+const GOAL_CHOICES = [40, 50, 60, 70, 80];
+
+export function AnalyticsModule({ state, discipline, streak, setState }) {
   const today = new Date();
   const [cursor, setCursor] = useState({
     y: today.getFullYear(),
@@ -13,21 +25,14 @@ export function AnalyticsModule({ state, discipline, streak }) {
 
   const byDate = useMemo(() => {
     const map = new Map(
-      /* A gap row carries no percentage on purpose — it is a day nobody
-         recorded, not a day that scored nothing — so it is kept out of this
-         map entirely and answered from `gapDates` below. */
       rows(state.history)
         .filter((h) => !isGap(h))
         .map((h) => [h.date, h.pct]),
     );
-    map.set(dayKey(), discipline); // today is live, not yet archived
+    map.set(dayKey(), discipline);
     return map;
   }, [state.history, discipline]);
 
-  /* The days written down as unrecorded. A square that is grey because the
-     app was never opened and a square that is grey because the month has not
-     got there yet are two different facts, and a tracker that draws them the
-     same way is the one that let two silent days pass unnoticed. */
   const gapDates = useMemo(
     () => new Set(rows(state.history).filter(isGap).map((h) => h.date)),
     [state.history],
@@ -51,7 +56,7 @@ export function AnalyticsModule({ state, discipline, streak }) {
   const grid = useMemo(() => {
     const first = new Date(cursor.y, cursor.m, 1);
     const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
-    const lead = (first.getDay() + 1) % 7; // week starts Saturday
+    const lead = (first.getDay() + 1) % 7;
     const cells = Array.from({ length: lead }, () => null);
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = dayKey(new Date(cursor.y, cursor.m, d));
@@ -69,10 +74,6 @@ export function AnalyticsModule({ state, discipline, streak }) {
         : 0,
       best: vals.length ? Math.max(...vals) : 0,
       hit: vals.filter((v) => v >= STREAK_TARGET).length,
-      /* Counted, never averaged. An unrecorded day folded into the average
-         as a zero would punish a day nobody has any record of; left out of
-         the count entirely it would flatter a month of four entries. Said
-         out loud is the only honest third option. */
       gaps: grid.filter((c) => c && c.gap).length,
     };
   }, [grid]);
@@ -111,6 +112,13 @@ export function AnalyticsModule({ state, discipline, streak }) {
         </p>
       </Card>
 
+      <GoalCard
+        discipline={discipline}
+        history={state.history}
+        state={state}
+        setState={setState}
+      />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           { k: "متوسط الشهر", v: `${monthStats.avg}%`, c: T.accent, icon: TrendingUp },
@@ -133,7 +141,10 @@ export function AnalyticsModule({ state, discipline, streak }) {
         ))}
       </div>
 
-      {/* month grid */}
+      <WeeklyInsightCard state={state} />
+
+      <TrendChart state={state} discipline={discipline} />
+
       <Card className="p-6 sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <Btn variant="outline" size="icon" onClick={() => shift(1)} aria-label="الشهر التالي">
@@ -157,8 +168,6 @@ export function AnalyticsModule({ state, discipline, streak }) {
           {grid.map((cell, i) => {
             if (cell === null) return <span key={`e${i}`} />;
             const note = notesByDate.get(cell.ds);
-            /* Every recorded day opens, not just the ones carrying a written
-               reflection — the roll call is the thing worth going back for. */
             const row = cell.pct === undefined ? null : rowsByDate.get(cell.ds);
             return (
               <button
@@ -176,19 +185,12 @@ export function AnalyticsModule({ state, discipline, streak }) {
                       }${row?.falls ? ` — سقطت ${row.falls}` : ""}`
                 }
                 className={`relative flex aspect-square items-center justify-center rounded-lg text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default ${
-                  /* Dashed, so an unrecorded day is distinguishable from a
-                     day that has not happened yet without needing a colour
-                     the sky can wash out. */
                   cell.gap ? "border border-dashed" : "border"
                 }`}
                 style={{
                   background: cell.gap
                     ? "rgba(255,255,255,0.02)"
                     : LEVEL_BG[levelOf(cell.pct ?? 0)],
-                  /* A tracked day and an untracked one must never look the
-                     same. A 20% day is a day you showed up for, and at 0.28
-                     alpha against a noon sky it read as blank — which is
-                     what "nothing is being saved" looked like. */
                   borderColor:
                     cell.ds === dayKey()
                       ? T.accent
@@ -240,9 +242,6 @@ export function AnalyticsModule({ state, discipline, streak }) {
           })}
         </div>
 
-        {/* Said out loud, under the grid it is about. Two silent days in a
-            month is the fact that explains a flattering average, and a
-            number nobody renders is a number nobody acts on. */}
         {monthStats.gaps > 0 && (
           <p
             className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3.5 py-2.5 text-center text-[11.5px] font-bold leading-relaxed"
@@ -281,11 +280,11 @@ export function AnalyticsModule({ state, discipline, streak }) {
                 {openNote.holds > 0 && (
                   <Badge tint={T.primary}>
                     <ShieldCheck size={10} />
-                    {"صمدت "}
+                    {"صمدت "}
                     <span dir="ltr" className="tabular-nums">
                       {openNote.holds}
                     </span>
-                    {` ${timesWord(openNote.holds)}`}
+                    {` ${timesWord(openNote.holds)}`}
                   </Badge>
                 )}
                 {openNote.falls > 0 && (
@@ -294,7 +293,7 @@ export function AnalyticsModule({ state, discipline, streak }) {
                     <span dir="ltr" className="tabular-nums">
                       {openNote.falls}
                     </span>
-                    {` ${fallWord(openNote.falls)}`}
+                    {` ${fallWord(openNote.falls)}`}
                   </Badge>
                 )}
               </div>
@@ -360,9 +359,10 @@ export function AnalyticsModule({ state, discipline, streak }) {
         </div>
       </Card>
 
+      <WeeklyPatternCard state={state} />
+
       <ConsistencyCard state={state} />
 
-      {/* year overview */}
       <Card className="p-6 sm:p-7">
         <h3 className="text-sm font-bold text-white/70">
           متوسط كل شهر في {cursor.y}
@@ -396,14 +396,1096 @@ export function AnalyticsModule({ state, discipline, streak }) {
 }
 
 
-/* Which habits actually hold, across time rather than on one day. A month of
-   percentages tells you how you did; this tells you *what* you did, and the
-   bottom of the list is where the next percentage point is hiding.
-   Only days carrying a recorded roster count — a day that stored a score and
-   nothing else cannot say which habit earned it, and guessing would be worse
-   than an honest gap. */
+/* ==================================================================== *
+ *  GoalCard
+ * ==================================================================== */
+function GoalCard({ discipline, history, state, setState }) {
+  const goal = Number.isFinite(state?.goal) ? state.goal : DAILY_GOAL_DEFAULT;
+
+  const setGoal = (n) => {
+    setState((s) => ({ ...s, goal: clampDailyGoal(n) }));
+  };
+
+  const stats = useMemo(() => {
+    const recs = rows(history).filter(
+      (h) => !isGap(h) && Number.isFinite(h.pct),
+    );
+    const best = recs.length
+      ? recs.reduce((a, b) => (b.pct > a.pct ? b : a))
+      : null;
+    return { best };
+  }, [history]);
+
+  const streak = useMemo(() => {
+    const map = new Map(
+      rows(history)
+        .filter((h) => !isGap(h))
+        .map((h) => [h.date, h.pct]),
+    );
+    let n = Number.isFinite(discipline) && discipline >= goal ? 1 : 0;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - 1);
+    for (let i = 0; i < 500; i++) {
+      const key = dayKey(d);
+      const p = map.get(key);
+      if (p === undefined || p < goal) break;
+      n += 1;
+      d.setDate(d.getDate() - 1);
+    }
+    return n;
+  }, [history, goal, discipline]);
+
+  const remaining = Math.max(0, goal - discipline);
+  const hitGoal = discipline >= goal;
+  const accent = hitGoal ? T.primary : T.accent;
+  const accentLift = hitGoal ? T.primaryLift : T.accent;
+
+  return (
+    <Card
+      className="p-6 sm:p-7"
+      style={{
+        borderColor: hitGoal ? `${T.primary}80` : `${T.accent}59`,
+        boxShadow: hitGoal
+          ? `inset 0 1px 0 0 rgba(255,255,255,0.15), 0 0 46px -18px ${T.primary}`
+          : `inset 0 1px 0 0 rgba(255,255,255,0.15), 0 0 46px -20px ${T.accent}`,
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
+            style={{
+              borderColor: `${accent}59`,
+              background: `linear-gradient(160deg, ${accent}3D, ${accent}0F)`,
+              color: accent,
+            }}
+          >
+            <Target size={20} strokeWidth={2.4} />
+          </span>
+          <div>
+            <h3
+              className="text-[17px] font-extrabold"
+              style={{ color: accentLift }}
+            >
+              هدفك اليومي
+            </h3>
+            <p
+              className="text-[11.5px] leading-relaxed"
+              style={{ color: T.faint }}
+            >
+              رقم واحد تكسره كل يوم — النتيجة الكاملة، لا عادة بعينها.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {GOAL_CHOICES.map((n) => {
+            const on = n === goal;
+            return (
+              <button
+                key={n}
+                onClick={() => setGoal(n)}
+                className="rounded-lg border px-2.5 py-1 text-[11px] font-extrabold tabular-nums transition-all duration-200"
+                style={{
+                  borderColor: on ? `${T.cta}80` : T.border,
+                  background: on ? `${T.cta}1F` : "transparent",
+                  color: on ? T.ctaLift : T.faint,
+                }}
+              >
+                <span dir="ltr">{n}%</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <div
+          className="relative h-3 w-full overflow-hidden rounded-full"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${Math.min(100, discipline)}%`,
+              backgroundImage: hitGoal
+                ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
+                : `linear-gradient(90deg, ${T.accent}, ${T.accent}99)`,
+              boxShadow: `0 0 12px ${accent}80`,
+            }}
+          />
+          <div
+            className="absolute top-0 bottom-0 w-0.5"
+            style={{
+              left: `${goal}%`,
+              background: T.cta,
+              boxShadow: `0 0 8px ${T.cta}`,
+            }}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[10.5px]">
+          <span style={{ color: T.faint }}>
+            اليوم:{" "}
+            <span
+              dir="ltr"
+              className="font-extrabold tabular-nums"
+              style={{ color: accent }}
+            >
+              {discipline}%
+            </span>
+          </span>
+          <span style={{ color: T.faint }}>
+            الهدف:{" "}
+            <span
+              dir="ltr"
+              className="font-extrabold tabular-nums"
+              style={{ color: T.ctaLift }}
+            >
+              {goal}%
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-3 gap-3">
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{
+            borderColor: hitGoal ? `${T.primary}59` : `${T.accent}3D`,
+            background: hitGoal ? `${T.primary}0F` : `${T.accent}0A`,
+          }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            اليوم
+          </p>
+          <p
+            className="mt-1 text-[15px] font-extrabold"
+            style={{ color: accent }}
+          >
+            {hitGoal ? (
+              "🎉 تجاوزت"
+            ) : (
+              <>
+                <span dir="ltr" className="tabular-nums">
+                  {remaining}
+                </span>
+                {" نقطة"}
+              </>
+            )}
+          </p>
+          <p className="text-[9.5px]" style={{ color: T.faint }}>
+            {hitGoal ? "الهدف محقق" : "لتحقيق الهدف"}
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{
+            borderColor: streak > 0 ? `${T.ember}59` : T.border,
+            background: streak > 0 ? `${T.ember}0A` : "rgba(255,255,255,0.03)",
+          }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            السلسلة
+          </p>
+          <p
+            className="mt-1 flex items-baseline gap-1 text-[15px] font-extrabold"
+            style={{ color: streak > 0 ? T.ember : T.faint }}
+          >
+            {streak > 0 && <Flame size={13} />}
+            <span dir="ltr" className="tabular-nums">
+              {streak}
+            </span>
+          </p>
+          <p className="text-[9.5px]" style={{ color: T.faint }}>
+            {streak === 0
+              ? "ابدأ اليوم"
+              : streak === 1
+              ? "يوم واحد"
+              : "أيام متتالية"}
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{
+            borderColor: `${T.primary}3D`,
+            background: `${T.primary}0A`,
+          }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            أفضل يوم
+          </p>
+          <p
+            dir="ltr"
+            className="mt-1 text-[15px] font-extrabold tabular-nums"
+            style={{ color: T.primary }}
+          >
+            {stats.best ? `${stats.best.pct}%` : "—"}
+          </p>
+          <p className="text-[9.5px]" style={{ color: T.faint }}>
+            {stats.best ? arDate(stats.best.date) : "لا سجلّ"}
+          </p>
+        </div>
+      </div>
+
+      <p
+        className="mt-4 rounded-xl border px-3.5 py-2.5 text-center text-[11.5px] leading-relaxed"
+        style={{
+          borderColor: hitGoal ? `${T.primary}3D` : `${T.accent}3D`,
+          background: hitGoal ? `${T.primary}10` : `${T.accent}0A`,
+          color: accentLift,
+        }}
+      >
+        {hitGoal ? (
+          streak > 1 ? (
+            <>
+              🎉 تجاوزت الهدف{" "}
+              <span dir="ltr" className="font-extrabold tabular-nums">
+                {streak}
+              </span>{" "}
+              أيام متتالية — لا تكسر السلسلة!
+            </>
+          ) : (
+            <>🎉 تجاوزت الهدف اليوم — كمّل غدًا لتبدأ السلسلة.</>
+          )
+        ) : (
+          <>
+            باقي{" "}
+            <span dir="ltr" className="font-extrabold tabular-nums">
+              {remaining}
+            </span>{" "}
+            نقطة للهدف — أي عادة تنجزها تقرّبك.
+          </>
+        )}
+      </p>
+    </Card>
+  );
+}
+
+
+/* ==================================================================== *
+ *  WeeklyInsightCard
+ * ==================================================================== */
+function WeeklyInsightCard({ state }) {
+  const data = useMemo(() => {
+    const recs = rows(state.history).filter(
+      (h) => !isGap(h) && Number.isFinite(h.pct),
+    );
+    const thisWeek = [];
+    const lastWeek = [];
+    for (const r of recs) {
+      const back = daysBetween(r.date);
+      if (back >= 0 && back < 7) thisWeek.push(r);
+      else if (back >= 7 && back < 14) lastWeek.push(r);
+    }
+    if (!thisWeek.length || !lastWeek.length) return null;
+
+    const avg = (arr) =>
+      Math.round(arr.reduce((a, r) => a + r.pct, 0) / arr.length);
+
+    const avgThis = avg(thisWeek);
+    const avgLast = avg(lastWeek);
+    const delta = avgThis - avgLast;
+
+    const best = thisWeek.reduce((a, b) => (b.pct > a.pct ? b : a));
+    const worst = thisWeek.reduce((a, b) => (b.pct < a.pct ? b : a));
+
+    return {
+      avgThis,
+      avgLast,
+      delta,
+      tracked: thisWeek.length,
+      best,
+      worst,
+    };
+  }, [state.history]);
+
+  if (!data) return null;
+
+  const up = data.delta > 0;
+  const down = data.delta < 0;
+  const flat = data.delta === 0;
+  const tone = up ? T.primary : down ? T.danger : T.muted;
+  const Arrow = up ? TrendingUp : down ? TrendingDown : null;
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            className="flex items-center gap-2 text-[17px] font-extrabold"
+            style={{ color: T.ctaLift }}
+          >
+            <Sparkles size={17} /> ملخّص الأسبوع
+          </h3>
+          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            آخر ٧ أيام مقابل الـ ٧ التي قبلها — هل أنت تتحسّن فعلًا؟
+          </p>
+        </div>
+        <span
+          className="shrink-0 rounded-xl border px-3 py-1.5 text-[11px] font-bold"
+          style={{ borderColor: T.border, color: T.faint }}
+        >
+          محسوب على{" "}
+          <span dir="ltr" className="tabular-nums" style={{ color: T.muted }}>
+            {data.tracked}
+          </span>{" "}
+          / ٧ أيام
+        </span>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div
+          className="rounded-xl border px-3.5 py-3"
+          style={{
+            borderColor: `${T.cta}3D`,
+            background: `${T.cta}0A`,
+          }}
+        >
+          <p className="text-[10.5px]" style={{ color: T.faint }}>
+            هذا الأسبوع
+          </p>
+          <p
+            dir="ltr"
+            className="mt-1 text-2xl font-extrabold tabular-nums"
+            style={{ color: T.ctaLift }}
+          >
+            {data.avgThis}%
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border px-3.5 py-3"
+          style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+        >
+          <p className="text-[10.5px]" style={{ color: T.faint }}>
+            الأسبوع الماضي
+          </p>
+          <p
+            dir="ltr"
+            className="mt-1 text-2xl font-extrabold tabular-nums"
+            style={{ color: T.muted }}
+          >
+            {data.avgLast}%
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border px-3.5 py-3"
+          style={{
+            borderColor: `${tone}4D`,
+            background: `${tone}10`,
+          }}
+        >
+          <p className="text-[10.5px]" style={{ color: T.faint }}>
+            الفرق
+          </p>
+          <p
+            className="mt-1 flex items-baseline gap-1.5 text-2xl font-extrabold"
+            style={{ color: tone }}
+          >
+            {Arrow && <Arrow size={20} strokeWidth={2.6} />}
+            <span dir="ltr" className="tabular-nums">
+              {up ? "+" : ""}
+              {data.delta}
+            </span>
+            {flat && <span className="text-[13px]">—</span>}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <p
+          className="rounded-xl border px-3 py-2 text-[11.5px]"
+          style={{ borderColor: `${T.primary}3D`, background: `${T.primary}0A` }}
+        >
+          <span style={{ color: T.faint }}>أفضل يوم:</span>{" "}
+          <span style={{ color: T.primary, fontWeight: 700 }}>
+            {arDate(data.best.date)}
+          </span>{" "}
+          <span
+            dir="ltr"
+            className="font-extrabold tabular-nums"
+            style={{ color: T.primary }}
+          >
+            {data.best.pct}%
+          </span>
+        </p>
+        <p
+          className="rounded-xl border px-3 py-2 text-[11.5px]"
+          style={{ borderColor: `${T.danger}3D`, background: `${T.danger}0A` }}
+        >
+          <span style={{ color: T.faint }}>أسوأ يوم:</span>{" "}
+          <span style={{ color: T.danger, fontWeight: 700 }}>
+            {arDate(data.worst.date)}
+          </span>{" "}
+          <span
+            dir="ltr"
+            className="font-extrabold tabular-nums"
+            style={{ color: T.danger }}
+          >
+            {data.worst.pct}%
+          </span>
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+
+/* ==================================================================== *
+ *  TrendChart — with 4 spans: week / month / 90d / year
+ * ==================================================================== */
+function TrendChart({ state, discipline }) {
+  const [span, setSpan] = useState(7);
+  const [hover, setHover] = useState(null);
+
+  const goal = Number.isFinite(state?.goal) ? state.goal : DAILY_GOAL_DEFAULT;
+
+  const SPANS = [
+    { n: 7, label: "أسبوع" },
+    { n: 30, label: "شهر" },
+    { n: 90, label: "٩٠ يوم" },
+    { n: 365, label: "سنة" },
+  ];
+
+  const dayLabel = (date) => {
+    const [y, m, d] = String(date).split("-").map(Number);
+    if (!y || !m || !d) return "";
+    const js = new Date(y, m - 1, d).getDay();
+    return ["أحد", "اثن", "ثلا", "أرب", "خمي", "جمع", "سبت"][js];
+  };
+
+  const data = useMemo(() => {
+    const byDate = new Map(
+      rows(state.history).filter((h) => !isGap(h)).map((h) => [h.date, h.pct]),
+    );
+    byDate.set(dayKey(), discipline);
+
+    const out = [];
+    const today = new Date();
+    for (let i = span - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const ds = dayKey(d);
+      const v = byDate.get(ds);
+      out.push({ date: ds, pct: v === undefined ? null : v });
+    }
+    return out;
+  }, [state.history, discipline, span]);
+
+  const stats = useMemo(() => {
+    const vals = data.filter((d) => d.pct !== null);
+    if (!vals.length) return null;
+    const avg = Math.round(vals.reduce((a, b) => a + b.pct, 0) / vals.length);
+    const best = vals.reduce((a, b) => (b.pct > a.pct ? b : a));
+    const worst = vals.reduce((a, b) => (b.pct < a.pct ? b : a));
+    const mid = Math.floor(vals.length / 2);
+    const oldV = vals.slice(0, mid);
+    const newV = vals.slice(mid);
+    const oldAvg = oldV.length ? oldV.reduce((a, b) => a + b.pct, 0) / oldV.length : 0;
+    const newAvg = newV.length ? newV.reduce((a, b) => a + b.pct, 0) / newV.length : 0;
+    const trend = Math.round(newAvg - oldAvg);
+    const above = vals.filter((v) => v.pct >= goal).length;
+    return { avg, best, worst, trend, above, total: vals.length };
+  }, [data, goal]);
+
+  const W = 900;
+  const H = 280;
+  const PAD_L = 52;
+  const PAD_R = 24;
+  const PAD_T = 20;
+  const PAD_B = 46;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+
+  const yOf = (pct) => PAD_T + chartH * (1 - pct / 100);
+  const xOf = (i) => PAD_L + (i / Math.max(1, data.length - 1)) * chartW;
+
+  const { linePath, areaPath } = useMemo(() => {
+    let line = "";
+    let started = false;
+    const segs = [];
+
+    data.forEach((d, i) => {
+      if (d.pct === null) {
+        started = false;
+        return;
+      }
+      const x = xOf(i);
+      const y = yOf(d.pct);
+      if (!started) {
+        line += `M ${x} ${y} `;
+        started = true;
+        segs.push({ pts: [{ x, y }] });
+      } else {
+        line += `L ${x} ${y} `;
+        segs[segs.length - 1].pts.push({ x, y });
+      }
+    });
+
+    const baseline = PAD_T + chartH;
+    let area = "";
+    for (const seg of segs) {
+      if (!seg.pts.length) continue;
+      area += `M ${seg.pts[0].x} ${baseline} `;
+      for (const pt of seg.pts) area += `L ${pt.x} ${pt.y} `;
+      area += `L ${seg.pts[seg.pts.length - 1].x} ${baseline} Z `;
+    }
+
+    return { linePath: line, areaPath: area };
+  }, [data]);
+
+  const handleMove = (e) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const xInViewBox = ((e.clientX - rect.left) / rect.width) * W;
+    if (xInViewBox < PAD_L - 10 || xInViewBox > W - PAD_R + 10) {
+      setHover(null);
+      return;
+    }
+    const i = Math.round(((xInViewBox - PAD_L) / chartW) * (data.length - 1));
+    if (i < 0 || i >= data.length) return;
+    setHover(i);
+  };
+
+  const hovered = hover !== null ? data[hover] : null;
+
+  if (!stats) return null;
+
+  const yTicks = [0, 25, 50, 75, 100];
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            className="flex items-center gap-2 text-[17px] font-extrabold"
+            style={{ color: T.primaryLift }}
+          >
+            <TrendingUp size={17} /> منحنى الانضباط
+          </h3>
+          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            كل نقطة يوم من أيامك. الخط الأخضر أداؤك، والخط الذهبي هدفك — راقب الاتجاه لا اليوم الواحد.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          {SPANS.map((s) => {
+            const on = span === s.n;
+            return (
+              <button
+                key={s.n}
+                onClick={() => setSpan(s.n)}
+                className="rounded-lg border px-2.5 py-1 text-[10.5px] font-bold tabular-nums"
+                style={{
+                  borderColor: on ? `${T.cta}80` : T.border,
+                  background: on ? `${T.cta}1F` : "transparent",
+                  color: on ? T.ctaLift : T.faint,
+                }}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full block select-none"
+          onMouseMove={handleMove}
+          onMouseLeave={() => setHover(null)}
+        >
+          <defs>
+            <linearGradient id="trendAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={T.primary} stopOpacity="0.55" />
+              <stop offset="100%" stopColor={T.primary} stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {yTicks.map((g) => (
+            <g key={g}>
+              <line
+                x1={PAD_L}
+                y1={yOf(g)}
+                x2={W - PAD_R}
+                y2={yOf(g)}
+                stroke={g === 0 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.06)"}
+                strokeWidth="1"
+                strokeDasharray={g === 0 ? "none" : "2 4"}
+              />
+              <text
+                x={PAD_L - 8}
+                y={yOf(g) + 3.5}
+                textAnchor="end"
+                fontSize="10.5"
+                fill="rgba(255,255,255,0.4)"
+                fontFamily="ui-monospace, monospace"
+                dir="ltr"
+              >
+                {g}%
+              </text>
+            </g>
+          ))}
+
+          {areaPath && <path d={areaPath} fill="url(#trendAreaGrad)" />}
+
+          <line
+            x1={PAD_L}
+            y1={yOf(goal)}
+            x2={W - PAD_R}
+            y2={yOf(goal)}
+            stroke={T.cta}
+            strokeWidth="2"
+            strokeDasharray="6 4"
+            opacity="0.9"
+          />
+          <text
+            x={W - PAD_R - 4}
+            y={yOf(goal) - 6}
+            textAnchor="end"
+            fontSize="10.5"
+            fill={T.cta}
+            fontFamily="ui-monospace, monospace"
+            dir="ltr"
+            fontWeight="700"
+          >
+            الهدف {goal}%
+          </text>
+
+          {linePath && (
+            <path
+              d={linePath}
+              fill="none"
+              stroke={T.primary}
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {data.map((d, i) => {
+            if (d.pct === null) return null;
+            const isToday = i === data.length - 1;
+            if (isToday) return null;
+            const hit = d.pct >= goal;
+            const r = span <= 7 ? 5 : 3;
+            return (
+              <g key={i}>
+                <circle
+                  cx={xOf(i)}
+                  cy={yOf(d.pct)}
+                  r={r}
+                  fill={hit ? T.primary : T.accent}
+                  stroke="rgba(20,14,19,0.9)"
+                  strokeWidth="1.2"
+                />
+                {span <= 7 && (
+                  <text
+                    x={xOf(i)}
+                    y={yOf(d.pct) - 10}
+                    textAnchor="middle"
+                    fontSize="10.5"
+                    fontWeight="700"
+                    fill={hit ? T.primary : T.accent}
+                    fontFamily="ui-monospace, monospace"
+                    dir="ltr"
+                  >
+                    {d.pct}%
+                  </text>
+                )}
+              </g>
+            );
+          })}
+
+          {data[data.length - 1]?.pct !== null &&
+            data[data.length - 1]?.pct !== undefined && (
+              <>
+                <circle
+                  cx={xOf(data.length - 1)}
+                  cy={yOf(data[data.length - 1].pct)}
+                  r="9"
+                  fill={data[data.length - 1].pct >= goal ? T.primary : T.accent}
+                  opacity="0.25"
+                />
+                <circle
+                  cx={xOf(data.length - 1)}
+                  cy={yOf(data[data.length - 1].pct)}
+                  r="5.5"
+                  fill={data[data.length - 1].pct >= goal ? T.primary : T.accent}
+                  stroke="rgba(20,14,19,0.95)"
+                  strokeWidth="2"
+                />
+              </>
+            )}
+
+          {hovered && hovered.pct !== null && (
+            <g>
+              <line
+                x1={xOf(hover)}
+                y1={PAD_T}
+                x2={xOf(hover)}
+                y2={PAD_T + chartH}
+                stroke="rgba(255,255,255,0.4)"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+              />
+              <circle
+                cx={xOf(hover)}
+                cy={yOf(hovered.pct)}
+                r="6"
+                fill={T.accent}
+                stroke="rgba(20,14,19,0.95)"
+                strokeWidth="2"
+              />
+            </g>
+          )}
+
+          {span <= 7
+            ? data.map((d, i) => {
+                const x = xOf(i);
+                const isToday = i === data.length - 1;
+                return (
+                  <text
+                    key={i}
+                    x={x}
+                    y={H - 12}
+                    textAnchor="middle"
+                    fontSize="10.5"
+                    fontWeight={isToday ? 800 : 500}
+                    fill={isToday ? T.accent : "rgba(255,255,255,0.5)"}
+                  >
+                    {isToday ? "اليوم" : dayLabel(d.date)}
+                  </text>
+                );
+              })
+            : [0, Math.floor(data.length / 2), data.length - 1].map((idx, k) => {
+                const d = data[idx];
+                if (!d) return null;
+                const [, mm, dd] = d.date.split("-");
+                const x = xOf(idx);
+                const anchor = k === 0 ? "start" : k === 2 ? "end" : "middle";
+                return (
+                  <text
+                    key={idx}
+                    x={x}
+                    y={H - 12}
+                    textAnchor={anchor}
+                    fontSize="10.5"
+                    fill="rgba(255,255,255,0.4)"
+                    fontFamily="ui-monospace, monospace"
+                    dir="ltr"
+                  >
+                    {mm}/{dd}
+                  </text>
+                );
+              })}
+        </svg>
+      </div>
+
+      <div className="mt-3 text-center text-[11.5px] h-5">
+        {hovered ? (
+          <>
+            <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.fg }}>
+              {hovered.date}
+            </span>
+            {" — "}
+            {hovered.pct !== null ? (
+              <span
+                dir="ltr"
+                className="font-extrabold tabular-nums"
+                style={{
+                  fontSize: 14,
+                  color: hovered.pct >= goal ? T.primary : T.accent,
+                }}
+              >
+                {hovered.pct}%
+              </span>
+            ) : (
+              <span style={{ color: T.faint }}>لا سجلّ</span>
+            )}
+          </>
+        ) : (
+          <span style={{ color: T.faint }}>مرّر على المنحنى لرؤية يوم محدّد</span>
+        )}
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{ borderColor: `${T.accent}3D`, background: `${T.accent}0A` }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            المتوسط
+          </p>
+          <p
+            dir="ltr"
+            className="mt-1 text-[17px] font-extrabold tabular-nums"
+            style={{ color: T.accent }}
+          >
+            {stats.avg}%
+          </p>
+        </div>
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{
+            borderColor:
+              stats.trend > 0
+                ? `${T.primary}3D`
+                : stats.trend < 0
+                ? `${T.danger}3D`
+                : T.border,
+            background:
+              stats.trend > 0
+                ? `${T.primary}0A`
+                : stats.trend < 0
+                ? `${T.danger}0A`
+                : "rgba(255,255,255,0.03)",
+          }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            الاتجاه
+          </p>
+          <p
+            className="mt-1 flex items-baseline gap-1 text-[17px] font-extrabold"
+            style={{
+              color:
+                stats.trend > 0
+                  ? T.primary
+                  : stats.trend < 0
+                  ? T.danger
+                  : T.muted,
+            }}
+          >
+            {stats.trend > 0 ? (
+              <TrendingUp size={15} />
+            ) : stats.trend < 0 ? (
+              <TrendingDown size={15} />
+            ) : null}
+            <span dir="ltr" className="tabular-nums">
+              {stats.trend > 0 ? "+" : ""}
+              {stats.trend}
+            </span>
+          </p>
+        </div>
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{ borderColor: `${T.primary}3D`, background: `${T.primary}0A` }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            أيام فوق الهدف
+          </p>
+          <p className="mt-1 text-[17px] font-extrabold" style={{ color: T.primary }}>
+            <span dir="ltr" className="tabular-nums">
+              {stats.above}
+            </span>
+            <span className="text-[12px]" style={{ color: T.muted }}>
+              {" / "}
+              {stats.total}
+            </span>
+          </p>
+        </div>
+        <div
+          className="rounded-xl border px-3 py-2.5"
+          style={{ borderColor: `${T.primary}3D`, background: `${T.primary}0A` }}
+        >
+          <p className="text-[10px]" style={{ color: T.faint }}>
+            أفضل يوم
+          </p>
+          <p
+            dir="ltr"
+            className="mt-1 text-[17px] font-extrabold tabular-nums"
+            style={{ color: T.primary }}
+          >
+            {stats.best.pct}%
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+
+/* ==================================================================== *
+ *  WeeklyPatternCard
+ * ==================================================================== */
+function WeeklyPatternCard({ state }) {
+  const data = useMemo(() => {
+    const recs = rows(state.history).filter(
+      (h) => !isGap(h) && Number.isFinite(h.pct),
+    );
+    if (recs.length < 4) return null;
+
+    const buckets = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }));
+    for (const r of recs) {
+      const [y, m, d] = String(r.date).split("-").map(Number);
+      if (!y || !m || !d) continue;
+      const jsDay = new Date(y, m - 1, d).getDay();
+      const idx = (jsDay + 1) % 7;
+      buckets[idx].sum += r.pct;
+      buckets[idx].n += 1;
+    }
+
+    const cells = buckets.map((b, i) => ({
+      idx: i,
+      avg: b.n ? Math.round(b.sum / b.n) : 0,
+      n: b.n,
+    }));
+
+    const solid = cells.filter((c) => c.n >= 2);
+    if (!solid.length) return { cells, best: null, worst: null };
+
+    const best = solid.reduce((a, b) => (b.avg > a.avg ? b : a));
+    const worst = solid.reduce((a, b) => (b.avg < a.avg ? b : a));
+    return { cells, best, worst };
+  }, [state.history]);
+
+  if (!data) return null;
+
+  const tintFor = (avg, n) => {
+    if (!n) return "rgba(255,255,255,0.14)";
+    if (avg >= 80) return T.primary;
+    if (avg >= 50) return T.accent;
+    if (avg > 0) return T.ember;
+    return T.danger;
+  };
+
+  const showSummary =
+    data.best &&
+    data.worst &&
+    data.best.idx !== data.worst.idx &&
+    data.best.avg - data.worst.avg >= 5;
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            className="flex items-center gap-2 text-[17px] font-extrabold"
+            style={{ color: T.sky }}
+          >
+            <CalendarRange size={17} /> نمط الأسبوع
+          </h3>
+          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            أي يوم من أيام الأسبوع تصمد فيه، وأيّها يسقط منك أولًا.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-2">
+        {data.cells.map((c) => {
+          const label = WEEK_FULL[c.idx];
+          const tint = tintFor(c.avg, c.n);
+          const isBest = data.best && data.best.idx === c.idx && c.n >= 2;
+          const isWorst = data.worst && data.worst.idx === c.idx && c.n >= 2;
+          const barH = c.n ? Math.max(6, c.avg) : 4;
+
+          return (
+            <div
+              key={c.idx}
+              className="flex min-w-0 flex-col items-center gap-1.5"
+              title={
+                c.n
+                  ? `${label} — ${c.avg}٪ متوسط من ${c.n} ${c.n === 1 ? "يوم" : "أيام"}`
+                  : `${label} — لا سجلّ بعد`
+              }
+            >
+              <span
+                dir="ltr"
+                className="text-[11.5px] font-extrabold tabular-nums"
+                style={{ color: c.n ? tint : T.faint }}
+              >
+                {c.n ? `${c.avg}%` : "—"}
+              </span>
+
+              <div
+                className="relative flex h-20 w-full items-end overflow-hidden rounded-lg border"
+                style={{
+                  borderColor: isBest
+                    ? `${T.primary}80`
+                    : isWorst
+                    ? `${T.danger}80`
+                    : T.border,
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                <div
+                  className="w-full rounded-t transition-all duration-700"
+                  style={{
+                    height: `${barH}%`,
+                    background: c.n
+                      ? `linear-gradient(180deg, ${tint}CC, ${tint}66)`
+                      : "transparent",
+                    boxShadow: c.n && c.avg >= 50 ? `0 0 10px ${tint}55` : "none",
+                  }}
+                />
+              </div>
+
+              <span
+                className="w-full text-center text-[9px] font-bold leading-tight sm:text-[10.5px]"
+                style={{
+                  color: isBest ? T.primary : isWorst ? T.danger : T.muted,
+                }}
+              >
+                {label}
+              </span>
+
+              {c.n > 0 && (
+                <span
+                  dir="ltr"
+                  className="text-[9px] tabular-nums"
+                  style={{ color: T.faint }}
+                >
+                  ·{c.n}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {showSummary && (
+        <p
+          className="mt-5 rounded-xl border px-3.5 py-3 text-[11.5px] leading-relaxed"
+          style={{
+            borderColor: `${T.sky}3D`,
+            background: `${T.sky}0D`,
+            color: T.muted,
+          }}
+        >
+          <strong style={{ color: T.primary }}>
+            {WEEK_FULL[data.best.idx]}
+          </strong>{" "}
+          أقوى أيامك (
+          <span dir="ltr" className="tabular-nums">
+            {data.best.avg}%
+          </span>
+          ) ·{" "}
+          <strong style={{ color: T.danger }}>
+            {WEEK_FULL[data.worst.idx]}
+          </strong>{" "}
+          أضعفها (
+          <span dir="ltr" className="tabular-nums">
+            {data.worst.avg}%
+          </span>
+          ) — راجع ما الذي يختلف في هذا اليوم.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+
+/* ==================================================================== *
+ *  ConsistencyCard
+ * ==================================================================== */
 function ConsistencyCard({ state }) {
   const [win, setWin] = useState(30);
+  const [openHabit, setOpenHabit] = useState(null);
+
+  const byId = useMemo(() => historyIndex(state.history), [state.history]);
 
   const data = useMemo(() => {
     const rows = (state.history || []).filter(
@@ -432,18 +1514,52 @@ function ConsistencyCard({ state }) {
       }
     }
 
+    const trend = new Map();
+    if (scoped.length >= 4) {
+      const sorted = [...scoped].sort((a, b) =>
+        a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+      );
+      const mid = Math.floor(sorted.length / 2);
+      const tallyHalf = (arr) => {
+        const m = new Map();
+        for (const r of arr) {
+          const done = new Set(r.done);
+          for (const id of r.all) {
+            if (!m.has(id)) m.set(id, { kept: 0, total: 0 });
+            const t = m.get(id);
+            t.total += 1;
+            if (done.has(id)) t.kept += 1;
+          }
+        }
+        return m;
+      };
+      const oldT = tallyHalf(sorted.slice(0, mid));
+      const newT = tallyHalf(sorted.slice(mid));
+      for (const [id, nt] of newT) {
+        const ot = oldT.get(id);
+        if (!ot || !ot.total || !nt.total) continue;
+        const op = Math.round((ot.kept / ot.total) * 100);
+        const np = Math.round((nt.kept / nt.total) * 100);
+        const d = np - op;
+        if (d !== 0) trend.set(id, d);
+      }
+    }
+
     const habits = [...tally.entries()]
+      .filter(([id]) => live.has(id))
       .map(([id, t]) => ({
         id,
-        label: live.get(id)?.label || "عادة لم تعد في روتينك",
-        group: live.get(id)?.group || null,
+        label: live.get(id).label,
+        group: live.get(id).group || null,
         pct: Math.round((t.kept / t.total) * 100),
+        streak: habitStreak(byId, id),
+        trend: trend.get(id) ?? 0,
         ...t,
       }))
       .sort((a, b) => b.pct - a.pct || b.kept - a.kept);
 
     return { days: scoped.length, habits, blocks };
-  }, [state.history, state.habits, win]);
+  }, [state.history, state.habits, win, byId]);
 
   const tintFor = (pct) =>
     pct >= 80 ? T.primary : pct >= 50 ? T.accent : pct > 0 ? T.ember : T.danger;
@@ -456,7 +1572,7 @@ function ConsistencyCard({ state }) {
             <ListChecks size={17} /> أكثر ما التزمت به
           </h3>
           <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-            ليست النسبة، بل ما وراءها: أي عادة تصمد، وأيّها تسقط أولًا.
+            ليست النسبة، بل ما وراءها: أي عادة تصمد، وأيّها تسقط أولًا. اضغط أي عادة لرؤية كل يوم خلف الرقم.
           </p>
         </div>
         <div className="flex shrink-0 gap-1.5">
@@ -481,12 +1597,14 @@ function ConsistencyCard({ state }) {
         </div>
       </div>
 
-      {!data ? (
+      {!data || !data.habits.length ? (
         <p
           className="mt-5 rounded-xl border border-dashed py-10 text-center text-[11.5px] leading-relaxed"
           style={{ borderColor: T.border, color: T.faint }}
         >
-          لا توجد أيام بسجلّ مفصّل بعد — يبدأ العدّ من اليوم.
+          {data
+            ? "لا توجد عادات حالية في هذه النافذة — كل ما سُجّل كان لعادات خارج روتينك."
+            : "لا توجد أيام بسجلّ مفصّل بعد — يبدأ العدّ من اليوم."}
           <br />
           كل يوم تؤشّر فيه عادةً يضيف سطرًا هنا.
         </p>
@@ -500,7 +1618,6 @@ function ConsistencyCard({ state }) {
             {dayWord(data.days)} بسجلّ مفصّل
           </p>
 
-          {/* which part of the day holds, before which habit holds */}
           <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
             {GROUPS.map((g) => {
               const b = data.blocks.get(g.id);
@@ -534,9 +1651,12 @@ function ConsistencyCard({ state }) {
               const tint = tintFor(h.pct);
               const g = GROUPS.find((x) => x.id === h.group);
               return (
-                <div
+                <button
                   key={h.id}
-                  className="rounded-xl border px-3.5 py-2.5"
+                  type="button"
+                  onClick={() => setOpenHabit(h)}
+                  aria-label={`تفاصيل ${h.label}`}
+                  className="block w-full rounded-xl border px-3.5 py-2.5 text-right transition-all duration-200 hover:border-white/30 hover:bg-white/[0.05]"
                   style={{
                     borderColor: i === 0 ? `${T.primary}59` : T.border,
                     background:
@@ -548,6 +1668,33 @@ function ConsistencyCard({ state }) {
                       {i === 0 && <span style={{ color: T.accent }}>★ </span>}
                       {h.label}
                     </p>
+                    {h.streak > 0 && (
+                      <span
+                        className="flex shrink-0 items-center gap-0.5 text-[10.5px] font-extrabold tabular-nums"
+                        style={{ color: T.ember }}
+                        title={`${h.streak} يوم متواصل`}
+                      >
+                        <Flame size={10} />
+                        <span dir="ltr">{h.streak}</span>
+                      </span>
+                    )}
+                    {h.trend !== 0 && (
+                      <span
+                        className="flex shrink-0 items-center gap-0.5 text-[10.5px] font-extrabold tabular-nums"
+                        style={{ color: h.trend > 0 ? T.primary : T.danger }}
+                        title={`${h.trend > 0 ? "+" : ""}${h.trend}٪ عن النصف السابق`}
+                      >
+                        {h.trend > 0 ? (
+                          <TrendingUp size={10} />
+                        ) : (
+                          <TrendingDown size={10} />
+                        )}
+                        <span dir="ltr">
+                          {h.trend > 0 ? "+" : ""}
+                          {h.trend}
+                        </span>
+                      </span>
+                    )}
                     <span
                       dir="ltr"
                       className="shrink-0 text-[10.5px] tabular-nums"
@@ -581,34 +1728,165 @@ function ConsistencyCard({ state }) {
                       {g.label}
                     </p>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
         </>
       )}
+
+      <HabitDrillModal
+        open={!!openHabit}
+        habit={openHabit}
+        win={win}
+        state={state}
+        onClose={() => setOpenHabit(null)}
+      />
     </Card>
   );
 }
 
 
-/* What you were actually keeping on a given day, block by block. Labels are
-   resolved from the live routine rather than stored per day — a renamed habit
-   should read under its current name, and twenty Arabic labels a day would
-   cost most of a megabyte a year. A habit since deleted is still shown: it
-   was part of that day whether or not it survived to this one. */
+/* ==================================================================== *
+ *  HabitDrillModal
+ * ==================================================================== */
+function HabitDrillModal({ open, habit, win, state, onClose }) {
+  const data = useMemo(() => {
+    if (!habit) return null;
+    const scoped = (state.history || []).filter(
+      (h) => Array.isArray(h.done) && Array.isArray(h.all) && h.all.length,
+    );
+    const filtered = win
+      ? scoped.filter((h) => daysBetween(h.date) < win)
+      : scoped;
+    const sorted = [...filtered].sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+    );
+
+    let kept = 0;
+    let asked = 0;
+    let bestRun = 0;
+    let curRun = 0;
+    const cells = sorted.map((r) => {
+      const askedHere = r.all.includes(habit.id);
+      const doneHere = askedHere && r.done.includes(habit.id);
+      if (askedHere) {
+        asked += 1;
+        if (doneHere) {
+          kept += 1;
+          curRun += 1;
+          if (curRun > bestRun) bestRun = curRun;
+        } else {
+          curRun = 0;
+        }
+      } else {
+        curRun = 0;
+      }
+      return { date: r.date, asked: askedHere, done: doneHere };
+    });
+
+    return {
+      cells,
+      kept,
+      asked,
+      bestRun,
+      pct: asked ? Math.round((kept / asked) * 100) : 0,
+    };
+  }, [habit, win, state.history]);
+
+  if (!open || !habit || !data) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title={habit.label}>
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Badge tint={T.primary}>
+            <span dir="ltr" className="tabular-nums">
+              {data.pct}%
+            </span>
+            {" الالتزام"}
+          </Badge>
+          {data.bestRun > 0 && (
+            <Badge tint={T.ember}>
+              <Flame size={10} />
+              {"أفضل سلسلة "}
+              <span dir="ltr" className="tabular-nums">
+                {data.bestRun}
+              </span>
+            </Badge>
+          )}
+          <Badge tint="rgba(255,255,255,0.5)">
+            <span dir="ltr" className="tabular-nums">
+              {data.kept}/{data.asked}
+            </span>
+          </Badge>
+        </div>
+
+        <p className="text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+          كل مربّع يوم — من الأقدم إلى الأحدث.{" "}
+          <span style={{ color: T.primary, fontWeight: 700 }}>الأخضر</span>
+          {" = أنجزتها · "}
+          <span style={{ color: T.danger, fontWeight: 700 }}>الأحمر</span>
+          {" = فاتتك · "}
+          <span style={{ color: T.faint, fontWeight: 700 }}>الرمادي</span>
+          {" = ما كانت في روتينك ذلك اليوم."}
+        </p>
+
+        <div className="grid grid-cols-7 gap-1">
+          {data.cells.map((c) => (
+            <div
+              key={c.date}
+              className="flex aspect-square items-center justify-center rounded-md border text-[10px] font-bold tabular-nums"
+              style={{
+                background: !c.asked
+                  ? "rgba(255,255,255,0.02)"
+                  : c.done
+                  ? `${T.primary}33`
+                  : `${T.danger}12`,
+                borderColor: !c.asked
+                  ? "rgba(255,255,255,0.06)"
+                  : c.done
+                  ? `${T.primary}80`
+                  : `${T.danger}40`,
+                color: !c.asked
+                  ? "rgba(255,255,255,0.25)"
+                  : c.done
+                  ? T.primary
+                  : T.danger,
+              }}
+              title={`${c.date} — ${
+                !c.asked ? "لم تكن في الروتين" : c.done ? "أنجزتها" : "فاتتك"
+              }`}
+            >
+              <span dir="ltr">{Number(c.date.slice(-2))}</span>
+            </div>
+          ))}
+        </div>
+
+        {data.cells.length === 0 && (
+          <p
+            className="rounded-xl border border-dashed px-3.5 py-4 text-center text-[11.5px] leading-relaxed"
+            style={{ borderColor: T.border, color: T.faint }}
+          >
+            لا توجد أيام بسجلّ مفصّل في هذه النافذة.
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+
+/* ==================================================================== *
+ *  DayRollCall
+ * ==================================================================== */
 export function DayRollCall({ row, state }) {
   const detail = useMemo(() => {
     if (!row || !Array.isArray(row.done)) return null;
     const live = new Map((state.habits || []).map((h) => [h.id, h]));
     const done = new Set(row.done);
-    /* The roster recorded that day. Older rows predate it, so they fall back
-       to today's routine — flagged, because that comparison is approximate. */
     const exact = Array.isArray(row.all);
     const ids = exact ? row.all : (state.habits || []).map((h) => h.id);
-    /* Which of the ticks were carried on the floor. A subset of `done`,
-       never a third state: the day counted it fully and so does this list —
-       it only says how. */
     const tiny = new Set(Array.isArray(row.tiny) ? row.tiny : []);
     const items = ids.map((id) => ({
       id,
@@ -663,9 +1941,6 @@ export function DayRollCall({ row, state }) {
             </span>
           </div>
 
-          {/* Where the score came from. "٢٠٪" says nothing about whether the
-              morning held and the evening collapsed — and that is the whole
-              question when you go back to look at a day. */}
           <div className="grid grid-cols-3 gap-1.5">
             {GROUPS.map((g) => {
               const items = detail.items.filter((h) => h.group === g.id);
@@ -795,11 +2070,6 @@ const CONSISTENCY_WINDOWS = [
 ];
 
 
-/* ==================================================================== *
- *  MODULE 4 — Analytics
- * ==================================================================== */
-
-
 const LEVEL_BG = [
   "rgba(255,255,255,0.04)",
   "rgba(16,185,129,0.42)",
@@ -807,4 +2077,3 @@ const LEVEL_BG = [
   "rgba(16,185,129,0.74)",
   "#10B981",
 ];
-

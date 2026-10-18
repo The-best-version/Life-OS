@@ -235,6 +235,27 @@ export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
 export const SCHEMA = 31;
 
+/* --- the daily goal ------------------------------------------------ *
+ *  One number the user picks and breaks every day. It lives in the state
+ *  rather than a per-viewer preference because the Telegram bot reads it
+ *  too — the point of the number is that the bot can say «باقي 15 نقطة
+ *  للهدف» at eight in the evening, and a value kept in localStorage is a
+ *  value only the browser can see.
+ *
+ *  Bounds are loose on purpose: 30 is not too low and 95 is not too high,
+ *  because the number is the user's choice and the point is not for this
+ *  file to have an opinion about it.
+ * ------------------------------------------------------------------- */
+export const DAILY_GOAL_DEFAULT = 60;
+export const DAILY_GOAL_MIN = 30;
+export const DAILY_GOAL_MAX = 95;
+export const clampDailyGoal = (n) => {
+  const v = Math.round(Number(n));
+  return Number.isFinite(v) && v >= DAILY_GOAL_MIN && v <= DAILY_GOAL_MAX
+    ? v
+    : DAILY_GOAL_DEFAULT;
+};
+
 export const freshState = (carry = {}) => ({
   schema: SCHEMA,
   date: dayKey(),
@@ -299,6 +320,7 @@ export const freshState = (carry = {}) => ({
   streakBase: carry.streakBase || 0,
   bestStreak: carry.bestStreak || 0,
   dayBanked: false,
+  goal: clampDailyGoal(carry.goal),
 });
 
 /* Reshapes a saved payload without discarding anything the user typed. */
@@ -671,6 +693,7 @@ export function migrate(saved) {
         ? Math.min(clampGoal(saved.waterGoal), Math.round(+saved.water))
         : 0,
     cueImage: typeof saved.cueImage === "string" ? saved.cueImage : null,
+    goal: clampDailyGoal(saved.goal),
   };
 }
 
@@ -702,6 +725,7 @@ export const carryOf = (s) => ({
   cueImage: s.cueImage,
   history: s.history,
   bestStreak: s.bestStreak,
+  goal: s.goal,
 });
 
 /* The day turning over, applied to a state already in memory. The reload
@@ -810,8 +834,23 @@ export {
   SEED_TASKS,
   QUADRANT_IDS,
   STEP_MAX,
+  ESTIMATE_MAX,
+  AGED_DAYS,
+  DUE_SOON_DAYS,
+  QUADRANT_WIP,
   taskShape,
   capToday,
+  taskAge,
+  taskOverdue,
+  taskDueToday,
+  taskDueSoon,
+  nextOrder,
+  orderedOpen,
+  orderedDone,
+  estimateTotal,
+  wipOf,
+  scheduledTasks,
+  reorderWithin,
   tomorrowKey,
   prepShape,
   prepPicks,
@@ -835,6 +874,7 @@ export {
   HORIZON_IDS,
   parentHorizon,
   ARC,
+  RUNWAY,
   GOAL_YEARS,
   YEAR_MIN,
   YEAR_MAX,
@@ -852,10 +892,14 @@ export {
   pillarOf,
   horizonOf,
   goalPct,
+  goalPace,
   goalEnd,
   windowOf,
+  yearQuarters,
   windowStand,
   openingWindow,
+  syncHabitToGoals,
+  syncTaskToGoal, 
 } from "./life-state-goals.mjs";
 
 /* The library, plus its memory: a point carries the day it comes back on,
@@ -982,6 +1026,10 @@ export {
   WEEKLY_AT_DEFAULT,
   WEEKLY_DOW_DEFAULT,
   REVIEW_AT_DEFAULT,
+  NUDGE_AT_DEFAULT,
+  NUDGE_THRESHOLD_DEFAULT,
+  NUDGE_THRESHOLD_MIN,
+  NUDGE_THRESHOLD_MAX,
   REMINDER_REPEATS,
   REMINDER_REPEAT_IDS,
   repeatMeta,

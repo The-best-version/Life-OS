@@ -8,6 +8,8 @@
 import { InlineKeyboard } from "grammy";
 import {
   TOP_TASK_CAP,
+  DAILY_GOAL_DEFAULT,
+  NUDGE_THRESHOLD_DEFAULT,
   scoredOf,
   rows,
   dayKey,
@@ -19,6 +21,7 @@ import {
   pagesLeft,
   countNotes,
   dueNotes,
+  botShape,
 } from "../../src/state/life-state.mjs";
 import { PRAYER_ROWS, clockAt, prayerTimes } from "../../src/utils/prayer-times.mjs";
 import {
@@ -83,33 +86,11 @@ export const savedTaskDone = (out) => line(`✅ أنجزت: ${out.row.text}`);
 
 export const undone = () => line("↩︎ رجّعتها.");
 
-/* --- the keyboards ----------------------------------------------------- *
- *  Callback data is `kind:id`, and Telegram caps it at 64 bytes — which is
- *  why the ids the app generates (seven characters) are passed as they are
- *  and never a label.
- * ---------------------------------------------------------------------- */
+/* --- the keyboards ----------------------------------------------------- */
 
-/* The undo button, under every write. Eight seconds is the app's own window
-   and it is the wrong one here: a message sits in a chat, and the answer to
-   «was that the right amount?» often arrives after a glance at the screen.
-   So the button stays until the bot restarts — `bot.js` holds the `before`
-   in memory and says so plainly when it no longer has it. */
 export const undoKeys = (token) =>
   new InlineKeyboard().text("↩︎ تراجع", `undo:${token}`);
 
-/* What is still open right now, as buttons. Built from the live roster and
-   never from a hardcoded list of prayers: the five that carry the score are
-   his choice, and «تمت صلاة العصر» has to mean whichever habit he actually
-   wrote.
- *
- *  **The floor gets a button of its own.** `habit.min` is the smallest
- *  version of a habit he wrote himself, a tiny tick counts for the score,
- *  the streak and the archive, and the whole value of it is that it is
- *  visible at the moment skipping looks reasonable — on a phone, at the end
- *  of a bad day, which is exactly where this keyboard is. Without the button
- *  the `tiny:` callback was reachable from nothing and the feature existed
- *  only in the state layer.
- */
 export function openKeys(state, max = 5) {
   const kb = new InlineKeyboard();
   const open = scoredOf(rows(state.habits)).filter((h) => !h.done).slice(0, max);
@@ -122,12 +103,6 @@ export function openKeys(state, max = 5) {
   return kb;
 }
 
-/* --- the coach's buttons ---------------------------------------------- *
- *  `insight.js` hands back `{label, data}` and never a keyboard, because it
- *  must stay loadable without grammY. This is the one place that turns them
- *  into one — two per row, so three habits and their floors fit a phone
- *  without a wall of taps.
- * ---------------------------------------------------------------------- */
 export function coachKeys(actions) {
   const kb = new InlineKeyboard();
   const list = (actions || []).slice(0, 6);
@@ -138,10 +113,6 @@ export function coachKeys(actions) {
   return kb;
 }
 
-/* Pages, as the four counts a person actually reads in one sitting. The
-   modal in the app offers the same quick numbers for the same reason: a
-   number pad is three taps and a glance away from the thing being
-   recorded. */
 export const PAGE_STEPS = [5, 10, 20, 30];
 export const readKeys = () => {
   const kb = new InlineKeyboard();
@@ -149,11 +120,6 @@ export const readKeys = () => {
   return kb.row().text("لاحقًا", "read:0");
 };
 
-/* --- the focus desk --------------------------------------------------- *
- *  Contextual, because the wrong button is worse than no button: «أكمل»
- *  under a round that is already counting is a tap that answers «هي تعدّ
- *  أصلاً», which is a round trip to learn what the keyboard could have said.
- * ---------------------------------------------------------------------- */
 export function focusKeys(run, now = Date.now()) {
   const kb = new InlineKeyboard();
   if (!run) return kb.text("▶️ ابدأ جولة", "focus:start").text("☕ استراحة", "focus:break");
@@ -179,7 +145,6 @@ export function focusStand(state, now = Date.now()) {
   ].join("\n");
 }
 
-/* --- tomorrow's three ------------------------------------------------- */
 export function prepKeys(tasks) {
   const kb = new InlineKeyboard();
   for (const t of (tasks || []).slice(0, 6)) {
@@ -188,12 +153,6 @@ export function prepKeys(tasks) {
   return kb;
 }
 
-/* --- the breaker ------------------------------------------------------- *
- *  Two steps and not one, and the second is skippable. A hold logged with no
- *  trigger is still a hold the mirror counts; a hold never logged because
- *  the bot asked three questions first is a hold that did not happen as far
- *  as the record is concerned.
- * ---------------------------------------------------------------------- */
 export function badKeys(list, act) {
   const kb = new InlineKeyboard();
   for (const b of (list || []).slice(0, 6)) {
@@ -211,11 +170,6 @@ export function tagKeys(act, badId, tags) {
   return kb.row().text("سجّلها بدون محرّك", `${act}t:${badId}:`);
 }
 
-/* --- the menu ---------------------------------------------------------- *
- *  Everything this bot does is a sentence, and that is its whole interface —
- *  but a sentence has to be remembered the first time, and a keyboard is how
- *  the second time happens. One tap to the five things asked for most.
- * ---------------------------------------------------------------------- */
 export const menuKeys = () =>
   new InlineKeyboard()
     .text("📅 يومي", "menu:today")
@@ -230,9 +184,6 @@ export const menuKeys = () =>
     .text("🔁 راجع فائدة", "rev:now")
     .text("📝 الشرح", "menu:help");
 
-/* What Telegram shows in its own command menu. ASCII names only — Telegram
-   marks a `/name` as a command when the name is ASCII and nothing else, so
-   «/صباح» arrives as ordinary text and is matched as a word instead. */
 export const COMMANDS = [
   { command: "today", description: "حالة اليوم الآن" },
   { command: "now", description: "ما زال مفتوحًا، بأزرار" },
@@ -248,13 +199,8 @@ export const COMMANDS = [
   { command: "help", description: "ماذا يفهم من رسائلك" },
 ];
 
-/* --- the new confirmations -------------------------------------------- */
-
 export const savedReading = (out) => {
   const got = [];
-  /* A book that was only «أنوي قراءته» until this message is a book he has
-     now started, and saying so is what makes «قرأت ١٠ صفحات من X» a complete
-     interaction rather than a silent status change. */
   if (out.added) got.push(line(`➕ أضفته للرف وعلّمته «أقرأه الآن»: «${out.book.title}»`));
   else if (out.started) got.push(line(`📗 بدأت «${out.book.title}» — صار «أقرأه الآن».`));
   got.push(line(`📖 ${pagesWord(out.pages)} في «${out.book.title}».`));
@@ -265,9 +211,6 @@ export const savedReading = (out) => {
         : `عند صفحة ${num(out.at)}.`,
     ),
   );
-  /* The one figure that turns a page count into a decision. Only when both
-     numbers exist — a promise built on a missing total is the kind of
-     encouragement that gets a feature switched off. */
   if (out.stand?.left !== null && out.stand?.left !== undefined) {
     got.push(
       line(
@@ -287,17 +230,6 @@ export const savedReading = (out) => {
   return got.join("\n");
 };
 
-/* --- the question that makes the pages worth something ----------------- *
- *  This is the half the shelf never had from a phone. Twenty pages logged is
- *  a number; the one line he can say about them a week later is the whole
- *  return, and the moment to ask for it is the moment he just closed the
- *  book — not at a laptop, not on a screen he opens on Fridays.
- *
- *  It asks and it never blocks: nothing is pending, nothing is waiting for
- *  an answer, and a silence costs him nothing but the point. The prefix is
- *  printed because a prompt that does not say how to answer it is a prompt
- *  answered once.
- * ---------------------------------------------------------------------- */
 export const askNote = (out) =>
   [
     line("✍️ وما أكبر فائدة من قراءة اليوم؟"),
@@ -317,8 +249,6 @@ export const savedNote = (out) =>
     line(`المحفوظ من هذا الكتاب: ${pointsWord(out.count)} · وترجع لك غدًا للمراجعة.`),
   ].join("\n");
 
-/* A point is worth more as a task than as a sentence, and the only moment
-   anybody would turn it into one is the moment they are looking at it. */
 export const noteActKeys = (token) =>
   new InlineKeyboard().text("📌 اجعلها مهمة", `nact:${token}`);
 
@@ -331,7 +261,6 @@ export const savedLesson = (out) =>
     .filter(Boolean)
     .join("\n");
 
-/* --- the shelf's own confirmations ------------------------------------- */
 export const savedBookAdd = (out) =>
   out.act === "already"
     ? line(`📚 «${out.book.title}» على الرف أصلاً.`)
@@ -382,12 +311,6 @@ export const savedBookRate = (out) =>
       : `أُزيل التقييم عن «${out.book.title}».`,
   );
 
-/* --- choosing which book ----------------------------------------------- *
- *  The same token arrangement the marks and the goals use: Telegram caps
- *  callback data at 64 bytes and a book's title blows that on its own, so the
- *  payload (the pages, the day) stays in memory and the button carries the
- *  token and the row's id.
- * ---------------------------------------------------------------------- */
 export function bookKeys(list, act, token, max = 6) {
   const kb = new InlineKeyboard();
   for (const b of (list || []).slice(0, max)) {
@@ -396,12 +319,9 @@ export function bookKeys(list, act, token, max = 6) {
   return kb;
 }
 
-/* The one button that turns «ما لقيت الكتاب» from a dead end into the first
-   row on the shelf. */
 export const newBookKeys = (token, title) =>
   new InlineKeyboard().text(`➕ أضف «${title}»`.slice(0, 40), `nbk:${token}`);
 
-/* --- the library, as a glance ------------------------------------------ */
 export function shelf(state) {
   const books = rows(state.books);
   if (!books.length) {
@@ -449,9 +369,6 @@ export function shelf(state) {
   return out.join("\n");
 }
 
-/* The card itself — the cue, the book, the page — is written in `ask.js`,
-   because the scheduled reminder builds it and `reminders.js` has to stay
-   loadable by the tests with nothing installed. Only the buttons are here. */
 export function reviewKeys(book, note, hidden) {
   const kb = new InlineKeyboard();
   if (hidden) return kb.text("👁️ اكشف الفائدة", `rvs:${book.id}:${note.id}`);
@@ -472,9 +389,6 @@ export const savedReview = (out) =>
       : line("وما بقي شي للمراجعة الليلة."),
   ].join("\n");
 
-/* The points of one book, newest last — the order they were read in, which
-   is the order they make sense in. Ten of them, because a chat bubble with
-   forty points in it is the book desk with worse typography. */
 export const NOTE_SHOW = 10;
 
 export function noteList(book) {
@@ -558,18 +472,11 @@ export const savedPrep = (out) =>
 
 export const savedTop = (out) => line(`🎯 من مهام اليوم: ${out.row.text}`);
 
-/* --- the ones that needed a day said out loud -------------------------- */
-
-/* A row filed on a past square is only findable if the message said where it
-   went — «أمس» typed and today's date stored is a row he will look for on
-   the wrong day a week later. */
 export const onDay = (date) => (date === dayKey() ? "" : ` · ${date}`);
 
 export const savedEvent = (out) =>
   [
     line(`📅 ${out.row.title} — ${out.row.date}${out.row.time ? ` ${time(out.row.time)}` : ""}`),
-    /* The hour is read back deliberately. A bare «٥» with no ص/م is a guess,
-       and a guess the user can see is a guess he fixes in ten seconds. */
     line(out.row.time ? "في التقويم." : "في التقويم، بلا ساعة."),
   ].join("\n");
 
@@ -624,12 +531,6 @@ export const savedDayEdit = (out) =>
     line(`انتظام ذلك اليوم صار ${num(out.pct)}٪ — والسلسلة أُعيد حسابها من السجلّ.`),
   ].join("\n");
 
-/* --- choosing between rows, with the payload held in memory ------------ *
- *  Telegram caps callback data at 64 bytes, which an Arabic mark label blows
- *  through on its own. So the payload stays in the bot's memory under a
- *  token and the button carries the token and the id — the same arrangement
- *  the undo bus already uses, for the same reason.
- * ---------------------------------------------------------------------- */
 export function courseKeys(list, act, token) {
   const kb = new InlineKeyboard();
   for (const c of (list || []).slice(0, 8)) {
@@ -654,9 +555,6 @@ export function habitKeys(list, act, max = 6) {
   return kb;
 }
 
-/* «لاحقًا» — the button that makes every other reminder survivable. A nudge
-   that cannot be deferred is one you mute, and a muted reminder takes the
-   rest of them with it. */
 export const snoozeKey = (kb, token, minutes) =>
   kb.text(`⏰ بعد ${minutes} دقيقة`, `snz:${token}`);
 
@@ -671,6 +569,10 @@ export const savedReflect = (out) =>
 
 export function morning(state, day, quote) {
   const out = [line("☀️ صباح الخير — هذا يومك:"), ""];
+
+  const goal = Number.isFinite(state.goal) ? state.goal : DAILY_GOAL_DEFAULT;
+  out.push(line(`🎯 هدف اليوم: ${num(goal)}٪.`));
+  out.push("");
 
   if (state.place && Number.isFinite(state.place.lat)) {
     const t = prayerTimes(state.place, new Date());
@@ -695,15 +597,10 @@ export function morning(state, day, quote) {
   } else {
     day.tasksOpen.forEach((t, i) => {
       out.push(line(`${num(i + 1)}. ${t.text}`));
-      /* The step, when it was written: a task is a sentence and the step is
-         the thing a body can start. */
       if (t.step) out.push(line(`    ↳ ${t.step}`));
     });
   }
 
-  /* Where the book stands, in one line. The brief is the one message he
-     reads every morning, and «باقي ١٤٠ صفحة — بهذا المعدّل سبعة أيام» is the
-     sentence that decides whether tonight has twenty pages in it. */
   if (day.book) {
     out.push("");
     const left = pagesLeft(day.book);
@@ -730,9 +627,20 @@ export function morning(state, day, quote) {
 export function evening(state, day) {
   const out = [line("🌙 إقفال اليوم:"), ""];
   out.push(line(`الانتظام: ${num(day.pct)}٪`));
-  out.push(
-    line(`العادات: ${num(day.habitsDone)} من ${num(day.habitsAll)}`),
-  );
+
+  const goal = Number.isFinite(state.goal) ? state.goal : DAILY_GOAL_DEFAULT;
+  const remaining = Math.max(0, goal - day.pct);
+  if (remaining > 0) {
+    out.push(
+      line(`🎯 الهدف اليومي: ${num(goal)}٪ — باقي ${num(remaining)} نقطة.`),
+    );
+    out.push(line("أي عادة تنجزها الآن تقرّبك."));
+  } else {
+    out.push(line(`🎯 تجاوزت هدفك اليومي (${num(goal)}٪) ✅`));
+  }
+  out.push("");
+
+  out.push(line(`العادات: ${num(day.habitsDone)} من ${num(day.habitsAll)}`));
   out.push(
     line(
       `المهام: ${num(day.tasks.filter((t) => t.done).length)} من ${num(day.tasks.length)}`,
@@ -744,9 +652,6 @@ export function evening(state, day) {
     line(`المال هذا الأسبوع: دخل ${money(day.earnedWeek)} · مصروف ${money(day.spentWeek)}`),
   );
   out.push("");
-  /* The one thing the evening can still buy back. Pages read and nothing
-     kept from them is the day this whole shelf exists to prevent, and the
-     ask costs a line. */
   if (day.readToday > 0 && day.book && !day.notesToday) {
     out.push(line(`✍️ وما أكبر فائدة من ${pagesWord(day.readToday)} اليوم؟ أرسل «فائدة …».`));
     out.push("");
@@ -777,11 +682,6 @@ export function today(state, day) {
   if (day.openScored.length) {
     out.push("");
     out.push(line("عادات لم تُسجّل:"));
-    /* Named up to `NAME_MAX`, and the rest counted. The same choice the
-       server's block toast makes, for the same reason: while no core five
-       are set, `scoredOf` falls back to every habit — twenty-two of them —
-       and a chat bubble listing all of them is a wall he scrolls past
-       instead of a glance he reads. */
     day.openScored.slice(0, NAME_MAX).forEach((h) => out.push(line(`• ${h.label}`)));
     const rest = day.openScored.length - NAME_MAX;
     if (rest > 0) out.push(line(`و${num(rest)} غيرها`));
@@ -789,11 +689,103 @@ export function today(state, day) {
   return out.join("\n");
 }
 
-/* Today's three, as buttons to tick off. */
 export function taskKeys(day) {
   const kb = new InlineKeyboard();
   for (const t of day.tasksOpen) kb.text(`✓ ${t.text}`.slice(0, 40), `task:${t.id}`).row();
   return kb;
+}
+
+/* --- the smart nudge, at the hour the day can still change ------------ *
+ *  Different from the evening brief in exactly one way and it is the whole
+ *  point: this one is *allowed to say nothing*. The evening brief is a
+ *  verdict — it says the number whatever the number is — and this one
+ *  speaks only when there is a decision left to make.
+ *
+ *  Three shapes and one silence:
+ *
+ *  - Past the goal: silent. Nothing to nudge.
+ *  - Close to the goal (`remaining <= 5`): «باقي ٥ نقاط» — a run one habit
+ *    finishes is a run worth finishing.
+ *  - With a live streak: said out loud, by name, with the number. A person
+ *    who sees «سلسلة ٤ أيام على المحك» finishes the day; a person who sees
+ *    «٤١٪» does not.
+ *  - Otherwise, under the threshold: the plain gap, the hours left, and
+ *    the count of habits still open. No streak, no drama.
+ *
+ *  Returns `null` when there is nothing worth sending. `deliver()` in
+ *  `bot.js` reads that as its instruction to stay silent, the same way it
+ *  reads `textFor`'s `null` for the water sweep and the coach.
+ * ---------------------------------------------------------------------- */
+export function goalNudge(state, day) {
+  const goal = Number.isFinite(state.goal) ? state.goal : DAILY_GOAL_DEFAULT;
+  const pct = Number.isFinite(day.pct) ? day.pct : 0;
+  const remaining = Math.max(0, goal - pct);
+
+  /* Met — silence. Nothing this message could add to the evening's own. */
+  if (remaining === 0) return null;
+
+  /* Close to the goal — the last point is the loudest. A run one habit
+     finishes is a run worth finishing. */
+  if (remaining <= 5) {
+    const open = day.openScored?.length || 0;
+    if (!open) return null;
+    return {
+      text: [
+        line(`🎯 باقي ${num(remaining)} نقطة للهدف (${num(goal)}٪).`),
+        line(`أي عادة مفتوحة عندك تكفي.`),
+      ].join("\n"),
+      keys: null,
+    };
+  }
+
+  const threshold = botShape(state.bot).nudge?.threshold ?? NUDGE_THRESHOLD_DEFAULT;
+
+  /* Under the threshold: the day is going fine enough that a nudge would
+     be noise. This is the branch that makes the whole feature usable. */
+  if (remaining < threshold) return null;
+
+  /* The hours until the logical day rolls over — 04:00 the next morning,
+     which is the boundary every other countdown on this bot uses. */
+  const now = new Date();
+  const minsNow = now.getHours() * 60 + now.getMinutes();
+  const dayEnd = 4 * 60;
+  const minsLeft = minsNow < dayEnd ? dayEnd - minsNow : 24 * 60 - minsNow + dayEnd;
+  const hoursLeft = Math.max(0, Math.floor(minsLeft / 60));
+
+  const openCount = day.openScored?.length || 0;
+
+  /* A live streak with the goal still out of reach is the one case worth a
+     louder message: the number exists and it is about to break. */
+  const streak = Number.isFinite(day.streak) ? day.streak : 0;
+  if (streak >= 2) {
+    return {
+      text: [
+        line(`⚠️ سلسلة ${num(streak)} أيام على المحك`),
+        line(
+          `أنت ${num(pct)}٪ والهدف ${num(goal)}٪ — باقي ${num(remaining)} نقطة${hoursLeft ? ` في ${num(hoursLeft)} ساعة` : ""}.`,
+        ),
+        openCount
+          ? line(`${num(openCount)} عادات مفتوحة — كل واحدة ترفعك.`)
+          : line("افتح الروتين وأنجز واحدة."),
+      ].join("\n"),
+      keys: openKeys(state),
+    };
+  }
+
+  /* The ordinary nudge. Its whole job is to say the two numbers a person
+     cannot hold in his head at five in the afternoon. */
+  return {
+    text: [
+      line(`🎯 الهدف اليومي: ${num(goal)}٪ — باقي ${num(remaining)} نقطة.`),
+      hoursLeft ? line(`أمامك ${num(hoursLeft)} ساعات حتى إقفال اليوم.`) : null,
+      openCount
+        ? line(`${num(openCount)} عادات مفتوحة — أي واحدة تقرّبك.`)
+        : line("افتح الروتين وأنجز واحدة."),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    keys: openKeys(state),
+  };
 }
 
 export const HELP = [
@@ -846,10 +838,6 @@ export const HELP = [
   "",
   line("📥 وأي نصّ آخر → صندوق الوارد في المصفوفة."),
   "",
-  /* The slash commands are ASCII because Telegram only marks an ASCII name
-     as a command; the Arabic words beside them are read as plain text and
-     are written here without a slash so nobody types one that does
-     nothing. */
   line("وللباقي كلمة واحدة، أو أمر:"),
   line("«يومي» أو /today — حالة اليوم الآن"),
   line("«باقي» أو /now — ما زال مفتوحًا، بأزرار"),

@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
  *  seventeen blocks here are rendered by this screen alone. That is the
  *  whole test of where a seam can go, and it is why this one was cut first.
  *
- *  `CostEstimator` and `estimate` live here rather than in life-finance.jsx
+ *  `CostEstimator` and `estimateBleedBleed` live here rather than in life-finance.jsx
  *  despite both being about money: the question they answer is what a habit
  *  bleeds in a year, which is an argument for stopping it rather than an
  *  entry in the income screen. Nothing in finance calls them.
@@ -1016,7 +1016,7 @@ function BadHabitFormModal({ open, draft, setDraft, onSave, onClose }) {
       replacement: p.replacement,
       costPerDay: String(
         Math.round(
-          estimate(p.costType, {
+          estimateBleed(p.costType, {
             method: p.key === "delay" ? "share" : "bouts",
             bouts: p.bouts,
             minutes: p.minutes,
@@ -1494,10 +1494,10 @@ function CostEstimator({ type, seed, onPick }) {
   const set = (patch) => {
     const next = { ...e, ...patch };
     setE(next);
-    onPick(Math.round(estimate(type, next) * 10) / 10);
+    onPick(Math.round(estimateBleedBleed(type, next) * 10) / 10);
   };
 
-  const daily = Math.round(estimate(type, e) * 10) / 10;
+  const daily = Math.round(estimateBleedBleed(type, e) * 10) / 10;
   const kind = costType(type);
   const yearly = daily * 365;
   const asDays = type === "time" ? Math.round(yearly / 24) : 0;
@@ -1687,7 +1687,7 @@ function EstRow({ label, children }) {
    share of a day that was already planned, so the questions become how many
    hours you meant to work and how much of them evaporated — two questions
    with real answers. */
-const estimate = (type, e) =>
+const estimateBleedBleedBleed = (type, e) =>
   type === "money"
     ? (e.perWeek * e.amount) / 7
     : e.method === "share"

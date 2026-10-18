@@ -5,12 +5,8 @@
  *  migration all go through it — and `GOAL_TREE` is the seed the whole vault
  *  starts from.
  * --------------------------------------------------------------------- */
-import { uid, obj, rows, fmtDay, daysBetween, daysTo } from "./life-state-util.mjs";
+import { uid, obj, rows, dayKey, fmtDay, daysBetween, daysTo } from "./life-state-util.mjs";
 
-/* --- 90-day chunks ---------------------------------------------------- *
- *  A year is too big to act on. Four 90-day blocks are not, and the vault
- *  opens on the one you are living in.
- * ---------------------------------------------------------------------- */
 export const QUARTERS = [
   { id: "q1", label: "الربع الأول", months: "يناير — مارس", tint: "#00C2FF" },
   { id: "q2", label: "الربع الثاني", months: "أبريل — يونيو", tint: "#9D5CFF" },
@@ -19,7 +15,7 @@ export const QUARTERS = [
 ];
 export const currentQuarter = (d = new Date()) => QUARTERS[Math.floor(d.getMonth() / 3)].id;
 export const QUARTER_IDS = new Set(QUARTERS.map((q) => q.id));
-/* --- the six pillars of 2027 ----------------------------------------- */
+
 export const PILLARS = [
   { id: "faith", label: "الإيماني", tint: "#9D5CFF" },
   { id: "health", label: "الصحي", tint: "#FF7A45" },
@@ -29,13 +25,7 @@ export const PILLARS = [
   { id: "self", label: "الشخصي", tint: "#5B8CFF" },
 ];
 export const PILLAR_IDS = new Set(PILLARS.map((p) => p.id));
-/* --- the three horizons ---------------------------------------------- *
- *  A 90-day goal that serves nothing is a chore with a deadline. Three
- *  horizons, each answering the one above it: who you intend to be in three
- *  years, what this year has to deliver for that, and what the next ninety
- *  days actually execute. The order matters — `HORIZONS` is read top-down
- *  everywhere, and `parentHorizon` is the only place the chain is written.
- * ---------------------------------------------------------------------- */
+
 export const HORIZONS = [
   {
     id: "h3",
@@ -66,31 +56,29 @@ export const HORIZON_IDS = new Set(HORIZONS.map((h) => h.id));
 export const parentHorizon = (id) =>
   id === "quarter" ? "year" : id === "year" ? "h3" : null;
 
-/* The three-year arc. 2027 is the year this whole app is named for, so it
-   anchors the horizon and the two after it complete it. */
-export const ARC = [2027, 2028, 2029];
-export const GOAL_YEARS = (() => {
-  const y = new Date().getFullYear();
-  return y < ARC[0] ? [y, ...ARC] : ARC;
-})();
+/* ── سنوات البرنامج — المكان الوحيد الذي تُعدَّل منه ─────────────────────
+ *  مصفوفتان لا واحدة، لأنهما سؤالان مختلفان:
+ *
+ *  `ARC` هو قوس الرؤية نفسه. أفق «ثلاث سنوات» يُقاس عليه وحده، وعدّاده
+ *  التنازلي يبدأ من أول سنة فيه وينتهي بآخرها. لا تضف إليه سنة تمهيدية:
+ *  يصير القوس خمس سنوات، ويقفز «مضى %» فجأة لأن بداية النافذة رجعت للوراء.
+ *
+ *  `RUNWAY` هو المدرج: سنوات يُسمح للهدف أن يسكنها *قبل* أن يفتح القوس،
+ *  بلا أي أثر على أفق الثلاث سنوات ولا على عدّاده. ٢٠٢٦ هنا لأن النظام
+ *  يُستعمل الآن، وهدف لا تبدأ نافذته إلا في يناير ٢٠٢٧ هدف بلا إيقاع:
+ *  `windowStand` يقرؤه «لم يبدأ»، فلا تأخّر ولا تقدّم ولا معدّل مطلوب —
+ *  أي بلا نبض يُقاس ولا شيء يحاسبك عليه اليوم.
+ *
+ *  لإلغاء المدرج لاحقًا (بعد أن يفتح ٢٠٢٧): اجعل `RUNWAY = []` ولا شيء
+ *  آخر يتغيّر — الأهداف المكتوبة فيه تبقى ويبقى ربعها ظاهرًا (راجع
+ *  `yearQuarters` أسفل).
+ * --------------------------------------------------------------------- */
+export const ARC = [2027, 2028, 2029, 2030];
+export const RUNWAY = [2026];
+export const GOAL_YEARS = [...RUNWAY, ...ARC];
+export const YEAR_MIN = GOAL_YEARS[0];
+export const YEAR_MAX = GOAL_YEARS[GOAL_YEARS.length - 1];
 
-/* A stored year is validated against this range, not against GOAL_YEARS —
-   GOAL_YEARS shrinks on the first of January once the run-up year is behind
-   us, and validating against it would silently move every goal filed in that
-   year into the next one. The range is fixed, so a 2026 goal stays a 2026
-   goal forever; the screen keeps offering its tab for as long as anything
-   lives there. */
-export const YEAR_MIN = ARC[0] - 1;
-export const YEAR_MAX = ARC[ARC.length - 1];
-
-/* --- the word and the vision ------------------------------------------ *
- *  One word for the arc and a paragraph under it. It sits above every goal
- *  on the screen because it is the thing the goals are for: a list of
- *  eighteen targets with no sentence explaining who they are building is a
- *  list you abandon in March. Capped because it is a motto and a paragraph,
- *  not a journal — and because every byte here shares one storage quota
- *  with the habits and the history, which never give way.
- * ---------------------------------------------------------------------- */
 export const WORD_MAX = 24;
 export const VISION_MAX = 600;
 export const northStarShape = (n) => {
@@ -99,19 +87,8 @@ export const northStarShape = (n) => {
   return { word: str(o.word, WORD_MAX), vision: str(o.vision, VISION_MAX) };
 };
 
-/* --- the goal, in one place ------------------------------------------- *
- *  Every goal row is written through here — seed, the add form, and the
- *  migration all go through `goalShape`, so the three can never drift apart.
- *  A goal carries more than a label now: the horizon it belongs to, the
- *  goal one horizon up that it serves, the reason it exists, an optional
- *  meter, its own milestones and a deadline.
- *
- *  Nothing here is permissive by accident. `parent` is validated for shape
- *  only; whether it points at a goal that exists, in the right horizon, is
- *  checked in `migrate` where the whole list is in hand — a shape function
- *  that can only see one row has no way to answer it.
- * ---------------------------------------------------------------------- */
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const goalShape = (g) => {
   const o = obj(g);
   const horizon = HORIZON_IDS.has(o.horizon) ? o.horizon : "quarter";
@@ -122,18 +99,15 @@ export const goalShape = (g) => {
     text: typeof o.text === "string" ? o.text : "",
     pillar: PILLAR_IDS.has(o.pillar) ? o.pillar : "self",
     horizon,
-    /* A quarter is meaningless above the 90-day horizon and a year is
-       meaningless below it, but both are stored regardless: changing a
-       goal's horizon and changing it back must not lose where it sat. */
     quarter: QUARTER_IDS.has(o.quarter) ? o.quarter : currentQuarter(),
+    /* صفٌّ فقد سنته يسقط على أول سنة في القوس لا في المدرج: المدرج تمهيد
+       يُختار عمدًا، والهدف الذي لا يعرف سنته ينتمي للبرنامج لا للتمهيد. */
     year:
       Number.isInteger(+o.year) && +o.year >= YEAR_MIN && +o.year <= YEAR_MAX
         ? +o.year
-        : GOAL_YEARS[0],
+        : ARC[0],
     parent: typeof o.parent === "string" && o.parent ? o.parent : null,
     why: typeof o.why === "string" ? o.why : "",
-    /* A target of zero is not a broken meter, it is a goal that has none —
-       a yes/no goal, scored by its milestones or its children instead. */
     target,
     current: target > 0 ? Math.min(target, num(o.current)) : num(o.current),
     unit: typeof o.unit === "string" ? o.unit.slice(0, 16) : "",
@@ -144,20 +118,19 @@ export const goalShape = (g) => {
       text: typeof s.text === "string" ? s.text : "",
       done: !!s.done,
     })),
+    linkedHabits: Array.isArray(o.linkedHabits) ? o.linkedHabits.filter(id => typeof id === "string") : [],
+    nextAction: typeof o.nextAction === "string" ? o.nextAction : "",
+    obstacles: Array.isArray(o.obstacles) ? o.obstacles.map(x => String(x)) : [],
+    reviews: Array.isArray(o.reviews) ? o.reviews.map(r => ({
+      id: typeof r.id === "string" ? r.id : uid(),
+      date: typeof r.date === "string" ? r.date : "",
+      note: typeof r.note === "string" ? r.note : "",
+      progress: typeof r.progress === "number" ? r.progress : 0
+    })) : [],
     done: !!o.done,
   };
 };
 
-/* How far along a goal is, read from whatever evidence it actually has: a
-   meter first, then its own milestones, then the goals one horizon down
-   that serve it. An explicit «مُحقَّق» wins over all three — declaring a goal
-   done is a judgement the owner is allowed to make, and a meter that reads
-   94% must not argue with it.
- *
- *  The depth guard is not theoretical. The chain is three deep by design, but
- *  a hand-edited backup can point a goal at its own descendant, and without
- *  a floor the recursion would never return — a white screen that reloading
- *  cannot clear, because the payload on disk is already the bad one. */
 export const GOAL_TREE = [
   {
     text: "أكون من أهل القرآن: حفظًا وتدبّرًا وعملًا",
@@ -291,8 +264,6 @@ export const GOAL_TREE = [
   },
 ];
 
-/* Walks the tree into the flat list the app stores, stamping each level with
-   its horizon and each row with the id of the one above it. */
 export function buildGoals(tree) {
   const out = [];
   const walk = (node, depth, parent, pillar) => {
@@ -307,17 +278,9 @@ export function buildGoals(tree) {
 
 export const SEED_GOALS = () => buildGoals(GOAL_TREE);
 
-/* The rows a profile written before the horizons existed is topped up with:
-   everything above the 90-day line, which it has none of. Matched on text so
-   a user who already typed one of these never gets a second copy beside it. */
 export const ADDED_GOALS = () =>
   SEED_GOALS().filter((g) => g.horizon !== "quarter");
 
-/* Which yearly goal each seeded 90-day goal was written to serve, by text.
-   An existing profile's eighteen goals came from this same seed list before
-   the horizons existed, so matching on text is what lets the migration wire
-   the user's own rows into the tree instead of leaving them orphans beside a
-   duplicate set that does have parents. */
 export const SEED_LINKS = (() => {
   const map = new Map();
   for (const root of GOAL_TREE)
@@ -327,12 +290,10 @@ export const SEED_LINKS = (() => {
 })();
 
 export const quarterOf = (id) => QUARTERS.find((q) => q.id === id) || QUARTERS[0];
-
 export const pillarOf = (id) => PILLARS.find((p) => p.id === id) || PILLARS[5];
-
 export const horizonOf = (id) => HORIZONS.find((h) => h.id === id) || HORIZONS[2];
 
-export function goalPct(goal, all, depth = 0) {
+export function goalPct(goal, all, habits = [], depth = 0) {
   if (goal.done) return 100;
   if (goal.target > 0)
     return Math.min(100, Math.round((goal.current / goal.target) * 100));
@@ -340,58 +301,67 @@ export function goalPct(goal, all, depth = 0) {
     return Math.round(
       (goal.steps.filter((s) => s.done).length / goal.steps.length) * 100,
     );
+
+  if (goal.linkedHabits && goal.linkedHabits.length > 0 && habits.length > 0) {
+    const linked = habits.filter(h => goal.linkedHabits.includes(h.id));
+    if (linked.length > 0) {
+      return Math.round((linked.filter(h => h.done).length / linked.length) * 100);
+    }
+  }
+
   if (depth < HORIZONS.length) {
     const kids = all.filter((g) => g.parent === goal.id);
     if (kids.length)
       return Math.round(
-        kids.reduce((n, k) => n + goalPct(k, all, depth + 1), 0) / kids.length,
+        kids.reduce((n, k) => n + goalPct(k, all, habits, depth + 1), 0) / kids.length,
       );
   }
   return 0;
 }
 
-/* The last day a goal has. Its own deadline when it set one, otherwise the
-   end of the window it lives in — a 90-day goal expires with its quarter and
-   a yearly one with its December, whether or not anyone typed a date. */
 export function goalEnd(goal) {
   if (goal.deadline) return goal.deadline;
   if (goal.horizon === "quarter") {
     const qi = QUARTERS.findIndex((q) => q.id === goal.quarter);
-    const y = goal.year || GOAL_YEARS[0];
+    const y = goal.year || ARC[0];
     return fmtDay(new Date(y, (qi < 0 ? 0 : qi) * 3 + 3, 0));
   }
   if (goal.horizon === "year") return `${goal.year}-12-31`;
-  return `${GOAL_YEARS[GOAL_YEARS.length - 1]}-12-31`;
+  /* أفق الثلاث سنوات ينتهي بنهاية القوس لا بنهاية قائمة السنوات المسموحة:
+     سنة المدرج تسبق القوس ولا تمدّه. */
+  return `${ARC[ARC.length - 1]}-12-31`;
 }
 
-/* The first and last day of a horizon's window, as date keys. */
-export function windowOf(horizon, year = GOAL_YEARS[0], quarter = "q1") {
-  /* The arc, not GOAL_YEARS: the run-up year is a place to file goals, not a
-     fourth year of a three-year horizon. */
+export function windowOf(horizon, year = ARC[0], quarter = "q1") {
   if (horizon === "h3") return [`${ARC[0]}-01-01`, `${ARC[ARC.length - 1]}-12-31`];
   if (horizon === "year") return [`${year}-01-01`, `${year}-12-31`];
   const qi = Math.max(0, QUARTERS.findIndex((q) => q.id === quarter));
   return [fmtDay(new Date(year, qi * 3, 1)), fmtDay(new Date(year, qi * 3 + 3, 0))];
 }
 
-/* Where today stands inside that window. `left` counts the day you are
-   standing in — on the last day of a quarter you still have that whole day,
-   which is why a live window never reads zero. A window that has not opened
-   yet reports its full length rather than a negative one: «لم يبدأ» is a
-   different answer from «بقي يوم», and collapsing them is how a planner ends
-   up telling you to hurry in a quarter that starts in March. */
+/* الأرباع التي تستحق تبويبًا في سنة ما. سنة من القوس تعرض أربعتها دائمًا —
+   كلها قادمة. سنة المدرج تعرض ما لم ينتهِ منها فقط: ربع مضى كاملًا قبل أن
+   يبدأ النظام تبويبٌ ميت لا يُكتب فيه شيء، وثلاثة منها ضجيج يخفي الربع
+   الوحيد الذي يُعمل فيه فعلًا.
+   قيدان يمنعان ضياع هدف خلف تبويب اختفى: ربعٌ يسكنه هدف يظهر مهما مضى
+   عليه، وسنة انتهت بالكامل تُبقي ربعها الأخير — فما كُتب يبقى مقروءًا. */
+export function yearQuarters(year, goals = [], today = dayKey()) {
+  if (!RUNWAY.includes(+year)) return QUARTERS;
+  const used = new Set(
+    rows(goals)
+      .filter((g) => g.horizon === "quarter" && +g.year === +year)
+      .map((g) => g.quarter),
+  );
+  const open = QUARTERS.filter(
+    (q) => used.has(q.id) || windowOf("quarter", year, q.id)[1] >= today,
+  );
+  return open.length ? open : [QUARTERS[QUARTERS.length - 1]];
+}
+
 export function windowStand(from, to) {
   const total = Math.max(1, daysBetween(from, to) + 1);
-  /* `daysTo` counts the day you are standing in, which is what «بقي» wants
-     and what «يبدأ بعد» does not: a window opening tomorrow starts in one
-     day, not two. The inclusive day comes back off for the start only. */
   const untilStart = daysTo(from) === null ? null : daysTo(from) - 1;
   const left = daysTo(to);
-  /* A window that has not opened still reports the days to its *end*, because
-     that is what «كم بقي» asks. Reporting its full span instead answered a
-     question nobody had and printed «يبدأ بعد ٩٠ يومًا» three times over,
-     which is a countdown that counts nothing. The start is said underneath,
-     as a note, and the elapsed bar stays empty until the day arrives. */
   if (untilStart !== null && untilStart > 0)
     return {
       state: "soon",
@@ -412,12 +382,6 @@ export function windowStand(from, to) {
   };
 }
 
-/* Which 90-day window the goals screen should open on: the one you are
-   standing in, unless nothing is filed there yet — in which case the earliest
-   window that does have goals. A planner that greets you with an empty
-   quarter while your whole year is written one tab over has made you do its
-   job, and the run-up months before the arc opens are exactly when that
-   happens. */
 export function openingWindow(goals) {
   const here = new Date().getFullYear();
   const live = GOAL_YEARS.includes(here)
@@ -430,4 +394,69 @@ export function openingWindow(goals) {
   const rank = (g) => g.year * 10 + QUARTERS.findIndex((q) => q.id === g.quarter);
   const first = list.reduce((a, b) => (rank(b) < rank(a) ? b : a));
   return { year: first.year, quarter: first.quarter };
+}
+
+export function goalPace(goal, all) {
+  const hit = goalPct(goal, all);
+  if (goal.done || hit >= 100) {
+    return { state: "done", pct: 100, hit: 100, left: 0, drift: 0, pace: { state: "done", label: "مُحقَّق" } };
+  }
+
+  const from = windowOf(goal.horizon, goal.year, goal.quarter)[0];
+  const end = goalEnd(goal);
+  const stand = windowStand(from, end);
+  const drift = hit - stand.pct;
+
+  let pace = null;
+  if (stand.state === "live") {
+    if (drift >= 10) pace = { state: "ahead", label: "متقدّم" };
+    else if (drift <= -10) pace = { state: "behind", label: "متأخر" };
+    else pace = { state: "on-pace", label: "على المسار" };
+  }
+
+  let rate = null;
+  let expected = null;
+  let behindBy = 0;
+  if (goal.target > 0 && stand.left > 0) {
+    const remaining = goal.target - goal.current;
+    if (remaining > 0) {
+      if (stand.left >= 30) {
+        rate = { amount: remaining / (stand.left / 30), per: "شهريًا" };
+      } else if (stand.left >= 7) {
+        rate = { amount: remaining / (stand.left / 7), per: "أسبوعيًا" };
+      } else {
+        rate = { amount: remaining / stand.left, per: "يوميًا" };
+      }
+    }
+    expected = (goal.target * stand.pct) / 100;
+    behindBy = Math.max(0, Math.round(expected - goal.current));
+  }
+
+  return { ...stand, hit, drift, pace, rate, expected, behindBy };
+}
+
+export function syncHabitToGoals(goals, habitId, isDone) {
+  return (goals || []).map((g) => {
+    if (g.linkedHabits && g.linkedHabits.includes(habitId)) {
+      if (g.target > 0) {
+        const change = isDone ? g.step : -g.step;
+        const newCurrent = Math.max(0, Math.min(g.target, g.current + change));
+        return { ...g, current: newCurrent };
+      }
+    }
+    return g;
+  });
+}
+/* ربط المهام بالأهداف: عند إنجاز مهمة، يزيد تقدم الهدف المرتبط */
+export function syncTaskToGoal(goals, goalId, isDone) {
+  return (goals || []).map((g) => {
+    if (g.id === goalId) {
+      if (g.target > 0) {
+        const change = isDone ? g.step : -g.step;
+        const newCurrent = Math.max(0, Math.min(g.target, g.current + change));
+        return { ...g, current: newCurrent };
+      }
+    }
+    return g;
+  });
 }

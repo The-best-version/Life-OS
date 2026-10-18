@@ -48,6 +48,13 @@ import {
   coreOf,
   bookShape,
   goalShape,
+  ARC,
+  RUNWAY,
+  GOAL_YEARS,
+  YEAR_MIN,
+  windowOf,
+  yearQuarters,
+  goalEnd,
   BLOCK_IDS,
   blockRank,
   remainingIn,
@@ -506,6 +513,44 @@ test("bookShape keeps what the user wrote", () => {
 
 test("goalShape defaults to the 90-day horizon", () => {
   assert.equal(goalShape({ text: "x" }).horizon, "quarter");
+});
+
+/* --- the runway year -------------------------------------------------- *
+ *  2026 is a year a goal may live in; it is not part of the three-year arc.
+ *  The two are separate constants precisely so the vision's window — and the
+ *  countdown drawn from it — never stretches backwards to cover a warm-up.
+ * ---------------------------------------------------------------------- */
+test("the runway widens where a goal may live, never the arc itself", () => {
+  assert.ok(RUNWAY.every((y) => !ARC.includes(y)), "the runway is not in the arc");
+  assert.deepEqual(GOAL_YEARS, [...RUNWAY, ...ARC]);
+  assert.equal(YEAR_MIN, GOAL_YEARS[0]);
+
+  for (const y of RUNWAY) assert.equal(goalShape({ year: y }).year, y, "a runway year is kept");
+  /* The three-year window is the arc and only the arc — a runway year in it
+     would move the window's start back and make «مضى %» jump overnight. */
+  assert.deepEqual(windowOf("h3"), [`${ARC[0]}-01-01`, `${ARC[ARC.length - 1]}-12-31`]);
+  assert.equal(goalEnd({ horizon: "h3", year: RUNWAY[0] }), `${ARC[ARC.length - 1]}-12-31`);
+  /* A row that lost its year lands in the programme, not in the warm-up. */
+  assert.equal(goalShape({ year: 1999 }).year, ARC[0]);
+});
+
+test("a runway year shows the quarters that are left, and never strands a goal", () => {
+  const year = RUNWAY[0];
+  const all = yearQuarters(year, [], `${year}-10-18`);
+  assert.deepEqual(all.map((q) => q.id), ["q4"], "three dead tabs are not a chooser");
+
+  /* An arc year is all four: every one of them is still ahead. */
+  assert.equal(yearQuarters(ARC[0], [], `${year}-10-18`).length, 4);
+
+  /* A quarter that already ended still shows while it holds a goal — a tab
+     that disappears takes what was written in it out of reach. */
+  const held = yearQuarters(year, [{ horizon: "quarter", year, quarter: "q1" }], `${year}-10-18`);
+  assert.deepEqual(held.map((q) => q.id), ["q1", "q4"]);
+
+  /* And a runway year gone by entirely keeps its last quarter rather than
+     collapsing to no tab at all. */
+  const past = yearQuarters(year, [], `${year + 1}-06-01`);
+  assert.deepEqual(past.map((q) => q.id), ["q4"]);
 });
 
 /* ===================================================================== *
@@ -1583,9 +1628,9 @@ test("the plan arms a monthly reminder on its day and on no other", () => {
     customs: [{ text: "سدّد الفواتير", at: "10:00", repeat: "month", dom: 31 }],
   });
   const on28 = planDay(bot, { date: new Date(2027, 1, 28, 8, 0) });
-  assert.deepEqual(on28.map((p) => p.kind), ["custom"]);
-  assert.equal(on28[0].at, 600);
-  assert.deepEqual(planDay(bot, { date: new Date(2027, 1, 27, 8, 0) }), []);
+  assert.deepEqual(on28.filter(p => p.kind === "custom").map((p) => p.kind), ["custom"]);
+  assert.equal(on28.find(p => p.kind === "custom").at, 600);
+  assert.deepEqual(planDay(bot, { date: new Date(2027, 1, 27, 8, 0) }).filter(p => p.kind === "custom"), []);
   /* A weekly one is the same row with a day list, and it fires on that day
      alone — 5 March 2027 is a Friday and the 4th is a Thursday. */
   const weekly = botShape({
@@ -1593,8 +1638,8 @@ test("the plan arms a monthly reminder on its day and on no other", () => {
     eveningOn: false,
     customs: [{ text: "خطّط الأسبوع", at: "20:00", repeat: "week", days: [5] }],
   });
-  assert.equal(planDay(weekly, { date: new Date(2027, 2, 5) }).length, 1);
-  assert.equal(planDay(weekly, { date: new Date(2027, 2, 4) }).length, 0);
+  assert.equal(planDay(weekly, { date: new Date(2027, 2, 5) }).filter(p => p.kind === "custom").length, 1);
+  assert.equal(planDay(weekly, { date: new Date(2027, 2, 4) }).filter(p => p.kind === "custom").length, 0);
 });
 
 test("a conditional reminder is armed anyway, and the gate answers later", () => {
@@ -1607,8 +1652,8 @@ test("a conditional reminder is armed anyway, and the gate answers later", () =>
     customs: [{ text: "اشرب", at: "14:00", only: "water" }],
   });
   const plan = planDay(bot, { date: new Date(2027, 2, 1, 9, 0) });
-  assert.deepEqual(plan.map((p) => p.kind), ["custom"]);
-  assert.equal(plan[0].only, "water", "the gate rides out with the entry");
+  assert.deepEqual(plan.filter(p => p.kind === "custom").map((p) => p.kind), ["custom"]);
+  assert.equal(plan.find(p => p.kind === "custom").only, "water", "the gate rides out with the entry");
 });
 
 test("a gate reads the day as it stands and hands back what it looked at", () => {
@@ -1705,8 +1750,11 @@ test("planDay is sorted, bounded to the day, and silent when switched off", () =
 
 test("the task sweep is armed only when there is something to sweep", () => {
   const bot = botShape({ morningOn: false, eveningOn: false, tasks: { on: true, at: "17:00" } });
-  assert.equal(planDay(bot, { date: MONDAY, hasTasks: true }).length, 1);
-  assert.equal(planDay(bot, { date: MONDAY, hasTasks: false }).length, 0);
+  const withTasks = planDay(bot, { date: MONDAY, hasTasks: true });
+  assert.equal(withTasks.filter(p => p.kind === "tasks").length, 1);
+  
+  const withoutTasks = planDay(bot, { date: MONDAY, hasTasks: false });
+  assert.equal(withoutTasks.filter(p => p.kind === "tasks").length, 0);
 });
 
 test("nextInPlan reads the day forward and runs out at the end of it", () => {

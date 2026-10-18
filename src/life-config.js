@@ -61,7 +61,7 @@ import { BLOCK_IDS, NAV_IDS } from "./state/life-state.mjs";
  * ----------------------------------------------------------------------- */
 export const sidebarNav = [
   { id: "today", label: "اليوم", short: "اليوم", icon: Compass, visible: true },
-  { id: "routine", label: "الروتين اليومي", short: "الروتين", icon: ListChecks, visible: true },
+  { id: "routine", label: "العادات اليومية", short: "العادات", icon: ListChecks, visible: true },
   { id: "agenda", label: "التقويم", short: "التقويم", icon: CalendarDays, visible: true },
   { id: "uni", label: "الجامعة", short: "الجامعة", icon: GraduationCap, visible: true },
   { id: "matrix", label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid, visible: true },
@@ -81,6 +81,11 @@ export const sidebarNav = [
  * لتبديل مكان بطاقة: انقل سطرها للأعلى أو للأسفل. لإخفائها: اجعل
  * `visible: false` (أو احذف السطر بالكامل — النتيجة نفسها).
  *
+ * `label` و `desc` نصّان يظهران فقط في نافذة «ترتيب بطاقات اليوم» اللي
+ * تُفتح من زر ⚙️ في رأس شاشة «اليوم» — لا علاقة لهما بمنطق البطاقة نفسها.
+ * لو أضفت بطاقة جديدة إلى `blockRegistry` في life-today.jsx، أضف سطرها
+ * هنا بـ `label` و`desc` لتصير قابلة للترتيب من الشاشة.
+ *
  * `prayerWaterGrid` و `lecturesAndDeadlines` كل منهما بطاقتان جنبًا إلى جنب
  * في صفّ واحد من شبكة بعرض عمودين؛ نقل السطر ينقل الزوج معًا. لتفكيك الزوج
  * أو تغيير تخطيطه عدّل الشبكة نفسها داخل src/features/life-today.jsx.
@@ -90,13 +95,48 @@ export const sidebarNav = [
  * الرجوع من غياب ولا تُرتَّب بين البطاقات، والثانية نافذة لا بطاقة.
  * ----------------------------------------------------------------------- */
 export const todayBlocks = [
-  { key: "dayHeader", visible: true }, // التاريخ والبلوك المفتوح وحلقة الانضباط
-  { key: "readingCue", visible: true }, // عبارة اليوم من الكتب
-  { key: "prayerWaterGrid", visible: true }, // أوقات الصلاة + شرب الماء
-  { key: "tasksModule", visible: true }, // المهام الثلاث (TopThree)
-  { key: "remainingHabits", visible: true }, // العادات المتبقية في البلوك الحالي
-  { key: "tomorrowPrep", visible: true }, // جهّز غدك — يظهر في نافذة المساء فقط
-  { key: "lecturesAndDeadlines", visible: true }, // محاضرات اليوم + أقرب موعد
+  {
+    key: "dayHeader",
+    label: "شريط اليوم",
+    desc: "التاريخ، البلوك المفتوح، حلقة الانضباط، وزر ترتيب البطاقات",
+    visible: true,
+  },
+  {
+    key: "readingCue",
+    label: "عبارة اليوم",
+    desc: "عبارة تحفيزية مقتبسة من كتبك",
+    visible: true,
+  },
+  {
+    key: "prayerWaterGrid",
+    label: "الصلاة والماء",
+    desc: "أوقات الصلاة + متتبّع شرب الماء — جنبًا إلى جنب",
+    visible: true,
+  },
+  {
+    key: "tasksModule",
+    label: "المهام",
+    desc: "أهم ٣ مهام اليوم + المهام الإضافية بلا سقف",
+    visible: true,
+  },
+  {
+    key: "remainingHabits",
+    label: "العادات المتبقية",
+    desc: "ما تبقّى من عادات اليوم، والبلوك الحالي أوّلًا",
+    visible: true,
+  },
+  {
+    key: "tomorrowPrep",
+    label: "جهّز غدك",
+    desc: "يظهر في نافذة المساء فقط (بعد ٨ مساءً)",
+    visible: true,
+  },
+  {
+    key: "lecturesAndDeadlines",
+    label: "المحاضرات والمواعيد",
+    desc: "محاضرات اليوم + أقرب اختبار أو تسليم",
+    visible: true,
+  },
 ];
 
 /* ----------------------------------------------------------------------- *
@@ -172,6 +212,21 @@ if (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") {
 export const cardTitles = {
   routineTitle: "الروتين اليومي",
 };
+
+/* ----------------------------------------------------------------------- *
+ * 4.1) سنوات البرنامج — ليست هنا، وهذا سبب واضح
+ *
+ * `ARC` (قوس الرؤية: ٢٠٢٧ — ٢٠٣٠) و `RUNWAY` (سنة المدرج: ٢٠٢٦) تسكنان:
+ *     src/state/life-state-goals.mjs   ← أعلى الملف مباشرة
+ *
+ * لماذا ليستا هنا؟ لأن طبقة الحالة (state/*.mjs) يجب أن تبقى قابلة للتحميل
+ * بـ `node --test` بلا متصفّح، وهذا الملف يستورد أيقونات lucide — فاستيراده
+ * من الحالة يُسقط كل الاختبارات. الاتجاه سطر واحد لا سطران:
+ *     life-config.js ← life-state.mjs   (ولا يُعكَس أبدًا)
+ *
+ * وهناك سطر واحد يخصّ السنوات هنا فعلًا: اسم تبويب الأهداف في `sidebarNav`
+ * أعلاه («أهدافي على ثلاث سنوات») — إن غيّرت القوس، غيّر الاسم معه.
+ * ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------- *
  * 5) متغيرات الهوية والثيم — themeVariables

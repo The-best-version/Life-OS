@@ -1,29 +1,5 @@
 #!/usr/bin/env node
-/* --- 2027 Life OS, from the phone --------------------------------------
- *  The app lives at http://127.0.0.1:47615 on one machine, which is right
- *  for a year of habits and wrong for the thirty seconds after lunch when
- *  the thing worth recording actually happens. This is that thirty seconds:
- *  a message, a confirmation, and an undo button.
- *
- *  It owns no data. Every change goes through `lifeos-client.js` to the sync
- *  server's own `POST /sync`, which carries the revision, refuses a write
- *  that is behind and stows a shrinking one — and every row it writes is
- *  built by the same shape function the screens use. The browser window
- *  stays the working copy; this is one more way to reach the disk.
- *
- *  **One consequence worth knowing.** If a browser window is open while the
- *  bot writes, that window is then holding a revision behind the disk and
- *  its next save is refused with the conflict bar — «حمّل الأحدث» adopts the
- *  disk copy, bot row and all. That is the designed answer and not a bug;
- *  nothing is lost either way. In practice the bot is used when the laptop
- *  is not.
- *
- *  Security is one rule, enforced before anything else runs: only
- *  TELEGRAM_CHAT_ID is answered, and everything else is dropped without a
- *  reply. A bot token makes a public endpoint — anyone who learns the bot's
- *  name can message it — so the whitelist is the whole of the access
- *  control, and it must be the first middleware in the chain.
- * --------------------------------------------------------------------- */
+/* --- 2027 Life OS, from the phone -------------------------------------- */
 import { Bot, InlineKeyboard } from "grammy";
 import { CONFIG, configProblems } from "./config.js";
 import { withState, readLife, DiskError } from "./lifeos-client.js";
@@ -61,16 +37,6 @@ if (problems.length) {
 
 const bot = new Bot(CONFIG.token, { client: { apiRoot: CONFIG.apiRoot } });
 
-/* --- the gate ---------------------------------------------------------- *
- *  `chat.id` AND `from.id`, both. In a private chat they are the same
- *  number, and that is exactly why both are checked: if the bot is ever
- *  added to a group, `chat.id` is the group's and `from.id` is whoever
- *  typed — and requiring both to be the configured id is the only test that
- *  stays correct in either shape.
- *
- *  Dropped silently, with no reply. An error message tells a stranger the
- *  bot is alive and has an owner; silence tells them nothing.
- * ---------------------------------------------------------------------- */
 bot.use(async (ctx, next) => {
   const chat = ctx.chat?.id;
   const from = ctx.from?.id;
@@ -81,18 +47,6 @@ bot.use(async (ctx, next) => {
   await next();
 });
 
-/* --- the undo bus ----------------------------------------------------- *
- *  The same idea as `UndoBus` in the app: a label and the whole array as it
- *  stood, never the row. In memory only — a pending undo is not state that
- *  has to survive anything, and the moment it were written to disk it would
- *  be a second copy of the day arguing with the first.
- *
- *  The app's window is eight seconds, and that is the wrong window here: a
- *  message sits in a chat, and the answer to «was that the right amount?»
- *  usually arrives after a glance at something else. So a token lives until
- *  `UNDO_KEEP` newer ones have pushed it out, and a button pressed after
- *  that says so rather than silently doing nothing.
- * ---------------------------------------------------------------------- */
 const UNDO_KEEP = 40;
 const undos = new Map();
 let undoSeq = 0;
@@ -103,17 +57,6 @@ function armUndo(before) {
   return token;
 }
 
-/* --- a choice whose payload does not fit in a button ------------------- *
- *  Telegram caps callback data at 64 bytes. «درجة الكويز ١٨ من ٢٠» has to
- *  survive the question «أي مادة؟», and an Arabic mark label blows that cap
- *  on its own — so the payload stays here under a token and the button
- *  carries the token and the row's id.
- *
- *  The same shape as the undo bus above, and in memory for the same reason:
- *  a half-finished question is not state that has to survive a restart, and
- *  a button pressed after one says so plainly instead of writing a mark onto
- *  a course nobody chose.
- * ---------------------------------------------------------------------- */
 const asked = new Map();
 let askSeq = 0;
 function hold(payload) {
@@ -125,9 +68,6 @@ function hold(payload) {
 const stale = (ctx) =>
   ctx.reply("⚠️ انتهت صلاحية هذا السؤال. أرسل الجملة مرة ثانية.");
 
-/* Every write goes through here, so the reply, the undo button and the error
-   handling are written once. `run` is one of the pure actions in actions.js;
-   `say` turns its result into Arabic. */
 async function apply(ctx, run, say) {
   let out;
   try {
@@ -138,24 +78,14 @@ async function apply(ctx, run, say) {
     return ctx.reply("⚠️ " + msg);
   }
   if (out.refused) return ctx.reply("⚠️ " + out.refused);
-  /* A write may have started or ended a focus round, and the bell is armed
-     off a moment rather than off a clock time — so it is re-read here rather
-     than waiting for the next minute's tick. A one-minute round started from
-     a message would otherwise ring late or not at all. */
   if (out.next) bell.sync(out.next);
   const keys = out.before ? V.undoKeys(armUndo(out.before)) : null;
   return ctx.reply(say(out), keys ? { reply_markup: keys } : undefined);
 }
 
-/* A keyboard, or nothing. Telegram refuses a markup with no buttons in it,
-   and a day with no open task has none. */
 const keysOr = (kb) =>
   kb && kb.inline_keyboard.some((r) => r.length) ? { reply_markup: kb } : undefined;
 
-/* The day, or a sentence saying why not. `readLife` throws when the sync
-   server is down, and a throw inside a handler is caught by `bot.catch` and
-   logged — which leaves the phone with no answer at all, the one failure
-   mode that reads as a dead bot. So every read path goes through here. */
 async function dayOrTell(ctx) {
   try {
     const state = await readLife();
@@ -172,13 +102,6 @@ async function dayOrTell(ctx) {
   }
 }
 
-/* --- the four things a sentence cannot ask for ------------------------- *
- *  Telegram only marks `/name` as a command when the name is ASCII, so
- *  «/صباح» arrives as ordinary text and a `bot.command("صباح")` would never
- *  fire. The commands are therefore ASCII, and the Arabic words that mean
- *  the same thing are matched as plain text below — which is the interface
- *  this bot is supposed to have anyway.
- * ---------------------------------------------------------------------- */
 async function showToday(ctx) {
   const got = await dayOrTell(ctx);
   if (!got) return;
@@ -196,19 +119,10 @@ async function showOpen(ctx) {
   );
 }
 
-/* --- the half nobody asked for, asked for ----------------------------- *
- *  The same sweep the scheduled coach runs, with a floor under it: a button
- *  pressed that answers with silence reads as a dead bot, so `coachReply`
- *  always has something to say even when `coachNote` would not.
- * ---------------------------------------------------------------------- */
 async function showCoach(ctx) {
   const got = await dayOrTell(ctx);
   if (!got) return;
   const note = coachReply(got.state);
-  /* Through the Arabic formatter like every other number the bot prints: a
-     Latin digit inside Arabic text is a strong LTR run that throws itself to
-     the wrong side of the sentence, and «٣ ملاحظة» is a plural nobody says
-     out loud. */
   const out = note.more
     ? `${note.text}\n\n${line(`و${notesWord(note.more)} أخرى — أرسل «يومي» لترى الصورة كاملة.`)}`
     : note.text;
@@ -227,11 +141,28 @@ async function showFocus(ctx) {
   return ctx.reply(V.focusStand(got.state), keysOr(V.focusKeys(got.state.focus?.run || null)));
 }
 
-/* Keyed on the *folded* word, because that is what the lookup is given:
-   «مساعدة» and «مساعده» and «الآن» and «الان» have to be one entry each, and
-   folding the keys here is what keeps the table readable while making them
-   so. A bare «اليوم» is the day and not a task — the table is consulted
-   first, deliberately. */
+// دالة عرض الأهداف
+async function showGoals(ctx, horizon) {
+  // حماية: إذا تم تمرير دالة next من المكتبة، نجعلها quarter افتراضياً
+  if (typeof horizon !== "string") horizon = "quarter";
+  
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  const report = act.goalReport(got.state, horizon);
+  
+  if (ctx.callbackQuery) {
+    return ctx.editMessageText(report.text, { 
+      parse_mode: "HTML", 
+      reply_markup: report.kb 
+    }).catch(() => {});
+  }
+  
+  return ctx.reply(report.text, { 
+    parse_mode: "HTML", 
+    reply_markup: report.kb 
+  });
+}
+
 const WORDS = new Map(
   [
     ["مساعدة", (ctx) => ctx.reply(V.HELP)],
@@ -244,10 +175,6 @@ const WORDS = new Map(
     ["المدرب", showCoach],
     ["مدرب", showCoach],
     ["وجهني", showCoach],
-    /* The library, by the words it gets asked for by. «راجع» alone is the
-       review — «راجع المحاسبة» is a task and falls through to the parser,
-       because this table is only ever consulted for a message that is one
-       word long. */
     ["مكتبتي", showShelf],
     ["المكتبة", showShelf],
     ["الرف", showShelf],
@@ -257,6 +184,10 @@ const WORDS = new Map(
     ["مراجعة", showWeek],
     ["القائمة", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() })],
     ["قائمة", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() })],
+    // إصلاح: تغليف دالة الأهداف بدالة سهمية لمنع تمرير next
+    ["الأهداف", (ctx) => showGoals(ctx, "quarter")],
+    ["اهداف", (ctx) => showGoals(ctx, "quarter")],
+    ["أهدافي", (ctx) => showGoals(ctx, "quarter")],
   ].map(([word, run]) => [fold(word), run]),
 );
 
@@ -276,28 +207,23 @@ bot.command("find", async (ctx) => {
   if (!got) return;
   return ctx.reply(search(got.state, q));
 });
+bot.command("goals", (ctx) => showGoals(ctx, "quarter"));
 bot.command("morning", (ctx) => sendMorning(ctx.chat.id));
 bot.command("evening", (ctx) => sendEvening(ctx.chat.id));
 
-/* --- the buttons ------------------------------------------------------- */
 bot.on("callback_query:data", async (ctx) => {
-  /* Split into parts and not a pair: the breaker's tag buttons carry
-     `holdt:<badId>:<tag>`, and a two-way split would read the tag as part of
-     the id. Telegram caps the whole string at 64 bytes, which three short
-     fields stay well inside. */
   const [kind, arg, extra] = String(ctx.callbackQuery.data).split(":");
-  /* Answered first and always: an unanswered callback leaves the button
-     spinning on the phone for a minute, which reads as a dead bot. */
   await ctx.answerCallbackQuery().catch(() => {});
 
+  if (kind === "grp") {
+    return showGoals(ctx, arg);
+  }
   if (kind === "undo") {
     const before = undos.get(arg);
     if (!before) {
       return ctx.reply("⚠️ ما عندي نسخة أرجّعها — البوت أُعيد تشغيله بعدها.");
     }
     undos.delete(arg);
-    /* No undo button under an undo: a second one would be a redo wearing the
-       same label. */
     return apply(ctx, (s) => ({ ...act.undo(s, before), before: null }), V.undone);
   }
   if (kind === "tick") return tickAndMaybeRead(ctx, arg, false);
@@ -308,18 +234,9 @@ bot.on("callback_query:data", async (ctx) => {
   }
   if (kind === "read") {
     const pages = Number(arg) || 0;
-    /* «لاحقًا» is a real answer and writes nothing. The habit is already
-       ticked by the time this keyboard exists, so skipping the pages must
-       never undo the completion — the same rule the app's modal keeps. */
     if (!pages) return ctx.reply("تمام — العادة مسجّلة، والصفحات تُسجّل وقت ما تجي.");
     return apply(ctx, (s) => act.logReading(s, { pages }), V.savedReading);
   }
-  /* --- the library's buttons ------------------------------------------ *
-   *  Three of them carry a token, for the reason the marks and the goals
-   *  do: Telegram caps callback data at 64 bytes and a book's title blows
-   *  that on its own, so the payload — the pages, the day — waits in memory
-   *  and the button carries the token and the row's id.
-   * ------------------------------------------------------------------- */
   if (kind === "rdb") {
     const want = asked.get(arg);
     if (!want) return stale(ctx);
@@ -352,20 +269,12 @@ bot.on("callback_query:data", async (ctx) => {
     if (!book) return ctx.reply("⚠️ هذا الكتاب لم يعد على الرف.");
     return ctx.reply(V.noteList(book));
   }
-  /* A point, turned into something that gets done. The text is held under a
-     token because a note is longer than a button. */
   if (kind === "nact") {
     const want = asked.get(arg);
     if (!want) return stale(ctx);
     asked.delete(arg);
     return apply(ctx, (s) => act.addTask(s, { label: want.label }), V.savedTask);
   }
-  /* --- the review, in three taps at most ------------------------------ *
-   *  Reveal, then remembered or not. The reveal is a separate message and
-   *  not an edit of the first: the cue stays in the chat above the answer,
-   *  which is what makes scrolling back through an evening's review
-   *  readable at all.
-   * ------------------------------------------------------------------- */
   if (kind === "rvs") {
     const got = await dayOrTell(ctx);
     if (!got) return;
@@ -387,7 +296,6 @@ bot.on("callback_query:data", async (ctx) => {
   if (kind === "focus") return runFocus(ctx, arg);
   if (kind === "unt") return apply(ctx, (s) => act.untickHabit(s, arg), V.savedUntick);
 
-  /* The three questions whose answer needs a payload bigger than a button. */
   if (kind === "gset") {
     const want = asked.get(arg);
     if (!want) return stale(ctx);
@@ -407,25 +315,18 @@ bot.on("callback_query:data", async (ctx) => {
     return apply(ctx, (s) => act.addMark(s, extra, want), V.savedMark);
   }
 
-  /* «لاحقًا». The entry is re-armed, never the rendered text — a water nudge
-     deferred at eleven must say what is left at noon. */
   if (kind === "snooze" || kind === "snz") {
     let mins = 60;
     try {
       const now = await readLife();
       if (now) mins = botShape(now.bot).snooze;
-    } catch {
-      /* The disk is unreachable; the default is still a sane later. */
-    }
+    } catch {}
     if (!snoozer.arm(arg, mins)) {
       return ctx.reply("⚠️ ما عاد عندي هذا التذكير — البوت أُعيد تشغيله بعده.");
     }
     return ctx.reply(`⏰ تمام، أذكّرك بعد ${mins} دقيقة.`);
   }
 
-  /* The breaker, in two taps. The first names which habit, the second names
-     the trigger — and the second is skippable, because a hold logged with no
-     trigger is still a hold the mirror counts. */
   if (kind === "hold" || kind === "fall") {
     return ctx.reply(
       kind === "fall" ? "ما الذي سبقها؟" : "ما المحرّك الذي صمدت أمامه؟",
@@ -450,12 +351,6 @@ bot.on("callback_query:data", async (ctx) => {
   }
 });
 
-/* --- a tick, and the question it opens -------------------------------- *
- *  A habit can feed the library, and the pages are asked for *after* the
- *  tick has landed — never before. The reward has to be paid and the habit
- *  has to stay done whether or not a number follows, which is the one rule
- *  the app's own reading modal keeps.
- * ---------------------------------------------------------------------- */
 async function tickAndMaybeRead(ctx, id, tiny) {
   let out;
   try {
@@ -474,22 +369,7 @@ async function tickAndMaybeRead(ctx, id, tiny) {
   return undefined;
 }
 
-/* --- the pages, and the one question worth asking after them ----------- *
- *  Logging pages is the cheap half. The half this system was missing from a
- *  phone is the sentence he could still say about them a week later — so the
- *  write lands first, with its undo, and the question comes after it in its
- *  own message.
- *
- *  It asks and it never waits: nothing is pending, no answer is expected,
- *  and ignoring it costs him the point and nothing else. Asked once an
- *  evening — a book that already has a point written on it today has had
- *  this conversation.
- * ---------------------------------------------------------------------- */
 async function logPages(ctx, args) {
-  /* A title that is not on the shelf yet is two writes that have to be one:
-     the book is added, marked as the one being read, and the pages land on
-     it — under a single undo, because an undo that took the pages back and
-     left a book nobody chose is half an undo. */
   const run = args.addTitle
     ? (s) => act.addAndRead(s, { title: args.addTitle, pages: args.pages, back: args.back })
     : (s) => act.logReading(s, args);
@@ -503,8 +383,6 @@ async function logPages(ctx, args) {
   }
   if (out.refused) return ctx.reply("⚠️ " + out.refused);
   const keys = out.before ? V.undoKeys(armUndo(out.before)) : null;
-  /* `addAndRead` with no pages is an add and says so — the one shape this
-     function can get back that is not a reading. */
   if (out.kind === "book") {
     return ctx.reply(V.savedBookAdd(out), keys ? { reply_markup: keys } : undefined);
   }
@@ -515,15 +393,6 @@ async function logPages(ctx, args) {
   return undefined;
 }
 
-/* --- one point, rated ---------------------------------------------------- *
- *  No undo button under this one, deliberately: what it changed is when the
- *  point comes back, and «تراجع» on a schedule is a button whose effect
- *  nobody can see. What goes under it instead is the thing worth doing with
- *  a point he remembered — turning it into a task.
- *
- *  And the next due point follows it, so an evening's review is a flow of
- *  taps rather than a word typed once per point.
- * ---------------------------------------------------------------------- */
 async function reviewOne(ctx, bookId, noteId, kept) {
   let out;
   try {
@@ -546,10 +415,6 @@ async function reviewOne(ctx, bookId, noteId, kept) {
   return undefined;
 }
 
-/* A finish, and the two things only he can answer about a book he has just
-   closed — the stars and the one sentence it came down to. The stars are a
-   keyboard; the sentence is asked for in words, because a lesson typed into
-   a button is a lesson nobody wrote. */
 async function finishAndAsk(ctx, id) {
   let out;
   try {
@@ -566,17 +431,12 @@ async function finishAndAsk(ctx, id) {
   return undefined;
 }
 
-/* --- the library, and one point out of it ------------------------------ */
 async function showShelf(ctx) {
   const got = await dayOrTell(ctx);
   if (!got) return;
   return ctx.reply(V.shelf(got.state));
 }
 
-/* One due point, as a card with its cue hidden. Asked for by hand it has a
-   floor under it, exactly as `/coach` does: a button pressed that answers
-   with silence reads as a dead bot, so an evening with nothing due says when
-   the next one comes back instead of saying nothing. */
 async function showReview(ctx) {
   const got = await dayOrTell(ctx);
   if (!got) return;
@@ -596,8 +456,6 @@ async function showReview(ctx) {
   return sendReview(ctx.chat.id, due[0], due.length - 1, got.state.date);
 }
 
-/* The nearest point still ahead, so an evening with nothing due can say when
-   the next one is rather than saying nothing at all. */
 function nextNote(books) {
   let best = null;
   for (const b of rows(books)) {
@@ -609,10 +467,6 @@ function nextNote(books) {
   return best;
 }
 
-/* The card, with the cue hidden when there is enough of a point to hide. One
-   place, because the scheduled reminder, the button and `/review` must send
-   the same thing — a review that looks different depending on how it was
-   reached is a review whose buttons he has to re-read every time. */
 function sendReview(chatId, row, left, on) {
   const { hidden } = noteCue(row.note.text);
   return bot.api
@@ -622,13 +476,6 @@ function sendReview(chatId, row, left, on) {
     .catch((e) => console.error("review send: " + (e?.message || e)));
 }
 
-/* --- a day that is already closed -------------------------------------- *
- *  Forgetting to tick is not the same as not having done it. `tickOn` goes
- *  through `setDayDone`, which is the same function «عدّل أمس» uses on the
- *  routine screen, and the streak is recomputed from the rows afterwards
- *  rather than nudged — a counter adjusted by hand is a second opinion about
- *  the same archive.
- * ---------------------------------------------------------------------- */
 function editPastDay(ctx, found, back, on) {
   if (found.length > 1) {
     return ctx.reply(
@@ -640,7 +487,6 @@ function editPastDay(ctx, found, back, on) {
   return apply(ctx, (s) => act.tickOn(s, found[0].id, date, on), V.savedDayEdit);
 }
 
-/* --- the focus desk's buttons and words ------------------------------- */
 function runFocus(ctx, what) {
   if (what === "start") return apply(ctx, (s) => act.startFocus(s, {}), V.savedFocusStart);
   if (what === "break") return apply(ctx, (s) => act.breakFocus(s, {}), V.savedFocusBreak);
@@ -652,7 +498,6 @@ function runFocus(ctx, what) {
   return showFocus(ctx);
 }
 
-/* --- the sentence ----------------------------------------------------- */
 bot.on("message:text", (ctx) => handleText(ctx));
 
 async function handleText(ctx) {
@@ -676,19 +521,12 @@ async function handleText(ctx) {
     return apply(ctx, (s) => act.drinkWater(s, said.count), V.savedWater);
   }
   if (said.kind === "habit") {
-    /* A habit is matched against the live roster, so the match needs the
-       state — read here without writing. One open match ticks; several ask
-       which, because guessing between «صلاة العصر وأذكار» and «أذكار
-       المساء» is how a tick lands on the wrong row. */
     const got = await dayOrTell(ctx);
     if (!got) return;
     const found = act.findHabits(got.state.habits, said.query);
     if (!found.length) {
       return ctx.reply(`⚠️ ما لقيت عادة تشبه «${said.query}». أرسل «باقي» لتشوف المفتوح.`);
     }
-    /* «أمس تمت صلاة العصر» rewrites one archive row and moves nothing else:
-       today's habits do not shift, because today is a different day and the
-       whole value of a hard boundary is that it holds. */
     if (said.back) return editPastDay(ctx, found, said.back, true);
     const open = found.filter((h) => !h.done);
     if (!open.length) {
@@ -702,16 +540,10 @@ async function handleText(ctx) {
     return apply(ctx, (s) => act.tickHabit(s, open[0].id), V.savedHabit);
   }
   if (said.kind === "reading") {
-    /* No book named is the sentence this feature shipped with and still the
-       common one: it means the book he is reading, and nothing needs asking.
-       A name has to be matched against the shelf, which needs the state. */
     if (!said.query) return logPages(ctx, { pages: said.pages, back: said.back });
     const got = await dayOrTell(ctx);
     if (!got) return;
     const found = act.findBooks(got.state.books, said.query);
-    /* Not on the shelf is not a dead end — it is the first sentence this
-       feature will ever meet. One tap adds the book, marks it «أقرأه الآن»
-       and puts the pages on it, as one write with one undo. */
     if (!found.length) {
       return ctx.reply(
         line(`📚 ما لقيت «${said.query}» على الرف. أضيفه وأسجّل عليه ${pagesWord(said.pages)}؟`),
@@ -738,10 +570,6 @@ async function handleText(ctx) {
     }
     const found = act.findBooks(got.state.books, said.query);
     if (!found.length) {
-      /* «ابدأ كتاب …» for a title nobody added is an add and a start, which
-         is what he meant; «خلصت كتاب …» for one is a book this system never
-         saw, and inventing a finished row for it would be inventing a
-         reading it has no record of. */
       if (said.act === "start") {
         return apply(
           ctx,
@@ -789,10 +617,6 @@ async function handleText(ctx) {
     return runFocus(ctx, said.act);
   }
   if (said.kind === "urge") {
-    /* Which habit is matched against the live list, so it needs the state —
-       read here without writing. One match logs after the tag question; more
-       than one asks which, because a fall recorded against the wrong habit
-       resets the wrong counter. */
     const got = await dayOrTell(ctx);
     if (!got) return;
     const pick = act.oneBad(got.state, said.query);
@@ -819,8 +643,6 @@ async function handleText(ctx) {
   if (said.kind === "untick") {
     const got = await dayOrTell(ctx);
     if (!got) return;
-    /* Matched against what is actually ticked: «ألغِ صلاة» with three
-       prayers ticked is a question, not a guess at which one. */
     const found = act
       .findHabits(got.state.habits, said.query)
       .filter((h) => (said.back ? true : h.done));
@@ -878,10 +700,6 @@ async function handleText(ctx) {
     }
     return apply(ctx, (s) => act.addMark(s, found[0].id, said), V.savedMark);
   }
-  /* A question is answered and nothing is written — which is the whole point
-     of reading it as one. An unrecognised subject is not filed as a task
-     either: a question misfiled in the inbox is a row he then has to go and
-     delete. */
   if (said.kind === "ask") {
     const got = await dayOrTell(ctx);
     if (!got) return;
@@ -898,26 +716,16 @@ async function handleText(ctx) {
   return ctx.reply(V.HELP);
 }
 
-/* An answer that can be acted on comes with the action under it. An answer
-   that cannot — the prayer times, the money — comes bare, because a keyboard
-   under a number nobody can change is a keyboard that teaches him the
-   buttons mean nothing. */
 function answerKeys(topic, got) {
   if (topic === "habits") return V.openKeys(got.state);
   if (topic === "tasks") return V.taskKeys(got.day);
   if (topic === "water") return V.openKeys(got.state, 0);
   if (topic === "read") return V.readKeys();
-  /* The points answer with the one action that fits it: bring one back now. */
   if (topic === "notes") return new InlineKeyboard().text("🔁 راجع نقطة", "rev:now");
   if (topic === "focus") return V.focusKeys(got.state.focus?.run || null);
   return null;
 }
 
-/* --- the briefs ------------------------------------------------------- */
-/* Both briefs are reached two ways — the timer and a word typed by hand —
-   so the failure is reported to the chat rather than only to the log: a
-   brief asked for and silently missing is indistinguishable from a bot that
-   has stopped. */
 async function brief(chatId, build) {
   let state;
   try {
@@ -949,18 +757,6 @@ const sendEvening = (chatId) =>
     keys: V.openKeys(state),
   }));
 
-/* --- a voice note ------------------------------------------------------ *
- *  The fastest way to record something is to say it, and the moment worth
- *  recording is almost always a moment with a hand full of something else.
- *
- *  It ends where `parse` begins: the transcript goes down the *same* path a
- *  typed message does, so every trigger, every question and every
- *  confirmation works unchanged and there is no second grammar to keep in
- *  step. The text is echoed back first, because a transcriber that misheard
- *  «صرفت ثلاثين» as «صرفت ثلاثمئة» must be caught by eye and not by a
- *  ledger that is quietly wrong — and the undo button under the write is
- *  then one tap away.
- * ---------------------------------------------------------------------- */
 bot.on(["message:voice", "message:audio"], async (ctx) => {
   const file = ctx.message.voice || ctx.message.audio;
   let text;
@@ -973,29 +769,12 @@ bot.on(["message:voice", "message:audio"], async (ctx) => {
     return ctx.reply("⚠️ " + msg);
   }
   await ctx.reply(`🎙️ «${text}»`);
-  /* Replayed through the ordinary text handler by swapping the message's
-     own text in — so there is exactly one route from a sentence to a row,
-     whether it was typed or spoken. */
   ctx.message.text = text;
   return handleText(ctx);
 });
 
-/* Anything grammY could not hand to a handler. Reported and swallowed: a bot
-   that exits on one bad update is a bot that is down until somebody
-   notices. */
 bot.catch((err) => console.error("bot: " + (err?.message || err)));
 
-/* --- the schedule ------------------------------------------------------ *
- *  Everything the bot sends unprompted comes off `state.bot`, which the
- *  control hub in the app edits and the sync server keeps on disk. There is
- *  no command channel between the screen and this process and there must not
- *  be one: the screen saves, the disk changes, and the tick below notices.
- *
- *  A minute is the resolution. It costs one local HTTP read, it is how the
- *  bot learns about an edit made thirty seconds ago, and it is also how the
- *  day rollover arrives — `Scheduler.sync` re-arms only when the plan it
- *  depends on has actually moved, so the other 1,439 ticks do nothing.
- * ---------------------------------------------------------------------- */
 const TICK = 60 * 1000;
 
 async function deliver(entry) {
@@ -1011,10 +790,17 @@ async function deliver(entry) {
   if (entry.kind === "morning") return sendMorning(CONFIG.chatId);
   if (entry.kind === "evening") return sendEvening(CONFIG.chatId);
 
-  /* Built from the state at the moment it fires, never at the moment it was
-     armed: a water nudge armed at 07:00 that still says «باقي ٨ أكواب» at
-     three in the afternoon has stopped being true. `null` means there is
-     nothing worth saying, and silence is the right output for that. */
+  if (entry.kind === "nudge") {
+    const said = V.goalNudge(state, act.dayAt(state));
+    if (!said) return;
+    const keys = said.keys ? said.keys : new InlineKeyboard();
+    V.snoozeKey(keys.row(), snoozer.hold(entry), botShape(state.bot).snooze);
+    await bot.api
+      .sendMessage(CONFIG.chatId, said.text, keysOr(keys))
+      .catch((e) => console.error("nudge send: " + (e?.message || e)));
+    return;
+  }
+
   const said = textFor(entry, state);
   if (!said) return;
 
@@ -1028,21 +814,13 @@ async function deliver(entry) {
           : said.habits
             ? V.habitKeys(said.habits, "tick")
             : said.review
-              ? /* The cue is hidden when there is enough of the point to
-                   hide, so the first button is «اكشف» and the rating comes
-                   after it. One place decides that — `noteCue` — and both
-                   this and `/review` read it. */
-                V.reviewKeys(
+              ? V.reviewKeys(
                   { id: said.review.bookId },
                   { id: said.review.noteId },
                   noteCue(said.review.text).hidden,
                 )
               : new InlineKeyboard();
 
-  /* Every unprompted message gets «لاحقًا». A nudge that cannot be deferred
-     is one you mute, and a muted reminder takes the rest of the schedule
-     with it. The weekly review is the exception — it is a report, and
-     deferring a report by an hour means nothing. */
   if (!said.weekly) {
     V.snoozeKey(keys.row(), snoozer.hold(entry), botShape(state.bot).snooze);
   }
@@ -1052,17 +830,6 @@ async function deliver(entry) {
   });
 }
 
-/* --- the bell ---------------------------------------------------------- *
- *  A round that finished while the laptop was shut has to be written down by
- *  somebody, and the only process awake is this one. So the bell settles the
- *  run first and announces it second — `settleFocus` is the same function the
- *  screen's own settle goes through, so the session row, the cycle counter
- *  and the armed break come out identical either way.
- *
- *  A refusal here is the ordinary case and not an error: if a window was
- *  open, it already settled the round, and this write finds nothing left to
- *  do. The bell still rings, because the round still ended.
- * ---------------------------------------------------------------------- */
 async function ringBell(what) {
   let settled = null;
   try {
@@ -1079,31 +846,18 @@ async function ringBell(what) {
       ? "‏خُذ راحتك — الراحة نصف الطريقة."
       : "‏جولة أخرى؟",
   );
-  /* The keyboard is read off the state after the settle, so it offers the
-     break that was actually armed rather than the one that would have
-     been. */
   let run = null;
   try {
     const now = await readLife();
     run = now?.focus?.run || null;
-  } catch {
-    /* The disk is unreachable; the bell is still worth sending without
-       buttons under it. */
-  }
+  } catch {}
   await bot.api
     .sendMessage(CONFIG.chatId, lines.join("\n"), keysOr(V.focusKeys(run)))
     .catch((e) => console.error("bell send: " + (e?.message || e)));
 }
 
 const scheduler = new Scheduler(deliver);
-/* The focus bell is its own timer and not one of the scheduler's, because it
-   is armed off `run.endAt` — an absolute moment that only exists once a
-   round was started, and one that moves on every pause while the day's plan
-   does not move at all. */
 const bell = new Bell(ringBell);
-/* «لاحقًا» re-arms the *entry*, so the message is rebuilt from the day as it
-   stands when it finally fires — a water nudge deferred at eleven says what
-   is left at noon. */
 const snoozer = new Snoozer(deliver);
 let lastTickAt = 0;
 
@@ -1113,9 +867,6 @@ async function tick() {
   try {
     state = await readLife();
   } catch {
-    /* The sync server is down or restarting. The timers already armed keep
-       their moments, and the next tick that succeeds re-reads the schedule.
-       Nothing is written and nothing is lost. */
     return;
   }
   if (!state) return;
@@ -1131,7 +882,6 @@ const ticker = setInterval(tick, TICK);
 ticker.unref?.();
 tick();
 
-/* --- the status strip's one endpoint ----------------------------------- */
 const startedAt = Date.now();
 const health = startHealth({
   read: () => ({
@@ -1142,10 +892,6 @@ const health = startHealth({
     next: scheduler.armed[0]?.when?.getTime() ?? null,
     checkedAt: lastTickAt,
   }),
-  /* The test ping. It proves the whole chain in one tap — this process is
-     alive, the token works, the network reaches Telegram, and the chat id is
-     the right one — which is four different failures a single message rules
-     out at once. */
   ping: async () => {
     await bot.api.sendMessage(
       CONFIG.chatId,
@@ -1173,35 +919,16 @@ console.log("2027 Life OS — بوت تيليجرام");
 console.log("  الحالة من  " + CONFIG.origin);
 console.log("  يردّ على   " + CONFIG.chatId);
 console.log("  الحالة على " + BOT_API);
-/* The schedule is deliberately absent from this banner. It lives in
-   `state.bot` and is edited on the «بوت تيليجرام» screen, so printing a copy
-   of it at startup would be a second answer that goes stale the first time
-   he changes a time — the tick below logs what it actually armed. */
 
-/* Long polling, not a webhook: no public URL, no tunnel, no TLS to terminate
-   on a home machine, and nothing listening on a port that did not need to be
-   open. `drop_pending_updates` because a message sent while the bot was down
-   is almost always stale, and an expense from yesterday logged onto today is
-   worse than one that was lost. */
 bot.start({
   drop_pending_updates: true,
   onStart: () => {
     console.log("  ✓ يستقبل");
-    /* Telegram's own command menu, so the slash commands are discoverable
-       without reading the help once. Registered after the loop is up and
-       never awaited before it: a failure here is cosmetic, and a bot that
-       refuses to start because a menu would not register is a bot down over
-       nothing. */
     bot.api
       .setMyCommands(V.COMMANDS)
       .catch((e) => console.warn("القائمة ما سُجّلت: " + (e?.message || e)));
   },
 }).catch((e) => {
-  /* The first call grammY makes is getMe and the loop after it is
-     getUpdates, and each way they fail has its own answer — a name that will
-     not resolve, a token Telegram does not know, a second copy on the same
-     token. Unhandled, every one of them arrives as the same stack trace with
-     the answer buried in it. */
   const cause = String(e?.cause?.code || e?.message || e);
   if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|ETIMEDOUT/.test(cause)) {
     console.error(
@@ -1212,11 +939,6 @@ bot.start({
   } else if (/401/.test(cause)) {
     console.error("\nتيليجرام رفض التوكن. خُذ واحدًا جديدًا من @BotFather.\n");
   } else if (/409/.test(cause)) {
-    /* Two long-polling clients on one token take turns stealing each other's
-       updates, and Telegram ends the older one with a 409. The symptom
-       otherwise is a bot that answers every other message, so this names it
-       rather than letting it read as a generic failure — and this copy is
-       the one that stops, which is correct: the newest start wins. */
     console.error("\nنسخة أخرى من البوت تعمل على نفس التوكن. هذه النسخة توقّفت.");
     console.error("نسخة واحدة فقط — أوقف الباقي ثم شغّل واحدة.\n");
   } else {

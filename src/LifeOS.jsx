@@ -374,7 +374,15 @@ const SCREENS = {
   matrix: (c) => <MatrixModule state={c.state} setState={c.setState} />,
 
   /* العمل العميق — المؤقّت وجلساته. */
-  deep: (c) => <DeepWorkModule state={c.state} setState={c.setState} />,
+  deep: (c) => (
+    <DeepWorkModule
+      state={c.state}
+      setState={c.setState}
+      hyperFocus={c.hyperFocus}
+      onEnterHyperFocus={c.enterHyperFocus}
+      onExitHyperFocus={c.exitHyperFocus}
+    />
+  ),
 
   /* الأهداف — ستّ ركائز، وأرباع سنة، وساعات الأفق. */
   goals: (c) => <GoalsModule state={c.state} setState={c.setState} />,
@@ -387,7 +395,7 @@ const SCREENS = {
 
   /* التتبع الشهري — يقرأ الأرشيف ولا يكتب فيه. */
   analytics: (c) => (
-    <AnalyticsModule state={c.state} discipline={c.discipline} streak={c.streak} />
+    <AnalyticsModule state={c.state} setState={c.setState} discipline={c.discipline} streak={c.streak} />
   ),
 
   /* كاسر العادات. */
@@ -1028,6 +1036,20 @@ export default function LifeOS() {
   /* The comeback card, once it has been put away. Same shelf as the snooze
      above and for the same reason. */
   const [back, setBack] = useState(() => obj(readUI().back));
+  /* وضع الغوص العميق — hides the sidebar, the phone bar and the header while
+     a focus round is actually running, so the only thing on screen is the
+     dial itself. A per-viewer preference like `collapsed`, not a focus-desk
+     switch: it says nothing about what the timer does, only about what the
+     chrome around it shows, so it has no business in `state.focus` beside
+     `autoBreak` and the rest. Turned off the moment there is no focus round
+     to be undistracted *for* — see the effect below — because a lockdown
+     that survives the round it was entered for is a UI nobody can get back
+     to without knowing to look for the exit pill. */
+  const [hyperFocus, setHyperFocus] = useState(() => !!readUI().hyperFocus);
+  useEffect(() => {
+    if (!hyperFocus) return;
+    if (state.focus?.run?.phase !== "focus") setHyperFocus(false);
+  }, [hyperFocus, state.focus?.run?.phase]);
   const nagRef = useRef(nag);
   const setNag = useCallback((next) => {
     nagRef.current = next;
@@ -1250,12 +1272,12 @@ export default function LifeOS() {
     try {
       window.localStorage.setItem(
         UI_KEY,
-        JSON.stringify({ tab, collapsed, reflect: nag, back }),
+        JSON.stringify({ tab, collapsed, reflect: nag, back, hyperFocus }),
       );
     } catch {
       /* per-viewer convenience only */
     }
-  }, [tab, collapsed, nag, back, leading]);
+  }, [tab, collapsed, nag, back, hyperFocus, leading]);
 
   /* Through `disciplineOf`, never recomputed here — the archive row, the streak and
      the ring all read the same denominator or they will disagree about the
@@ -1495,6 +1517,9 @@ export default function LifeOS() {
     openReflect: () => setReflect(true),
     openFix: () => setFixing(true),
     closeComeback: () => setBack({ day: state.date }),
+    hyperFocus,
+    enterHyperFocus: () => setHyperFocus(true),
+    exitHyperFocus: () => setHyperFocus(false),
   };
 
   /* Below every hook, without exception — a return placed among them is
@@ -1525,8 +1550,11 @@ export default function LifeOS() {
       <AppStyles />
 
       <div className="flex min-h-screen">
-        {/* ---------- sidebar (desktop) ---------- */}
-        <aside
+        {/* ---------- sidebar (desktop) ---------- *
+         *  Gone outright in hyper-focus, not just dimmed: the whole feature
+         *  is that nothing competes with the dial for a glance, and a greyed
+         *  sidebar is still something the eye has to rule out. */}
+        {!hyperFocus && <aside
           className="sticky top-0 hidden h-screen shrink-0 flex-col border-l p-4 transition-all duration-300 lg:flex"
           style={{
             width: collapsed ? 80 : 268,
@@ -1660,12 +1688,13 @@ export default function LifeOS() {
               {!collapsed && "تصفير اليوم"}
             </Btn>
           </div>
-        </aside>
+        </aside>}
 
         {/* ---------- main ---------- */}
         <main className="min-w-0 flex-1">
-          {/* mobile header — navigation lives in BottomTabs, so no menu here */}
-          <div
+          {/* mobile header — navigation lives in BottomTabs, so no menu here.
+              Gone in hyper-focus for the same reason the sidebar is. */}
+          {!hyperFocus && <div
             className="sticky z-40 flex items-center justify-between gap-3 border-b px-5 py-3.5 lg:hidden"
             style={{
               top: "env(safe-area-inset-top, 0px)",
@@ -1703,9 +1732,13 @@ export default function LifeOS() {
             >
               {discipline}%
             </span>
-          </div>
+          </div>}
 
-          <div className="mx-auto w-full max-w-6xl px-5 pb-36 pt-8 sm:px-7 lg:px-12 lg:pb-24 lg:pt-12">
+          <div
+            className={`mx-auto w-full max-w-6xl px-5 pt-8 sm:px-7 lg:px-12 lg:pt-12${
+              hyperFocus ? " pb-10" : " pb-36 lg:pb-24"
+            }`}
+          >
             {/* Outside the keyed wrapper on purpose: the warning belongs to
                 the hour, not to the tab, and re-animating it on every tab
                 change would turn it into decoration. */}
@@ -1725,13 +1758,37 @@ export default function LifeOS() {
         </main>
       </div>
 
-      <BottomTabs
-        items={navItems}
-        more={moreItems}
-        tab={tab}
-        onGo={go}
-        onSettings={() => setSettings(true)}
-      />
+      {!hyperFocus && (
+        <BottomTabs
+          items={navItems}
+          more={moreItems}
+          tab={tab}
+          onGo={go}
+          onSettings={() => setSettings(true)}
+        />
+      )}
+
+      {/* The one way back. Centred without a transform — `.los-in` on the
+          screen below already owns `transform`, and `-translate-x-1/2` on a
+          fixed element under it is the same collision the four other fixed
+          bars in this file already avoid. */}
+      {hyperFocus && (
+        <button
+          onClick={() => setHyperFocus(false)}
+          className="fixed inset-x-3 z-50 flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-[12px] font-bold transition-colors hover:border-white/30 sm:inset-x-0 sm:mx-auto sm:w-fit"
+          style={{
+            top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            borderColor: T.border,
+            backgroundColor: `${T.bg}D9`,
+            backdropFilter: "blur(12px) saturate(150%)",
+            color: T.faint,
+          }}
+          title="غوص عميق نشط — اضغط للعودة"
+        >
+          <Target size={13} style={{ color: T.primary }} />
+          وضع الغوص العميق — اضغط للخروج
+        </button>
+      )}
 
       <UndoToast undo={undo} onUndo={takeBack} onDismiss={dropUndo} />
 

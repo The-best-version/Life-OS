@@ -588,14 +588,24 @@ export function search(state, query) {
 }
 
 /* --- the week, once ---------------------------------------------------- *
- *  The one message the bot sends that is not about now. A day is too short a
- *  window to see a slope in, and the evening brief cannot show one: it
+ *  The one message the bot sends that is not about now. A day is too short
+ *  a window to see a slope in, and the evening brief cannot show one: it
  *  reports today against nothing.
  *
- *  Gaps are named and never folded into the average, the streak is read off
- *  the rows rather than nudged, and every total comes from the same window
- *  function the income screen reads — so this cannot disagree with any
- *  screen it summarises.
+ *  **The review counts days, not percentages.** «٥ من ٧ أيام» is a picture
+ *  a person can hold in his head; «٦٨٪» is a figure he has to translate
+ *  before it means anything, and by the time he has translated it the
+ *  review has lost him. Every line below answers one question — *how many
+ *  days this week?* — and the questions that are not about days (money,
+ *  university, projects) have their own messages and are not repeated here.
+ *
+ *  The seven days are walked into an array first, with `null` for a day
+ *  that was never recorded. A gap and a zero are two different facts and
+ *  this array is where they stop being confused: a bar chart cannot draw
+ *  them the same, and «٥ من ٧ أيام» cannot count them the same.
+ *
+ *  The comparison with last week is stated as a change in days for the same
+ *  reason: «+٢ أيام» is a week that went better, «+١٨٪» is a spreadsheet.
  * ---------------------------------------------------------------------- */
 export function weekReview(state, now = new Date()) {
   const s = obj(state);
@@ -603,133 +613,142 @@ export function weekReview(state, now = new Date()) {
   const from = addDays(today, -6);
   const history = rows(s.history);
   const span = history.filter((h) => h.date >= from && h.date <= today);
-  const real = span.filter((h) => !isGap(h) && Array.isArray(h.done));
-  const gaps = span.filter(isGap).length;
   const focus = focusShape(s.focus);
   const goal = Number.isFinite(+s.readGoal) ? +s.readGoal : READ_GOAL_DEFAULT;
 
+  /* The seven days, oldest first. `null` for a day that was never recorded
+     — a gap and a zeroed day are different facts and this array is where
+     they stop being confused. */
+  const byDay = new Map(span.map((h) => [h.date, h]));
+  const days = [];
+  for (let i = 6; i >= 0; i -= 1) {
+    const row = byDay.get(addDays(today, -i));
+    days.push(row && !isGap(row) && Array.isArray(row.done) ? row : null);
+  }
+  const logged = days.filter(Boolean).length;
+  const unlogged = 7 - logged;
+  const complete = days.filter((d) => d && (d.pct || 0) >= STREAK_TARGET).length;
+  const partial = logged - complete;
+
   const out = [line(`🗓️ مراجعة الأسبوع — ${DOW[now.getDay()]}`), ""];
 
-  if (real.length) {
-    const avg = Math.round(real.reduce((n, h) => n + (h.pct || 0), 0) / real.length);
-    const hit = real.filter((h) => (h.pct || 0) >= STREAK_TARGET).length;
-    const best = real.reduce((a, b) => ((b.pct || 0) > (a.pct || 0) ? b : a));
-    out.push(line(`📊 الانتظام: متوسط ${num(avg)}٪ على ${num(real.length)} يوم مسجّل.`));
-    out.push(line(`${num(hit)} ${hit === 1 ? "يوم" : "أيام"} فوق ${num(STREAK_TARGET)}٪ · أفضل يوم ${num(best.pct || 0)}٪.`));
-    /* The shape, which is the whole reason a weekly review exists — a slope
-       is the thing a single day cannot show you. Scaled against 100 rather
-       than against the best day, or every week would come out looking
-       identical. A gap gets its own mark: «no bar» and «a day that scored
-       zero» are different facts, and a chart that draws them the same hides
-       exactly the thing the gap rows exist to say. */
-    const byDay = new Map(span.map((h) => [h.date, h]));
-    const week = [];
-    for (let i = 6; i >= 0; i -= 1) {
-      const row = byDay.get(addDays(today, -i));
-      week.push(row && !isGap(row) ? row.pct || 0 : null);
-    }
-    const bar = week.map((v) => (v === null ? "◌" : sparkline([v], 100))).join(" ");
-    out.push(line(`${bar}${gaps ? "   ◌ = بلا تسجيل" : ""}`));
-  } else {
-    out.push(line("📊 ما سُجّل يوم واحد هذا الأسبوع."));
-  }
-  /* Counted out loud, never averaged. */
-  if (gaps) out.push(line(`🕳️ ${daysWord(gaps)} بدون تسجيل — خارج المتوسط، ومذكورة لأنها حدثت.`));
-
-  const run = streakRunFrom(history);
+  /* --- the tracker --- */
+  out.push(line("📅 المتتبّع:"));
   out.push(
     line(
-      run.days
-        ? `🔥 السلسلة: ${countedWord(run.days)}${run.forgiven ? " ومعها يوم سماح مستهلك" : ""}.`
-        : "🔥 ما فيه سلسلة قائمة.",
+      `• سجّلت ${num(logged)} من ${num(7)} أيام${unlogged ? ` — و${countDays(unlogged)} بلا تسجيل` : " — بلا انقطاع"}`,
     ),
   );
+  if (complete) out.push(line(`• منها ${countDays(complete)} فوق ${num(STREAK_TARGET)}٪`));
+  if (partial) out.push(line(`• و${countDays(partial)} دون الهدف`));
+  if (logged) {
+    const bar = days.map((d) => (d ? sparkline([d.pct || 0], 100) : "◌")).join(" ");
+    out.push(line(`${bar}${unlogged ? "   ◌ = بلا تسجيل" : ""}`));
+  }
+  out.push("");
 
-  /* Which habit carried the week and which one did not. Over the roster each
-     row actually recorded, so a habit added on Wednesday is not counted
-     against Monday. */
+  /* --- the habits, counted in days --- *
+   *  Each habit answers «كم يومًا هذا الأسبوع؟» over the days it was on the
+   *  roster — so a habit added on Wednesday is not counted against Sunday.
+   *  The floor of `asked >= 3` keeps a habit that arrived yesterday off the
+   *  list rather than reporting it as 1/1.
+   * ------------------------------------------------------------------- */
   const tally = new Map();
-  for (const h of real) {
-    for (const id of h.all || []) {
+  for (const d of days) {
+    if (!d) continue;
+    for (const id of d.all || []) {
       const at = tally.get(id) || { asked: 0, kept: 0 };
       at.asked += 1;
-      if (h.done.includes(id)) at.kept += 1;
+      if (d.done.includes(id)) at.kept += 1;
       tally.set(id, at);
     }
   }
   const live = rows(s.habits);
-  const scored = scoredOf(live).map((h) => h.id);
+  const scored = new Set(scoredOf(live).map((h) => h.id));
   const ranked = [...tally.entries()]
-    .filter(([id, v]) => v.asked >= 3 && scored.includes(id))
+    .filter(([id, v]) => v.asked >= 3 && scored.has(id))
     .map(([id, v]) => ({
       label: live.find((h) => h.id === id)?.label || "عادة محذوفة",
-      pct: Math.round((v.kept / v.asked) * 100),
+      kept: v.kept,
+      asked: v.asked,
     }))
-    .sort((a, b) => b.pct - a.pct);
-  if (ranked.length >= 2) {
+    .sort((a, b) => b.kept - a.kept || a.label.localeCompare(b.label, "ar"));
+
+  if (ranked.length) {
+    out.push(line("📊 العادات — كم يومًا في الأسبوع:"));
+    for (const r of ranked.slice(0, 6)) {
+      const mark = r.kept === r.asked ? " ⭐" : r.kept === 0 ? " ⚠️" : "";
+      out.push(line(`• ${num(r.kept)}/${num(r.asked)} — ${r.label}${mark}`));
+    }
+    if (ranked.length > 6) out.push(line(`و${num(ranked.length - 6)} عادات أخرى`));
     out.push("");
-    out.push(line(`🏆 الأثبت: ${ranked[0].label} — ${num(ranked[0].pct)}٪`));
-    const worst = ranked[ranked.length - 1];
-    out.push(line(`🩹 الأضعف: ${worst.label} — ${num(worst.pct)}٪`));
-    /* The floor, offered where it belongs: against the one habit the week
-       says is actually hard. */
-    const min = live.find((h) => h.label === worst.label)?.min;
-    if (min) out.push(line(`وحدّه الأدنى المكتوب: ${min} — وهو تسجيل كامل.`));
-    else out.push(line("اكتب لها حدًّا أدنى من شاشة الروتين، فاليوم المستحيل يحتاج بابًا."));
   }
 
-  out.push("");
-  const pages = sumPages(rows(s.reading).filter((r) => r.date >= from));
-  out.push(line(`📖 القراءة: ${pagesWord(pages)} · هدف اليوم ${num(goal)} · السلسلة ${num(readStreak(s.reading, goal))}`));
-  /* What the week's pages left behind. Pages are the effort and the points
-     are the return, and a review that reports only the first is a review of
-     a habit rather than of a discipline. */
-  const kept = notesSince(s.books, from);
-  const waiting = dueNotes(s.books).length;
-  out.push(
-    line(
-      kept
-        ? `✍️ وحفظت ${pointsWord(kept)} هذا الأسبوع — ${pointsWord(countNotes(s.books))} في المكتبة كلها.`
-        : pages > 0
-          ? "✍️ ولا فائدة واحدة محفوظة من صفحات الأسبوع — «فائدة …» بعد كل قراءة."
-          : "✍️ ما فيه فوائد محفوظة هذا الأسبوع.",
-    ),
-  );
-  if (waiting) out.push(line(`🔁 و${pointsWord(waiting)} تنتظر المراجعة — «راجع».`));
-  /* A book marked «أقرأه الآن» that nothing has moved. The most common way
-     reading stops is not a decision, it is a fortnight nobody noticed. */
-  const onDesk = activeBook(s.books);
-  const stalled = onDesk ? stalledDays(s.reading, onDesk.id) : null;
-  if (stalled !== null && stalled >= 7) {
-    out.push(line(`📕 و«${onDesk.title}» متوقّف ${daysWord(stalled)} — عشر صفحات تكفي لإعادته.`));
+  /* --- progress vs last week, also in days --- */
+  const prevFrom = addDays(from, -7);
+  const prevSpan = history.filter((h) => h.date >= prevFrom && h.date < from);
+  const prevReal = prevSpan.filter((h) => !isGap(h) && Array.isArray(h.done));
+  const prevLogged = prevReal.length;
+  const prevComplete = prevReal.filter((h) => (h.pct || 0) >= STREAK_TARGET).length;
+  if (prevLogged || logged) {
+    out.push(line("📈 مقارنة بالأسبوع الماضي:"));
+    out.push(line(`• الأيام المسجّلة: ${num(prevLogged)} ← ${num(logged)} ${delta(prevLogged, logged)}`));
+    out.push(line(`• الأيام الكاملة: ${num(prevComplete)} ← ${num(complete)} ${delta(prevComplete, complete)}`));
+    out.push("");
   }
-  const mins = sessionMinutes(sessionsSince(s.sessions, 7, today));
-  out.push(line(`🎧 التركيز: ${spanOf(mins)} في ${roundsWord(rows(sessionsSince(s.sessions, 7, today)).length)}${focus.goal ? ` · الهدف اليومي ${spanOf(focus.goal)}` : ""}`));
+
+  /* --- the streak --- */
+  const run = streakRunFrom(history);
   out.push(
     line(
-      `💰 المال: دخل ${money(amountSum(sinceDays(s.income, 7, today)))} · مصروف ${money(
-        amountSum(sinceDays(s.expenses, 7, today)),
-      )}`,
+      run.days
+        ? `🔥 السلسلة: ${countedWord(run.days)}${run.forgiven ? " (ومعها يوم سماح مستهلك)" : ""}.`
+        : "🔥 ما فيه سلسلة قائمة — كل يوم جديد بداية.",
     ),
   );
 
-  const bad = rows(s.badHabits);
-  if (bad.length) {
-    const standing = bad.filter((b) => cleanDays(b) > 0).length;
-    out.push(line(`🛡️ الكاسر: ${num(standing)} من ${num(bad.length)} صامدة — أطولها ${daysWord(bad.reduce((n, b) => Math.max(n, cleanDays(b)), 0))}.`));
-  }
+  /* --- reading and focus, also as days --- */
+  const readingInWeek = rows(s.reading).filter((r) => r.date >= from && r.date <= today);
+  const readingDays = new Set(readingInWeek.filter((r) => (r.pages || 0) > 0).map((r) => r.date)).size;
+  const pages = sumPages(readingInWeek);
+  out.push(line(`📖 القراءة: ${num(readingDays)} من ${num(7)} أيام · ${pagesWord(pages)}`));
 
-  const due = uniPending(s.uni).filter((t) => {
-    const left = daysUntil(t.due);
-    return left !== null && left <= 7;
-  });
-  if (due.length) {
-    out.push("");
-    out.push(line(`🎓 الأسبوع القادم: ${due.slice(0, 4).map((t) => t.title).join(" · ")}`));
-  }
+  const focusInWeek = rows(sessionsSince(s.sessions, 7, today));
+  const focusDays = new Set(focusInWeek.map((r) => r.date)).size;
+  const mins = sessionMinutes(focusInWeek);
+  out.push(
+    line(
+      `🎧 التركيز: ${num(focusDays)} من ${num(7)} أيام · ${spanOf(mins)}${
+        focus.goal ? ` · الهدف اليومي ${spanOf(focus.goal)}` : ""
+      }`,
+    ),
+  );
 
+  /* --- open tasks, kept because they cross the week --- */
   const open = rows(s.tasks).filter((t) => !t.done).length;
-  out.push("");
-  out.push(line(`📥 في المصفوفة ${tasksWord(open)} مفتوحة.`));
+  if (open) {
+    out.push("");
+    out.push(line(`📥 في المصفوفة ${tasksWord(open)} مفتوحة.`));
+  }
+
   return out.join("\n");
 }
+
+/* How a day count reads in Arabic. Duals carry their own number, so «٢ أيام»
+   would be a translation and not a sentence — the same rule `daysPhrase`
+   and `tasksPhrase` in `views.js` already follow. */
+const countDays = (n) => {
+  if (n === 0) return "";
+  if (n === 1) return "يوم واحد";
+  if (n === 2) return "يومان";
+  return `${num(n)} أيام`;
+};
+
+/* How a change reads in Arabic: a signed count, so a flat week says
+   «بلا تغيير» rather than a bare zero that looks like a loss. */
+const delta = (prev, now) => {
+  const d = now - prev;
+  if (d > 0) return `(+${num(d)})`;
+  if (d < 0) return `(-${num(Math.abs(d))})`;
+  return "(بلا تغيير)";
+};

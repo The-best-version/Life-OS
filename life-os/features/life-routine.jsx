@@ -2,7 +2,7 @@ import { HorizonRow, clockLabel, horizonClock } from "./life-goals.jsx";
 import { ReadLogModal, useHabitTick } from "../components/life-day.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Field, GLASS, GROUPS, GROUP_BY_ID, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
 import { cardTitles, routineBlocks } from "../life-config.js";
-import { CORE_CAP, GOAL_YEARS, HABIT_MIN_MAX, HORIZONS, QUARTERS, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, currentQuarter, goalShape, habitShape, habitStreak, historyIndex, isGap, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
+import { CORE_CAP, HABIT_MIN_MAX, HORIZONS, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, goalShape, habitShape, habitStreak, historyIndex, isGap, openingWindow, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
 import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MessageSquareQuote, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -1491,11 +1491,11 @@ export function MirrorModal({ open, onClose, value, onSave }) {
    habit blocks on purpose: the habits are what spend the days it counts. */
 function CountdownStrip({ state, onGo }) {
   const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
-  /* The calendar being lived in, not the arc's first year. On this screen
-     «كم بقي من السنة» can only mean the year outside the window. */
-  const here = new Date().getFullYear();
-  const year = GOAL_YEARS.includes(here) ? here : GOAL_YEARS[0];
-  const quarter = GOAL_YEARS.includes(here) ? currentQuarter() : QUARTERS[0].id;
+  /* نفس النافذة التي تفتح عليها شاشة الأهداف بالضبط، من نفس الدالة: السنة
+     والربع اللذان يعيشهما فعلًا إن كان فيهما أهداف، وإلا أقرب ربع مكتوب.
+     كانت هنا نسخة ثانية من هذا الحساب تقول «السنة الحالية دائمًا» — ومع
+     فتح سنة المدرج صارت تعرض ربعًا فارغًا بلا هدف واحد فيه. */
+  const { year, quarter } = useMemo(() => openingWindow(state.goals), [state.goals]);
 
   return (
     <Card className="p-5 sm:p-6">
@@ -1690,7 +1690,7 @@ export function SaveStamp({ at, diskAt, diskStuck }) {
         "browser",
         <>
           <Check size={10} strokeWidth={3.2} />
-          {"المتصفح "}
+          {"المتصفح "}
           <span dir="ltr" className="tabular-nums">
             {clock(at)}
           </span>
@@ -1711,7 +1711,7 @@ export function SaveStamp({ at, diskAt, diskStuck }) {
               "disk",
               <>
                 <Database size={10} strokeWidth={3} />
-                {"القرص "}
+                {"القرص "}
                 <span dir="ltr" className="tabular-nums">
                   {clock(diskAt)}
                 </span>

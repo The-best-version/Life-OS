@@ -773,13 +773,6 @@ export function TimeField({ value, onChange, id, ...rest }) {
   );
 }
 
-/* The years a goal may be filed under: the arc, plus the year you are
-   actually standing in when that is earlier than it. Planning 2027 from 2026
-   is the normal case right now, and the months before the arc opens are
-   exactly when the planning happens — a year with no tab is a year you cannot
-   write a goal in, and the three-month run-up would have nowhere to live.
-   From 2027 onward this is the arc and nothing else, so no goal's year ever
-   stops being selectable underneath it. */
 /* --- routine groups -------------------------------------------------- */
 /* The six blocks, drawn. `BLOCK_IDS` in life-state.mjs is the canonical
    order — the one the day runs in and the one `remainingIn` ranks «فاتك»

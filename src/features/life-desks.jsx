@@ -6,6 +6,8 @@ import {
   Brain,
   Check,
   Coffee,
+  Eye,
+  EyeOff,
   Flame,
   Hand,
   Lightbulb,
@@ -191,7 +193,7 @@ const atClock = (at) => {
   }
 };
 
-export function DeepWorkModule({ state, setState }) {
+export function DeepWorkModule({ state, setState, hyperFocus, onEnterHyperFocus, onExitHyperFocus }) {
   const focus = focusIn(state);
   const run = focus.run;
   const arm = useUndo();
@@ -832,6 +834,8 @@ export function DeepWorkModule({ state, setState }) {
         onSkip={skipBreak}
         onBump={bump}
         onExtend={extend}
+        hyperFocus={hyperFocus}
+        onToggleHyperFocus={() => (hyperFocus ? onExitHyperFocus() : onEnterHyperFocus())}
       />
 
       <FocusSwitches focus={focus} onSet={setFocus} onAskNotify={askNotify} />
@@ -1068,6 +1072,8 @@ export function TimerDial({
   onSkip,
   onBump,
   onExtend,
+  hyperFocus,
+  onToggleHyperFocus,
 }) {
   const meta = phaseMeta(phase);
   const Icon = meta.icon;
@@ -1242,6 +1248,19 @@ export function TimerDial({
           </Btn>
           <Btn size="sm" variant="ghost" onClick={() => onExtend(5)} style={{ color: T.faint }}>
             <Plus size={12} /> خمس دقائق
+          </Btn>
+          {/* وضع الغوص العميق — يُخفي كل شيء إلا هذه البطاقة. يظهر فقط أثناء
+              جولة تركيز فعلية، لا أثناء الراحة: الراحة هي اللحظة التي يُفترض
+              أن يرى فيها شيئًا آخر غير الشاشة. */}
+          <Btn
+            size="sm"
+            variant={hyperFocus ? "success" : "outline"}
+            onClick={onToggleHyperFocus}
+            style={hyperFocus ? undefined : { borderColor: T.border, color: T.faint }}
+            title="يُخفي القائمة الجانبية وشريط التنقّل أثناء هذه الجولة"
+          >
+            {hyperFocus ? <Eye size={13} /> : <EyeOff size={13} />}
+            {hyperFocus ? "إنهاء الغوص العميق" : "غوص عميق"}
           </Btn>
         </div>
       )}

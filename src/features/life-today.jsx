@@ -1,10 +1,74 @@
-import { ReadLogModal, TopThree, useHabitTick } from "../components/life-day.jsx";
-import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
+import { ReadLogModal, TodayExtras, TopThree, useHabitTick } from "../components/life-day.jsx";
+import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { todayBlocks } from "../life-config.js";
-import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, scoredOf, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
+import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, goalPct, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, rows, scoredOf, taskOverdue, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlarmClock, ArrowLeft, CalendarClock, CalendarDays, ClipboardList, Droplets, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, School, Star, Sunrise, X, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, CalendarClock, CalendarDays, ClipboardList, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, RotateCcw, School, Settings2, Star, Sunrise, Target, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+/* Where a user's own layout of اليوم screen lives. localStorage and not
+   `state` for the same reason the daily goal is: the layout outlives a day,
+   a rollover and a migration — it is a standing preference, not a piece of
+   today. The config file above stays the *defaults*; this is only the set
+   of overrides the user has actually touched. Merging them is what lets a
+   new block added to the config later still appear on a profile that had
+   saved a layout before the block existed. */
+const LAYOUT_KEY = "los-today-layout";
+
+function useTodayLayout() {
+  const [stored, setStored] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LAYOUT_KEY);
+      if (!raw) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const layout = useMemo(() => {
+    if (!stored) return todayBlocks;
+    const byKey = new Map(todayBlocks.map((b) => [b.key, b]));
+    const out = [];
+    const seen = new Set();
+    for (const item of stored) {
+      if (!item || typeof item.key !== "string") continue;
+      const def = byKey.get(item.key);
+      if (!def || seen.has(item.key)) continue;
+      seen.add(item.key);
+      out.push({ ...def, visible: item.visible !== false });
+    }
+    for (const def of todayBlocks) {
+      if (!seen.has(def.key)) out.push(def);
+    }
+    return out;
+  }, [stored]);
+
+  const save = (next) => {
+    const clean = next.map((b) => ({
+      key: b.key,
+      visible: b.visible !== false,
+    }));
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(clean));
+    } catch {
+      /* ignore — the state still updates for the session */
+    }
+    setStored(clean);
+  };
+
+  const reset = () => {
+    try {
+      localStorage.removeItem(LAYOUT_KEY);
+    } catch {
+      /* ignore */
+    }
+    setStored(null);
+  };
+
+  return { layout, save, reset };
+}
 
 export function TodayModule({
   state,
@@ -17,9 +81,6 @@ export function TodayModule({
   comeback = 0,
   onCloseComeback,
 }) {
-  /* Every number on this screen is a function of the clock: the open block,
-     the countdown to the next prayer, which lecture is running. One tick a
-     minute re-reads them all. */
   useMinuteClock();
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -27,22 +88,13 @@ export function TodayModule({
   const uni = state.uni || uniShape();
 
   const next = nextPrayer(place, now);
-  /* The block the day is actually in, from the prayers rather than from
-     clock hours — the same anchoring the six routine blocks use, because a
-     screen that says «بعد العصر» ten minutes before العصر is a screen that
-     has to be checked against another one. */
   const block = blockAt(place, now);
   const g = groupOf(block?.id);
 
   const { toggle, logging, closeLog, logRead } = useHabitTick(state, setState);
+  const { layout, save: saveLayout, reset: resetLayout } = useTodayLayout();
+  const [layoutOpen, setLayoutOpen] = useState(false);
 
-  /* A habit ticked here leaves the list it was ticked from, and a row that
-     vanishes under the finger animates nothing — the ripple, the pop and the
-     emerald glow all play on a row that is no longer mounted. So the id is
-     held for a moment longer than the animation and the row goes out after
-     it, struck through. On a timer and never through requestAnimationFrame:
-     a hidden tab does not run frames, and the reward would be swallowed and
-     then replayed when the tab came back. */
   const [fading, setFading] = useState(() => new Set());
   const timers = useRef([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -67,16 +119,17 @@ export function TodayModule({
 
   const habits = state.habits || [];
   const open = remainingIn(habits, block?.id, fading);
-  /* His own order inside a block is his; across blocks the flat array can
-     interleave them, so what is behind him is read in the order the day ran
-     — earliest block first, which is also the order it has to be caught up
-     in. */
   const missed = useMemo(
     () => open.missed.slice().sort((a, b) => blockRank(a.group) - blockRank(b.group)),
     [open.missed],
   );
   const doneCount = habits.filter((h) => h.done).length;
   const allDone = habits.length > 0 && doneCount === habits.length;
+
+  const overdue = useMemo(
+    () => (state.tasks || []).filter((t) => taskOverdue(t)),
+    [state.tasks],
+  );
 
   const dateLabel = useMemo(
     () =>
@@ -89,12 +142,6 @@ export function TodayModule({
     [],
   );
 
-  /* The weekday the timetable is read on is the wall clock's, not the
-     logical day's: at 01:00 the logical day is still yesterday, and the
-     lectures someone awake at that hour needs are the ones he is about to
-     walk into. The weekday is printed under the heading for that exact
-     reason — «اليوم» is ambiguous in those four hours and a named day is
-     not. */
   const dow = now.getDay();
   const courses = useMemo(() => coursesIn(uni, uni.term), [uni]);
   const sections = useMemo(() => daySections(courses, dow, mins), [courses, dow, mins]);
@@ -103,11 +150,6 @@ export function TodayModule({
     [sections.length, courses, dow, mins],
   );
 
-  /* The university's deliverables and the calendar's exams and deadlines,
-     in one list. Two sources, never copied into a third: a due date edited
-     on either screen moves here in the same render. Overdue rows come first
-     because the list is sorted by date and a date that has passed is the one
-     that needs saying out loud. */
   const soon = useMemo(() => {
     const out = [];
     for (const t of uniPending(uni)) {
@@ -148,9 +190,6 @@ export function TodayModule({
 
   const nearest = soon.slice(0, 4);
 
-  /* Tomorrow's prep, read and never written here. `useMinuteClock` above is
-     what makes the window live: the card appears when 20:00 arrives on a
-     screen that was already open, instead of waiting for a reload. */
   const evening = inReflectWindow(now);
   const tomorrowOn = tomorrowKey();
   const prepared = useMemo(() => {
@@ -164,13 +203,6 @@ export function TodayModule({
       .filter((r) => r.task);
   }, [state.tomorrow, state.tasks, state.events, tomorrowOn]);
 
-  /* ==================================================================== *
-   * ترتيب صفحة «اليوم» يُضبط الآن من src/life-config.js (مصفوفة
-   * todayBlocks) — افتح ذلك الملف لتحريك بطاقة أو إخفائها، لا هذا الملف.
-   * السجل (registry) أدناه يربط كل مفتاح في تلك المصفوفة ببطاقته فقط —
-   * لا ترتيب فيه. ConfigBlockBoundary يحمي الشاشة إن كان مفتاح مكتوبًا
-   * خطأ أو بطاقة انكسرت: تختفي تلك البطاقة وحدها لا الشاشة كلها.
-   * ==================================================================== */
   const blockRegistry = {
     dayHeader: (
       <DayHeaderCard
@@ -183,11 +215,10 @@ export function TodayModule({
         total={habits.length}
         discipline={discipline}
         onOpenSettings={onOpenSettings}
+        onOpenLayout={() => setLayoutOpen(true)}
       />
     ),
     readingCue: <ReadingCue list={state.reads} />,
-    /* بطاقتان جنبًا إلى جنب: أوقات الصلاة وشرب الماء يجيبان السؤال نفسه
-       من جهتين. لتفكيك الزوج عدّل هذا الـ div مباشرة. */
     prayerWaterGrid: (
       <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
         <PrayerCard place={state.place} onOpenSettings={onOpenSettings} />
@@ -203,7 +234,12 @@ export function TodayModule({
         />
       </div>
     ),
-    tasksModule: <TopThree state={state} setState={setState} />,
+    tasksModule: (
+      <>
+        <TopThree state={state} setState={setState} />
+        <TodayExtras state={state} setState={setState} />
+      </>
+    ),
     remainingHabits: (
       <RemainingHabitsCard
         block={g}
@@ -216,8 +252,6 @@ export function TodayModule({
         onGo={onGo}
       />
     ),
-    /* يظهر في نافذة المساء وحدها، حتى لو visible:true في الإعدادات —
-       الإعدادات تعطّله بالكامل فقط، لا تفرض ظهوره خارج نافذته. */
     tomorrowPrep: evening ? (
       <TomorrowPrepCard prepared={prepared} on={tomorrowOn} onOpen={onOpenTomorrow} />
     ) : null,
@@ -231,8 +265,6 @@ export function TodayModule({
 
   return (
     <div className="space-y-6">
-      {/* الرجوع بعد انقطاع. يسبق كل شيء ولا يُضبط من الإعدادات لأنه يحلّ
-          محلّ أول جملة يقولها التطبيق لمن غاب أسبوعًا. */}
       {comeback > 0 && (
         <ComebackCard
           state={state}
@@ -244,28 +276,244 @@ export function TodayModule({
         />
       )}
 
-      {todayBlocks
+      {overdue.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onGo("matrix")}
+          className="los-in flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-right transition-all duration-200 hover:border-white/40 hover:bg-white/[0.03]"
+          style={{
+            borderColor: `${T.danger}66`,
+            background: `${T.danger}12`,
+            boxShadow: `0 0 30px -18px ${T.danger}`,
+          }}
+        >
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+            style={{
+              borderColor: `${T.danger}4D`,
+              background: `${T.danger}1A`,
+              color: T.danger,
+            }}
+          >
+            <AlertTriangle size={18} strokeWidth={2.4} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-[13.5px] font-extrabold"
+              style={{ color: T.danger }}
+            >
+              عندك{" "}
+              <span dir="ltr" className="tabular-nums">
+                {overdue.length}
+              </span>{" "}
+              {overdue.length === 1 ? "مهمة متأخرة" : "مهام متأخرة"}
+            </p>
+            <p
+              className="mt-0.5 truncate text-[11px] leading-relaxed"
+              style={{ color: T.muted }}
+            >
+              {overdue
+                .slice(0, 3)
+                .map((t) => t.text)
+                .filter(Boolean)
+                .join(" · ")}
+              {overdue.length > 3 && ` · +${overdue.length - 3}`}
+            </p>
+          </div>
+          <ArrowLeft size={16} className="shrink-0" style={{ color: T.danger }} />
+        </button>
+      )}
+
+      {/* الصندوق الجديد: خطوتك اليوم نحو أهدافك */}
+      <DailyGoalFocus state={state} onGoGoals={() => onGo("goals")} />
+
+      {layout
         .filter((b) => b.visible !== false)
         .map((b) => (
           <ConfigBlockBoundary key={b.key}>{blockRegistry[b.key] ?? null}</ConfigBlockBoundary>
         ))}
 
-      {/* نافذة تسجيل القراءة — ليست بطاقة، لا تُضبط من الإعدادات. */}
       <ReadLogModal
         open={!!logging}
         book={logging ? bookForHabit(logging, state.books) : null}
         onClose={closeLog}
         onLog={logRead}
       />
+
+      <TodayLayoutModal
+        open={layoutOpen}
+        onClose={() => setLayoutOpen(false)}
+        layout={layout}
+        onSave={saveLayout}
+        onReset={resetLayout}
+      />
     </div>
   );
 }
 
+/* ==================================================================== *
+ *  TodayLayoutModal — hide, reorder, or reset the اليوم cards.
+ *
+ *  The config file above is the *defaults*; this is the set of overrides
+ *  the user has actually touched, kept in localStorage under `LAYOUT_KEY`.
+ *  Opening the modal passes the merged layout in; saving writes only the
+ *  key/visible pairs back, so a future block added to `todayBlocks` still
+ *  shows on a profile that saved a layout before the block existed.
+ *
+ *  Rows move by one step at a time — an Up arrow and a Down arrow, one per
+ *  row. A drag-and-drop sortable list is the sort of thing that reads as
+ *  an upgrade and behaves as a tax on a screen with seven rows: the arrows
+ *  say exactly which line went where, and there is nothing to misread on a
+ *  phone. The two ends disable rather than wrap, because a move that takes
+ *  the first card to the bottom when the user meant to nudge it up is a
+ *  mistake nobody undoes on purpose.
+ * ==================================================================== */
+function TodayLayoutModal({ open, onClose, layout, onSave, onReset }) {
+  const [draft, setDraft] = useState(layout);
+  useEffect(() => {
+    if (open) setDraft(layout);
+  }, [open, layout]);
 
-/* One habit, light. No drag, no arrows, no delete: this screen is for doing
-   them, and the routine screen is where they are managed. The payout is the
-   same, because a completion that animates nothing is a bug wherever it is
-   ticked. */
+  if (!open) return null;
+
+  const toggle = (key) =>
+    setDraft((d) =>
+      d.map((b) => (b.key === key ? { ...b, visible: !b.visible } : b)),
+    );
+
+  const move = (key, dir) =>
+    setDraft((d) => {
+      const i = d.findIndex((b) => b.key === key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= d.length) return d;
+      const copy = [...d];
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+      return copy;
+    });
+
+  const commit = () => {
+    onSave(draft);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="ترتيب بطاقات اليوم"
+      footer={
+        <>
+          <Btn variant="default" className="flex-1" onClick={commit}>
+            حفظ
+          </Btn>
+          <Btn
+            variant="outline"
+            onClick={() => {
+              onReset();
+              onClose();
+            }}
+          >
+            <RotateCcw size={13} /> استعادة الافتراضي
+          </Btn>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p
+          className="rounded-xl border px-3.5 py-2.5 text-[11.5px] leading-relaxed"
+          style={{
+            borderColor: `${T.cta}3D`,
+            background: `${T.cta}0A`,
+            color: T.muted,
+          }}
+        >
+          الأزرار اللي فوق وتحت تنقل البطاقة سطر واحد. العين المشطوبة تخفيها من
+          الشاشة. الإعدادات تُحفظ في هذا المتصفح فقط.
+        </p>
+
+        <div className="space-y-2">
+          {draft.map((b, i) => {
+            const off = b.visible === false;
+            const first = i === 0;
+            const last = i === draft.length - 1;
+            return (
+              <div
+                key={b.key}
+                className="flex items-center gap-2 rounded-xl border px-2.5 py-2"
+                style={{
+                  borderColor: off ? "rgba(255,255,255,0.08)" : T.border,
+                  background: off ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)",
+                  opacity: off ? 0.65 : 1,
+                }}
+              >
+                <div className="flex shrink-0 flex-col gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => move(b.key, -1)}
+                    disabled={first}
+                    title="للأعلى"
+                    aria-label="تحريك للأعلى"
+                    className="rounded p-1 transition-colors disabled:cursor-default disabled:opacity-20 hover:text-white"
+                    style={{ color: T.muted }}
+                  >
+                    <ArrowUp size={12} strokeWidth={3} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(b.key, 1)}
+                    disabled={last}
+                    title="للأسفل"
+                    aria-label="تحريك للأسفل"
+                    className="rounded p-1 transition-colors disabled:cursor-default disabled:opacity-20 hover:text-white"
+                    style={{ color: T.muted }}
+                  >
+                    <ArrowDown size={12} strokeWidth={3} />
+                  </button>
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate text-[12.5px] font-bold"
+                    style={{ color: T.fg }}
+                  >
+                    {b.label || b.key}
+                  </p>
+                  {b.desc && (
+                    <p
+                      className="mt-0.5 truncate text-[10.5px]"
+                      style={{ color: T.faint }}
+                    >
+                      {b.desc}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggle(b.key)}
+                  aria-pressed={!off}
+                  aria-label={off ? "إظهار البطاقة" : "إخفاء البطاقة"}
+                  title={off ? "إظهار" : "إخفاء"}
+                  className="shrink-0 rounded-lg border p-1.5 transition-colors"
+                  style={{
+                    borderColor: off ? T.border : `${T.cta}80`,
+                    background: off ? "transparent" : `${T.cta}1F`,
+                    color: off ? T.faint : T.ctaLift,
+                  }}
+                >
+                  {off ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const REWARD_HOLD = 1100;
+
 function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
   const [burst, fireBurst] = useBurst(700);
   const g = groupOf(habit.group);
@@ -275,10 +523,6 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
     if (!habit.done) fireBurst();
     onToggle();
   };
-
-  /* Same payout as the full tick — see HabitRow. This screen is where a bad
-     day is actually lived, so the floor has to be reachable here or it is a
-     feature that only exists on the screen nobody opens at 23:40. */
   const handleTiny = () => {
     if (!habit.done) fireBurst();
     onToggleTiny();
@@ -321,9 +565,6 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
         tint={T.primary}
         size="sm"
       />
-      {/* Kept visible through the reward hold, when `done` has just flipped
-          and the row is still on screen — a mark that vanishes under the
-          finger that set it reads as a tap that did not land. */}
       {!!habit.min && (habit.tiny || !habit.done) && (
         <button
           onClick={handleTiny}
@@ -369,20 +610,7 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
   );
 }
 
-
-/* A row on the two cards at the foot of the screen — a lecture, a
-   deliverable, an exam. One shape for all three so the eye reads them the
-   same way: a tint, what it is, and when. */
-function TodayLine({
-  tint,
-  icon: Icon,
-  title,
-  sub,
-  when,
-  time,
-  hot = false,
-  now = false,
-}) {
+function TodayLine({ tint, icon: Icon, title, sub, when, time, hot = false, now = false }) {
   return (
     <div
       className="flex items-center gap-2.5 rounded-xl border px-2.5 py-2"
@@ -437,32 +665,7 @@ function TodayLine({
   );
 }
 
-
-/* ==================================================================== *
- *  وضع الرجوع — two days away, and no verdict waiting
- *
- *  Somebody opening this app after a week away is opening it for a verdict,
- *  and the verdict a broken streak and a 0% ring deliver is «you failed, and
- *  here is the number». That is the moment the app gets closed for a month,
- *  and no amount of accurate arithmetic makes it a useful thing to say.
- *
- *  So on a day that follows two or more unrecorded ones, the first thing on
- *  «اليوم» is the smallest possible surface: the core habits and the three
- *  tasks, and nothing else. No streak, no percentage, no count of what was
- *  missed — all of that is still one scroll away and none of it is the first
- *  sentence. It owns nothing of its own: the habits are the same flat array
- *  ticked through the same `useHabitTick`, and the three are the same
- *  `TopThree` every other screen renders.
- *
- *  It closes, and stays closed for the rest of the day. A card that says
- *  «نبدأ بأقل شي» and then reappears after every tick is the nagging it
- *  exists to replace.
- * ==================================================================== */
 function ComebackCard({ state, setState, days, onTick, onTickTiny, onClose }) {
-  /* The core when one is set, every habit when none is — the same roster
-     the score reads, so this card cannot show a different five from the
-     ring. Only what is still open: the point is the shortest list, and a
-     list of things already done is not a place to start. */
   const open = scoredOf(state.habits || []).filter((h) => !h.done);
   const shown = open.slice(0, CORE_CAP);
 
@@ -491,9 +694,6 @@ function ComebackCard({ state, setState, days, onTick, onTickTiny, onClose }) {
             <h3 className="text-[17px] font-extrabold" style={{ color: T.sky }}>
               رجعت. نبدأ بأقل شي.
             </h3>
-            {/* The days away are stated once, flatly, because they are a
-                fact he already knows and hiding them would be the app
-                pretending. What is never stated is a verdict about them. */}
             <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
               {daysPhrase(days) || `${days} ${dayWord(days)}`} بلا تسجيل. لا شيء
               يحتاج تعويضًا — اليوم وحده يكفي.
@@ -549,44 +749,6 @@ function ComebackCard({ state, setState, days, onTick, onTickTiny, onClose }) {
   );
 }
 
-
-/* ==================================================================== *
- *  Primitives (shadcn-shaped, dependency-free)
- * ==================================================================== */
-
-
-
-/* ==================================================================== *
- *  MODULE 0 — اليوم
- *
- *  The screen the app opens on, and the only one that answers «وش عليّ
- *  الآن؟» without being asked twice. Nothing here is a new store: the
- *  prayers are computed, the three tasks are the same `TopThree` the routine
- *  shows, the habits are the same flat array ticked through the same
- *  `useHabitTick`, and the lectures and the deadlines are read off the
- *  university desk and the calendar where they already live. A second copy
- *  of any of it would be a second day that disagrees with the first.
- *
- *  It is deliberately short. A landing screen that lists everything is the
- *  fifteen-tab sidebar again with extra steps — what belongs here is what
- *  the next hour needs, and a way into the screen that owns the rest.
- * ==================================================================== */
-
-/* How long a ticked habit stays on «اليوم» before it drops out of the list.
-   Longer than the 700ms reward burst, so the animation finishes on a row
-   that is still there. */
-const REWARD_HOLD = 1100;
-
-/* ==================================================================== *
- * كتل صفحة «اليوم»
- *
- * كل بطاقة في الصفحة مكوّن مستقلّ هنا، والصفحة نفسها أعلاه
- * مجرّد قائمة بها. ولا واحد من هذه المكوّنات يملك حالة: كلّها
- * تستقبل ما تعرضه وتعرضه — وهذا هو سبب كون نقل سطر واحد كافيًا
- * لإعادة ترتيب الشاشة.
- * ==================================================================== */
-
-/* شريط اليوم: التاريخ، البلوك المفتوح، الصلاة القادمة، والحلقة. */
 export function DayHeaderCard({
   dateLabel,
   block,
@@ -597,14 +759,29 @@ export function DayHeaderCard({
   total,
   discipline,
   onOpenSettings,
+  onOpenLayout,
 }) {
   const Icon = block.icon;
   return (
     <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 lg:flex-row lg:justify-between">
       <div className="min-w-0 text-center lg:text-right">
-        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
-          اليوم
-        </h2>
+        <div className="flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
+            اليوم
+          </h2>
+          {onOpenLayout && (
+            <button
+              type="button"
+              onClick={onOpenLayout}
+              title="ترتيب بطاقات اليوم"
+              aria-label="ترتيب بطاقات اليوم"
+              className="rounded-lg border p-1.5 text-white/40 transition-colors hover:border-white/40 hover:text-white"
+              style={{ borderColor: T.border }}
+            >
+              <Settings2 size={13} />
+            </button>
+          )}
+        </div>
         <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
           <CalendarDays size={13} /> {dateLabel}
         </p>
@@ -644,10 +821,6 @@ export function DayHeaderCard({
               </span>
             </button>
           )}
-          {/* Hidden while the comeback card is up. A zero beside a flame
-              is a verdict, and the one thing someone opening this after a
-              week away must not be handed first is a verdict. It is back
-              the moment the card is closed. */}
           {showStreak && (
             <span
               className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
@@ -674,7 +847,6 @@ export function DayHeaderCard({
   );
 }
 
-/* جهّز غدك — بطاقة تقرأ ولا تكتب. */
 export function TomorrowPrepCard({ prepared, on, onOpen }) {
   return (
     <Card
@@ -700,9 +872,6 @@ export function TomorrowPrepCard({ prepared, on, onOpen }) {
             <h3 className="text-[15px] font-extrabold" style={{ color: T.violet }}>
               {prepared.length ? "غدك مجهّز" : "جهّز غدك"}
             </h3>
-            {/* The count, never the word «ثلاث» — two picks announced as
-                three is the screen lying about the one number it
-                exists to carry. */}
             <p className="mt-0.5 text-[11px] leading-relaxed" style={{ color: T.faint }}>
               {!prepared.length ? (
                 "اختر ثلاثًا الآن، وابدأ الغد بلا مساومة"
@@ -771,7 +940,6 @@ export function TomorrowPrepCard({ prepared, on, onOpen }) {
   );
 }
 
-/* العادات المتبقية، البلوك الذي أمامك أوّلًا. */
 export function RemainingHabitsCard({
   block,
   open,
@@ -843,10 +1011,6 @@ export function RemainingHabitsCard({
             )}
           </div>
 
-          {/* Behind him, not hidden. A habit whose block has closed is
-              still tickable — the day is not over until 04:00 — and a
-              screen that drops it is a screen that quietly lowers the
-              score without saying so. */}
           {missed.length > 0 && (
             <div>
               <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
@@ -898,7 +1062,6 @@ export function RemainingHabitsCard({
   );
 }
 
-/* جدول اليوم من مكتب الجامعة. */
 export function LecturesCard({ dow, sections, ahead, mins, onGo }) {
   return (
     <Card className="p-5 sm:p-6">
@@ -958,7 +1121,6 @@ export function LecturesCard({ dow, sections, ahead, mins, onGo }) {
   );
 }
 
-/* أقرب اختبار أو تسليم — من الجامعة والتقويم معًا. */
 export function NearestDueCard({ items, onGo }) {
   return (
     <Card className="p-5 sm:p-6">
@@ -1014,25 +1176,10 @@ export function NearestDueCard({ items, onGo }) {
   );
 }
 
-
-/* --- prayer times ----------------------------------------------------- *
- *  The day's six blocks are anchored to the prayers, so the times they are
- *  anchored to belong on the screen the app opens on — beside the block it
- *  says is open, not one tab away on the routine. Computed locally and never
- *  fetched — see `prayerTimes` for why that is not an optimisation but a
- *  requirement. Re-read once a minute, so the "next" marker and the counter
- *  move while the app sits open rather than waiting for a reload.
- *
- *  It reads `state.place` and nothing else, so putting it back on the
- *  routine — or onto a third screen — is one import and one line.
- * ---------------------------------------------------------------------- */
 export function PrayerCard({ place, onOpenSettings }) {
-  useMinuteClock(); // the whole card is a function of the clock
+  useMinuteClock();
   const now = new Date();
   const p = placeShape(place);
-  /* Recomputed on every minute tick rather than memoised: it is a dozen trig
-     calls, and a cache keyed on "the place and the day" would need the day
-     in its own dependency list — which is the clock again, by a longer road. */
   const times = prayerTimes(p, now);
   const next = nextPrayer(p, now);
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -1080,8 +1227,6 @@ export function PrayerCard({ place, onOpenSettings }) {
           const t = times[row.id];
           const at = t === null || !Number.isFinite(t) ? null : fixHour(t) * 60;
           const on = !row.mark && next && next.id === row.id && !next.tomorrow;
-          /* Passed, so it is behind you — dimmed rather than hidden, because
-             «هل صليت العصر؟» is answered by seeing that it has gone by. */
           const past = at !== null && at <= mins;
           const Icon = row.icon;
           return (
@@ -1095,11 +1240,7 @@ export function PrayerCard({ place, onOpenSettings }) {
                 opacity: past && !on ? 0.45 : 1,
               }}
             >
-              <Icon
-                size={13}
-                className="mx-auto"
-                style={{ color: on ? T.cta : row.tint }}
-              />
+              <Icon size={13} className="mx-auto" style={{ color: on ? T.cta : row.tint }} />
               <p
                 dir="ltr"
                 className="mt-1 text-[13.5px] font-extrabold tabular-nums"
@@ -1122,19 +1263,6 @@ export function PrayerCard({ place, onOpenSettings }) {
   );
 }
 
-
-/* --- water ------------------------------------------------------------ *
- *  The one meter on this screen that is not a habit, and the reason it sits
- *  beside the prayers: both answer «أين أنا من يومي الآن؟» from two
- *  directions. It owns nothing — the count comes in as a prop and goes back
- *  out through `onSet`, so the screen that renders it is the screen that
- *  decides where the number lives.
- *
- *  A cup per glass, tapped to fill up to that point. Tapping the glass that
- *  is already the last full one takes it back off instead of doing nothing —
- *  a tracker you cannot correct is one you stop trusting after the first
- *  mis-tap. The count is per-day and resets with the rollover.
- * ---------------------------------------------------------------------- */
 export function WaterCard({ count, goal, onSet }) {
   const [burst, fireBurst] = useBurst(700);
   const n = Math.min(goal, Math.max(0, count || 0));
@@ -1226,13 +1354,55 @@ export function WaterCard({ count, goal, onSet }) {
               {goal - n}
             </span>{" "}
             {cupWord(goal - n)}
-            {/* Only once there is something to undo. Offering the way back
-                before the first cup is filled is an instruction with nothing
-                to act on. */}
             {n > 0 && " — اضغط الكوب الممتلئ الأخير للتراجع."}
           </>
         )}
       </p>
+    </Card>
+  );
+}
+
+/* ==================================================================== *
+ *  الميزة الجوهرية: بطاقة الأهداف في شاشة اليوم
+ * ==================================================================== */
+export function DailyGoalFocus({ state, onGoGoals }) {
+  const activeGoals = rows(state.goals).filter(
+    (g) => !g.done && g.nextAction && g.horizon === "quarter"
+  );
+
+  if (activeGoals.length === 0) return null;
+
+  return (
+    <Card className="p-5 sm:p-6 border-emerald-500/30 bg-emerald-500/[0.02]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[15px] font-extrabold flex items-center gap-2 text-emerald-400">
+          <Target size={18} /> خطوتك اليوم نحو أهدافك
+        </h3>
+        <button
+          onClick={onGoGoals}
+          className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1"
+        >
+          كل الأهداف <ArrowLeft size={12} />
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {activeGoals.map((g) => {
+          const pct = goalPct(g, state.goals, state.habits);
+          return (
+            <div key={g.id} className="flex flex-col gap-1.5 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-bold text-white/90">{g.text}</span>
+                <span className="text-[11px] font-bold text-emerald-500">{pct}%</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11.5px] text-emerald-300/80 bg-emerald-500/10 p-2 rounded-lg mt-1">
+                <span className="font-bold">الخطوة القادمة:</span>
+                <span>{g.nextAction}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }

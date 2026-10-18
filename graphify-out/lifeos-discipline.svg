@@ -25,7 +25,7 @@
 <rect x="774.4" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
 <rect x="944" y="112" width="3" height="40" rx="2" fill="#FF5722"/>
 <text x="934" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أيام مسجّلة</text>
-<text x="934" y="150" fill="#FF5722" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">16</text>
+<text x="934" y="150" fill="#FF5722" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">20</text>
 <rect x="588.8" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
 <rect x="758.4" y="112" width="3" height="40" rx="2" fill="#FFB020"/>
 <text x="748.4" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">متوسّط الانضباط</text>
@@ -41,7 +41,7 @@
 <rect x="32" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
 <rect x="201.6" y="112" width="3" height="40" rx="2" fill="#9D5CFF"/>
 <text x="191.6" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أهداف مكتملة</text>
-<text x="191.6" y="150" fill="#9D5CFF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/29</text>
+<text x="191.6" y="150" fill="#9D5CFF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/14</text>
 <g><rect x="32" y="186" width="916" height="262" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="186" width="916" height="262" rx="18" fill="url(#sheen)"/></g>
 <text x="928" y="218" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">خريطة الانضباط</text>
 <text x="928" y="237" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">٣٤ أسبوعًا · الأحدث على اليسار · الأسبوع يبدأ السبت</text>
@@ -60,6 +60,7 @@
 <rect x="886" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="886" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="886" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="882" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مارس</text>
 <rect x="862" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="862" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="862" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -67,7 +68,6 @@
 <rect x="862" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="862" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="862" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="858" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مارس</text>
 <rect x="838" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="838" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="838" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -89,6 +89,7 @@
 <rect x="790" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="790" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="790" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="786" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أبريل</text>
 <rect x="766" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="766" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="766" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -96,7 +97,6 @@
 <rect x="766" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="766" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="766" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="762" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أبريل</text>
 <rect x="742" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="742" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="742" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -118,6 +118,7 @@
 <rect x="694" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="694" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="694" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="690" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مايو</text>
 <rect x="670" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="670" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="670" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -125,7 +126,6 @@
 <rect x="670" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="670" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="670" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="666" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">مايو</text>
 <rect x="646" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="646" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="646" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -154,6 +154,7 @@
 <rect x="574" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="574" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="574" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="570" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">يونيو</text>
 <rect x="550" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="550" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="550" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -161,7 +162,6 @@
 <rect x="550" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="550" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="550" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="546" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">يونيو</text>
 <rect x="526" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="526" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="526" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -183,6 +183,7 @@
 <rect x="478" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="478" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="478" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="474" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">يوليو</text>
 <rect x="454" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="454" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="454" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -190,7 +191,6 @@
 <rect x="454" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="454" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="454" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="450" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">يوليو</text>
 <rect x="430" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="430" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="430" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -212,6 +212,7 @@
 <rect x="382" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="382" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="382" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="378" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أغسطس</text>
 <rect x="358" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="358" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="358" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -219,7 +220,6 @@
 <rect x="358" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="358" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="358" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="354" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أغسطس</text>
 <rect x="334" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="334" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="334" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -248,6 +248,7 @@
 <rect x="262" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="262" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="262" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
+<text x="258" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">سبتمبر</text>
 <rect x="238" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="238" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="238" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -255,7 +256,6 @@
 <rect x="238" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="238" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="238" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<text x="234" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">سبتمبر</text>
 <rect x="214" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="214" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="214" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
@@ -273,30 +273,27 @@
 <rect x="166" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="166" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
 <rect x="166" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="166" y="330" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="166" y="354" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="166" y="378" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="166" y="402" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="142" y="258" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="142" y="282" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="142" y="306" width="20" height="20" rx="4" fill="rgba(255,255,255,0.055)" fill-opacity="1.00"/>
-<rect x="142" y="330" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="166" y="330" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="166" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="166" y="378" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="166" y="402" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<text x="162" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أكتوبر</text>
+<rect x="142" y="258" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="142" y="282" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.34"/>
+<rect x="142" y="306" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.48"/>
+<rect x="142" y="330" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.34"/>
 <rect x="142" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
 <rect x="142" y="378" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
 <rect x="142" y="402" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
-<text x="138" y="250" fill="rgba(255,246,240,0.30)" font-size="9.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أكتوبر</text>
 <rect x="118" y="258" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
-<rect x="118" y="282" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.34"/>
-<rect x="118" y="306" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.48"/>
+<rect x="118" y="282" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="118" y="306" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.53"/>
 <rect x="118" y="330" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.34"/>
-<rect x="118" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
-<rect x="118" y="378" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
-<rect x="118" y="402" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="118" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.35"/>
+<rect x="118" y="378" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.31"/>
+<rect x="118" y="402" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.31"/>
 <rect x="94" y="258" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
 <rect x="94" y="282" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
-<rect x="94" y="306" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.53"/>
-<rect x="94" y="330" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.34"/>
-<rect x="94" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.35"/>
 <text x="928" y="434" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الأخضر: يوم بلغ الهدف · المرجاني: دونه · الفارغ: لم يُسجّل</text>
 <g><rect x="32" y="464" width="450" height="200" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="464" width="450" height="200" rx="18" fill="url(#sheen)"/></g>
 <text x="462" y="494" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أهداف ٢٠٢٧ حسب الربع</text>
@@ -311,12 +308,12 @@
 <text x="96" y="575.24" fill="#FFB020" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/0</text>
 <text x="460" y="604.24" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الربع الثالث</text>
 <rect x="106" y="592" width="258" height="17" rx="8.5" fill="rgba(255,255,255,0.055)"/>
-<rect x="181.88235294117646" y="592" width="182.11764705882354" height="17" rx="8.5" fill="#10B981"/>
+<rect x="106" y="592" width="258" height="17" rx="8.5" fill="#10B981"/>
 <text x="96" y="604.24" fill="#10B981" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/12</text>
 <text x="460" y="633.24" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الربع الرابع</text>
 <rect x="106" y="621" width="258" height="17" rx="8.5" fill="rgba(255,255,255,0.055)"/>
-<rect x="106" y="621" width="258" height="17" rx="8.5" fill="#9D5CFF"/>
-<text x="96" y="633.24" fill="#9D5CFF" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/17</text>
+<rect x="321" y="621" width="43" height="17" rx="8.5" fill="#9D5CFF"/>
+<text x="96" y="633.24" fill="#9D5CFF" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/2</text>
 <g><rect x="498" y="464" width="450" height="200" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="498" y="464" width="450" height="200" rx="18" fill="url(#sheen)"/></g>
 <text x="928" y="494" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الركائز الستّ</text>
 <text x="928" y="513" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">نسبة الأهداف المنجَزة في كل ركيزة</text>
@@ -349,6 +346,6 @@
 <circle cx="724.5" cy="575.2" r="4" fill="#5B8CFF" stroke="#1B1418" stroke-width="1.5"/>
 <text x="786.0" y="543.6" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="end" style="direction:rtl;unicode-bidi:isolate">الشخصي</text>
 <text x="786.0" y="557.6" fill="#5B8CFF" font-size="10.5" font-weight="700" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">0%</text>
-<text x="32" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-10-14 17:21</text>
+<text x="32" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-10-18 18:47</text>
 <text x="948" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">report-agent · للقراءة فقط</text>
 </svg>

@@ -80,6 +80,14 @@ import {
   prepPicks,
   tomorrowKey,
   TOP_TASK_CAP,
+  
+  // الميزة الجوهرية: استيراد دوال الأهداف
+  syncHabitToGoals,
+  goalPct,
+  goalPace,
+  horizonOf,
+  quarterOf,
+  pillarOf,
 } from "../../src/state/life-state.mjs";
 import { fold, BACK_MAX } from "./parse.js";
 
@@ -119,12 +127,8 @@ export function addIncome(state, { label, amount, hours, back = 0 }) {
   };
 }
 
-/* --- the tasks --------------------------------------------------------- *
- *  There is no separate inbox array and there must not be one: «مهم غير
- *  عاجل» is already the square of the matrix that asks for a decision
- *  instead of making one, which is what an inbox is. A second list would be
- *  a second place to triage from.
- * ---------------------------------------------------------------------- */
+/* --- the tasks --------------------------------------------------------- */
+
 export function addTask(state, { label, today }) {
   const text = String(label ?? "").trim();
   if (!text) return { refused: "اكتب المهمة بعد الكلمة." };
@@ -141,20 +145,9 @@ export function addTask(state, { label, today }) {
     };
   }
 
-  /* The cap, read off the state layer rather than counted here. `capToday`
-     keeps the first three in HIS order and takes the flag off the rest —
-     appended last, this one is the one that loses, which is the correct
-     answer and not an accident. */
   const capped = capToday(appended);
   const kept = capped.find((t) => t.id === row.id);
   if (!kept || !kept.today) {
-    /* Refused as a *today* task and kept as a task: his words are never
-       thrown away over a cap. The cap's job is to say no to a fourth
-       priority, not to a fourth thought.
-     *
-     *  `capped` and not `appended` — the list that goes to disk is the one
-     *  the cap has already been through, or the refusal would be a message
-     *  saying no beside a fourth flagged task on the screen. */
     return {
       kind: "task",
       row: kept || { ...row, today: false },
@@ -173,7 +166,6 @@ export function addTask(state, { label, today }) {
   };
 }
 
-/* Ticking one of today's three off. */
 export function finishTask(state, id) {
   const list = rows(state.tasks);
   const t = list.find((x) => x.id === id);
@@ -187,11 +179,7 @@ export function finishTask(state, id) {
   };
 }
 
-/* --- the water -------------------------------------------------------- *
- *  `state.water` rides today's archive row like everything else written
- *  per-day, so the stamp is not optional: without it the calendar and the
- *  monthly tracker would read a day that never recorded its water.
- * ---------------------------------------------------------------------- */
+/* --- the water -------------------------------------------------------- */
 export function drinkWater(state, count = 1) {
   const goal = clampGoal(state.waterGoal);
   const was = Math.max(0, Math.round(state.water || 0));
@@ -204,18 +192,11 @@ export function drinkWater(state, count = 1) {
     count: now,
     goal,
     next: stampToday({ ...state, water: now }),
-    /* The archive row moves with it, so it has to come back with it. */
     before: { water: state.water, history: state.history },
   };
 }
 
 /* --- the habits ------------------------------------------------------- */
-
-/* Which habits a few typed words could mean. Folded on both sides, so
-   «صلاة العصر» finds «صلاة العصر وأذكار» and «صلاه العصر» finds it too. The
-   ones still open come first: a tick is almost always meant for one of
-   those, and the ones already done are only here so the bot can say «مسجّلة
-   أصلاً» instead of «ما لقيتها». */
 export function findHabits(habits, query) {
   const q = fold(query);
   if (!q) return [];
@@ -228,66 +209,34 @@ export function findHabits(habits, query) {
   return [...found.filter((h) => !h.done), ...found.filter((h) => h.done)];
 }
 
-/* A tick, and the same tick a tiny one. `tiny` is a second argument and
-   never a second function, exactly as `useHabitTick` takes it in the app:
-   a floor taken on a hard day counts for the score, the streak and the
-   archive, and is only *marked* differently. */
 export function tickHabit(state, id, tiny = false) {
   const list = rows(state.habits);
   const h = list.find((x) => x.id === id);
   if (!h) return { refused: "هذه العادة لم تعد في روتينك." };
   if (h.done) return { refused: `«${h.label}» مسجّلة أصلاً اليوم ✅` };
+  
+  // الميزة الجوهرية: تحديث الأهداف المرتبطة بهذه العادة
+  const updatedGoals = syncHabitToGoals(state.goals, id, true);
+  
   const next = stampToday({
     ...state,
     habits: list.map((x) => (x.id === id ? { ...x, done: true, tiny: !!tiny } : x)),
+    goals: updatedGoals, // <--- تحديث الأهداف هنا
   });
   return {
     kind: "habit",
     habit: h,
     tiny: !!tiny,
     pct: disciplineOf(next.habits),
-    /* A habit can feed the library, and the tick is what opens the question.
-       Handed back rather than acted on: the reply must land and the reward
-       must be paid whether or not pages are then logged, exactly as the
-       app's modal is skippable. */
     book: bookForHabit(h, rows(state.books)),
     next,
-    before: { habits: state.habits, history: state.history },
+    before: { habits: state.habits, history: state.history, goals: state.goals }, // <--- إضافة goals للـ undo
   };
 }
 
-/* --- the library ------------------------------------------------------- *
- *  The app logs pages from a modal that opens the instant a reading habit is
- *  ticked. The same thing from a phone is one sentence — «قرأت ٢٠ صفحة» — and
- *  it writes exactly what the modal writes: a row on `state.reading` and the
- *  book's page counter moved forward, bounded by the book's own total.
- *
- *  Which book is not a question the bot asks. A reading habit ticked a
- *  moment ago names one; otherwise it is whichever book is marked «أقرأه
- *  الآن», which is the same answer `READ_ACTIVE` gives the app.
- * ---------------------------------------------------------------------- */
-/* --- which book a few typed words mean --------------------------------- *
- *  The same folded match `findHabits` and `findCourses` use, plus one thing
- *  neither of them needs: a word-by-word overlap. A habit's label is a
- *  phrase he wrote himself and types back nearly the same way; a book's
- *  title is a phrase a publisher wrote, and «سكليوجية المال» for
- *  «سيكولوجية المال» is the ordinary case rather than the awkward one. A
- *  substring match misses that outright — but «المال» still lands, and one
- *  correct word out of two is enough to name a book on a shelf of twenty.
- *
- *  Ranked, and only the tied best come back: one hit is an answer, two
- *  equally good hits are a question. Guessing between «العمل العميق» and
- *  «العادات الذرية» is how twenty pages land on the wrong book, and the page
- *  counter is the one number here nobody re-checks.
- * ---------------------------------------------------------------------- */
+/* --- the library ------------------------------------------------------- */
 export const BOOK_WORD_MIN = 3;
 
-/* How close two strings are, as the share of two-letter runs they have in
-   common. It is the cheap classical measure and the right one for Arabic
-   typed in a hurry: a dropped letter or a swapped pair costs two bigrams and
-   not the whole word, which is exactly the difference between «سكليوجية» and
-   «سيكولوجية». Spaces are dropped so a missing one does not count as a
-   mismatch. */
 const bigrams = (s) => {
   const t = String(s).replace(/\s+/g, "");
   const out = [];
@@ -312,10 +261,6 @@ export function nearness(a, b) {
   return (2 * hit) / (A.length + B.length);
 }
 
-/* How much clearer the best spelling match has to be before it is allowed to
-   settle a tie on its own. «المال» is a whole word of two different titles
-   and nearly equally close to both — that is a question. «سكليوجية المال» is
-   a long way closer to one of them — that is an answer. */
 export const NEAR_MARGIN = 0.15;
 
 export function findBooks(books, query) {
@@ -327,8 +272,6 @@ export function findBooks(books, query) {
     if (!title) return 0;
     if (title === q) return 100;
     if (title.includes(q) || q.includes(title)) return 80;
-    /* Counted in both directions: he may type less than the title («المال»)
-       or more than it («سيكولوجية المال لمورغان»). */
     const forward = words.filter((w) => title.includes(w)).length;
     const back = title
       .split(" ")
@@ -344,17 +287,11 @@ export function findBooks(books, query) {
   const top = ranked[0].n;
   const tied = ranked.filter((r) => r.n === top);
   if (tied.length < 2) return tied.map((r) => r.b);
-  /* A decisively closer spelling wins; a close one stays a question, because
-     a page count landing on the wrong book is the one number nobody ever
-     re-checks. */
   return tied[0].near - tied[1].near >= NEAR_MARGIN
     ? [tied[0].b]
     : tied.map((r) => r.b);
 }
 
-/* How a book's own numbers are read back, once, for every reply that shows
-   them. `pctOf`, `pagesLeft` and `readPace` are the state layer's; this only
-   gathers them so three confirmations cannot each gather a different three. */
 export function bookStand(book, state) {
   const pace = readPace(book, state.reading);
   return {
@@ -364,9 +301,6 @@ export function bookStand(book, state) {
     pct: pctOf(book),
     left: pagesLeft(book),
     perDay: pace.perDay,
-    /* Days to the last page at the pace of the last fortnight, or null when
-       either number does not exist. A promise built on a number that is not
-       there is the one kind of encouragement that gets a feature muted. */
     eta: pace.days,
     notes: rows(book.notes).filter((n) => n && n.text).length,
   };
@@ -377,10 +311,6 @@ export function logReading(state, { pages, habitId = null, bookId = null, back =
   if (n < 1) return { refused: "كم صفحة؟ مثال: «قرأت ٢٠ صفحة»." };
   const books = rows(state.books);
   const habit = habitId ? rows(state.habits).find((h) => h.id === habitId) : null;
-  /* Named, then the ticked habit's, then the active one. The caller resolves
-     a name into an id before this is reached — matching needs the shelf and
-     asking «أيّ كتاب؟» needs a keyboard, and neither belongs in a pure
-     mutation. */
   const book =
     (bookId && books.find((b) => b.id === bookId)) ||
     (habit && bookForHabit(habit, books)) ||
@@ -394,25 +324,12 @@ export function logReading(state, { pages, habitId = null, bookId = null, back =
   const total = parseInt(book.pages, 10);
   const at = parseInt(book.page, 10);
   const base = Number.isFinite(at) ? at : 0;
-  /* Bounded by the book's own total when it has one, exactly as the modal
-     bounds it: a counter past the last page is a book that reads as
-     finished and is not. */
   const next =
     Number.isFinite(total) && total > 0 ? Math.min(total, base + n) : base + n;
   const on = backKey(back);
   const row = { id: uid(), date: on, bookId: book.id, habitId: habit?.id || null, pages: n };
   const goal = Number.isFinite(+state.readGoal) ? +state.readGoal : READ_GOAL_DEFAULT;
   const reading = [...rows(state.reading), row];
-  /* Pages landing on a book he had only *planned* mean he started it, and
-     pages landing on any book mean it is the one he is reading now — so it
-     moves to the head of the shelf.
-   *
-   *  That matters beyond tidiness: «أقرأه الآن» is not exclusive on the
-   *  shelf, every reader of it takes the first match (`activeBook`), and the
-   *  next sentence is usually «فائدة …» with no book named in it. Without
-   *  this, a point from tonight's reading lands on whichever book happens to
-   *  sit earlier in the array. Book order carries no other meaning — the
-   *  shelf has filters and a desk, and no hand ordering to overwrite. */
   const moved = {
     ...book,
     page: String(next),
@@ -433,25 +350,12 @@ export function logReading(state, { pages, habitId = null, bookId = null, back =
     today: sumPages(reading.filter((r) => r.date === dayKey())),
     streak: readStreak(reading, goal),
     stand: bookStand(moved, { ...state, reading }),
-    /* Points already written on this book today. The question «وما أكبر
-       فائدة؟» is asked once an evening and not after every message: a prompt
-       that arrives after the thing was done is the prompt that teaches you
-       to stop reading them. */
     kept: rows(book.notes).filter((n) => n && n.text && n.at === on).length,
     next: { ...state, reading, books: after },
     before: { reading: state.reading, books: state.books },
   };
 }
 
-/* --- the shelf, from a phone ------------------------------------------- *
- *  A book is added where the reading actually starts — standing in a shop,
- *  halfway through somebody's recommendation — and never at a laptop with
- *  the vault open. `bookShape` writes the row, like every other row here.
- * ---------------------------------------------------------------------- */
-/* A bound, because this list is fed from a phone now. The shelf's own add
-   form has never had one and does not need one: a hundred and twenty books
-   is a decade of reading, and a list with no ceiling is a payload that grows
-   until a save throws. */
 export const BOOK_CAP = 120;
 
 export function addBook(state, { title, author = "", status = "planned" } = {}) {
@@ -461,9 +365,6 @@ export function addBook(state, { title, author = "", status = "planned" } = {}) 
   if (books.length >= BOOK_CAP) {
     return { refused: `الرف وصل ${BOOK_CAP} كتابًا — احذف واحدًا من المكتبة أولًا.` };
   }
-  /* An existing title is not an error and not a second row: «أضف كتاب X» for
-     a book already on the shelf is almost always him reaching for it, so the
-     row he has is handed back and nothing is written. */
   const already = findBooks(books, name);
   if (already.length === 1) return { kind: "book", act: "already", book: already[0] };
   const row = bookShape({ id: uid(), title: name, author: String(author || "").trim(), status });
@@ -477,9 +378,6 @@ export function addBook(state, { title, author = "", status = "planned" } = {}) 
   };
 }
 
-/* «أقرأه الآن», and the head of the shelf with it — the same reason a logged
-   page moves a book up: the first `reading` row is what every reader of the
-   active book takes. */
 export function startBook(state, id) {
   const books = rows(state.books);
   const book = books.find((b) => b.id === id);
@@ -495,9 +393,6 @@ export function startBook(state, id) {
   };
 }
 
-/* Finishing stamps the date once, exactly as the shelf does — and hands back
-   what the book cost and gave, because that is the one moment the question
-   «was it worth it?» is actually live. */
 export function finishBook(state, id, on = dayKey()) {
   const books = rows(state.books);
   const book = books.find((b) => b.id === id);
@@ -511,8 +406,6 @@ export function finishBook(state, id, on = dayKey()) {
     kind: "book",
     act: "finish",
     book: done,
-    /* What the log actually holds for it: the pages recorded through this
-       system, the days they were spread over, and the points kept. */
     pages: sumPages(log),
     days: new Set(log.map((r) => r.date)).size,
     notes: rows(book.notes).filter((n) => n && n.text).length,
@@ -537,17 +430,6 @@ export function rateBook(state, id, stars) {
   };
 }
 
-/* --- a title that is not on the shelf yet ------------------------------ *
- *  «قرأت ٢٠ صفحة من سيكولوجية المال» for a book nobody has added is the most
- *  likely first sentence this feature will ever meet, and refusing it with
- *  «ما لقيت الكتاب» is a dead end that costs him the log. So the two writes
- *  are one: the book is added, marked as the one being read, and the pages
- *  go straight onto it.
- *
- *  One `before`, holding both arrays as they stood: an undo that put the
- *  pages back and left a book nobody chose on the shelf would be half an
- *  undo, which is worse than none.
- * ---------------------------------------------------------------------- */
 export function addAndRead(state, { title, pages = 0, back = 0 } = {}) {
   const added = addBook(state, { title, status: "reading" });
   if (added.refused) return added;
@@ -565,12 +447,6 @@ export function addAndRead(state, { title, pages = 0, back = 0 } = {}) {
   };
 }
 
-/* --- what the book gave ------------------------------------------------ *
- *  A point, onto the book the pages last went into, carrying the page it was
- *  read at. `noteShape` writes it — the same function the book desk writes
- *  through — so a point typed on a phone enters the review rotation on
- *  exactly the same terms as one typed on the laptop.
- * ---------------------------------------------------------------------- */
 export function addNote(state, { body, bookId = null, back = 0 } = {}) {
   const text = String(body ?? "").trim();
   if (!text) return { refused: "اكتب الفائدة بعد الكلمة. مثال: «فائدة المال حرية لا رفاهية»." };
@@ -586,9 +462,6 @@ export function addNote(state, { body, bookId = null, back = 0 } = {}) {
   if (notes.length >= NOTE_CAP) {
     return { refused: `«${book.title}» وصل ${NOTE_CAP} نقطة — احذف واحدة من مكتب الكتاب.` };
   }
-  /* Due tomorrow rather than left empty: a point written tonight is one he
-     has just read, and the first return is worth something only after a
-     night's sleep. An empty `due` would put it in this evening's own nudge. */
   const note = noteShape({
     text,
     page: book.page ? String(book.page) : "",
@@ -607,9 +480,6 @@ export function addNote(state, { body, bookId = null, back = 0 } = {}) {
   };
 }
 
-/* The one sentence a whole book came down to. One field and not a list, so
-   it is set and not appended — and the previous one rides out on `before`
-   like every other array this file replaces. */
 export function setLesson(state, { body, bookId = null } = {}) {
   const text = String(body ?? "").trim();
   if (!text) return { refused: "اكتب الدرس بعد الكلمة." };
@@ -630,12 +500,6 @@ export function setLesson(state, { body, bookId = null } = {}) {
   };
 }
 
-/* --- a point, come back around ----------------------------------------- *
- *  `kept` is «تذكّرتها»: the gap to the next return widens. Forgotten sends
- *  it back to the bottom of the ladder, which is the whole mechanism —
- *  nothing here decides the spacing, `reviewedNote` in the state layer owns
- *  it, because the book desk shows the same schedule.
- * ---------------------------------------------------------------------- */
 export function reviewNote(state, bookId, noteId, kept, on = dayKey()) {
   const books = rows(state.books);
   const book = books.find((b) => b.id === bookId);
@@ -654,8 +518,6 @@ export function reviewNote(state, bookId, noteId, kept, on = dayKey()) {
     note: after,
     was: note,
     kept: !!kept,
-    /* What is still waiting after this one, so the reply can say whether the
-       evening's review is over. Read off the new shelf, never the old. */
     left: dueNotes(books2, on).length,
     total: countNotes(books2),
     next: { ...state, books: books2 },
@@ -663,25 +525,11 @@ export function reviewNote(state, bookId, noteId, kept, on = dayKey()) {
   };
 }
 
-/* --- the focus desk, from a phone -------------------------------------- *
- *  The run is state and is counted off an absolute `endAt`, which is the
- *  whole reason this is possible at all: a round started from a message and
- *  a round started from the screen are the same row, and either side can end
- *  it. Nothing here re-decides the rhythm — `closePhase` in the state layer
- *  owns the cycle counter, the row and the next phase, and both writers call
- *  it.
- * ---------------------------------------------------------------------- */
-
-/* A run found already over is settled before anything else is decided.
-   Otherwise a round that finished three hours ago would still be «counting»
-   when the next message arrives, and the minutes it earned would be lost
-   the moment it was replaced. */
+/* --- the focus desk, from a phone -------------------------------------- */
 const settled = (state, now) => {
   const focus = focusShape(state.focus);
   const out = settleRun(focus.run, now);
   if (out.run === focus.run) return { focus, state, closed: null };
-  /* A finished round goes through `closePhase` so the counter advances and
-     the break is armed exactly as it would have been on screen. */
   if (out.rang && focus.run) {
     const next = closePhase(state, focus.run, { minutes: focus.run.planned, full: true, at: now });
     return {
@@ -690,8 +538,6 @@ const settled = (state, now) => {
       closed: { phase: focus.run.phase, row: next.row },
     };
   }
-  /* Stale: the minutes of a paused round are kept, a round still counting
-     when it went stale writes nothing. `settleRun` already drew that line. */
   const sessions = out.log ? addSession(state.sessions, out.log) : state.sessions;
   const focusNext = { ...focus, run: null };
   return {
@@ -734,9 +580,6 @@ export function startFocus(state, { minutes = 0, label = "", taskId = null } = {
   };
 }
 
-/* The break, armed and started on purpose. A break that has to be asked for
-   is still better than one that never comes, which is what a timer with no
-   break at all guarantees. */
 export function breakFocus(state, { minutes = 0 } = {}, now = Date.now()) {
   const base = settled(state, now);
   const focus = base.focus;
@@ -785,11 +628,6 @@ export function resumeFocus(state, now = Date.now()) {
   };
 }
 
-/* Stopped, and logged as the minutes it actually was. The old timer wrote
-   nothing unless the round finished, so eighty minutes of a ninety-minute
-   round simply never existed — `full: false` is what makes the row honest
-   instead of absent. A round cut short does not advance the cycle counter:
-   the long break is earned by rounds that were sat through. */
 export function stopFocus(state, now = Date.now()) {
   const base = settled(state, now);
   const focus = base.focus;
@@ -813,9 +651,6 @@ export function stopFocus(state, now = Date.now()) {
   };
 }
 
-/* A stale run, accepted or thrown away by hand — the two buttons the coach
-   offers when it finds one. Accepting is what `settleRun` would have done
-   on its own; dropping is the one case the user overrules it. */
 export function settleFocus(state, now = Date.now()) {
   const focus = focusShape(state.focus);
   if (!focus.run) return { refused: "ما فيه جولة معلّقة." };
@@ -839,12 +674,7 @@ export function dropFocus(state) {
   };
 }
 
-/* Work that happened away from any timer. Marked `full` because there was no
-   plan to have fallen short of. */
 export function logFocus(state, { minutes, label = "", taskId = null, back = 0 } = {}, now = Date.now()) {
-  /* Noon of the day it belongs to, not the current clock: `manualSession`
-     dates a row from the epoch it is handed, and midnight would land the
-     row on the wrong side of the logical day boundary. */
   const at = back ? (keyToDate(backKey(back))?.getTime() ?? now) + 12 * 3600 * 1000 : now;
   const row = manualSession({ minutes, label, taskId, at });
   if (!row) return { refused: "كم دقيقة؟ مثال: «ركزت ٤٥ دقيقة على المحاسبة»." };
@@ -856,11 +686,7 @@ export function logFocus(state, { minutes, label = "", taskId = null, back = 0 }
   };
 }
 
-/* --- the breaker ------------------------------------------------------- *
- *  A hold never touches `startDate`: surviving the urge is the run
- *  continuing, not an event in it. A fall stamps the run that just ended
- *  onto the log, so the record outlives the counter it cost.
- * ---------------------------------------------------------------------- */
+/* --- the breaker ------------------------------------------------------- */
 function oneBad(state, query) {
   const list = rows(state.badHabits);
   if (!list.length) return { refused: "ما فيه عادة مسجّلة في كاسر العادات." };
@@ -922,20 +748,11 @@ export function fallUrge(state, id, { tag = "", mood = "", trigger = "" } = {}) 
 
 export { oneBad };
 
-/* --- tomorrow's three, tonight ----------------------------------------- *
- *  `prepPickAdd` holds the cap and refuses the fourth outright, which is one
- *  of its four doors. Nothing here counts picks itself.
- * ---------------------------------------------------------------------- */
+/* --- tomorrow's three, tonight ----------------------------------------- */
 export function pickTomorrow(state, taskId) {
   const task = rows(state.tasks).find((t) => t.id === taskId);
   if (!task) return { refused: "هذي المهمة لم تعد موجودة." };
   const day = tomorrowKey();
-  /* `prepPickAdd` refuses by handing the prep back unchanged rather than by
-     returning nothing — it is written for a screen, where a no-op button is
-     the whole of a refusal. In a chat a silent no-op is indistinguishable
-     from a write that failed, so the two cases it refuses for are read here
-     and each one is said out loud. The cap itself is still the state
-     layer's: nothing below counts picks to decide whether to allow one. */
   const was = prepShape(state.prep);
   const already = was.for === day ? was.picks : [];
   if (already.some((x) => x.task === taskId)) {
@@ -956,11 +773,6 @@ export function pickTomorrow(state, taskId) {
   };
 }
 
-/* --- one of today's three, chosen from the matrix ---------------------- *
- *  The flag, not a new task: the coach offers what is already in the
- *  quadrants rather than asking him to type it twice. `capToday` is the
- *  gate, as it is for every other door.
- * ---------------------------------------------------------------------- */
 export function flagToday(state, taskId) {
   const list = rows(state.tasks);
   const task = list.find((t) => t.id === taskId);
@@ -982,12 +794,6 @@ export function flagToday(state, taskId) {
   };
 }
 
-/* --- the evening reflection -------------------------------------------- *
- *  Written onto today's archive row, which is where the app writes it. The
- *  row is stamped first so it exists and is current, then the field is
- *  merged — `stampToday` spreads the previous entry precisely so anything
- *  written per-day survives a habit toggle, and this is one of those things.
- * ---------------------------------------------------------------------- */
 export function reflect(state, { field, note }) {
   const text = String(note ?? "").trim();
   if (!text) return { refused: "اكتب الجواب بعد الكلمة." };
@@ -1010,22 +816,11 @@ export function reflect(state, { field, note }) {
   };
 }
 
-/* --- a day that is not today ------------------------------------------- *
- *  `expenseShape` and the rest have always taken a date; nothing could say
- *  one. The row is written with it and the confirmation says which day it
- *  landed on, because a row filed on the wrong square is only findable if
- *  the message said where it went.
- * ---------------------------------------------------------------------- */
 export const backKey = (back) => {
   const n = Math.round(Number(back) || 0);
   return n >= 1 && n <= BACK_MAX ? addDays(dayKey(), -n) : dayKey();
 };
 
-/* --- the calendar ------------------------------------------------------ *
- *  `readWhen` in the parser hands back the day as a *word*; turning it into
- *  a square is calendar arithmetic and lives here, beside the shape that
- *  will carry it.
- * ---------------------------------------------------------------------- */
 export function whenKey(day, from = dayKey()) {
   if (day === null || day === undefined) return from;
   if (day === "today") return from;
@@ -1033,9 +828,6 @@ export function whenKey(day, from = dayKey()) {
   if (day === "after") return addDays(from, 2);
   const want = Number(day);
   if (!Number.isInteger(want) || want < 0 || want > 6) return from;
-  /* The next one of that weekday, today included: «موعد الأحد» said on a
-     Sunday morning is this Sunday, and pushing it a week out would be the
-     app arguing with him about a day he can see. */
   const base = keyToDate(from);
   if (!base) return from;
   const ahead = (want - base.getDay() + 7) % 7;
@@ -1049,9 +841,6 @@ export function addEvent(state, { title, day, time }) {
     title: text,
     date: whenKey(day),
     time: time || "",
-    /* «مقابلة» is a meeting and everything else is a note until he says
-       otherwise. Guessing further — an exam, a deadline — would put a red
-       tint on a dentist's appointment. */
     kind: /مقابل|اجتماع/.test(text) ? "meet" : "note",
   });
   return {
@@ -1063,10 +852,6 @@ export function addEvent(state, { title, day, time }) {
 }
 
 /* --- the university desk ------------------------------------------------ */
-
-/* Which course a few words could mean. The same folded match `findHabits`
-   uses, over the name and the code — he says «محاسبة» and the row says
-   «مبادئ المحاسبة ١» or «ACCT 101», and either should find it. */
 export function findCourses(uni, query) {
   const list = rows(uniShape(uni).courses);
   const q = fold(query);
@@ -1083,20 +868,10 @@ export function findCourses(uni, query) {
   return found.length ? found : [];
 }
 
-/* One absence, with the guard that makes the button safe to press twice.
-   `absences` stays the authoritative count — a term usually starts with
-   absences taken before the app did — and `absentOn` is only what lets a
-   second tap on the same day be refused. */
 export function markAbsence(state, courseId, on = dayKey()) {
   const uni = uniShape(state.uni);
   const course = rows(uni.courses).find((c) => c.id === courseId);
   if (!course) return { refused: "هذي المادة لم تعد موجودة." };
-  /* The array directly, never through `rows()`: that helper keeps row
-     *objects* and drops everything else, and `absentOn` is a list of bare
-     day keys — so `rows(absentOn)` is always empty and the guard it was
-     written for never fired once. The guard is the whole point here: tapping
-     «غياب» twice after one lecture is the easiest mistake on that screen and
-     the hardest to notice, because the number is simply wrong from then on. */
   const seen = Array.isArray(course.absentOn) ? course.absentOn : [];
   if (seen.includes(on)) {
     return { refused: `غياب «${course.name || course.code}» مسجّل لهذا اليوم أصلاً.` };
@@ -1125,10 +900,6 @@ export function addMark(state, courseId, { label, score, max }) {
   const uni = uniShape(state.uni);
   const course = rows(uni.courses).find((c) => c.id === courseId);
   if (!course) return { refused: "هذي المادة لم تعد موجودة." };
-  /* Checked on the way *in*, not on the shaped row: `markShape` clamps an
-     unusable `max` up to 100, which is right for a damaged payload being
-     read off disk and wrong for a sentence being typed — «١٨ من ٠» would
-     quietly become eighteen out of a hundred. */
   if (!(Number(max) > 0)) {
     return { refused: "الدرجة لازم تكون «من» رقم أكبر من صفر." };
   }
@@ -1145,11 +916,7 @@ export function addMark(state, courseId, { label, score, max }) {
   };
 }
 
-/* --- the goals vault ---------------------------------------------------- *
- *  The meter only. A goal's text, pillar, quarter and parent are decisions
- *  made on a screen with the whole tree visible; `current` is the one field
- *  that changes while you are out of the house.
- * ---------------------------------------------------------------------- */
+/* --- the goals vault ---------------------------------------------------- */
 export function findGoals(goals, query) {
   const q = fold(query);
   if (!q) return [];
@@ -1159,8 +926,6 @@ export function findGoals(goals, query) {
     return t === q || t.includes(q) || q.includes(t);
   };
   const found = open.filter(hit);
-  /* A goal with a meter first: «هدف الحفظ ٣٠» is about a number, and a
-     yes/no goal has nowhere to put one. */
   return [...found.filter((g) => g.target > 0), ...found.filter((g) => !g.target)];
 }
 
@@ -1190,26 +955,23 @@ export function moveGoal(state, id, { value, add = false }) {
   };
 }
 
-/* --- taking a tick back ------------------------------------------------- *
- *  An untick is a deletion in everything but name: it withdraws today's
- *  reading sessions for the habit and rolls the book's page counter back.
- *  `withdrawReading` is the state layer's, so this and the routine screen
- *  cannot disagree about where a book has reached.
- * ---------------------------------------------------------------------- */
+/* --- taking a tick back ------------------------------------------------- */
 export function untickHabit(state, id) {
   const list = rows(state.habits);
   const h = list.find((x) => x.id === id);
   if (!h) return { refused: "هذه العادة لم تعد في روتينك." };
   if (!h.done) return { refused: `«${h.label}» غير مؤشّرة أصلاً.` };
   const back = withdrawReading(state.reading, state.books, id, dayKey());
+  
+  // الميزة الجوهرية: إزالة التحديث من الأهداف
+  const updatedGoals = syncHabitToGoals(state.goals, id, false);
+  
   const next = stampToday({
     ...state,
-    /* `tiny` leaves with the tick: a habit unticked is not «done the small
-       way», it is not done, and a mark left behind would be read back by
-       the archive as a day that was carried. */
     habits: list.map((x) => (x.id === id ? { ...x, done: false, tiny: false } : x)),
     reading: back.reading,
     books: back.books,
+    goals: updatedGoals, // <--- تحديث الأهداف هنا
   });
   return {
     kind: "untick",
@@ -1222,17 +984,12 @@ export function untickHabit(state, id) {
       history: state.history,
       reading: state.reading,
       books: state.books,
+      goals: state.goals, // <--- إضافة goals للـ undo
     },
   };
 }
 
-/* --- yesterday, corrected from a phone --------------------------------- *
- *  One archive row rewritten and nothing else moved — today's habits do not
- *  shift, because today is a different day and the whole value of a hard
- *  boundary is that it holds. `setDayDone` is the same function «عدّل أمس»
- *  goes through, and the streak is recomputed from the rows rather than
- *  nudged.
- * ---------------------------------------------------------------------- */
+/* --- yesterday, corrected from a phone --------------------------------- */
 export function tickOn(state, id, date, on = true) {
   const habits = rows(state.habits);
   const h = habits.find((x) => x.id === id);
@@ -1255,11 +1012,7 @@ export function tickOn(state, id, date, on = true) {
   };
 }
 
-/* --- putting one back ------------------------------------------------- *
- *  Spread over whatever the state is by then rather than over the state the
- *  change was made on: an unrelated row added in the meantime is not undone
- *  along with this one.
- * ---------------------------------------------------------------------- */
+/* --- putting one back ------------------------------------------------- */
 export function undo(state, before) {
   if (!before || typeof before !== "object") {
     return { refused: "ما فيه شي أرجّعه." };
@@ -1267,10 +1020,7 @@ export function undo(state, before) {
   return { kind: "undo", next: { ...state, ...before } };
 }
 
-/* --- what the day looks like ------------------------------------------ *
- *  Read-only, and every figure derived. Used by the two briefs and by
- *  «/يومي», so there is one reading of the day and not three.
- * ---------------------------------------------------------------------- */
+/* --- what the day looks like ------------------------------------------ */
 export function dayAt(state) {
   const habits = rows(state.habits);
   const scored = scoredOf(habits);
@@ -1289,16 +1039,10 @@ export function dayAt(state) {
     spentWeek: amountSum(rows(state.expenses).filter((e) => e.date >= weekAgo(state.date))),
     earnedWeek: amountSum(rows(state.income).filter((e) => e.date >= weekAgo(state.date))),
     balance: netBalance(state.income, state.expenses),
-    /* The library, as the briefs need it. Read here with everything else the
-       day is made of, so the two briefs and «يومي» cannot each count the
-       day's pages their own way. */
     book: activeBook(rows(state.books)),
     readToday: sumPages(rows(state.reading).filter((r) => r.date === state.date)),
     readGoal: Number.isFinite(+state.readGoal) ? +state.readGoal : READ_GOAL_DEFAULT,
     notesDue: dueNotes(rows(state.books), state.date).length,
-    /* Points written today, so the evening asks for one only on an evening
-       that has none. A prompt that arrives after the thing was already done
-       is the prompt that teaches you to stop reading them. */
     notesToday: rows(state.books).reduce(
       (n, b) => n + rows(b.notes).filter((x) => x && x.text && x.at === state.date).length,
       0,
@@ -1306,14 +1050,60 @@ export function dayAt(state) {
   };
 }
 
-/* Six days back from the day in hand, as a key. String comparison on day
-   keys is what every window in the state layer uses — an ISO key sorts
-   lexicographically, and parsing it into a Date only invites a timezone to
-   move it. */
 function weekAgo(date) {
   const [y, m, d] = String(date || "").split("-").map(Number);
   if (!y) return "0000-00-00";
   const x = new Date(y, m - 1, d - 6);
   const p = (n) => String(n).padStart(2, "0");
   return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+}
+
+/* ==================================================================== *
+ *  الميزة الجوهرية: ملخص الأهداف للبوت (بدون اقتطاع)
+ * ==================================================================== */
+export function goalReport(state, horizon = "quarter") {
+  const all = rows(state.goals);
+  const habits = rows(state.habits);
+  
+  const active = all.filter((g) => !g.done && g.horizon === horizon);
+  const hLabel = horizon === "quarter" ? "الربع الحالي (٩٠ يومًا)" : horizon === "year" ? "هذه السنة" : "٣ سنوات";
+  
+  if (!active.length) {
+    return {
+      text: `✅ ما فيه أهداف نشطة في أفق «${hLabel}».`,
+      kb: null
+    };
+  }
+
+  const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, " ");
+  
+  let text = `<b>🎯 أهدافك في أفق «${hLabel}»:</b>\n\n`;
+
+  active.forEach((g) => {
+    const pct = goalPct(g, all, habits);
+    const pace = goalPace(g, all);
+    const paceIcon = pace.pace?.state === "ahead" ? "🚀" : pace.pace?.state === "behind" ? "⚠️" : "✅";
+    const pLabel = `[${pillarOf(g.pillar).label}]`;
+    
+    // هنا نعرض النص كاملاً (تم إزالة دالة الاقتطاع)
+    text += `${paceIcon} ${pLabel} <b>${escapeHtml(g.text)}</b>\n`;
+    
+    if (g.target > 0) {
+      text += `📊 ${pct}% (${g.current || 0}/${g.target} ${escapeHtml(g.unit || "")})\n\n`;
+    } else {
+      text += `📊 ${pct}%\n\n`;
+    }
+  });
+  
+  const kb = {
+    inline_keyboard: [
+      [
+        { text: "🎯 الربع الحالي", callback_data: "grp:quarter" },
+        { text: "📅 السنة", callback_data: "grp:year" },
+        { text: "🚀 ٣ سنوات", callback_data: "grp:h3" }
+      ]
+    ]
+  };
+
+  return { text, kb };
 }

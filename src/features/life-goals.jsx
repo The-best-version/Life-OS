@@ -1,15 +1,9 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
-import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, currentQuarter, daysTo, goalEnd, goalPct, goalShape, horizonOf, openingWindow, parentHorizon, pillarOf, quarterOf, rows, uid, windowOf, windowStand } from "../state/life-state.mjs";
-import { AlertTriangle, Check, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, SquarePen, Trash2, TrendingDown, TrendingUp, X } from "lucide-react";
+import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, openingWindow, parentHorizon, pillarOf, quarterOf, rows, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
+import { AlertTriangle, Check, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 export function GoalsModule({ state, setState }) {
-  /* Opens on the ninety days you are actually in — the whole point of
-     chunking. The horizons above it are one tap away but never the default.
-     Before the arc starts there is no «now» to open on, so it falls to the
-     first ninety days of the first year instead: opening on Q4 of a year
-     that has not begun, because the wall clock happens to say October, is
-     the one window nobody is planning in. */
   const here = new Date().getFullYear();
   const arm = useUndo();
   const [horizon, setHorizon] = useState("quarter");
@@ -30,18 +24,13 @@ export function GoalsModule({ state, setState }) {
     return m;
   }, [all]);
 
-  /* The years on offer: the arc, plus any year that still has goals filed in
-     it. Without the second half, a year the arc has moved past would keep its
-     goals but lose its tab — and a goal you cannot navigate to is gone as far
-     as the user is concerned. */
   const years = useMemo(() => {
     const set = new Set(GOAL_YEARS);
-    for (const g of all) if (g.horizon !== "h3") set.add(g.year);
+    for (const g of all) if (g.horizon !== "h3" && g.year >= YEAR_MIN) set.add(g.year);
     return [...set].sort((a, b) => a - b);
   }, [all]);
 
   const meta = horizonOf(horizon);
-  /* Which window the chosen horizon means. The three-year arc has only one. */
   const inWindow = useCallback(
     (g) =>
       g.horizon !== horizon
@@ -55,8 +44,6 @@ export function GoalsModule({ state, setState }) {
   );
 
   const scoped = useMemo(() => all.filter(inWindow), [all, inWindow]);
-  /* Only below the top horizon: a three-year goal has nothing above it to
-     serve, so calling it an orphan would be nonsense. */
   const orphans = useMemo(
     () => scoped.filter((g) => g.horizon !== "h3" && !g.parent),
     [scoped],
@@ -65,7 +52,7 @@ export function GoalsModule({ state, setState }) {
 
   const done = scoped.filter((g) => g.done).length;
   const pct = scoped.length
-    ? Math.round(scoped.reduce((n, g) => n + goalPct(g, all), 0) / scoped.length)
+    ? Math.round(scoped.reduce((n, g) => n + goalPct(g, all, state.habits || []), 0) / scoped.length)
     : 0;
 
   const live =
@@ -92,30 +79,20 @@ export function GoalsModule({ state, setState }) {
     }));
 
   const remove = (id) => {
-    /* The cut links come back with the list, which is the point of restoring
-       the array whole rather than re-inserting the row. */
     arm("حُذف الهدف", { goals: state.goals || [] });
     setState((s) => ({
       ...s,
-      /* The children stay — they are the user's own rows, not this goal's
-         property. Their link is cut rather than followed, which is also what
-         `migrate` would do on the next load; doing it here keeps the screen
-         honest without waiting for a reload. */
       goals: (s.goals || [])
         .filter((g) => g.id !== id)
         .map((g) => (g.parent === id ? { ...g, parent: null } : g)),
     }));
   };
 
-  /* A new goal lands in the window on screen and opens straight onto its own
-     desk: a goal with no reason, no measure and nothing it serves is the kind
-     this screen exists to prevent, so the form that asks for all three is the
-     next thing the user sees rather than something to go hunting for. */
   const add = () => {
     const row = goalShape({
       horizon,
       quarter,
-      year,
+      year: year < YEAR_MIN ? YEAR_MIN : year,
       pillar: shown[0]?.pillar || "faith",
     });
     setState((s) => ({ ...s, goals: [...(s.goals || []), row] }));
@@ -124,46 +101,54 @@ export function GoalsModule({ state, setState }) {
 
   const desk = deskId ? byId.get(deskId) : null;
 
+  /* أرباع السنة المعروضة. سنة المدرج (٢٠٢٦) لا تعرض إلا ما بقي منها، فلا
+     يُفتح التبويب على ربع انتهى قبل أن يبدأ النظام. */
+  const quartersShown = useMemo(() => yearQuarters(year, all), [year, all]);
+
+  /* تبديل السنة يصحّح الربع معه: ربع مختار لم يعد له تبويب في السنة
+     الجديدة يترك الشاشة فارغة بلا تبويب مضيء — وهو فراغ يبدو عطلًا. */
+  const pickYear = (y) => {
+    setYear(y);
+    const qs = yearQuarters(y, all);
+    if (!qs.some((q) => q.id === quarter)) setQuarter(qs[0].id);
+  };
+
   return (
-    <div className="space-y-8">
-      <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div className="min-w-0">
-          <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
-            أهدافي
-          </h2>
-          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
-            {meta.hint}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Btn variant="default" size="sm" onClick={add}>
-              <Plus size={14} strokeWidth={3} /> هدف جديد
-            </Btn>
-            <Badge tint={pct === 100 && scoped.length ? T.primary : meta.tint}>
-              <span dir="ltr" className="tabular-nums">
-                {done}/{scoped.length}
+    <div className="space-y-8 pb-20">
+      <Card className="relative overflow-hidden p-6 sm:p-8 bg-gradient-to-br from-white/[0.03] to-transparent border-white/5">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-3xl font-extrabold text-white tracking-tight">أهدافي</h2>
+              <span className="px-2.5 py-1 rounded-lg bg-white/5 text-[11px] font-bold text-white/50 border border-white/10">
+                {meta.label}
               </span>
-              {" مُحقَّق"}
-            </Badge>
-            {daysLeft !== null && daysLeft > 0 && live && (
-              <Badge tint={T.cta}>
-                {daysLeft === 1 ? (
-                  "بقي يوم واحد"
-                ) : daysLeft === 2 ? (
-                  "بقي يومان"
-                ) : (
-                  <>
-                    بقي{" "}
-                    <span dir="ltr" className="tabular-nums">
-                      {daysLeft}
-                    </span>{" "}
-                    {dayWord(daysLeft)}
-                  </>
-                )}
-              </Badge>
-            )}
+            </div>
+            <p className="text-[13px] leading-relaxed text-white/40 max-w-lg mb-6">
+              {meta.hint}
+            </p>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <Btn variant="default" size="sm" onClick={add} className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
+                <Plus size={16} strokeWidth={3} /> هدف جديد
+              </Btn>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+                <Target size={14} className="text-emerald-400" />
+                <span className="text-[12px] font-bold text-white/80">{done} من {scoped.length} محقق</span>
+              </div>
+              {daysLeft !== null && daysLeft > 0 && live && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400">
+                  <Hourglass size={14} />
+                  <span className="text-[12px] font-bold">بقي {daysLeft} يوم</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0 flex flex-col items-center justify-center bg-black/20 p-4 rounded-3xl border border-white/5">
+             <ProgressRing value={pct} size={110} stroke={8} label="إنجاز الأفق" />
           </div>
         </div>
-        <ProgressRing value={pct} size={150} stroke={11} label="تقدّم الأفق" />
       </Card>
 
       <NorthStarCard
@@ -171,8 +156,8 @@ export function GoalsModule({ state, setState }) {
         onSave={(northStar) => setState((s) => ({ ...s, northStar }))}
       />
 
-      {/* The clock on all three windows at once. Doubles as the horizon
-          switcher, so the countdown is not a second control to learn. */}
+      <GoalAnalysisDashboard goals={all} habits={state.habits || []} />
+
       <CountdownCard
         all={all}
         year={year}
@@ -184,172 +169,137 @@ export function GoalsModule({ state, setState }) {
         }}
       />
 
-      {/* the window inside the horizon */}
-      {horizon !== "h3" && (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            {years.map((y) => {
-              const on = y === year;
-              const list = all.filter((g) => g.horizon === horizon && g.year === y);
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {years.map((y) => {
+            const on = y === year;
+            const list = all.filter((g) => g.horizon === horizon && g.year === y);
+            return (
+              <button
+                key={y}
+                onClick={() => pickYear(y)}
+                className={`flex-1 min-w-[100px] rounded-2xl border px-4 py-3 text-[13px] font-extrabold tabular-nums transition-all duration-300 ${
+                  on 
+                    ? "bg-white/10 border-white/20 text-white shadow-lg" 
+                    : "bg-white/[0.02] border-transparent text-white/40 hover:bg-white/5"
+                }`}
+              >
+                {y} <span className="opacity-50 text-[11px] mr-1">({list.length})</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {horizon === "quarter" && (
+          <div
+            className={`grid gap-3 ${
+              quartersShown.length < 4 ? "sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-4"
+            }`}
+          >
+            {quartersShown.map((q) => {
+              const on = q.id === quarter;
+              const now = q.id === currentQuarter() && year === here;
+              const list = all.filter(
+                (g) => g.horizon === "quarter" && g.quarter === q.id && g.year === year,
+              );
+              const hit = list.filter((g) => g.done).length;
               return (
                 <button
-                  key={y}
-                  onClick={() => setYear(y)}
-                  aria-pressed={on}
-                  dir="ltr"
-                  className="flex-1 rounded-xl border px-2 py-2 text-[11.5px] font-extrabold tabular-nums transition-all duration-200"
-                  style={{
-                    borderColor: on ? `${T.accent}80` : T.border,
-                    background: on ? `${T.accent}1F` : "rgba(255,255,255,0.03)",
-                    color: on ? T.accent : T.faint,
-                  }}
+                  key={q.id}
+                  onClick={() => setQuarter(q.id)}
+                  className={`group relative overflow-hidden rounded-2xl border p-4 text-right transition-all duration-300 ${
+                    on 
+                      ? "bg-white/10 border-white/20 shadow-lg" 
+                      : "bg-white/[0.02] border-transparent hover:bg-white/5"
+                  }`}
                 >
-                  {y}
-                  <span className="mr-1.5 opacity-60">({list.length})</span>
+                  {on && <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[14px] font-extrabold ${on ? "text-white" : "text-white/60"}`}>{q.label}</span>
+                    {now && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+                  </div>
+                  <span className="block text-[11px] text-white/40 mb-3">{q.months}</span>
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span className={on ? "text-emerald-400" : "text-white/30"}>مُنجز: {hit}</span>
+                    <span className={on ? "text-white/60" : "text-white/30"}>الكل: {list.length}</span>
+                  </div>
                 </button>
               );
             })}
           </div>
+        )}
+      </div>
 
-          {horizon === "quarter" && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {QUARTERS.map((q) => {
-                const on = q.id === quarter;
-                const now = q.id === currentQuarter() && year === here;
-                const list = all.filter(
-                  (g) => g.horizon === "quarter" && g.quarter === q.id && g.year === year,
-                );
-                const hit = list.filter((g) => g.done).length;
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setQuarter(q.id)}
-                    aria-pressed={on}
-                    className="rounded-2xl border px-3 py-3 text-right transition-all duration-200"
-                    style={{
-                      borderColor: on ? `${q.tint}80` : T.border,
-                      backgroundImage: on
-                        ? `linear-gradient(160deg, ${q.tint}2E, ${q.tint}0A)`
-                        : "none",
-                      backgroundColor: on ? "transparent" : "rgba(255,255,255,0.03)",
-                      color: on ? q.tint : T.muted,
-                      boxShadow: on ? `0 10px 26px -16px ${q.tint}` : "none",
-                    }}
-                  >
-                    <span className="flex items-center gap-1.5 text-[13px] font-extrabold">
-                      {q.label}
-                      {now && (
-                        <span
-                          aria-label="الربع الحالي"
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{ background: T.cta, boxShadow: `0 0 8px ${T.cta}` }}
-                        />
-                      )}
-                    </span>
-                    <span className="mt-0.5 block text-[10px]" style={{ color: T.faint }}>
-                      {q.months}
-                    </span>
-                    <span
-                      className="mt-1 block text-[10.5px] font-bold tabular-nums"
-                      dir="ltr"
-                      style={{ color: on ? q.tint : T.faint }}
-                    >
-                      {hit}/{list.length}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Every goal below the top horizon should answer to one above it.
-          Saying so once, with a way to see exactly which ones do not, is the
-          whole discipline this screen adds over a flat list. */}
       {orphans.length > 0 && (
         <button
           onClick={() => setOrphansOnly((v) => !v)}
-          aria-pressed={orphansOnly}
-          className="flex w-full items-center gap-2.5 rounded-2xl border px-4 py-3 text-right transition-all duration-200"
-          style={{
-            borderColor: orphansOnly ? `${T.cta}80` : `${T.accent}4D`,
-            background: orphansOnly ? `${T.cta}1A` : `${T.accent}12`,
-          }}
+          className={`flex w-full items-center gap-3 rounded-2xl border px-5 py-4 text-right transition-all duration-300 ${
+            orphansOnly ? "bg-orange-500/20 border-orange-500/40" : "bg-orange-500/5 border-orange-500/10 hover:bg-orange-500/10"
+          }`}
         >
-          <AlertTriangle size={15} className="shrink-0" style={{ color: orphansOnly ? T.cta : T.accent }} />
-          <span className="min-w-0 flex-1 text-[12px] font-bold leading-relaxed" style={{ color: orphansOnly ? T.ctaLift : T.accent }}>
-            <span dir="ltr" className="tabular-nums">
-              {orphans.length}
-            </span>{" "}
-            من أهداف هذه النافذة لا تخدم هدفًا أعلى.
-            <span className="block text-[10.5px] font-normal" style={{ color: T.muted }}>
-              {orphansOnly ? "اضغط لعرض الكل" : "اضغط لعرضها وحدها"}
-            </span>
+          <AlertTriangle size={18} className={orphansOnly ? "text-orange-400" : "text-orange-500/50"} />
+          <span className="flex-1 text-[13px] font-bold text-orange-200/80">
+            {orphans.length} أهداف لا تخدم هدفًا أعلى — اضغط للعرض
           </span>
         </button>
       )}
 
-      {/* by pillar */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {PILLARS.map((p) => {
           const list = shown.filter((g) => g.pillar === p.id);
           const hit = list.filter((g) => g.done).length;
           const complete = list.length > 0 && hit === list.length;
           const Icon = p.icon;
           const avg = list.length
-            ? Math.round(list.reduce((n, g) => n + goalPct(g, all), 0) / list.length)
+            ? Math.round(list.reduce((n, g) => n + goalPct(g, all, state.habits || []), 0) / list.length)
             : 0;
+            
           return (
-            <Card key={p.id} className="p-5 sm:p-6">
-              <div className="flex items-center gap-3">
+            <Card key={p.id} className="p-0 overflow-hidden bg-white/[0.01] border-white/5 flex flex-col">
+              <div className="flex items-center gap-3 p-5 border-b border-white/5 bg-gradient-to-l from-white/[0.03] to-transparent">
                 <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                   style={{
-                    borderColor: complete ? `${T.primary}59` : `${p.tint}45`,
-                    background: complete ? `${T.primary}1A` : `${p.tint}18`,
+                    background: complete ? `${T.primary}20` : `${p.tint}15`,
                     color: complete ? T.primary : p.tint,
+                    border: `1px solid ${complete ? T.primary : p.tint}30`,
                   }}
                 >
-                  <Icon size={18} strokeWidth={1.9} />
+                  <Icon size={18} strokeWidth={2.2} />
                 </span>
-                <h3 className="text-[15px] font-bold">{p.label}</h3>
-                <span className="mr-auto text-[11px] tabular-nums text-white/30">
-                  <span dir="ltr">
-                    {hit}/{list.length}
-                  </span>
-                </span>
+                <div className="flex-1">
+                  <h3 className="text-[16px] font-extrabold text-white/90">{p.label}</h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[11px] text-white/40 font-bold">{hit} من {list.length} محقق</span>
+                    <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-700" 
+                        style={{ 
+                          width: `${avg}%`, 
+                          backgroundColor: complete ? T.primary : p.tint,
+                          boxShadow: `0 0 10px ${complete ? T.primary : p.tint}80`
+                        }} 
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div
-                className="mt-3.5 h-1 w-full overflow-hidden rounded-full"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${avg}%`,
-                    backgroundImage: complete
-                      ? `linear-gradient(90deg, ${T.primary}, ${T.primaryLift})`
-                      : `linear-gradient(90deg, ${p.tint}, ${p.tint}AA)`,
-                    boxShadow: avg ? `0 0 12px ${complete ? T.primary : p.tint}99` : "none",
-                  }}
-                />
-              </div>
-
-              <div className="mt-3 space-y-2">
+              <div className="p-4 flex-1 flex flex-col gap-3">
                 {list.length === 0 ? (
-                  <p className="py-3 text-center text-[11px] text-white/25">
-                    {orphansOnly
-                      ? "لا أهداف معلّقة في هذه الركيزة"
-                      : "لا أهداف في هذه الركيزة بعد"}
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-8 opacity-40">
+                    <Sparkles size={24} className="mb-3 text-white/20" />
+                    <p className="text-[12px] font-bold text-white/40">لا توجد أهداف هنا بعد</p>
+                    <p className="text-[10px] text-white/30 mt-1">أضف هدفاً لتضيء هذه الركيزة</p>
+                  </div>
                 ) : (
                   list.map((g) => (
                     <GoalCard
                       key={g.id}
                       goal={g}
                       all={all}
+                      habits={state.habits || []}
+                      history={state.history || []}
                       parent={g.parent ? byId.get(g.parent) : null}
                       kids={kidsOf.get(g.id) || []}
                       onToggle={() => patch(g.id, { done: !g.done })}
@@ -357,10 +307,7 @@ export function GoalsModule({ state, setState }) {
                         g.target > 0
                           ? (n) =>
                               patch(g.id, {
-                                current: Math.max(
-                                  0,
-                                  Math.min(g.target, g.current + n),
-                                ),
+                                current: Math.max(0, Math.min(g.target, g.current + n)),
                               })
                           : null
                       }
@@ -377,6 +324,9 @@ export function GoalsModule({ state, setState }) {
       <GoalDesk
         goal={desk}
         all={all}
+        tasks={state.tasks || []} // <--- تمرير المهام هنا
+        habits={state.habits || []}
+        history={state.history || []}
         onClose={() => setDeskId(null)}
         onPatch={(fields) => patch(deskId, fields)}
         onDelete={() => {
@@ -388,20 +338,522 @@ export function GoalsModule({ state, setState }) {
   );
 }
 
+function GoalAnalysisDashboard({ goals, habits }) {
+  const activeGoals = goals.filter((g) => !g.done);
+  if (activeGoals.length === 0) return null;
 
-/* --- the desk --------------------------------------------------------- *
- *  Everything a goal is, in one place: the horizon, the window, the reason,
- *  the meter, the milestones, the deadline and the goal it serves. Edits are
- *  applied live through `onPatch` rather than held in a draft and saved at
- *  the end — the same way the book and course desks work, so closing the
- *  sheet can never be the thing that loses a milestone.
- * ---------------------------------------------------------------------- */
-function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
+  let ahead = 0, behind = 0, onPace = 0;
+  activeGoals.forEach((g) => {
+    const pace = goalPace(g, goals);
+    if (pace.pace?.state === "ahead") ahead++;
+    else if (pace.pace?.state === "behind") behind++;
+    else if (pace.pace?.state === "on-pace") onPace++;
+  });
+
+  const linked = activeGoals.filter((g) => g.linkedHabits && g.linkedHabits.length > 0).length;
+  const linkedPct = Math.round((linked / activeGoals.length) * 100);
+
+  const pillarCounts = {};
+  activeGoals.forEach(g => {
+    pillarCounts[g.pillar] = (pillarCounts[g.pillar] || 0) + 1;
+  });
+  let topPillarId = null, maxCount = 0;
+  Object.entries(pillarCounts).forEach(([id, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      topPillarId = id;
+    }
+  });
+  const topPillar = pillarOf(topPillarId);
+
+  let insight = "";
+  if (behind > 0) {
+    insight = `⚠️ لديك ${behind} أهداف متأخرة عن الجدول. راجع العقبات في مكتب الهدف لتعود للمسار.`;
+  } else if (linkedPct < 50) {
+    insight = `🔗 ${activeGoals.length - linked} من أهدافك لا ترتبط بعادات يومية. اربطها لتتحرك النسب تلقائياً.`;
+  } else if (ahead > 0) {
+    insight = `🚀 ممتاز! لديك ${ahead} أهداف تتقدم بسرعة أكبر من الجدول.`;
+  } else {
+    insight = `✅ كل أهدافك تسير حسب الخطة. استمر في إنجاز عاداتك اليومية.`;
+  }
+
+  return (
+    <Card className="p-6 bg-gradient-to-br from-indigo-500/5 to-transparent border-white/5 overflow-hidden relative">
+      <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -ml-10 -mt-10 pointer-events-none" />
+      
+      <div className="flex items-center gap-3 mb-6 relative z-10">
+        <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20">
+          <PieChart size={20} />
+        </div>
+        <div>
+          <h3 className="text-[16px] font-extrabold text-white/90">لوحة تحليل الأهداف</h3>
+          <p className="text-[11px] text-white/40">نظرة سريعة على أداء أهدافك النشطة ({activeGoals.length} هدف)</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 relative z-10">
+        <div className="p-4 rounded-2xl bg-black/20 border border-white/5">
+           <p className="text-[11px] font-bold text-white/50 mb-3 flex items-center gap-1"><Activity size={12}/> مؤشر الأداء (Pace)</p>
+           <div className="flex items-center h-3 w-full rounded-full overflow-hidden mb-3 bg-white/5">
+             <div style={{ width: `${(ahead/activeGoals.length)*100}%` }} className="h-full bg-emerald-500" title={`متقدم: ${ahead}`} />
+             <div style={{ width: `${(onPace/activeGoals.length)*100}%` }} className="h-full bg-blue-500" title={`على المسار: ${onPace}`} />
+             <div style={{ width: `${(behind/activeGoals.length)*100}%` }} className="h-full bg-red-500" title={`متأخر: ${behind}`} />
+           </div>
+           <div className="flex justify-between text-[10px] font-bold">
+             <span className="text-emerald-400 flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> {ahead} متقدم</span>
+             <span className="text-blue-400 flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"/> {onPace} مسار</span>
+             <span className="text-red-400 flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-red-500"/> {behind} متأخر</span>
+           </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-black/20 border border-white/5 flex flex-col justify-between">
+           <p className="text-[11px] font-bold text-white/50 mb-3 flex items-center gap-1"><Link2 size={12}/> ربط العادات</p>
+           <div className="flex items-center gap-3">
+             <div className="relative h-11 w-11 shrink-0 flex items-center justify-center rounded-full border border-white/10" style={{ background: `conic-gradient(#10b981 ${linkedPct}%, transparent 0)` }}>
+                <div className="absolute inset-1 bg-[#151b23] rounded-full flex items-center justify-center">
+                  <span className="text-[11px] font-extrabold text-emerald-400">{linkedPct}%</span>
+                </div>
+             </div>
+             <div>
+               <span className="block text-[13px] font-bold text-white/80">{linked} من {activeGoals.length}</span>
+               <span className="block text-[10px] text-white/40">أهداف مرتبطة بعادات يومية</span>
+             </div>
+           </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-black/20 border border-white/5 flex flex-col justify-between">
+           <p className="text-[11px] font-bold text-white/50 mb-3 flex items-center gap-1"><Target size={12}/> أكثر ركيزة نشطة</p>
+           {topPillar ? (
+             <div className="flex items-center gap-3">
+               <div className="p-2.5 rounded-xl border shrink-0" style={{ backgroundColor: `${topPillar.tint}15`, borderColor: `${topPillar.tint}30`, color: topPillar.tint }}>
+                 <topPillar.icon size={18} />
+               </div>
+               <div>
+                 <span className="block text-[13px] font-bold text-white/80">{topPillar.label}</span>
+                 <span className="block text-[10px] text-white/40">{maxCount} أهداف نشطة</span>
+               </div>
+             </div>
+           ) : <span className="text-[11px] text-white/40">لا توجد بيانات</span>}
+        </div>
+      </div>
+
+      <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-[12px] font-bold leading-relaxed flex items-start gap-2.5 relative z-10">
+         <Sparkles size={16} className="shrink-0 mt-0.5 text-indigo-400" />
+         <p>{insight}</p>
+      </div>
+    </Card>
+  );
+}
+
+function GoalHeatmap({ goal, history }) {
+  const linked = goal.linkedHabits || [];
+  if (linked.length === 0) return null;
+
+  const days = [];
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay() - 84);
+
+  const formatDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatDate(today);
+
+  for (let i = 0; i < 91; i++) {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    const dateStr = formatDate(d);
+    const row = (history || []).find((h) => h.date === dateStr);
+    let doneCount = 0;
+    if (row && Array.isArray(row.done)) {
+      doneCount = linked.filter(id => row.done.includes(id)).length;
+    }
+    days.push({ date: dateStr, done: doneCount, total: linked.length, isToday: dateStr === todayStr });
+  }
+
+  return (
+    <div className="mt-4 p-3 rounded-xl bg-black/20 border border-white/5">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">خريطة الالتزام</span>
+        <div className="flex gap-1">
+          <div className="h-2 w-2 rounded-sm bg-white/10"></div>
+          <div className="h-2 w-2 rounded-sm bg-emerald-500/40"></div>
+          <div className="h-2 w-2 rounded-sm bg-emerald-500"></div>
+        </div>
+      </div>
+      <div 
+        className="grid gap-1" 
+        style={{ 
+          gridTemplateColumns: "repeat(13, 1fr)", 
+          gridTemplateRows: "repeat(7, 1fr)",
+          gridAutoFlow: "column",
+        }}
+      >
+        {days.map((day) => {
+          let color = "bg-white/5";
+          if (day.done > 0) {
+            const ratio = day.done / day.total;
+            color = ratio === 1 ? "bg-emerald-500" : "bg-emerald-500/40";
+          }
+          return (
+            <div
+              key={day.date}
+              title={`${day.date}: ${day.done} من ${day.total}`}
+              className={`aspect-square w-full rounded-[3px] transition-all hover:scale-125 hover:z-10 ${color} ${
+                day.isToday ? "ring-1 ring-white" : ""
+              }`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, onOpen }) {
+  const [burst, fireBurst] = useBurst(700);
+  const p = pillarOf(goal.pillar);
+  const pct = goalPct(goal, all, habits);
+  const pace = goalPace(goal, all);
+  const ripe = pct >= 100 && !goal.done;
+  const Icon = p.icon;
+
+  /* توهّج حافة البطاقة حسب الحالة — بدل قراءة شارة صغيرة، تفرز عينك
+     الأهداف المتعثّرة من أول نظرة على الشاشة كلها. يُحسب فقط للمتأخر
+     والمتقدّم؛ «على المسار» يبقى حياديًا كي لا يغرق التلوين كل بطاقة. */
+  const edgeTint =
+    !goal.done && pace.pace?.state === "behind"
+      ? T.danger
+      : !goal.done && pace.pace?.state === "ahead"
+        ? T.primary
+        : null;
+
+  const handle = () => {
+    if (!goal.done) fireBurst();
+    onToggle();
+  };
+
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 ${
+        goal.done
+          ? "bg-white/[0.02] border-white/5 opacity-70"
+          : "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]"
+      } ${burst ? "ring-2 ring-emerald-500" : ""}`}
+      style={
+        edgeTint
+          ? { borderInlineStart: `3px solid ${edgeTint}`, boxShadow: `0 0 22px -12px ${edgeTint}` }
+          : undefined
+      }
+    >
+      {ripe && <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-transparent pointer-events-none" />}
+
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <button onClick={handle} className={`mt-0.5 shrink-0 flex items-center justify-center h-5 w-5 rounded-md border transition-all ${goal.done ? 'bg-emerald-500 border-emerald-500' : 'border-white/20 hover:border-white/40'}`}>
+            {goal.done && <Check size={12} className="text-black" strokeWidth={3} />}
+          </button>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className={`text-[14px] font-bold leading-tight ${goal.done ? 'line-through text-white/40' : 'text-white/90'}`}>
+                {goal.text}
+              </h4>
+              <button onClick={onOpen} className="shrink-0 text-white/20 hover:text-white/80 transition-colors">
+                <SquarePen size={14} />
+              </button>
+            </div>
+            
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-1000" 
+                  style={{ 
+                    width: `${pct}%`, 
+                    backgroundColor: pct >= 100 ? T.primary : p.tint,
+                    boxShadow: `0 0 10px ${pct >= 100 ? T.primary : p.tint}`
+                  }} 
+                />
+              </div>
+              <span className="text-[11px] font-bold tabular-nums text-white/60">{pct}%</span>
+            </div>
+          </div>
+        </div>
+
+        {!goal.done && goal.nextAction && (
+          <div className="mb-4 flex items-center gap-2 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
+            <Flag size={14} className="text-orange-400 shrink-0" />
+            <span className="text-[12px] font-bold text-orange-200 leading-tight">
+              {goal.nextAction}
+            </span>
+          </div>
+        )}
+
+        {!goal.done && <GoalHeatmap goal={goal} history={history} />}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="px-2 py-1 rounded-md bg-white/5 text-[10px] font-bold text-white/50">{p.label}</span>
+          
+          {goal.target > 0 && (
+            <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+              {goal.current} / {goal.target} {goal.unit}
+            </span>
+          )}
+          
+          {goal.steps.length > 0 && (
+            <span className="px-2 py-1 rounded-md bg-blue-500/10 text-[10px] font-bold text-blue-400 flex items-center gap-1">
+              <ListChecks size={10} /> {goal.steps.filter(s => s.done).length} خطوات
+            </span>
+          )}
+
+          {goal.linkedHabits && goal.linkedHabits.length > 0 && (
+            <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+              <Link2 size={10} /> {goal.linkedHabits.length} عادات
+            </span>
+          )}
+
+          {pace.pace && (
+            <span className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 ${
+              pace.pace.state === 'behind' ? 'bg-red-500/10 text-red-400' : 
+              pace.pace.state === 'ahead' ? 'bg-emerald-500/10 text-emerald-400' : 
+              'bg-white/5 text-white/50'
+            }`}>
+              {pace.pace.state === 'behind' ? <TrendingDown size={10} /> : <TrendingUp size={10} />}
+              {pace.pace.label}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function HorizonRow({ clock, h, compact = false, on = false, as = "div", ...rest }) {
+  const Tag = as;
+  const dead = clock.state === "done";
+  return (
+    <Tag
+      className={`relative flex items-center justify-between p-4 sm:p-5 rounded-2xl border transition-all duration-300 w-full text-right ${
+        on ? "bg-white/[0.08] border-white/20 shadow-lg" : "bg-white/[0.02] border-transparent hover:bg-white/[0.05]"
+      }`}
+      {...rest}
+    >
+      <div className="flex items-center gap-4 w-[140px] sm:w-[180px] shrink-0">
+        <div className="p-2.5 rounded-xl border" style={{ backgroundColor: `${h.tint}15`, borderColor: `${h.tint}30`, color: h.tint }}>
+          <h.icon size={20} />
+        </div>
+        <div>
+          <div className="text-[15px] font-extrabold text-white">{h.label}</div>
+          <div className="text-[11px] font-bold text-white/50 mt-0.5">{clock.label}</div>
+        </div>
+      </div>
+
+      <div className="flex-1 px-4 sm:px-8">
+        <div className="flex items-center justify-between text-[12px] font-bold mb-2">
+          <span className="text-white/60">أُنجز: <span style={{ color: h.tint }}>{clock.hit}%</span></span>
+          <span className="text-white/40">مضى: {clock.pct}%</span>
+        </div>
+        <div className="h-2.5 w-full bg-black/40 rounded-full overflow-hidden">
+          <div 
+            className="h-full rounded-full transition-all duration-700" 
+            style={{ width: `${clock.hit}%`, backgroundColor: h.tint, boxShadow: `0 0 10px ${h.tint}` }} 
+          />
+        </div>
+      </div>
+
+      <div className="shrink-0 text-center pl-4 sm:pl-6 border-r border-white/10 min-w-[80px]">
+        <span className="block text-[28px] font-extrabold tabular-nums leading-none" style={{ color: h.tint }}>
+          {dead ? "0" : clock.left}
+        </span>
+        <span className="block text-[11px] font-bold text-white/50 mt-1">يوم متبقي</span>
+      </div>
+    </Tag>
+  );
+}
+
+function CountdownCard({ all, year, quarter, horizon, onPick }) {
+  return (
+    <Card className="p-6 sm:p-8 bg-gradient-to-br from-orange-500/5 to-transparent border-white/5 overflow-hidden relative">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+      
+      <div className="relative z-10 flex items-center gap-4 mb-6">
+        <div className="p-3 bg-orange-500/15 text-orange-400 rounded-2xl border border-orange-500/20">
+          <Hourglass size={24} />
+        </div>
+        <div>
+          <h3 className="text-[18px] font-extrabold text-white/90">العد التنازلي (الأفق الزمني)</h3>
+          <p className="text-[12px] text-white/40">الوقت المتبقي والإنجاز في كل أفق زمني</p>
+        </div>
+      </div>
+      
+      <div className="space-y-3 relative z-10">
+        {HORIZONS.map((h) => {
+          const clock = horizonClock(h.id, all, year, quarter);
+          return (
+            <HorizonRow
+              key={h.id}
+              as="button"
+              h={h}
+              clock={{ ...clock, label: clockLabel(h.id, year, quarter) }}
+              on={h.id === horizon}
+              onClick={() => onPick(h.id)}
+            />
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+const DRIFT_BAND = 10;
+
+function NorthStarCard({ value, onSave }) {
+  const [draft, setDraft] = useState(null);
+  const star = value || { word: "", vision: "" };
+  const empty = !star.word.trim() && !star.vision.trim();
+
+  const commit = () => {
+    onSave({
+      word: draft.word.trim().slice(0, WORD_MAX),
+      vision: draft.vision.trim().slice(0, VISION_MAX),
+    });
+    setDraft(null);
+  };
+
+  return (
+    <Card className="relative overflow-hidden p-6 sm:p-8 bg-black/20 border-white/5">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+      
+      <div className="relative flex flex-wrap items-start justify-between gap-3 mb-4">
+        <h3 className="flex items-center gap-2 text-[18px] font-extrabold text-white/90">
+          <Compass size={20} className="text-violet-400" /> كلمة سنتي ورؤيتي
+        </h3>
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={() => setDraft(draft ? null : { word: star.word, vision: star.vision })}
+          className="bg-white/5 hover:bg-white/10"
+        >
+          {draft ? <X size={14} /> : <SquarePen size={14} />}
+          {draft ? "إلغاء" : empty ? "اكتبها" : "تعديل"}
+        </Btn>
+      </div>
+
+      {draft ? (
+        <div className="relative mt-4 space-y-4">
+          <div>
+            <label className="mb-2 block text-[12px] font-bold text-white/50">كلمة واحدة تحكم السنة</label>
+            <Field
+              autoFocus
+              maxLength={WORD_MAX}
+              value={draft.word}
+              onChange={(e) => setDraft((d) => ({ ...d, word: e.target.value }))}
+              placeholder="مثال: إتقان"
+              className="bg-black/20 border-white/10 text-lg font-bold text-violet-300"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-[12px] font-bold text-white/50">الرؤية — من تريد أن تكون؟</label>
+            <Field
+              as="textarea"
+              rows={3}
+              maxLength={VISION_MAX}
+              value={draft.vision}
+              onChange={(e) => setDraft((d) => ({ ...d, vision: e.target.value }))}
+              placeholder="اكتبها بصيغة الحاضر..."
+              className="bg-black/20 border-white/10 text-[13px] leading-relaxed text-white/80"
+            />
+          </div>
+          <Btn variant="default" size="sm" onClick={commit} className="bg-violet-600 hover:bg-violet-500">
+            <Check size={14} /> حفظ الرؤية
+          </Btn>
+        </div>
+      ) : empty ? (
+        <p className="relative text-[13px] leading-relaxed text-white/40 italic">
+          "لم تكتب كلمتك بعد. كلمة واحدة وسطرٌ عن الرجل الذي تبنيه — هي ما يُبقيك على الأهداف حين يفتر الحافز."
+        </p>
+      ) : (
+        <div className="relative">
+          {star.word.trim() && (
+            <h4 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400 mb-3">
+              {star.word}
+            </h4>
+          )}
+          {star.vision.trim() && (
+            <p className="max-w-3xl text-[14px] leading-relaxed text-white/70">
+              {star.vision}
+            </p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function GoalMeter({ goal, pct, tint, onStep }) {
+  const has = goal.target > 0;
+  const full = pct >= 100;
+  const bar = full ? T.primary : tint;
+  return (
+    <div>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full"
+        style={{ background: "rgba(255,255,255,0.07)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${Math.min(100, pct)}%`,
+            backgroundImage: `linear-gradient(90deg, ${bar}, ${bar}AA)`,
+            boxShadow: pct ? `0 0 12px ${bar}99` : "none",
+          }}
+        />
+      </div>
+      {has && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span dir="ltr" className="text-[11px] tabular-nums" style={{ color: T.faint }}>
+            {goal.current} / {goal.target}
+            {goal.unit ? ` ${goal.unit}` : ""}
+          </span>
+          {onStep && (
+            <span className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onStep(-goal.step)}
+                disabled={goal.current <= 0}
+                aria-label={`أنقص ${goal.text}`}
+                className="flex h-6 w-6 items-center justify-center rounded-md border transition-all active:scale-90 disabled:opacity-25"
+                style={{ borderColor: T.border, color: T.muted }}
+              >
+                <Minus size={11} strokeWidth={3} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onStep(goal.step)}
+                disabled={goal.current >= goal.target}
+                aria-label={`زد ${goal.text}`}
+                className="flex h-6 w-6 items-center justify-center rounded-md border transition-all active:scale-90 disabled:opacity-25"
+                style={{ borderColor: `${tint}4D`, color: tint }}
+              >
+                <Plus size={11} strokeWidth={3} />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onDelete }) {
   const [step, setStep] = useState("");
-  /* Every hook runs before the early return, without exception. This sheet is
-     rendered with `goal === null` whenever it is shut, so a `useMemo` placed
-     after the guard would run on open and not on close — which is React
-     error #310 and a blank screen, not a warning. */
+  const [obstacleDraft, setObstacleDraft] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
+  
   const below = useMemo(() => {
     const out = new Set();
     if (!goal) return out;
@@ -421,25 +873,43 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
 
   const h = horizonOf(goal.horizon);
   const p = pillarOf(goal.pillar);
-  const pct = goalPct(goal, all);
+  const pct = goalPct(goal, all, habits);
+  const pace = goalPace(goal, all);
+  const paceTint = pace.pace?.state === "ahead" ? T.primary : pace.pace?.state === "behind" ? T.danger : T.accent;
   const want = parentHorizon(goal.horizon);
   const kids = all.filter((g) => g.parent === goal.id);
-  /* The goal's own year is always offered, even once the arc has moved past
-     it — otherwise the desk would show no year selected at all and the first
-     tap would move the goal somewhere the user never asked for. */
-  const deskYears = [...new Set([...GOAL_YEARS, goal.year])].sort((a, b) => a - b);
-  /* Only goals one horizon up may be a parent, and never one already below
-     this goal in the chain — that is the loop `migrate` has to repair, and it
-     is cheaper to make it unreachable in the picker than to repair it later. */
+  const deskYears = [...new Set([...GOAL_YEARS, goal.year])].sort((a, b) => a - b).filter((y) => y >= YEAR_MIN);
   const options = want
     ? all.filter((g) => g.horizon === want && g.id !== goal.id && !below.has(g.id))
     : [];
+
+  const linkedTasks = (tasks || []).filter(t => t.linkedGoalId === goal.id);
 
   const addStep = () => {
     const text = step.trim();
     if (!text) return;
     onPatch({ steps: [...goal.steps, { id: uid(), text, done: false }] });
     setStep("");
+  };
+
+  const addObstacle = () => {
+    const text = obstacleDraft.trim();
+    if (!text) return;
+    onPatch({ obstacles: [...(goal.obstacles || []), text] });
+    setObstacleDraft("");
+  };
+
+  const commitReview = () => {
+    const note = reviewNote.trim();
+    if (!note) return;
+    const newReview = {
+      id: uid(),
+      date: new Date().toISOString().split("T")[0],
+      note,
+      progress: pct
+    };
+    onPatch({ reviews: [...(goal.reviews || []), newReview] });
+    setReviewNote("");
   };
 
   const label = "mb-1.5 block text-xs";
@@ -488,23 +958,106 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
           </Btn>
         </div>
 
-        {/* why */}
-        <div>
-          <label htmlFor="los-gd-why" className={label} style={{ color: T.muted }}>
-            لماذا هذا الهدف؟
-          </label>
-          <Field
-            as="textarea"
-            id="los-gd-why"
-            rows={2}
-            value={goal.why}
-            onChange={(e) => onPatch({ why: e.target.value.slice(0, 400) })}
-            placeholder="السبب الذي يحملك عليه في الشهر السابع، لا في الأول."
-            className="resize-none leading-relaxed"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="los-gd-why" className={label} style={{ color: T.muted }}>
+              لماذا هذا الهدف؟
+            </label>
+            <Field
+              as="textarea"
+              id="los-gd-why"
+              rows={2}
+              value={goal.why}
+              onChange={(e) => onPatch({ why: e.target.value.slice(0, 400) })}
+              placeholder="السبب الذي يحملك عليه."
+              className="resize-none leading-relaxed"
+            />
+          </div>
+          <div>
+            <label htmlFor="los-gd-next" className={label} style={{ color: T.ctaLift }}>
+              الخطوة القادمة (تظهر في البطاقة)
+            </label>
+            <Field
+              as="textarea"
+              id="los-gd-next"
+              rows={2}
+              value={goal.nextAction}
+              onChange={(e) => onPatch({ nextAction: e.target.value })}
+              placeholder="مثال: اقرأ 20 صفحة اليوم"
+              className="resize-none leading-relaxed"
+            />
+          </div>
         </div>
 
-        {/* the window */}
+        <div className="rounded-2xl border p-4" style={{ borderColor: `${T.danger}3D`, background: `${T.danger}05` }}>
+          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.danger }}>
+            <AlertTriangle size={14} /> العقبات المتوقعة (Pre-mortem)
+          </p>
+          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            تخيل أنك فشلت في هذا الهدف. ما هو السبب الأكبر؟ سجله هنا وضع خطة لتجاوزه قبل أن يحدث.
+          </p>
+          <div className="space-y-2 mb-3">
+            {(goal.obstacles || []).map((obs, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/5 text-[11.5px]">
+                <span className="text-white/80">{obs}</span>
+                <button onClick={() => onPatch({ obstacles: goal.obstacles.filter((_, idx) => idx !== i) })} className="text-white/30 hover:text-red-400">
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Field
+              value={obstacleDraft}
+              onChange={(e) => setObstacleDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addObstacle()}
+              placeholder="مثال: الانشغال بالعمل، أو التعب بعد الظهر..."
+              className="flex-1 text-xs"
+            />
+            <Btn variant="danger" size="sm" onClick={addObstacle} className="shrink-0">
+              <Plus size={13} /> أضف
+            </Btn>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border p-4" style={{ borderColor: `${T.sky}3D`, background: `${T.sky}05` }}>
+          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
+            <History size={14} /> المراجعة الأسبوعية
+          </p>
+          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            سجل هنا ما تعلمته هذا الأسبوع. كيف كان أداؤك؟ وما الذي ستفعله بشكل مختلف الأسبوع القادم؟
+          </p>
+          
+          <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
+            {(goal.reviews || []).slice().reverse().map((rev) => (
+              <div key={rev.id} className="p-3 rounded-xl bg-black/20 border border-white/5 text-[11.5px]">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-bold text-sky-400">{rev.date}</span>
+                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/60">كان التقدم: {rev.progress}%</span>
+                </div>
+                <p className="text-white/80 leading-relaxed">{rev.note}</p>
+              </div>
+            ))}
+            {(goal.reviews || []).length === 0 && (
+              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مراجعات بعد.</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Field
+              as="textarea"
+              rows={2}
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              placeholder="أضف مراجعة لهذا الأسبوع..."
+              className="text-xs resize-none"
+            />
+            <Btn variant="default" size="sm" onClick={commitReview} className="self-end">
+              حفظ المراجعة
+            </Btn>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <span className={label} style={{ color: T.muted }}>
@@ -517,15 +1070,7 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
                   <button
                     key={x.id}
                     type="button"
-                    onClick={() =>
-                      /* Changing horizon invalidates the parent: a 90-day goal
-                         promoted to a yearly one cannot still serve the yearly
-                         goal it used to. Cutting it here is what keeps the
-                         chain legal without a repair pass. */
-                      on
-                        ? undefined
-                        : onPatch({ horizon: x.id, parent: null })
-                    }
+                    onClick={() => on ? undefined : onPatch({ horizon: x.id, parent: null })}
                     aria-pressed={on}
                     className="rounded-xl border px-2 py-2 text-[10.5px] font-bold transition-all"
                     style={{
@@ -600,7 +1145,6 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
           </div>
         </div>
 
-        {/* pillar */}
         <div>
           <span className={label} style={{ color: T.muted }}>
             الركيزة
@@ -630,7 +1174,6 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
           </div>
         </div>
 
-        {/* the chain */}
         {want && (
           <div>
             <label htmlFor="los-gd-parent" className={label} style={{ color: T.muted }}>
@@ -661,7 +1204,6 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
           </div>
         )}
 
-        {/* the meter */}
         <div
           className="rounded-2xl border p-4"
           style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
@@ -756,9 +1298,100 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
               />
             </div>
           )}
+
+          {pace.pace && goal.target > 0 && (
+            <div 
+              className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5"
+              style={{ borderColor: T.border, background: "rgba(255,255,255,0.02)" }}
+            >
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="font-bold" style={{ color: paceTint }}>
+                  {pace.pace.label}
+                </span>
+                <span style={{ color: T.faint }}>
+                  · مضى {pace.pct}% · أنجزت {pct}%
+                </span>
+              </div>
+              <div className="text-[10.5px] font-bold" style={{ color: paceTint }}>
+                {pace.pace.state === "behind" ? (
+                  <span>⚠️ متأخر بـ {pace.behindBy} {goal.unit} — تحتاج {Math.round(pace.rate.amount)} {goal.unit} {pace.rate.per}</span>
+                ) : pace.rate ? (
+                  <span>تحتاج {Math.round(pace.rate.amount)} {goal.unit} {pace.rate.per}</span>
+                ) : null}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* deadline */}
+        <div
+          className="rounded-2xl border p-4"
+          style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+        >
+          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.primary }}>
+            <Link2 size={14} /> العادات المرتبطة (تزيد التقدم تلقائياً)
+          </p>
+          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            عندما تضع علامة (✔) على أي من هذه العادات في قسم الروتين، سيزيد تقدم هذا الهدف تلقائياً بمقدار "الخطوة".
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+            {habits.map((h) => {
+              const isLinked = (goal.linkedHabits || []).includes(h.id);
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => {
+                    const linked = goal.linkedHabits || [];
+                    const next = isLinked ? linked.filter(id => id !== h.id) : [...linked, h.id];
+                    onPatch({ linkedHabits: next });
+                  }}
+                  className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold transition-all text-right"
+                  style={{
+                    borderColor: isLinked ? `${T.primary}80` : T.border,
+                    background: isLinked ? `${T.primary}1F` : "rgba(255,255,255,0.03)",
+                    color: isLinked ? T.primary : T.muted,
+                  }}
+                >
+                  <div className={`h-3.5 w-3.5 rounded-sm border flex shrink-0 items-center justify-center ${isLinked ? 'bg-emerald-500 border-emerald-500' : 'border-white/30'}`}>
+                    {isLinked && <Check size={10} className="text-black" />}
+                  </div>
+                  <span className="truncate">{h.label}</span>
+                </button>
+              );
+            })}
+            {habits.length === 0 && (
+              <p className="text-[10.5px] text-white/30 col-span-2">لا توجد عادات مضافة بعد.</p>
+            )}
+          </div>
+        </div>
+
+        {/* 👇 قسم المهام المرتبطة 👇 */}
+        <div
+          className="rounded-2xl border p-4"
+          style={{ borderColor: `${T.sky}3D`, background: `${T.sky}05` }}
+        >
+          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
+            <ListChecks size={14} /> المهام المرتبطة بهذا الهدف
+          </p>
+          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            هذه المهام عند إنجازها في "مصفوفة المهام" أو "اليوم"، تزيد من نسبة هذا الهدف تلقائياً.
+          </p>
+          <div className="space-y-2 mb-3">
+            {linkedTasks.map(t => (
+              <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 text-[11.5px] border border-white/5">
+                <span className={t.done ? "line-through text-white/40" : "text-white/80"}>{t.text}</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] ${t.done ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/50'}`}>
+                  {t.done ? "منجزة" : "قيد الانتظار"}
+                </span>
+              </div>
+            ))}
+            {linkedTasks.length === 0 && (
+              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مهام مرتبطة بهذا الهدف بعد. اذهب لمصفوفة المهام لربطها.</p>
+            )}
+          </div>
+        </div>
+        {/* 👆 نهاية قسم المهام المرتبطة 👆 */}
+
         <div>
           <label htmlFor="los-gd-deadline" className={label} style={{ color: T.muted }}>
             موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span>
@@ -781,7 +1414,6 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
           </p>
         </div>
 
-        {/* milestones */}
         <div>
           <span className={label} style={{ color: T.muted }}>
             الخطوات — ما الذي يجعله يتحرّك؟
@@ -844,7 +1476,6 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
           </div>
         </div>
 
-        {/* what it carries */}
         {kids.length > 0 && (
           <div
             className="rounded-2xl border p-4"
@@ -855,7 +1486,7 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
             </p>
             <div className="mt-2.5 space-y-1.5">
               {kids.map((k) => {
-                const kp = goalPct(k, all);
+                const kp = goalPct(k, all, habits);
                 return (
                   <div key={k.id} className="flex items-center gap-2">
                     <span
@@ -907,405 +1538,8 @@ function GoalDesk({ goal, all, onClose, onPatch, onDelete }) {
   );
 }
 
+const ARC_LABEL = "٢٠٢٧ — ٢٠٣٠";
 
-function GoalCard({ goal, all, parent, kids, onToggle, onStep, onOpen }) {
-  const [burst, fireBurst] = useBurst(700);
-  const p = pillarOf(goal.pillar);
-  const pct = goalPct(goal, all);
-  const ripe = pct >= 100 && !goal.done;
-  const Icon = p.icon;
-  const childLabel = horizonOf(goal.horizon).child;
-  const kidsDone = kids.filter((k) => k.done).length;
-
-  const handle = () => {
-    if (!goal.done) fireBurst();
-    onToggle();
-  };
-
-  return (
-    <div
-      className={`rounded-2xl border p-3.5 transition-all duration-200${
-        burst ? " los-reward" : ""
-      }`}
-      style={{
-        borderColor: burst
-          ? T.primary
-          : goal.done
-            ? `${T.primary}4D`
-            : ripe
-              ? `${T.accent}4D`
-              : T.border,
-        backgroundColor: goal.done
-          ? `${T.primary}0F`
-          : "rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="flex items-start gap-1">
-        <Checkbox
-          checked={goal.done}
-          onToggle={handle}
-          label={goal.text}
-          tint={T.primary}
-          size="sm"
-        />
-        <button
-          onClick={onOpen}
-          aria-label={`مكتب ${goal.text}`}
-          title="افتح المكتب"
-          className="shrink-0 rounded p-1.5 transition-all hover:scale-110"
-          style={{ color: p.tint }}
-        >
-          <SquarePen size={13} />
-        </button>
-      </div>
-
-      <div className="mt-2.5">
-        <GoalMeter goal={goal} pct={pct} tint={p.tint} onStep={onStep} />
-      </div>
-
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
-          style={{ background: `${p.tint}1A`, color: p.tint }}
-        >
-          <Icon size={9} />
-          {p.label}
-        </span>
-        <span
-          dir="ltr"
-          className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold tabular-nums"
-          style={{
-            background: pct >= 100 ? `${T.primary}1A` : "rgba(255,255,255,0.05)",
-            color: pct >= 100 ? T.primary : T.muted,
-          }}
-        >
-          {pct}%
-        </span>
-        <DeadlineChip day={goalEnd(goal)} done={goal.done} />
-        {goal.steps.length > 0 && (
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px]"
-            style={{ background: "rgba(255,255,255,0.05)", color: T.faint }}
-          >
-            <ListChecks size={9} />
-            <span dir="ltr" className="tabular-nums">
-              {goal.steps.filter((s) => s.done).length}/{goal.steps.length}
-            </span>
-          </span>
-        )}
-        {kids.length > 0 && (
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px]"
-            style={{ background: `${T.sky}14`, color: T.sky }}
-            title={`${childLabel || "هدف"} يخدم هذا الهدف`}
-          >
-            <Layers size={9} />
-            <span dir="ltr" className="tabular-nums">
-              {kidsDone}/{kids.length}
-            </span>
-          </span>
-        )}
-        {goal.why.trim() && (
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px]"
-            style={{ background: `${T.violet}14`, color: T.violet }}
-            title={goal.why}
-          >
-            <Lightbulb size={9} /> لماذا
-          </span>
-        )}
-      </div>
-
-      {/* The one line the chain is for: what this goal is in service of. */}
-      {parent ? (
-        <p
-          className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed"
-          style={{ color: T.faint }}
-        >
-          <Link2 size={10} className="mt-0.5 shrink-0" style={{ color: T.sky }} />
-          <span>
-            يخدم:{" "}
-            <span style={{ color: T.muted }}>{parent.text}</span>
-          </span>
-        </p>
-      ) : (
-        goal.horizon !== "h3" && (
-          <p
-            className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed"
-            style={{ color: `${T.accent}B3` }}
-          >
-            <AlertTriangle size={10} className="mt-0.5 shrink-0" />
-            <span>لا يخدم هدفًا أعلى — اربطه من المكتب.</span>
-          </p>
-        )
-      )}
-
-      {ripe && (
-        <p
-          className="los-in mt-2 flex items-center gap-1.5 text-[10px] font-bold"
-          style={{ color: T.accent }}
-        >
-          <Check size={11} strokeWidth={3} /> اكتمل القياس — علّمه مُحقَّقًا
-        </p>
-      )}
-    </div>
-  );
-}
-
-
-/* One horizon, as a row. The row is what fixed the design: three tall tiles
-   left most of their height empty and the numbers floating in it, which is
-   what reads as unfinished no matter how the type is set. */
-export function HorizonRow({ clock, h, compact = false, on = false, as = "div", ...rest }) {
-  const Tag = as;
-  const label = clock.label;
-  const dead = clock.state === "done";
-  return (
-    <Tag
-      className={`relative block w-full overflow-hidden rounded-xl border text-right transition-all duration-200${
-        as === "button" ? " hover:brightness-110" : ""
-      }`}
-      style={{
-        borderColor: on ? `${h.tint}80` : `${h.tint}2E`,
-        backgroundColor: on ? "transparent" : "rgba(255,255,255,0.025)",
-        backgroundImage: on
-          ? `linear-gradient(160deg, ${h.tint}24, ${h.tint}08)`
-          : "none",
-        boxShadow: on ? `0 10px 26px -18px ${h.tint}` : "none",
-        opacity: dead ? 0.55 : 1,
-        padding: compact ? "11px 13px 11px 13px" : "14px 16px",
-      }}
-      {...rest}
-    >
-      {/* the accent edge, on the reading-start side — the same rule the
-          project's own report charts are drawn with */}
-      <span
-        aria-hidden="true"
-        className="absolute block rounded-full"
-        style={{
-          right: 0,
-          top: compact ? 11 : 14,
-          bottom: compact ? 11 : 14,
-          width: 3,
-          background: h.tint,
-          boxShadow: `0 0 10px ${h.tint}99`,
-        }}
-      />
-
-      {/* Three columns — name, track, count — rather than two blocks pinned
-          to the edges. Pinned, the middle of a wide row is simply empty, and
-          an empty middle is what reads as unfinished however the type is set.
-          The order flips on a phone: name and count share the first line and
-          the track takes the second, which is the only way the track stays
-          wide enough to read at 375px. */}
-      <span className="flex flex-wrap items-center gap-x-4 gap-y-2.5 pr-3">
-        <span
-          className={`order-1 block min-w-0 flex-1 sm:flex-none ${
-            compact ? "sm:w-[108px]" : "sm:w-[132px]"
-          }`}
-        >
-          <span
-            className={`flex items-center gap-1.5 font-extrabold ${
-              compact ? "text-[11.5px]" : "text-[13px]"
-            }`}
-            style={{ color: h.tint }}
-          >
-            <h.icon size={compact ? 12 : 14} strokeWidth={2.2} />
-            <span className="truncate">{h.short}</span>
-          </span>
-          <span
-            className={`mt-0.5 block truncate ${compact ? "text-[9.5px]" : "text-[10.5px]"}`}
-            dir="auto"
-            style={{ color: T.faint }}
-          >
-            {label}
-          </span>
-        </span>
-
-        <span className="order-3 block w-full min-w-0 sm:order-2 sm:w-auto sm:flex-1">
-          <PaceTrack clock={clock} tint={h.tint} compact={compact} />
-          <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span
-              className={`flex items-center gap-2 ${compact ? "text-[9px]" : "text-[10px]"}`}
-              style={{ color: T.faint }}
-            >
-              <span>
-                مضى{" "}
-                <span dir="ltr" className="tabular-nums" style={{ color: T.muted }}>
-                  {clock.pct}%
-                </span>
-              </span>
-              <span aria-hidden="true" style={{ opacity: 0.35 }}>
-                ·
-              </span>
-              <span>
-                أُنجز{" "}
-                <span dir="ltr" className="tabular-nums" style={{ color: h.tint }}>
-                  {clock.hit}%
-                </span>
-              </span>
-            </span>
-            <span
-              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${
-                compact ? "text-[9px]" : "text-[9.5px]"
-              }`}
-              style={{
-                background:
-                  clock.goals && clock.done === clock.goals
-                    ? `${T.primary}1A`
-                    : "rgba(255,255,255,0.05)",
-                color: clock.goals && clock.done === clock.goals ? T.primary : T.muted,
-              }}
-            >
-              <Flag size={9} />
-              <span dir="ltr" className="tabular-nums">
-                {clock.done}/{clock.goals}
-              </span>
-            </span>
-            {clock.pace && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${
-                  compact ? "text-[9px]" : "text-[9.5px]"
-                }`}
-                style={{ background: `${clock.pace.tint}1A`, color: clock.pace.tint }}
-              >
-                {clock.drift >= DRIFT_BAND ? (
-                  <TrendingUp size={9} />
-                ) : clock.drift <= -DRIFT_BAND ? (
-                  <TrendingDown size={9} />
-                ) : (
-                  <Check size={9} strokeWidth={3} />
-                )}
-                {clock.pace.label}
-              </span>
-            )}
-          </span>
-        </span>
-
-        <span
-          className={`order-2 block shrink-0 text-left sm:order-3 ${
-            compact ? "sm:w-[72px]" : "sm:w-[88px]"
-          }`}
-        >
-          {dead ? (
-            <span
-              className={`block font-extrabold ${compact ? "text-[12px]" : "text-[14px]"}`}
-              style={{ color: T.faint }}
-            >
-              انتهت
-            </span>
-          ) : (
-            <>
-              <span className="flex items-baseline justify-start gap-1 leading-none">
-                <span
-                  dir="ltr"
-                  className={`font-extrabold tabular-nums ${
-                    compact ? "text-[23px]" : "text-[28px]"
-                  }`}
-                  style={{ color: h.tint, letterSpacing: "-0.02em" }}
-                >
-                  {clock.left}
-                </span>
-                <span
-                  className={`font-bold ${compact ? "text-[10px]" : "text-[11px]"}`}
-                  style={{ color: T.muted }}
-                >
-                  {dayWord(clock.left)}
-                </span>
-              </span>
-              {clock.state === "soon" && (
-                <span
-                  className="mt-0.5 block text-[9px] font-bold"
-                  style={{ color: T.faint }}
-                >
-                  يبدأ بعد{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {clock.until}
-                  </span>{" "}
-                  {dayWord(clock.until)}
-                </span>
-              )}
-            </>
-          )}
-        </span>
-      </span>
-    </Tag>
-  );
-}
-
-
-/* The horizon a goal's parent must belong to. The top of the chain has none,
-   which is also how the editor knows to hide the parent picker. */
-const ARC_LABEL = "٢٠٢٧ — ٢٠٢٩";
-
-
-
-/* The full card, for the goals screen. Each row also switches the horizon,
-   so the countdown is not a second control to learn beside the tabs. */
-function CountdownCard({ all, year, quarter, horizon, onPick }) {
-  return (
-    <Card className="p-6 sm:p-7">
-      <div className="min-w-0">
-        <h3
-          className="flex items-center gap-2 text-[16px] font-extrabold"
-          style={{ color: T.ctaLift }}
-        >
-          <Hourglass size={16} /> العدّ التنازلي
-        </h3>
-        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-          الشريط الملوّن ما أُنجز من أهداف النافذة، والعلامة البيضاء واقفة عند
-          اليوم الذي أنت فيه. إن سبقتِ العلامةُ الشريطَ فأنت متأخّر — وهذا هو
-          الرقم الذي يستحقّ النظر.
-        </p>
-      </div>
-
-      <div className="mt-5 space-y-2.5">
-        {HORIZONS.map((h) => {
-          const clock = horizonClock(h.id, all, year, quarter);
-          return (
-            <HorizonRow
-              key={h.id}
-              as="button"
-              h={h}
-              clock={{ ...clock, label: clockLabel(h.id, year, quarter) }}
-              on={h.id === horizon}
-              onClick={() => onPick(h.id)}
-              aria-pressed={h.id === horizon}
-            />
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-
-/* ==================================================================== *
- *  MODULE — goals across three horizons
- *
- *  A 90-day goal that serves nothing is a chore with a deadline. The screen
- *  is built around the chain rather than around a flat list: three years, the
- *  year, and the ninety days you are in — each row knowing the one above it
- *  that it serves and the ones below it that carry it.
- *
- *  The card is a glance and the desk is where the work happens, the same
- *  split the library and the university desk already use. A goal's reason,
- *  its meter, its milestones and its deadline all live on the desk; the card
- *  shows only what you scan for.
- * ==================================================================== */
-
-/* --- the horizon clock ------------------------------------------------ *
- *  How much of a window has gone, beside how much of its goals have. The
- *  first number alone is a countdown and decoration; the two together are
- *  the only thing that can tell you that you are behind, which is the one
- *  fact a planner exists to surface while there is still time to act on it.
- * ---------------------------------------------------------------------- */
-const DRIFT_BAND = 10; // inside ten points of the clock still counts as on pace
-
-
-/* «بقي ١٢ يومًا», «اليوم آخر يوم», «فات موعده قبل ٣ أيام». A window that has
-   closed has to say so — a goal silently sitting past its deadline is the
-   one state a planner must never render as normal. */
 function DeadlineChip({ day, done }) {
   const left = daysTo(day);
   if (left === null) return null;
@@ -1350,258 +1584,6 @@ function DeadlineChip({ day, done }) {
   );
 }
 
-
-/* A compact meter row. Used on the card and again on the desk, so the two
-   can never show a different number for the same goal. */
-function GoalMeter({ goal, pct, tint, onStep }) {
-  const has = goal.target > 0;
-  const full = pct >= 100;
-  const bar = full ? T.primary : tint;
-  return (
-    <div>
-      <div
-        className="h-1.5 w-full overflow-hidden rounded-full"
-        style={{ background: "rgba(255,255,255,0.07)" }}
-      >
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${Math.min(100, pct)}%`,
-            backgroundImage: `linear-gradient(90deg, ${bar}, ${bar}AA)`,
-            boxShadow: pct ? `0 0 12px ${bar}99` : "none",
-          }}
-        />
-      </div>
-      {has && (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span dir="ltr" className="text-[11px] tabular-nums" style={{ color: T.faint }}>
-            {goal.current} / {goal.target}
-            {goal.unit ? ` ${goal.unit}` : ""}
-          </span>
-          {onStep && (
-            <span className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => onStep(-goal.step)}
-                disabled={goal.current <= 0}
-                aria-label={`أنقص ${goal.text}`}
-                className="flex h-6 w-6 items-center justify-center rounded-md border transition-all active:scale-90 disabled:opacity-25"
-                style={{ borderColor: T.border, color: T.muted }}
-              >
-                <Minus size={11} strokeWidth={3} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onStep(goal.step)}
-                disabled={goal.current >= goal.target}
-                aria-label={`زد ${goal.text}`}
-                className="flex h-6 w-6 items-center justify-center rounded-md border transition-all active:scale-90 disabled:opacity-25"
-                style={{ borderColor: `${tint}4D`, color: tint }}
-              >
-                <Plus size={11} strokeWidth={3} />
-              </button>
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-/* The word and the vision. Above every goal on the screen, because it is
-   what the goals are for — eighteen targets with no sentence saying who they
-   are building is a list abandoned in March. */
-function NorthStarCard({ value, onSave }) {
-  const [draft, setDraft] = useState(null); // null = reading, object = editing
-  const star = value || { word: "", vision: "" };
-  const empty = !star.word.trim() && !star.vision.trim();
-
-  const commit = () => {
-    onSave({
-      word: draft.word.trim().slice(0, WORD_MAX),
-      vision: draft.vision.trim().slice(0, VISION_MAX),
-    });
-    setDraft(null);
-  };
-
-  return (
-    <Card className="relative overflow-hidden p-6 sm:p-7">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/4 h-56 w-56 rounded-full opacity-25 blur-3xl"
-        style={{ background: T.violet }}
-      />
-      <div className="relative flex flex-wrap items-start justify-between gap-3">
-        <h3
-          className="flex items-center gap-2 text-[16px] font-extrabold"
-          style={{ color: T.accent }}
-        >
-          <Compass size={17} /> كلمة سنتي ورؤيتي
-        </h3>
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            setDraft(draft ? null : { word: star.word, vision: star.vision })
-          }
-          style={{ borderColor: T.border }}
-        >
-          {draft ? <X size={13} /> : <SquarePen size={13} />}
-          {draft ? "إلغاء" : empty ? "اكتبها" : "تعديل"}
-        </Btn>
-      </div>
-
-      {draft ? (
-        <div className="los-in relative mt-4 space-y-3.5">
-          <div>
-            <label
-              htmlFor="los-ns-word"
-              className="mb-1.5 block text-xs"
-              style={{ color: T.muted }}
-            >
-              كلمة واحدة تحكم السنة
-            </label>
-            <Field
-              id="los-ns-word"
-              autoFocus
-              maxLength={WORD_MAX}
-              value={draft.word}
-              onChange={(e) => setDraft((d) => ({ ...d, word: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && commit()}
-              placeholder="مثال: إتقان"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="los-ns-vision"
-              className="mb-1.5 block text-xs"
-              style={{ color: T.muted }}
-            >
-              الرؤية — من تريد أن تكون في نهاية {ARC_LABEL}؟
-            </label>
-            <Field
-              as="textarea"
-              id="los-ns-vision"
-              rows={4}
-              maxLength={VISION_MAX}
-              value={draft.vision}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, vision: e.target.value }))
-              }
-              placeholder="اكتبها بصيغة الحاضر، كأنها قد تحقّقت: «أنا رجل يقوم لصلاته، يقرأ كل يوم، ويعمل فيما يحبّ…»"
-              className="resize-none leading-relaxed"
-            />
-            <p className="mt-1 text-left text-[10px] tabular-nums" dir="ltr" style={{ color: T.faint }}>
-              {draft.vision.length}/{VISION_MAX}
-            </p>
-          </div>
-          <Btn variant="default" size="sm" onClick={commit}>
-            <Check size={13} strokeWidth={3} /> احفظ
-          </Btn>
-        </div>
-      ) : empty ? (
-        <p
-          className="relative mt-4 text-[12.5px] leading-relaxed"
-          style={{ color: T.faint }}
-        >
-          لم تكتب كلمتك بعد. كلمة واحدة وسطرٌ عن الرجل الذي تبنيه — هي ما
-          يُبقيك على الأهداف حين يفتر الحافز.
-        </p>
-      ) : (
-        <div className="relative mt-4">
-          {star.word.trim() && (
-            <p
-              className="los-title text-3xl font-extrabold leading-tight sm:text-4xl"
-              style={{ wordBreak: "break-word" }}
-            >
-              {star.word}
-            </p>
-          )}
-          {star.vision.trim() && (
-            <p
-              className="mt-3 max-w-2xl whitespace-pre-line text-[13px] leading-relaxed"
-              style={{ color: T.muted }}
-            >
-              {star.vision}
-            </p>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-
-/* --- the pace track --------------------------------------------------- *
- *  One track, not two. The fill is how far the goals have got; the marker
- *  standing on it is where the calendar currently is. Marker ahead of fill
- *  means you are behind, and that reads in a glance without a legend —
- *  which two stacked bars never did, because at the start of a window they
- *  are both empty and look like a component that failed to load.
- *
- *  Everything is positioned from `right`: the page is RTL, so a window fills
- *  from the right edge the way the text runs.
- * ---------------------------------------------------------------------- */
-function PaceTrack({ clock, tint, compact = false }) {
-  const h = compact ? 7 : 9;
-  const behind = clock.pace && clock.drift <= -DRIFT_BAND;
-  return (
-    <span className="relative block" style={{ height: h + 10, marginTop: 2 }}>
-      {/* the window */}
-      <span
-        className="absolute inset-x-0 block overflow-hidden rounded-full"
-        style={{ top: 5, height: h, background: "rgba(255,255,255,0.09)" }}
-      >
-        {/* time already spent, kept very quiet — it is the backdrop the fill
-            is judged against, not a second thing to read */}
-        <span
-          className="absolute inset-y-0 block transition-all duration-700"
-          style={{
-            right: 0,
-            width: `${clock.pct}%`,
-            background: "rgba(255,255,255,0.10)",
-          }}
-        />
-        {/* what the goals have actually done */}
-        <span
-          className="absolute inset-y-0 block rounded-full transition-all duration-700"
-          style={{
-            right: 0,
-            width: `${clock.hit}%`,
-            backgroundImage: `linear-gradient(270deg, ${tint}, ${tint}99)`,
-            boxShadow: clock.hit ? `0 0 12px ${tint}AA` : "none",
-          }}
-        />
-      </span>
-
-      {/* «أنت هنا» — the calendar's own position on the window */}
-      {clock.state === "live" && (
-        <span
-          className="absolute block transition-all duration-700"
-          style={{ right: `${clock.pct}%`, top: 0, height: h + 10 }}
-          title={`مضى ${clock.pct}% من المدّة`}
-        >
-          <span
-            className="absolute block rounded-full"
-            style={{
-              top: 0,
-              right: -1.5,
-              width: 3,
-              height: h + 10,
-              background: behind ? T.danger : "rgba(255,255,255,0.85)",
-              boxShadow: behind
-                ? `0 0 10px ${T.danger}`
-                : "0 0 8px rgba(255,255,255,0.55)",
-            }}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
-
-
 export function horizonClock(id, all, year, quarter) {
   const [from, to] = windowOf(id, year, quarter);
   const stand = windowStand(from, to);
@@ -1618,9 +1600,6 @@ export function horizonClock(id, all, year, quarter) {
     ? Math.round(list.reduce((n, g) => n + goalPct(g, all), 0) / list.length)
     : 0;
   const done = list.filter((g) => g.done).length;
-  /* Pace is only a question once the window is open and has goals in it.
-     Calling an empty quarter «متأخّر» would be scolding someone for not yet
-     having written anything down. */
   const judged = stand.state === "live" && list.length > 0;
   const drift = hit - stand.pct;
   return {
@@ -1634,19 +1613,16 @@ export function horizonClock(id, all, year, quarter) {
     pace: !judged
       ? null
       : drift >= DRIFT_BAND
-        ? { label: "متقدّم على الوقت", tint: T.primary }
+        ? { label: "متقدّم", tint: T.primary }
         : drift <= -DRIFT_BAND
-          ? { label: "متأخّر عن الوقت", tint: T.danger }
+          ? { label: "متأخّر", tint: T.danger }
           : { label: "على المسار", tint: T.accent },
   };
 }
 
-
-/* The window each horizon is counting, named the way it is spoken. */
 export const clockLabel = (id, year, quarter) =>
   id === "h3"
     ? ARC_LABEL
     : id === "year"
       ? String(year)
       : `${quarterOf(quarter).label} · ${year}`;
-
