@@ -1062,19 +1062,36 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
           <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
             <Gauge size={14} /> القياس
           </p>
-          <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-            هدف بلا رقم لا يُقاس. اتركه صفرًا إن كان هدفًا بنعم أو لا — حينها
-            تقيسه خطواته أو الأهداف التي تخدمه.
-          </p>
-          {/* ٢×٢ لا صفّ من أربع: خانة الهدف وخانة الوحدة معًا تجيبان «شكل
-              خط النهاية؟»، وخانة المُحقَّق وخانة الخطوة معًا تجيبان «وين
-              أنت الآن، وبأي سرعة تتحرّك؟» — تجميع منطقي بدل أربع خانات
-              متلاصقة بلا رابط بينها. */}
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="los-gd-target" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
-                الهدف الرقمي
-              </label>
+          {/* سطر إرشاد واحد يتبدّل بحال الهدف — لا نصّ ثابت دائمًا: قبل
+              كتابة رقم يشرح متى الرقم أصلًا غير مطلوب، وبعدها يتحوّل لجملة
+              حيّة تقرأ الأرقام الأربعة معًا بدل أربع خانات متفرّقة. */}
+          {goal.target > 0 ? (
+            <p className="mt-1 text-[11px] leading-relaxed" style={{ color: T.muted }}>
+              🎯 خط النهاية:{" "}
+              <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: p.tint }}>
+                {goal.target} {goal.unit || "—"}
+              </span>
+              {" "}— كل إنجاز يضيف{" "}
+              <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: p.tint }}>
+                {goal.step}
+              </span>
+              .
+            </p>
+          ) : (
+            <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+              هدف بلا رقم لا يُقاس. اتركه صفرًا إن كان هدفًا بنعم أو لا — حينها
+              تقيسه خطواته أو الأهداف التي تخدمه.
+            </p>
+          )}
+
+          {/* خانتان مدموجتان بإطار واحد لكل سؤال — «كم خط النهاية؟» ثم «وين
+              أنت الآن؟» — بدل أربع خانات منفصلة بلا رابط بصري بينها. رقائق
+              الوحدات الشائعة تحت الأولى توفّر كتابتها يدويًا في الغالب. */}
+          <div className="mt-3">
+            <label htmlFor="los-gd-target" className="mb-1 block text-[10px] font-bold" style={{ color: T.faint }}>
+              خط النهاية — كم الرقم الذي تصل إليه؟
+            </label>
+            <div className="flex items-stretch overflow-hidden rounded-xl border" style={{ borderColor: T.border }}>
               <Field
                 id="los-gd-target"
                 type="number"
@@ -1089,25 +1106,45 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
                   });
                 }}
                 placeholder="0"
-                className="tabular-nums"
+                className="flex-1 text-center tabular-nums"
+                style={{ borderWidth: 0, borderRadius: 0 }}
               />
-            </div>
-            <div>
-              <label htmlFor="los-gd-unit" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
-                الوحدة
-              </label>
+              <div className="w-px shrink-0" style={{ background: T.border }} />
               <Field
                 id="los-gd-unit"
                 maxLength={16}
                 value={goal.unit}
                 onChange={(e) => onPatch({ unit: e.target.value })}
                 placeholder="كتاب"
+                className="w-28 shrink-0"
+                style={{ borderWidth: 0, borderRadius: 0 }}
               />
             </div>
-            <div>
-              <label htmlFor="los-gd-current" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
-                المُحقَّق
-              </label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {UNIT_SUGGESTIONS.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => onPatch({ unit: u })}
+                  aria-pressed={goal.unit === u}
+                  className="rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all"
+                  style={{
+                    borderColor: goal.unit === u ? `${p.tint}80` : T.border,
+                    background: goal.unit === u ? `${p.tint}1F` : "transparent",
+                    color: goal.unit === u ? p.tint : T.faint,
+                  }}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label htmlFor="los-gd-current" className="mb-1 block text-[10px] font-bold" style={{ color: T.faint }}>
+              أين أنت الآن؟
+            </label>
+            <div className="flex items-stretch overflow-hidden rounded-xl border" style={{ borderColor: T.border }}>
               <Field
                 id="los-gd-current"
                 type="number"
@@ -1119,24 +1156,29 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
                   onPatch({ current: goal.target > 0 ? Math.min(goal.target, n) : n });
                 }}
                 placeholder="0"
-                className="tabular-nums"
+                className="flex-1 text-center tabular-nums"
+                style={{ borderWidth: 0, borderRadius: 0 }}
               />
-            </div>
-            <div>
-              <label htmlFor="los-gd-step" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
-                مقدار الخطوة
+              <div className="w-px shrink-0" style={{ background: T.border }} />
+              <label
+                htmlFor="los-gd-step"
+                className="flex shrink-0 items-center gap-1.5 px-2 text-[10px] font-bold whitespace-nowrap"
+                style={{ color: T.faint }}
+              >
+                بخطوة
+                <Field
+                  id="los-gd-step"
+                  type="number"
+                  min="1"
+                  dir="ltr"
+                  value={goal.step}
+                  onChange={(e) =>
+                    onPatch({ step: Math.max(1, Math.round(+e.target.value) || 1) })
+                  }
+                  className="w-14 shrink-0 text-center tabular-nums"
+                  style={{ borderWidth: 0, borderRadius: 0 }}
+                />
               </label>
-              <Field
-                id="los-gd-step"
-                type="number"
-                min="1"
-                dir="ltr"
-                value={goal.step}
-                onChange={(e) =>
-                  onPatch({ step: Math.max(1, Math.round(+e.target.value) || 1) })
-                }
-                className="tabular-nums"
-              />
             </div>
           </div>
           {goal.target > 0 && (
@@ -1666,6 +1708,10 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
 }
 
 const ARC_LABEL = "٢٠٢٧ — ٢٠٣٠";
+
+/* وحدات شائعة تكفي أغلب الأهداف الرقمية — تعبئة بضغطة بدل كتابة يدوية
+   في الغالب. الحقل يبقى نصًّا حرًّا، فكتابة وحدة غير موجودة هنا لا تُرفض. */
+const UNIT_SUGGESTIONS = ["كتاب", "صفحة", "ساعة", "مرة", "ريال", "كيلومتر"];
 
 function DeadlineChip({ day, done }) {
   const left = daysTo(day);
