@@ -123,8 +123,6 @@ export const taskShape = (t) => {
     /* Empty means "we do not know when this was written", which is the
        honest reading of a task from before this field existed. */
     createdAt: isKey(t.createdAt) ? t.createdAt : "",
-    
-    // 👇 التعديل الجديد تم إضافته هنا 👇
     linkedGoalId: typeof t.linkedGoalId === "string" ? t.linkedGoalId : null,
   };
 };

@@ -1,5 +1,5 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
-import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, openingWindow, parentHorizon, pillarOf, quarterOf, rows, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
+import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
 import { AlertTriangle, Check, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -324,11 +324,25 @@ export function GoalsModule({ state, setState }) {
       <GoalDesk
         goal={desk}
         all={all}
-        tasks={state.tasks || []} // <--- تمرير المهام هنا
+        tasks={state.tasks || []}
         habits={state.habits || []}
         history={state.history || []}
         onClose={() => setDeskId(null)}
         onPatch={(fields) => patch(deskId, fields)}
+        onAddTask={(text) =>
+          setState((s) => ({
+            ...s,
+            tasks: [
+              ...(s.tasks || []),
+              taskShape({
+                text,
+                quadrant: "q2",
+                linkedGoalId: deskId,
+                order: nextOrder(s.tasks, "q2"),
+              }),
+            ],
+          }))
+        }
         onDelete={() => {
           remove(deskId);
           setDeskId(null);
@@ -849,10 +863,11 @@ function GoalMeter({ goal, pct, tint, onStep }) {
   );
 }
 
-function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onDelete }) {
+function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTask, onDelete }) {
   const [step, setStep] = useState("");
   const [obstacleDraft, setObstacleDraft] = useState("");
   const [reviewNote, setReviewNote] = useState("");
+  const [taskDraft, setTaskDraft] = useState("");
   
   const below = useMemo(() => {
     const out = new Set();
@@ -910,6 +925,13 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onDelet
     };
     onPatch({ reviews: [...(goal.reviews || []), newReview] });
     setReviewNote("");
+  };
+
+  const addLinkedTask = () => {
+    const text = taskDraft.trim();
+    if (!text) return;
+    onAddTask(text);
+    setTaskDraft("");
   };
 
   const label = "mb-1.5 block text-xs";
@@ -1090,49 +1112,53 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onDelet
             <span className={label} style={{ color: T.muted }}>
               {goal.horizon === "quarter" ? "الربع والسنة" : "السنة"}
             </span>
-            <div className="flex gap-1.5">
-              {goal.horizon === "quarter" &&
-                QUARTERS.map((q) => {
-                  const on = q.id === goal.quarter;
-                  return (
-                    <button
-                      key={q.id}
-                      type="button"
-                      onClick={() => onPatch({ quarter: q.id })}
-                      aria-pressed={on}
-                      className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold transition-all"
-                      style={{
-                        borderColor: on ? `${q.tint}80` : T.border,
-                        background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)",
-                        color: on ? q.tint : T.muted,
-                      }}
-                      title={q.months}
-                    >
-                      {q.id.toUpperCase()}
-                    </button>
-                  );
-                })}
-              {goal.horizon !== "h3" &&
-                deskYears.map((y) => {
-                  const on = y === goal.year;
-                  return (
-                    <button
-                      key={y}
-                      type="button"
-                      onClick={() => onPatch({ year: y })}
-                      aria-pressed={on}
-                      dir="ltr"
-                      className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold tabular-nums transition-all"
-                      style={{
-                        borderColor: on ? `${T.accent}80` : T.border,
-                        background: on ? `${T.accent}1F` : "rgba(255,255,255,0.03)",
-                        color: on ? T.accent : T.muted,
-                      }}
-                    >
+            {/* صفّ واحد بدل تسعة أزرار متلاصقة: الأرباع أزرار لأنها أربعة
+                فقط وتُقارَن ببعضها، والسنة منتقٍ مدمج لأن قائمتها تطول مع
+                فتح كل سنة مدرج جديدة — صفّ من خمس سنوات كأزرار هو بالضبط
+                الازدحام الذي كانت عليه هذه البطاقة. */}
+            <div className="flex items-center gap-1.5">
+              {goal.horizon === "quarter" && (
+                <div className="flex flex-1 gap-1.5">
+                  {QUARTERS.map((q) => {
+                    const on = q.id === goal.quarter;
+                    return (
+                      <button
+                        key={q.id}
+                        type="button"
+                        onClick={() => onPatch({ quarter: q.id })}
+                        aria-pressed={on}
+                        className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold transition-all"
+                        style={{
+                          borderColor: on ? `${q.tint}80` : T.border,
+                          background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)",
+                          color: on ? q.tint : T.muted,
+                        }}
+                        title={q.months}
+                      >
+                        {q.id.toUpperCase()}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {goal.horizon !== "h3" && (
+                <select
+                  value={goal.year}
+                  onChange={(e) => onPatch({ year: +e.target.value })}
+                  dir="ltr"
+                  aria-label="السنة"
+                  className={`rounded-xl border py-2 text-[12px] font-extrabold tabular-nums outline-none transition-colors focus:border-white/30 ${
+                    goal.horizon === "quarter" ? "w-20 shrink-0 px-2 text-center" : "flex-1 px-3"
+                  }`}
+                  style={{ borderColor: `${T.accent}80`, background: T.cardSolid, color: T.accent }}
+                >
+                  {deskYears.map((y) => (
+                    <option key={y} value={y} style={{ background: T.cardSolid }}>
                       {y}
-                    </button>
-                  );
-                })}
+                    </option>
+                  ))}
+                </select>
+              )}
               {goal.horizon === "h3" && (
                 <p
                   className="flex-1 rounded-xl border px-3 py-2 text-center text-[10.5px] font-bold"
@@ -1365,7 +1391,6 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onDelet
           </div>
         </div>
 
-        {/* 👇 قسم المهام المرتبطة 👇 */}
         <div
           className="rounded-2xl border p-4"
           style={{ borderColor: `${T.sky}3D`, background: `${T.sky}05` }}
@@ -1374,23 +1399,36 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onDelet
             <ListChecks size={14} /> المهام المرتبطة بهذا الهدف
           </p>
           <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-            هذه المهام عند إنجازها في "مصفوفة المهام" أو "اليوم"، تزيد من نسبة هذا الهدف تلقائياً.
+            إنجازها من هنا أو من مصفوفة المهام يزيد نسبة هذا الهدف تلقائيًا.
           </p>
           <div className="space-y-2 mb-3">
-            {linkedTasks.map(t => (
+            {linkedTasks.map((t) => (
               <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 text-[11.5px] border border-white/5">
                 <span className={t.done ? "line-through text-white/40" : "text-white/80"}>{t.text}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] ${t.done ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/50'}`}>
+                <span className={`px-2 py-0.5 rounded text-[10px] ${t.done ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/50"}`}>
                   {t.done ? "منجزة" : "قيد الانتظار"}
                 </span>
               </div>
             ))}
             {linkedTasks.length === 0 && (
-              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مهام مرتبطة بهذا الهدف بعد. اذهب لمصفوفة المهام لربطها.</p>
+              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مهام مرتبطة بهذا الهدف بعد.</p>
             )}
           </div>
+          {/* تُنشَأ في «مهم غير عاجل» مربوطة بهذا الهدف مباشرة — بلا مغادرة
+              هذه النافذة لمصفوفة المهام ثم العودة لربطها يدويًا. */}
+          <div className="flex gap-2">
+            <Field
+              value={taskDraft}
+              onChange={(e) => setTaskDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addLinkedTask()}
+              placeholder="مهمة جديدة لهذا الهدف..."
+              className="flex-1 text-xs"
+            />
+            <Btn variant="outline" size="sm" onClick={addLinkedTask} className="shrink-0" style={{ borderColor: `${T.sky}80`, color: T.sky }}>
+              <Plus size={13} /> أضف
+            </Btn>
+          </div>
         </div>
-        {/* 👆 نهاية قسم المهام المرتبطة 👆 */}
 
         <div>
           <label htmlFor="los-gd-deadline" className={label} style={{ color: T.muted }}>
