@@ -1,6 +1,6 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
 import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
-import { AlertTriangle, Check, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 export function GoalsModule({ state, setState }) {
@@ -863,12 +863,45 @@ function GoalMeter({ goal, pct, tint, onStep }) {
   );
 }
 
+/* قسم قابل للطيّ — للعقبات والمراجعة الأسبوعية في مكتب الهدف: صندوقان
+   كبيران ملوّنان كانا يظهران بكامل حجمهما حتى فارغين تمامًا، فيستقبلانك
+   بإلحاح بصري في أول فتح لأي هدف جديد. يبدأ مفتوحًا فقط إن كان فيه محتوى
+   بالفعل — هدف فارغ يرى سطرًا واحدًا، هدف مكتوب فيه يرى ما كتبه مباشرة. */
+function CollapsibleSection({ icon: Icon, tint, title, count, children }) {
+  const [open, setOpen] = useState(count > 0);
+  return (
+    <div className="rounded-2xl border p-4" style={{ borderColor: `${tint}3D`, background: `${tint}05` }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 text-right"
+        aria-expanded={open}
+      >
+        <Icon size={14} style={{ color: tint }} />
+        <span className="flex-1 text-[12.5px] font-bold" style={{ color: tint }}>
+          {title}
+          {count > 0 && <span dir="ltr"> ({count})</span>}
+        </span>
+        <ChevronDown
+          size={15}
+          className="transition-transform duration-200"
+          style={{ color: tint, transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        />
+      </button>
+      {open && <div className="mt-1">{children}</div>}
+    </div>
+  );
+}
+
 function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTask, onDelete }) {
   const [step, setStep] = useState("");
   const [obstacleDraft, setObstacleDraft] = useState("");
   const [reviewNote, setReviewNote] = useState("");
   const [taskDraft, setTaskDraft] = useState("");
-  
+  /* عادات ومهام هذا الهدف سؤال واحد — «شو يغذّيه يوميًا؟» — فتُعرضان في
+     بطاقة واحدة بعلامتي تبويب بدل بطاقتين منفصلتين بنفس العنوان الفرعي. */
+  const [linkTab, setLinkTab] = useState("habits");
+
   const below = useMemo(() => {
     const out = new Set();
     if (!goal) return out;
@@ -951,13 +984,10 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-bold"
-            style={{ background: `${h.tint}1A`, color: h.tint }}
-          >
-            <h.icon size={12} /> {h.label}
-          </span>
+        {/* الصف العلوي للأهمّ فقط — النسبة وزر الإنجاز. أفق الهدف وموعده
+            معلومتان لا فعل، ومكانهما بجانب ما يضبطهما لا هنا: الأفق بجانب
+            أزرار الأفق أسفل، والموعد بجانب حقل الموعد النهائي. */}
+        <div className="flex items-center gap-2">
           <span
             dir="ltr"
             className="rounded-lg px-2 py-1 text-[12px] font-extrabold tabular-nums"
@@ -968,7 +998,6 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
           >
             {pct}%
           </span>
-          <DeadlineChip day={goalEnd(goal)} done={goal.done} />
           <Btn
             variant={goal.done ? "default" : "outline"}
             size="sm"
@@ -1011,10 +1040,12 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
           </div>
         </div>
 
-        <div className="rounded-2xl border p-4" style={{ borderColor: `${T.danger}3D`, background: `${T.danger}05` }}>
-          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.danger }}>
-            <AlertTriangle size={14} /> العقبات المتوقعة (Pre-mortem)
-          </p>
+        <CollapsibleSection
+          icon={AlertTriangle}
+          tint={T.danger}
+          title="العقبات المتوقعة (Pre-mortem)"
+          count={(goal.obstacles || []).length}
+        >
           <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
             تخيل أنك فشلت في هذا الهدف. ما هو السبب الأكبر؟ سجله هنا وضع خطة لتجاوزه قبل أن يحدث.
           </p>
@@ -1040,16 +1071,18 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
               <Plus size={13} /> أضف
             </Btn>
           </div>
-        </div>
+        </CollapsibleSection>
 
-        <div className="rounded-2xl border p-4" style={{ borderColor: `${T.sky}3D`, background: `${T.sky}05` }}>
-          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
-            <History size={14} /> المراجعة الأسبوعية
-          </p>
+        <CollapsibleSection
+          icon={History}
+          tint={T.sky}
+          title="المراجعة الأسبوعية"
+          count={(goal.reviews || []).length}
+        >
           <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
             سجل هنا ما تعلمته هذا الأسبوع. كيف كان أداؤك؟ وما الذي ستفعله بشكل مختلف الأسبوع القادم؟
           </p>
-          
+
           <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
             {(goal.reviews || []).slice().reverse().map((rev) => (
               <div key={rev.id} className="p-3 rounded-xl bg-black/20 border border-white/5 text-[11.5px]">
@@ -1078,12 +1111,18 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
               حفظ المراجعة
             </Btn>
           </div>
-        </div>
+        </CollapsibleSection>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <span className={label} style={{ color: T.muted }}>
+            <span className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>
               الأفق
+              <span
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                style={{ background: `${h.tint}1A`, color: h.tint }}
+              >
+                <h.icon size={10} /> {h.label}
+              </span>
             </span>
             <div className="grid grid-cols-3 gap-1.5">
               {HORIZONS.map((x) => {
@@ -1241,7 +1280,11 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
             هدف بلا رقم لا يُقاس. اتركه صفرًا إن كان هدفًا بنعم أو لا — حينها
             تقيسه خطواته أو الأهداف التي تخدمه.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* ٢×٢ لا صفّ من أربع: خانة الهدف وخانة الوحدة معًا تجيبان «شكل
+              خط النهاية؟»، وخانة المُحقَّق وخانة الخطوة معًا تجيبان «وين
+              أنت الآن، وبأي سرعة تتحرّك؟» — تجميع منطقي بدل أربع خانات
+              متلاصقة بلا رابط بينها. */}
+          <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="los-gd-target" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
                 الهدف الرقمي
@@ -1264,6 +1307,18 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
               />
             </div>
             <div>
+              <label htmlFor="los-gd-unit" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
+                الوحدة
+              </label>
+              <Field
+                id="los-gd-unit"
+                maxLength={16}
+                value={goal.unit}
+                onChange={(e) => onPatch({ unit: e.target.value })}
+                placeholder="كتاب"
+              />
+            </div>
+            <div>
               <label htmlFor="los-gd-current" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
                 المُحقَّق
               </label>
@@ -1279,18 +1334,6 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
                 }}
                 placeholder="0"
                 className="tabular-nums"
-              />
-            </div>
-            <div>
-              <label htmlFor="los-gd-unit" className="mb-1 block text-[10px]" style={{ color: T.faint }}>
-                الوحدة
-              </label>
-              <Field
-                id="los-gd-unit"
-                maxLength={16}
-                value={goal.unit}
-                onChange={(e) => onPatch({ unit: e.target.value })}
-                placeholder="كتاب"
               />
             </div>
             <div>
@@ -1354,85 +1397,111 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
           style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
         >
           <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.primary }}>
-            <Link2 size={14} /> العادات المرتبطة (تزيد التقدم تلقائياً)
+            <Link2 size={14} /> ما يغذّي هذا الهدف
           </p>
           <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-            عندما تضع علامة (✔) على أي من هذه العادات في قسم الروتين، سيزيد تقدم هذا الهدف تلقائياً بمقدار "الخطوة".
+            عادة أو مهمة تُنجَز تزيد تقدّم هذا الهدف تلقائيًا بمقدار «الخطوة».
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-            {habits.map((h) => {
-              const isLinked = (goal.linkedHabits || []).includes(h.id);
-              return (
-                <button
-                  key={h.id}
-                  type="button"
-                  onClick={() => {
-                    const linked = goal.linkedHabits || [];
-                    const next = isLinked ? linked.filter(id => id !== h.id) : [...linked, h.id];
-                    onPatch({ linkedHabits: next });
-                  }}
-                  className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold transition-all text-right"
-                  style={{
-                    borderColor: isLinked ? `${T.primary}80` : T.border,
-                    background: isLinked ? `${T.primary}1F` : "rgba(255,255,255,0.03)",
-                    color: isLinked ? T.primary : T.muted,
-                  }}
-                >
-                  <div className={`h-3.5 w-3.5 rounded-sm border flex shrink-0 items-center justify-center ${isLinked ? 'bg-emerald-500 border-emerald-500' : 'border-white/30'}`}>
-                    {isLinked && <Check size={10} className="text-black" />}
-                  </div>
-                  <span className="truncate">{h.label}</span>
-                </button>
-              );
-            })}
-            {habits.length === 0 && (
-              <p className="text-[10.5px] text-white/30 col-span-2">لا توجد عادات مضافة بعد.</p>
-            )}
-          </div>
-        </div>
 
-        <div
-          className="rounded-2xl border p-4"
-          style={{ borderColor: `${T.sky}3D`, background: `${T.sky}05` }}
-        >
-          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}>
-            <ListChecks size={14} /> المهام المرتبطة بهذا الهدف
-          </p>
-          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-            إنجازها من هنا أو من مصفوفة المهام يزيد نسبة هذا الهدف تلقائيًا.
-          </p>
-          <div className="space-y-2 mb-3">
-            {linkedTasks.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 text-[11.5px] border border-white/5">
-                <span className={t.done ? "line-through text-white/40" : "text-white/80"}>{t.text}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] ${t.done ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/50"}`}>
-                  {t.done ? "منجزة" : "قيد الانتظار"}
-                </span>
+          {/* سؤال واحد — «شو يغذّي هذا الهدف يوميًا؟» — بعلامتي تبويب بدل
+              بطاقتين منفصلتين كانتا تكرّران نفس العنوان الفرعي تقريبًا. */}
+          <div className="mb-3 flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setLinkTab("habits")}
+              aria-pressed={linkTab === "habits"}
+              className="flex-1 rounded-xl border py-2 text-[11px] font-bold transition-all"
+              style={{
+                borderColor: linkTab === "habits" ? `${T.primary}80` : T.border,
+                background: linkTab === "habits" ? `${T.primary}1F` : "rgba(255,255,255,0.03)",
+                color: linkTab === "habits" ? T.primary : T.muted,
+              }}
+            >
+              عادات{(goal.linkedHabits || []).length > 0 && <span dir="ltr"> ({(goal.linkedHabits || []).length})</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLinkTab("tasks")}
+              aria-pressed={linkTab === "tasks"}
+              className="flex-1 rounded-xl border py-2 text-[11px] font-bold transition-all"
+              style={{
+                borderColor: linkTab === "tasks" ? `${T.sky}80` : T.border,
+                background: linkTab === "tasks" ? `${T.sky}1F` : "rgba(255,255,255,0.03)",
+                color: linkTab === "tasks" ? T.sky : T.muted,
+              }}
+            >
+              مهام{linkedTasks.length > 0 && <span dir="ltr"> ({linkedTasks.length})</span>}
+            </button>
+          </div>
+
+          {linkTab === "habits" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+              {habits.map((h) => {
+                const isLinked = (goal.linkedHabits || []).includes(h.id);
+                return (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => {
+                      const linked = goal.linkedHabits || [];
+                      const next = isLinked ? linked.filter(id => id !== h.id) : [...linked, h.id];
+                      onPatch({ linkedHabits: next });
+                    }}
+                    className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold transition-all text-right"
+                    style={{
+                      borderColor: isLinked ? `${T.primary}80` : T.border,
+                      background: isLinked ? `${T.primary}1F` : "rgba(255,255,255,0.03)",
+                      color: isLinked ? T.primary : T.muted,
+                    }}
+                  >
+                    <div className={`h-3.5 w-3.5 rounded-sm border flex shrink-0 items-center justify-center ${isLinked ? 'bg-emerald-500 border-emerald-500' : 'border-white/30'}`}>
+                      {isLinked && <Check size={10} className="text-black" />}
+                    </div>
+                    <span className="truncate">{h.label}</span>
+                  </button>
+                );
+              })}
+              {habits.length === 0 && (
+                <p className="text-[10.5px] text-white/30 col-span-2">لا توجد عادات مضافة بعد.</p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2 mb-3">
+                {linkedTasks.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 text-[11.5px] border border-white/5">
+                    <span className={t.done ? "line-through text-white/40" : "text-white/80"}>{t.text}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] ${t.done ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/50"}`}>
+                      {t.done ? "منجزة" : "قيد الانتظار"}
+                    </span>
+                  </div>
+                ))}
+                {linkedTasks.length === 0 && (
+                  <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مهام مرتبطة بهذا الهدف بعد.</p>
+                )}
               </div>
-            ))}
-            {linkedTasks.length === 0 && (
-              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مهام مرتبطة بهذا الهدف بعد.</p>
-            )}
-          </div>
-          {/* تُنشَأ في «مهم غير عاجل» مربوطة بهذا الهدف مباشرة — بلا مغادرة
-              هذه النافذة لمصفوفة المهام ثم العودة لربطها يدويًا. */}
-          <div className="flex gap-2">
-            <Field
-              value={taskDraft}
-              onChange={(e) => setTaskDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addLinkedTask()}
-              placeholder="مهمة جديدة لهذا الهدف..."
-              className="flex-1 text-xs"
-            />
-            <Btn variant="outline" size="sm" onClick={addLinkedTask} className="shrink-0" style={{ borderColor: `${T.sky}80`, color: T.sky }}>
-              <Plus size={13} /> أضف
-            </Btn>
-          </div>
+              {/* تُنشَأ في «مهم غير عاجل» مربوطة بهذا الهدف مباشرة — بلا
+                  مغادرة هذه النافذة لمصفوفة المهام ثم العودة لربطها يدويًا. */}
+              <div className="flex gap-2">
+                <Field
+                  value={taskDraft}
+                  onChange={(e) => setTaskDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addLinkedTask()}
+                  placeholder="مهمة جديدة لهذا الهدف..."
+                  className="flex-1 text-xs"
+                />
+                <Btn variant="outline" size="sm" onClick={addLinkedTask} className="shrink-0" style={{ borderColor: `${T.sky}80`, color: T.sky }}>
+                  <Plus size={13} /> أضف
+                </Btn>
+              </div>
+            </>
+          )}
         </div>
 
         <div>
-          <label htmlFor="los-gd-deadline" className={label} style={{ color: T.muted }}>
+          <label htmlFor="los-gd-deadline" className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>
             موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span>
+            <DeadlineChip day={goalEnd(goal)} done={goal.done} />
           </label>
           <div className="flex items-center gap-2">
             <DateField
