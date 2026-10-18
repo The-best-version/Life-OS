@@ -667,11 +667,10 @@ export function weekReview(state, now = new Date()) {
   const scored = new Set(scoredOf(live).map((h) => h.id));
   const ranked = [...tally.entries()]
     .filter(([id, v]) => v.asked >= 3 && scored.has(id))
-    .map(([id, v]) => ({
-      label: live.find((h) => h.id === id)?.label || "عادة محذوفة",
-      kept: v.kept,
-      asked: v.asked,
-    }))
+    .map(([id, v]) => {
+      const h = live.find((x) => x.id === id);
+      return { label: h?.label || "عادة محذوفة", min: h?.min || "", kept: v.kept, asked: v.asked };
+    })
     .sort((a, b) => b.kept - a.kept || a.label.localeCompare(b.label, "ar"));
 
   if (ranked.length) {
@@ -681,6 +680,22 @@ export function weekReview(state, now = new Date()) {
       out.push(line(`• ${num(r.kept)}/${num(r.asked)} — ${r.label}${mark}`));
     }
     if (ranked.length > 6) out.push(line(`و${num(ranked.length - 6)} عادات أخرى`));
+
+    /* الأصعب: أدنى نسبة محافظة لا أدنى عدد — عادة سُئلت ٣ مرات وحُفظت مرة
+       واحدة أصعب فعلًا من عادة سُئلت ٧ وحُفظت مرتين، وإن كان عددها أكبر.
+       لا تُذكر إن حافظ عليها كل يوم — أسبوع كامل ليس له «أصعب». */
+    const hardest = ranked
+      .filter((r) => r.kept < r.asked)
+      .sort((a, b) => a.kept / a.asked - b.kept / b.asked)[0];
+    if (hardest) {
+      out.push(
+        line(
+          `💡 الأصعب هذا الأسبوع: ${hardest.label}${
+            hardest.min ? ` — جرّب أقل نسخة منها: ${hardest.min}` : ""
+          }`,
+        ),
+      );
+    }
     out.push("");
   }
 
@@ -711,7 +726,17 @@ export function weekReview(state, now = new Date()) {
   const readingInWeek = rows(s.reading).filter((r) => r.date >= from && r.date <= today);
   const readingDays = new Set(readingInWeek.filter((r) => (r.pages || 0) > 0).map((r) => r.date)).size;
   const pages = sumPages(readingInWeek);
-  out.push(line(`📖 القراءة: ${num(readingDays)} من ${num(7)} أيام · ${pagesWord(pages)}`));
+  /* الصفحات وحدها رقم؛ الفائدة هي الجملة التي يمكن أن يرددها بعد أسبوع —
+     نفس التفريق الذي من أجله وُجد noteShape أصلًا، والمراجعة الأسبوعية
+     كانت تذكر الصفحات فقط وتترك ما استُخلص منها غير مذكور. */
+  const points = notesSince(s.books, from);
+  out.push(
+    line(
+      `📖 القراءة: ${num(readingDays)} من ${num(7)} أيام · ${pagesWord(pages)}${
+        points ? ` · ${pointsWord(points)}` : ""
+      }`,
+    ),
+  );
 
   const focusInWeek = rows(sessionsSince(s.sessions, 7, today));
   const focusDays = new Set(focusInWeek.map((r) => r.date)).size;

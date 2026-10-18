@@ -576,11 +576,15 @@ test("the weekly review counts the gaps and never averages them", () => {
     ],
   };
   const out = weekReview(s, at(20));
-  /* The average is over the two days that recorded, and the two that did not
-     are named: an average over «the rows that exist» flatters every stretch
-     where the recording stopped. */
-  assert.ok(out.includes("٨٠"));
-  assert.ok(out.includes("يومان بدون تسجيل"));
+  /* Seven days are judged, not four: the two the fixture never wrote a row
+     for at all are exactly as unlogged as the two explicit gaps, and all
+     five are named rather than folded into a zero. The two real days are
+     reported individually against the same bar (STREAK_TARGET, 80%) rather
+     than blended into one average — a 100% day and a 60% day averaging to
+     "80%" would say the week cleared the bar when only half of it did. */
+  assert.ok(out.includes("٥ أيام بلا تسجيل"));
+  assert.ok(out.includes("يوم واحد فوق ٨٠٪"));
+  assert.ok(out.includes("يوم واحد دون الهدف"));
 });
 
 test("the weekly review names the habit the week says is hard", () => {
@@ -614,9 +618,11 @@ test("the weekly review names the habit the week says is hard", () => {
 
 /* --- the schedule's two new entries ------------------------------------ */
 
+/* Same reason as the identical helper in bot.test.mjs: the smart nudge
+   defaults on and has no test of its own here. */
 const withBot = (part) => {
   const s = freshState();
-  return { ...s, bot: botShape({ ...s.bot, ...part }), place: null };
+  return { ...s, bot: botShape({ ...s.bot, nudge: { on: false }, ...part }), place: null };
 };
 
 test("the coach and the weekly are off until he turns them on", () => {

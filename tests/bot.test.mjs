@@ -310,9 +310,14 @@ test("the morning cue is the same all day and different tomorrow", () => {
    into moments, and turning a kind into a sentence built from the day as it
    stands when it fires rather than when it was armed. */
 
+/* The smart nudge is on by default and has no test of its own in this file
+   — every test below predates it and is about something else entirely, so
+   it is switched off here rather than once per call. A test that actually
+   wants it overrides this by passing its own `nudge` in `part`, since the
+   spread below runs after. */
 const withBot = (part) => {
   const s = freshState();
-  return { ...s, bot: botShape({ ...s.bot, ...part }), place: null };
+  return { ...s, bot: botShape({ ...s.bot, nudge: { on: false }, ...part }), place: null };
 };
 
 test("the plan becomes moments on the day it is asked about", () => {

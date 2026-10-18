@@ -204,6 +204,7 @@ test("a timed entry today is armed, an untimed one is not", () => {
     ...s.bot,
     morningOn: false,
     eveningOn: false,
+    nudge: { on: false },
     events: { on: true, before: 30 },
   });
   const timed = eventShape({ title: "الدكتور", date: today, time: "17:00" });
@@ -233,6 +234,7 @@ test("a block nudge is anchored to the prayers, never to the clock", () => {
     ...s.bot,
     morningOn: false,
     eveningOn: false,
+    nudge: { on: false },
     blocks: { on: true, after: 10 },
   });
   /* With no city there are no prayer times and so no blocks — an invented
