@@ -1,6 +1,6 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
 import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
-import { AlertTriangle, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 export function GoalsModule({ state, setState }) {
@@ -10,6 +10,11 @@ export function GoalsModule({ state, setState }) {
   const [quarter, setQuarter] = useState(() => openingWindow(state.goals).quarter);
   const [year, setYear] = useState(() => openingWindow(state.goals).year);
   const [deskId, setDeskId] = useState(null);
+  /* مكتب الهدف المُنشأ تَوّه يفتح على قسم «الإعدادات» موسّعًا — يحتاجه ليختار
+     الركيزة والأفق أول مرة. أي فتح لاحق لنفس الهدف يلقاه مطويًا كغيره.
+     يُمسح عند إغلاق المكتب، لا عند تغيّر الهدف نفسه، فتعديل النص أو أي
+     حقل آخر وأنت بعدها داخل نفس الجلسة لا يُطوي القسم تحتك. */
+  const [newGoalId, setNewGoalId] = useState(null);
   const [orphansOnly, setOrphansOnly] = useState(false);
 
   const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
@@ -97,6 +102,7 @@ export function GoalsModule({ state, setState }) {
     });
     setState((s) => ({ ...s, goals: [...(s.goals || []), row] }));
     setDeskId(row.id);
+    setNewGoalId(row.id);
   };
 
   const desk = deskId ? byId.get(deskId) : null;
@@ -322,12 +328,17 @@ export function GoalsModule({ state, setState }) {
       </div>
 
       <GoalDesk
+        key={deskId}
         goal={desk}
+        isNew={deskId === newGoalId}
         all={all}
         tasks={state.tasks || []}
         habits={state.habits || []}
         history={state.history || []}
-        onClose={() => setDeskId(null)}
+        onClose={() => {
+          setDeskId(null);
+          setNewGoalId(null);
+        }}
         onPatch={(fields) => patch(deskId, fields)}
         onAddTask={(text) =>
           setState((s) => ({
@@ -867,8 +878,8 @@ function GoalMeter({ goal, pct, tint, onStep }) {
    كبيران ملوّنان كانا يظهران بكامل حجمهما حتى فارغين تمامًا، فيستقبلانك
    بإلحاح بصري في أول فتح لأي هدف جديد. يبدأ مفتوحًا فقط إن كان فيه محتوى
    بالفعل — هدف فارغ يرى سطرًا واحدًا، هدف مكتوب فيه يرى ما كتبه مباشرة. */
-function CollapsibleSection({ icon: Icon, tint, title, count, children }) {
-  const [open, setOpen] = useState(count > 0);
+function CollapsibleSection({ icon: Icon, tint, title, count, defaultOpen, children }) {
+  const [open, setOpen] = useState(defaultOpen !== undefined ? defaultOpen : count > 0);
   return (
     <div className="rounded-2xl border p-4" style={{ borderColor: `${tint}3D`, background: `${tint}05` }}>
       <button
@@ -893,7 +904,7 @@ function CollapsibleSection({ icon: Icon, tint, title, count, children }) {
   );
 }
 
-function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTask, onDelete }) {
+function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, onAddTask, onDelete }) {
   const [step, setStep] = useState("");
   const [obstacleDraft, setObstacleDraft] = useState("");
   const [reviewNote, setReviewNote] = useState("");
@@ -1040,235 +1051,10 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
           </div>
         </div>
 
-        <CollapsibleSection
-          icon={AlertTriangle}
-          tint={T.danger}
-          title="العقبات المتوقعة (Pre-mortem)"
-          count={(goal.obstacles || []).length}
-        >
-          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-            تخيل أنك فشلت في هذا الهدف. ما هو السبب الأكبر؟ سجله هنا وضع خطة لتجاوزه قبل أن يحدث.
-          </p>
-          <div className="space-y-2 mb-3">
-            {(goal.obstacles || []).map((obs, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/5 text-[11.5px]">
-                <span className="text-white/80">{obs}</span>
-                <button onClick={() => onPatch({ obstacles: goal.obstacles.filter((_, idx) => idx !== i) })} className="text-white/30 hover:text-red-400">
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Field
-              value={obstacleDraft}
-              onChange={(e) => setObstacleDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addObstacle()}
-              placeholder="مثال: الانشغال بالعمل، أو التعب بعد الظهر..."
-              className="flex-1 text-xs"
-            />
-            <Btn variant="danger" size="sm" onClick={addObstacle} className="shrink-0">
-              <Plus size={13} /> أضف
-            </Btn>
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          icon={History}
-          tint={T.sky}
-          title="المراجعة الأسبوعية"
-          count={(goal.reviews || []).length}
-        >
-          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
-            سجل هنا ما تعلمته هذا الأسبوع. كيف كان أداؤك؟ وما الذي ستفعله بشكل مختلف الأسبوع القادم؟
-          </p>
-
-          <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
-            {(goal.reviews || []).slice().reverse().map((rev) => (
-              <div key={rev.id} className="p-3 rounded-xl bg-black/20 border border-white/5 text-[11.5px]">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-bold text-sky-400">{rev.date}</span>
-                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/60">كان التقدم: {rev.progress}%</span>
-                </div>
-                <p className="text-white/80 leading-relaxed">{rev.note}</p>
-              </div>
-            ))}
-            {(goal.reviews || []).length === 0 && (
-              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مراجعات بعد.</p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Field
-              as="textarea"
-              rows={2}
-              value={reviewNote}
-              onChange={(e) => setReviewNote(e.target.value)}
-              placeholder="أضف مراجعة لهذا الأسبوع..."
-              className="text-xs resize-none"
-            />
-            <Btn variant="default" size="sm" onClick={commitReview} className="self-end">
-              حفظ المراجعة
-            </Btn>
-          </div>
-        </CollapsibleSection>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <span className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>
-              الأفق
-              <span
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
-                style={{ background: `${h.tint}1A`, color: h.tint }}
-              >
-                <h.icon size={10} /> {h.label}
-              </span>
-            </span>
-            <div className="grid grid-cols-3 gap-1.5">
-              {HORIZONS.map((x) => {
-                const on = x.id === goal.horizon;
-                return (
-                  <button
-                    key={x.id}
-                    type="button"
-                    onClick={() => on ? undefined : onPatch({ horizon: x.id, parent: null })}
-                    aria-pressed={on}
-                    className="rounded-xl border px-2 py-2 text-[10.5px] font-bold transition-all"
-                    style={{
-                      borderColor: on ? `${x.tint}80` : T.border,
-                      background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)",
-                      color: on ? x.tint : T.muted,
-                    }}
-                  >
-                    {x.short}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <span className={label} style={{ color: T.muted }}>
-              {goal.horizon === "quarter" ? "الربع والسنة" : "السنة"}
-            </span>
-            {/* صفّ واحد بدل تسعة أزرار متلاصقة: الأرباع أزرار لأنها أربعة
-                فقط وتُقارَن ببعضها، والسنة منتقٍ مدمج لأن قائمتها تطول مع
-                فتح كل سنة مدرج جديدة — صفّ من خمس سنوات كأزرار هو بالضبط
-                الازدحام الذي كانت عليه هذه البطاقة. */}
-            <div className="flex items-center gap-1.5">
-              {goal.horizon === "quarter" && (
-                <div className="flex flex-1 gap-1.5">
-                  {QUARTERS.map((q) => {
-                    const on = q.id === goal.quarter;
-                    return (
-                      <button
-                        key={q.id}
-                        type="button"
-                        onClick={() => onPatch({ quarter: q.id })}
-                        aria-pressed={on}
-                        className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold transition-all"
-                        style={{
-                          borderColor: on ? `${q.tint}80` : T.border,
-                          background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)",
-                          color: on ? q.tint : T.muted,
-                        }}
-                        title={q.months}
-                      >
-                        {q.id.toUpperCase()}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {goal.horizon !== "h3" && (
-                <select
-                  value={goal.year}
-                  onChange={(e) => onPatch({ year: +e.target.value })}
-                  dir="ltr"
-                  aria-label="السنة"
-                  className={`rounded-xl border py-2 text-[12px] font-extrabold tabular-nums outline-none transition-colors focus:border-white/30 ${
-                    goal.horizon === "quarter" ? "w-20 shrink-0 px-2 text-center" : "flex-1 px-3"
-                  }`}
-                  style={{ borderColor: `${T.accent}80`, background: T.cardSolid, color: T.accent }}
-                >
-                  {deskYears.map((y) => (
-                    <option key={y} value={y} style={{ background: T.cardSolid }}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {goal.horizon === "h3" && (
-                <p
-                  className="flex-1 rounded-xl border px-3 py-2 text-center text-[10.5px] font-bold"
-                  style={{ borderColor: T.border, color: T.faint }}
-                >
-                  {ARC_LABEL}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <span className={label} style={{ color: T.muted }}>
-            الركيزة
-          </span>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {PILLARS.map((x) => {
-              const on = x.id === goal.pillar;
-              const XIcon = x.icon;
-              return (
-                <button
-                  key={x.id}
-                  type="button"
-                  onClick={() => onPatch({ pillar: x.id })}
-                  aria-pressed={on}
-                  className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all"
-                  style={{
-                    borderColor: on ? `${x.tint}80` : T.border,
-                    background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)",
-                    color: on ? x.tint : T.muted,
-                  }}
-                >
-                  <XIcon size={14} strokeWidth={2} />
-                  {x.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {want && (
-          <div>
-            <label htmlFor="los-gd-parent" className={label} style={{ color: T.muted }}>
-              يخدم هدف «{horizonOf(want).label}»
-            </label>
-            <select
-              id="los-gd-parent"
-              value={goal.parent || ""}
-              onChange={(e) => onPatch({ parent: e.target.value || null })}
-              className="w-full rounded-xl border bg-transparent px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-white/30"
-              style={{ borderColor: T.border, color: T.muted }}
-            >
-              <option value="" style={{ background: T.cardSolid }}>
-                — لا يخدم شيئًا بعد —
-              </option>
-              {options.map((g) => (
-                <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>
-                  {g.text}
-                </option>
-              ))}
-            </select>
-            {options.length === 0 && (
-              <p className="mt-1.5 text-[10.5px]" style={{ color: T.accent }}>
-                لا أهداف في أفق «{horizonOf(want).label}» بعد — أضف واحدًا أولًا
-                ليصبح لهذا الهدف ما يخدمه.
-              </p>
-            )}
-          </div>
-        )}
-
+        {/* من هنا للأسفل: كل شي تعمل عليه فعليًا — تقيس، تربط، تنجز — قبل
+            كل شي تضبطه مرة وحدة ثم تنساه. العقبات والمراجعة بعدها لأنها
+            عمل متقطّع لا يومي، والإعدادات (الأفق، الركيزة، الموعد) في
+            آخر قسم مطوي لأنها الأقل تكرارًا من كل ما سبقها. */}
         <div
           className="rounded-2xl border p-4"
           style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
@@ -1369,7 +1155,7 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
           )}
 
           {pace.pace && goal.target > 0 && (
-            <div 
+            <div
               className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5"
               style={{ borderColor: T.border, background: "rgba(255,255,255,0.02)" }}
             >
@@ -1499,29 +1285,6 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
         </div>
 
         <div>
-          <label htmlFor="los-gd-deadline" className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>
-            موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span>
-            <DeadlineChip day={goalEnd(goal)} done={goal.done} />
-          </label>
-          <div className="flex items-center gap-2">
-            <DateField
-              id="los-gd-deadline"
-              value={goal.deadline}
-              onChange={(v) => onPatch({ deadline: v })}
-            />
-            {goal.deadline && (
-              <Btn variant="ghost" size="sm" onClick={() => onPatch({ deadline: "" })} style={{ borderColor: T.border }}>
-                <X size={13} /> امسح
-              </Btn>
-            )}
-          </div>
-          <p className="mt-1.5 text-[10.5px]" style={{ color: T.faint }}>
-            بلا موعد، ينتهي الهدف مع نهاية نافذته:{" "}
-            <span dir="ltr">{goalEnd(goal)}</span>.
-          </p>
-        </div>
-
-        <div>
           <span className={label} style={{ color: T.muted }}>
             الخطوات — ما الذي يجعله يتحرّك؟
           </span>
@@ -1582,6 +1345,263 @@ function GoalDesk({ goal, all, tasks, habits, history, onClose, onPatch, onAddTa
             </Btn>
           </div>
         </div>
+
+        <CollapsibleSection
+          icon={AlertTriangle}
+          tint={T.danger}
+          title="العقبات المتوقعة (Pre-mortem)"
+          count={(goal.obstacles || []).length}
+        >
+          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            تخيل أنك فشلت في هذا الهدف. ما هو السبب الأكبر؟ سجله هنا وضع خطة لتجاوزه قبل أن يحدث.
+          </p>
+          <div className="space-y-2 mb-3">
+            {(goal.obstacles || []).map((obs, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/5 text-[11.5px]">
+                <span className="text-white/80">{obs}</span>
+                <button onClick={() => onPatch({ obstacles: goal.obstacles.filter((_, idx) => idx !== i) })} className="text-white/30 hover:text-red-400">
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Field
+              value={obstacleDraft}
+              onChange={(e) => setObstacleDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addObstacle()}
+              placeholder="مثال: الانشغال بالعمل، أو التعب بعد الظهر..."
+              className="flex-1 text-xs"
+            />
+            <Btn variant="danger" size="sm" onClick={addObstacle} className="shrink-0">
+              <Plus size={13} /> أضف
+            </Btn>
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          icon={History}
+          tint={T.sky}
+          title="المراجعة الأسبوعية"
+          count={(goal.reviews || []).length}
+        >
+          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>
+            سجل هنا ما تعلمته هذا الأسبوع. كيف كان أداؤك؟ وما الذي ستفعله بشكل مختلف الأسبوع القادم؟
+          </p>
+
+          <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
+            {(goal.reviews || []).slice().reverse().map((rev) => (
+              <div key={rev.id} className="p-3 rounded-xl bg-black/20 border border-white/5 text-[11.5px]">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-bold text-sky-400">{rev.date}</span>
+                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/60">كان التقدم: {rev.progress}%</span>
+                </div>
+                <p className="text-white/80 leading-relaxed">{rev.note}</p>
+              </div>
+            ))}
+            {(goal.reviews || []).length === 0 && (
+              <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مراجعات بعد.</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Field
+              as="textarea"
+              rows={2}
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              placeholder="أضف مراجعة لهذا الأسبوع..."
+              className="text-xs resize-none"
+            />
+            <Btn variant="default" size="sm" onClick={commitReview} className="self-end">
+              حفظ المراجعة
+            </Btn>
+          </div>
+        </CollapsibleSection>
+
+        {/* الأفق، الركيزة، الربط بهدف أعلى، والموعد النهائي — تُضبط مرة
+            عند إنشاء الهدف وتُنسى بعدها، فهي القسم الوحيد المطويّ دائمًا
+            إلا لحظة الإنشاء نفسها (isNew). */}
+        <CollapsibleSection icon={Settings} tint={T.muted} title="الإعدادات" defaultOpen={isNew}>
+          <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <span className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>
+                الأفق
+                <span
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                  style={{ background: `${h.tint}1A`, color: h.tint }}
+                >
+                  <h.icon size={10} /> {h.label}
+                </span>
+              </span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {HORIZONS.map((x) => {
+                  const on = x.id === goal.horizon;
+                  return (
+                    <button
+                      key={x.id}
+                      type="button"
+                      onClick={() => on ? undefined : onPatch({ horizon: x.id, parent: null })}
+                      aria-pressed={on}
+                      className="rounded-xl border px-2 py-2 text-[10.5px] font-bold transition-all"
+                      style={{
+                        borderColor: on ? `${x.tint}80` : T.border,
+                        background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)",
+                        color: on ? x.tint : T.muted,
+                      }}
+                    >
+                      {x.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <span className={label} style={{ color: T.muted }}>
+                {goal.horizon === "quarter" ? "الربع والسنة" : "السنة"}
+              </span>
+              {/* صفّ واحد بدل تسعة أزرار متلاصقة: الأرباع أزرار لأنها أربعة
+                  فقط وتُقارَن ببعضها، والسنة منتقٍ مدمج لأن قائمتها تطول مع
+                  فتح كل سنة مدرج جديدة — صفّ من خمس سنوات كأزرار هو بالضبط
+                  الازدحام الذي كانت عليه هذه البطاقة. */}
+              <div className="flex items-center gap-1.5">
+                {goal.horizon === "quarter" && (
+                  <div className="flex flex-1 gap-1.5">
+                    {QUARTERS.map((q) => {
+                      const on = q.id === goal.quarter;
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => onPatch({ quarter: q.id })}
+                          aria-pressed={on}
+                          className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold transition-all"
+                          style={{
+                            borderColor: on ? `${q.tint}80` : T.border,
+                            background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)",
+                            color: on ? q.tint : T.muted,
+                          }}
+                          title={q.months}
+                        >
+                          {q.id.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {goal.horizon !== "h3" && (
+                  <select
+                    value={goal.year}
+                    onChange={(e) => onPatch({ year: +e.target.value })}
+                    dir="ltr"
+                    aria-label="السنة"
+                    className={`rounded-xl border py-2 text-[12px] font-extrabold tabular-nums outline-none transition-colors focus:border-white/30 ${
+                      goal.horizon === "quarter" ? "w-20 shrink-0 px-2 text-center" : "flex-1 px-3"
+                    }`}
+                    style={{ borderColor: `${T.accent}80`, background: T.cardSolid, color: T.accent }}
+                  >
+                    {deskYears.map((y) => (
+                      <option key={y} value={y} style={{ background: T.cardSolid }}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {goal.horizon === "h3" && (
+                  <p
+                    className="flex-1 rounded-xl border px-3 py-2 text-center text-[10.5px] font-bold"
+                    style={{ borderColor: T.border, color: T.faint }}
+                  >
+                    {ARC_LABEL}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <span className={label} style={{ color: T.muted }}>
+              الركيزة
+            </span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {PILLARS.map((x) => {
+                const on = x.id === goal.pillar;
+                const XIcon = x.icon;
+                return (
+                  <button
+                    key={x.id}
+                    type="button"
+                    onClick={() => onPatch({ pillar: x.id })}
+                    aria-pressed={on}
+                    className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all"
+                    style={{
+                      borderColor: on ? `${x.tint}80` : T.border,
+                      background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)",
+                      color: on ? x.tint : T.muted,
+                    }}
+                  >
+                    <XIcon size={14} strokeWidth={2} />
+                    {x.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {want && (
+            <div className="mt-4">
+              <label htmlFor="los-gd-parent" className={label} style={{ color: T.muted }}>
+                يخدم هدف «{horizonOf(want).label}»
+              </label>
+              <select
+                id="los-gd-parent"
+                value={goal.parent || ""}
+                onChange={(e) => onPatch({ parent: e.target.value || null })}
+                className="w-full rounded-xl border bg-transparent px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-white/30"
+                style={{ borderColor: T.border, color: T.muted }}
+              >
+                <option value="" style={{ background: T.cardSolid }}>
+                  — لا يخدم شيئًا بعد —
+                </option>
+                {options.map((g) => (
+                  <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>
+                    {g.text}
+                  </option>
+                ))}
+              </select>
+              {options.length === 0 && (
+                <p className="mt-1.5 text-[10.5px]" style={{ color: T.accent }}>
+                  لا أهداف في أفق «{horizonOf(want).label}» بعد — أضف واحدًا أولًا
+                  ليصبح لهذا الهدف ما يخدمه.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4">
+            <label htmlFor="los-gd-deadline" className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>
+              موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span>
+              <DeadlineChip day={goalEnd(goal)} done={goal.done} />
+            </label>
+            <div className="flex items-center gap-2">
+              <DateField
+                id="los-gd-deadline"
+                value={goal.deadline}
+                onChange={(v) => onPatch({ deadline: v })}
+              />
+              {goal.deadline && (
+                <Btn variant="ghost" size="sm" onClick={() => onPatch({ deadline: "" })} style={{ borderColor: T.border }}>
+                  <X size={13} /> امسح
+                </Btn>
+              )}
+            </div>
+            <p className="mt-1.5 text-[10.5px]" style={{ color: T.faint }}>
+              بلا موعد، ينتهي الهدف مع نهاية نافذته:{" "}
+              <span dir="ltr">{goalEnd(goal)}</span>.
+            </p>
+          </div>
+        </CollapsibleSection>
 
         {kids.length > 0 && (
           <div
