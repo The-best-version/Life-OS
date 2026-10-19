@@ -899,7 +899,13 @@ export {
   windowStand,
   openingWindow,
   syncHabitToGoals,
-  syncTaskToGoal, 
+  syncTaskToGoal,
+  GROWTH_STAGES,
+  GROWTH_WEIGHTS,
+  GROWTH_STREAK_FULL,
+  GROWTH_WEEK,
+  weekPace,
+  treeGrowth,
 } from "./life-state-goals.mjs";
 
 /* The library, plus its memory: a point carries the day it comes back on,

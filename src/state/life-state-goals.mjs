@@ -460,3 +460,64 @@ export function syncTaskToGoal(goals, goalId, isDone) {
     return g;
   });
 }
+/* ── نموّ الشجرة ───────────────────────────────────────────────────────
+ *  الشجرة لا تملك شيئًا: ارتفاعها وورقها وثمرها كلها مقروءة من الصفوف
+ *  التي تملكها الشاشات الأخرى — تقدّم الأهداف، وما سجّله الأرشيف هذا
+ *  الأسبوع، والسلسلة. رقمٌ مخزَّن هنا كان سيصير رأيًا ثانيًا في اليوم
+ *  نفسه. والسلسلة تصل وسيطًا ولا تُحسب هنا: `streakRunFrom` هي الجواب
+ *  الوحيد عنها في هذا المشروع، وحسابها مرّتين حسابان يختلفان يومًا ما.
+ * --------------------------------------------------------------------- */
+export const GROWTH_STAGES = [
+  { id: "seed", label: "بذرة", at: 0, hint: "لم تبدأ بعد — خطوة واحدة تكفي." },
+  { id: "sprout", label: "شتلة", at: 0.18, hint: "خرجت من التراب." },
+  { id: "sapling", label: "غصون", at: 0.38, hint: "الجذع يشتدّ." },
+  { id: "leafy", label: "مورقة", at: 0.62, hint: "الورق يملأ الأغصان." },
+  { id: "fruiting", label: "مثمرة", at: 0.84, hint: "الشجرة تُثمر." },
+];
+export const GROWTH_WEIGHTS = { goals: 0.5, week: 0.3, streak: 0.2 };
+export const GROWTH_STREAK_FULL = 21;
+export const GROWTH_WEEK = 7;
+
+/* الأسبوع كما سجّله الأرشيف: أيام الفراغ تُعدّ ولا تُعدَّل بها القسمة،
+   كما في كل قارئ آخر لهذه الصفوف. */
+export function weekPace(history = [], days = GROWTH_WEEK) {
+  const tail = rows(history).slice(-Math.max(1, days));
+  const kept = tail.filter((r) => Array.isArray(r.done));
+  const sum = kept.reduce((n, r) => n + (Number.isFinite(+r.pct) ? +r.pct : 0), 0);
+  return {
+    pct: kept.length ? Math.round(sum / kept.length) : 0,
+    recorded: kept.length,
+    gaps: tail.length - kept.length,
+  };
+}
+
+export function treeGrowth(goals = [], habits = [], history = [], streak = 0) {
+  const list = rows(goals).map(goalShape);
+  const leaves = list.filter((g) => g.horizon === "quarter");
+  /* ما يُمشى عليه فعلًا هو التسعون يومًا؛ الأفقان فوقه مشتقّان منه،
+     فجمعهما معه عدٌّ للتقدّم نفسه ثلاث مرّات. */
+  const scored = leaves.length ? leaves : list;
+  const parts = {
+    goals: scored.length
+      ? scored.reduce((n, g) => n + goalPct(g, list, habits), 0) / (scored.length * 100)
+      : 0,
+    week: weekPace(history).pct / 100,
+    streak: Math.min(1, Math.max(0, +streak || 0) / GROWTH_STREAK_FULL),
+  };
+  const growth = Math.min(
+    1,
+    parts.goals * GROWTH_WEIGHTS.goals +
+      parts.week * GROWTH_WEIGHTS.week +
+      parts.streak * GROWTH_WEIGHTS.streak,
+  );
+  let stage = GROWTH_STAGES[0];
+  for (const s of GROWTH_STAGES) if (growth >= s.at) stage = s;
+  return {
+    growth,
+    stage,
+    parts,
+    week: weekPace(history),
+    leaves: leaves.length,
+    fruit: leaves.filter((g) => g.done).length,
+  };
+}

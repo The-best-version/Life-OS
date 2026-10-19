@@ -66,7 +66,7 @@ export const sidebarNav = [
   { id: "uni", label: "الجامعة", short: "الجامعة", icon: GraduationCap, visible: true },
   { id: "matrix", label: "مصفوفة المهام", short: "المهام", icon: LayoutGrid, visible: true },
   { id: "deep", label: "العمل العميق", short: "التركيز", icon: Timer, visible: true },
-  { id: "goals", label: "أهدافي على ثلاث سنوات", short: "الأهداف", icon: Flag, visible: true },
+  { id: "goals", label: "إرثي 2030", short: "الأهداف", icon: Flag, visible: true },
   { id: "finance", label: "الدخل والمشاريع", short: "الدخل", icon: Wallet, visible: true },
   { id: "vault", label: "مكتبة الإنجازات", short: "المكتبة", icon: Library, visible: true },
   { id: "analytics", label: "التتبع الشهري", short: "التتبع", icon: BarChart3, visible: true },

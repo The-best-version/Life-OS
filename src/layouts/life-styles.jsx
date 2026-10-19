@@ -426,7 +426,21 @@ export function AppStyles() {
     
         @keyframes losThrob { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
         .los-throb { animation: losThrob 2.4s ease-in-out infinite; }
-    
+
+        /* شجرة الأهداف: الجذع يطلع من التراب، والورق يفتح بعده واحدةً
+           واحدة. الورقة تُحرَّك شفافيةً فقط — أي transform هنا يَغلب
+           سمة transform التي تضع الورقة على غصنها، فتهاجر الورقة. */
+        @keyframes losSprout { from { transform: scaleY(.86); opacity: .4; } to { transform: scaleY(1); opacity: 1; } }
+        .los-sprout { animation: losSprout .9s cubic-bezier(.22,1,.36,1) both; }
+
+        @keyframes losLeaf { from { opacity: 0; } to { opacity: 1; } }
+        .los-leaf { animation: losLeaf .5s ease-out both; }
+        .los-leaf:hover path:first-of-type, .los-leaf:focus-visible path:first-of-type {
+          stroke-width: 3;
+          stroke-opacity: 1;
+        }
+        .los-leaf:focus-visible { outline: none; }
+
         /* Hover lives in CSS so React never fights an imperatively-set style. */
         .los-nav:not(.los-nav-on):hover {
           background: rgba(255,255,255,0.07) !important;
@@ -472,7 +486,8 @@ export function AppStyles() {
     
         @media (prefers-reduced-motion: reduce) {
           .los-flame, .los-in, .los-cover-in, .los-reward,
-          .los-pop, .los-ripple, .los-halo, .los-throb, .los-drift {
+          .los-pop, .los-ripple, .los-halo, .los-throb, .los-drift,
+          .los-sprout, .los-leaf {
             animation: none !important;
           }
           .los-btn:hover { transform: none !important; }
