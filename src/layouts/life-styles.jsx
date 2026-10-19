@@ -441,6 +441,11 @@ export function AppStyles() {
         }
         .los-leaf:focus-visible { outline: none; }
 
+        /* البرعم يوضّح نفسه عند المرور، بالريشة لا بالحركة. */
+        .los-bud circle { transition: stroke-opacity .2s linear; }
+        .los-bud:hover circle, .los-bud:focus-visible circle { stroke-opacity: 1; }
+        .los-bud:focus-visible { outline: none; }
+
         /* Hover lives in CSS so React never fights an imperatively-set style. */
         .los-nav:not(.los-nav-on):hover {
           background: rgba(255,255,255,0.07) !important;

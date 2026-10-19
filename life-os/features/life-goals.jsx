@@ -302,6 +302,7 @@ export function GoalsModule({ state, setState }) {
           all={all}
           habits={state.habits || []}
           onOpen={(id) => setDeskId(id)}
+          onAdd={(pillarId) => add(pillarId)}
           grown={grown}
         />
       ) : (
@@ -457,6 +458,49 @@ const TREE_CX = 500;
 /* ورقة ترتفع من أصلها إلى طرفها، فيكفي تدويرها بزاوية الغصن. */
 const LEAF_D = "M0,0 C10,-9 16,-27 1,-45 C-14,-28 -10,-9 0,0 Z";
 const BARK = ["#6B4A2D", "#6F4F30", "#735434"];
+const LABEL_GAP = 9;
+
+/* عرض اللافتة يُقاس مرّةً واحدة: الرسم والتباعد لا يجوز أن يقيسا بطريقتين،
+   وإلا تباعدت لافتاتٌ لا تتلامس وتلامست لافتاتٌ قيل إنها متباعدة. */
+const labelW = (text, size) => Math.max(46, text.length * size * 0.47 + 22);
+const labelH = (size) => size + 13;
+
+/* اسمٌ يخرج على اتجاه غصنه ثم يُزاح حتى لا يلمس جاره: ستّة أسماء فوق ستّة
+   أطراف متجاورة تتراكب حتمًا، والمتراكب لا يُقرأ — فالتباعد ليس زينة.
+   إزاحةٌ واحدة لا تكفي لأن دفع (أ) عن (ب) قد يدخلها في (ج)، فالمرور يعاد
+   حتى تهدأ أو تنتهي المحاولات. */
+function spreadLabels(labels) {
+  const put = labels.map((l) => ({
+    ...l,
+    w: labelW(l.text, l.size),
+    h: labelH(l.size),
+    x: l.ax + Math.sin(l.a) * l.push,
+    y: l.ay - Math.cos(l.a) * l.push - 4,
+  }));
+  for (let pass = 0; pass < 70; pass++) {
+    let moved = false;
+    for (let i = 0; i < put.length; i++)
+      for (let j = i + 1; j < put.length; j++) {
+        const A = put[i];
+        const B = put[j];
+        const ox = (A.w + B.w) / 2 + LABEL_GAP - Math.abs(A.x - B.x);
+        const oy = (A.h + B.h) / 2 + LABEL_GAP - Math.abs(A.y - B.y);
+        if (ox <= 0 || oy <= 0) continue;
+        moved = true;
+        if (oy <= ox) {
+          const s = A.y <= B.y ? 1 : -1;
+          A.y -= (s * oy) / 2;
+          B.y += (s * oy) / 2;
+        } else {
+          const s = A.x <= B.x ? 1 : -1;
+          A.x -= (s * ox) / 2;
+          B.x += (s * ox) / 2;
+        }
+      }
+    if (!moved) break;
+  }
+  return put;
+}
 
 /* رقمٌ ثابت لكل معرّف: الورق يميل ويكبر ويصغر قليلًا، وورقةٌ تتبدّل
    زاويتها في كل رسم ورقةٌ ترتجف كلما أعاد React الرسم. */
@@ -510,6 +554,7 @@ function growTree(all, growth) {
   const leaves = [];
   const nodes = [];
   const masses = [];
+  const labels = [];
   const trunkH = 150 + 180 * growth;
   const topY = GROUND_Y - trunkH;
   const w0 = 30 + 13 * growth;
@@ -581,6 +626,28 @@ function growTree(all, growth) {
     const kids = depth < 3 ? all.filter((g) => g.parent === goal.id) : [];
     const end = width * (kids.length ? 0.72 : 0.42);
     const [ex, ey] = limbOf(goal.id, p0, angle, len, width, end, depth, tint, bend);
+    /* الهدف الكبير يُسمّى على الشجرة سواءٌ تفرّع أم لا: هدفٌ بلا أبناء
+       كان ينتهي ورقةً بلا اسم، فكانت الشجرة تعرض عشرين هدفًا وتسمّي
+       واحدًا — وهدفٌ لا يُقرأ اسمه هدفٌ لا يُفتح. */
+    if (depth === 1)
+      labels.push({
+        key: goal.id,
+        goal,
+        /* الاسم يُقصّ لا يُطوى: لافتةٌ بعرض جملةٍ كاملة تدفع جاراتها
+           إلى خارج الإطار كلّه. */
+        text:
+          (goal.text || "هدف بلا عنوان").length > 22
+            ? `${goal.text.slice(0, 22)}…`
+            : goal.text || "هدف بلا عنوان",
+        full: goal.text,
+        tint,
+        size: 13,
+        strong: false,
+        ax: ex,
+        ay: ey,
+        a: angle,
+        push: kids.length ? 30 : 46,
+      });
     if (!kids.length) return leafy(goal, ex, ey, angle, tint, depth);
     nodes.push({ goal, x: ex, y: ey, a: angle, depth, tint });
     const spread = Math.min(1.4, 0.5 + 0.22 * kids.length);
@@ -625,6 +692,18 @@ function growTree(all, growth) {
       (i % 2 ? -1 : 1) * len * 0.13,
     );
     nodes.push({ pillar: b.pillar, x: ex, y: ey, a, depth: 0, tint: b.pillar.tint });
+    labels.push({
+      key: `p-${b.pillar.id}`,
+      pillar: b.pillar,
+      text: b.pillar.label,
+      tint: b.pillar.tint,
+      size: 15,
+      strong: true,
+      ax: ex,
+      ay: ey,
+      a,
+      push: 30,
+    });
     const spread = Math.min(1.45, 0.45 + 0.2 * b.roots.length);
     b.roots.forEach((g, j) => {
       const u = b.roots.length === 1 ? 0 : j / (b.roots.length - 1) - 0.5;
@@ -654,40 +733,101 @@ function growTree(all, growth) {
     });
   });
 
-  /* الإطار يُفصَّل على الشجرة لا العكس: فرعٌ يخرج من الإطار فرعٌ مقصوص،
-     وعرضٌ أضيق من هذا يجعل الجذع يملأ الصورة فيقرأ جذعًا لا شجرة. */
-  const xs = [...leaves, ...nodes].map((n) => n.x);
-  const ys = [...leaves, ...nodes].map((n) => n.y);
-  const minY = Math.min(topY, ...ys) - 95;
-  const h = GROUND_Y + 62 - minY;
-  const reach = Math.max(385, h * 0.6, ...xs.map((x) => Math.abs(x - TREE_CX) + 86));
-  return { limbs, leaves, nodes, masses, trunk, roots, grain, topY, box: { x: TREE_CX - reach, y: minY, w: reach * 2, h } };
+  /* مجموعتا أسماء لا واحدة، ولكلٍّ إطارها: عشرون اسمًا على التاج تدفن
+     الشجرة التي جاء الرجل ليراها، واسمُ ركيزةٍ وحده لا يقول أين هدفه.
+     فالوضع الافتراضي شجرةٌ تُقرأ، و«كل الأهداف» على بُعد ضغطة — ولأن
+     التباعد يُحسب على المعروض وحده، لا تُزاح لافتةٌ هربًا من أخرى مخفيّة. */
+  const frame = (set) => {
+    const xs = [
+      ...leaves.map((n) => n.x),
+      ...nodes.map((n) => n.x),
+      ...set.map((l) => l.x - l.w / 2),
+      ...set.map((l) => l.x + l.w / 2),
+    ];
+    const ys = [
+      ...leaves.map((n) => n.y),
+      ...nodes.map((n) => n.y),
+      ...set.map((l) => l.y - l.h / 2),
+    ];
+    const minY = Math.min(topY, ...ys) - 40;
+    const h = GROUND_Y + 62 - minY;
+    const reach = Math.max(385, h * 0.58, ...xs.map((x) => Math.abs(x - TREE_CX) + 30));
+    return { x: TREE_CX - reach, y: minY, w: reach * 2, h };
+  };
+  const everyName = spreadLabels(labels);
+  const pillarsOnly = spreadLabels(labels.filter((l) => l.pillar));
+  return {
+    limbs,
+    leaves,
+    nodes,
+    masses,
+    names: {
+      pillars: { labels: pillarsOnly, box: frame(pillarsOnly) },
+      all: { labels: everyName, box: frame(everyName) },
+    },
+    trunk,
+    roots,
+    grain,
+    topY,
+  };
 }
 
-/* اسمٌ فوق الشجرة بلا أرضيّة اسمٌ يقع على غصن: الحبّة خلف الكلمة هي
-   الفرق بين لافتةٍ ونصٍّ ضائع. */
-function TreeLabel({ x, y, text, tint, size = 15, strong = false }) {
-  const w = Math.max(46, text.length * size * 0.47 + 22);
+/* اسمٌ فوق الشجرة بلا أرضيّة اسمٌ يقع على غصن: الحبّة خلف الكلمة هي الفرق
+   بين لافتةٍ ونصٍّ ضائع. واللافتة تُرسم حيث أقرّها التباعد لا حيث طرفها،
+   فيمدّ خيطٌ رفيع بينها وبين غصنها — لافتةٌ أُزيحت بلا خيطٍ لافتةٌ لا يُعرف
+   لمن هي. */
+function TreeLabel({ label, onOpen }) {
+  const { x, y, w, h, ax, ay, text, tint, strong, goal } = label;
+  const far = Math.hypot(x - ax, y - ay) > h * 0.9;
+  const open = goal && onOpen ? () => onOpen(goal.id) : null;
   return (
-    <g>
+    <g
+      className={open ? "cursor-pointer" : undefined}
+      role={open ? "button" : undefined}
+      tabIndex={open ? 0 : undefined}
+      aria-hidden={open ? undefined : "true"}
+      aria-label={open ? `${text} — افتح مكتب الهدف` : undefined}
+      onClick={open || undefined}
+      onKeyDown={
+        open
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                open();
+              }
+            }
+          : undefined
+      }
+    >
+      {far && (
+        <line
+          x1={ax}
+          y1={ay}
+          x2={x + (ax > x ? w / 2 : -w / 2)}
+          y2={y}
+          stroke={tint}
+          strokeOpacity="0.35"
+          strokeWidth="1"
+        />
+      )}
       <rect
         x={x - w / 2}
-        y={y - size - 7}
+        y={y - h / 2}
         width={w}
-        height={size + 13}
-        rx={(size + 13) / 2}
-        fill="rgba(14,11,9,0.72)"
+        height={h}
+        rx={h / 2}
+        fill="rgba(14,11,9,0.8)"
         stroke={tint}
-        strokeOpacity={strong ? 0.5 : 0.28}
+        strokeOpacity={strong ? 0.55 : 0.3}
         strokeWidth="1"
       />
-      <circle cx={x - w / 2 + 10} cy={y - 0.5} r="3" fill={tint} />
+      <circle cx={x - w / 2 + 11} cy={y} r="3" fill={tint} />
       <text
-        x={x + 5}
-        y={y + size * 0.33}
+        x={x + 6}
+        y={y + label.size * 0.34}
         textAnchor="middle"
-        fill={strong ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.8)"}
-        fontSize={size}
+        fill={strong ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.82)"}
+        fontSize={label.size}
         fontWeight={strong ? 800 : 700}
       >
         {text}
@@ -696,9 +836,10 @@ function TreeLabel({ x, y, text, tint, size = 15, strong = false }) {
   );
 }
 
-function GoalTreeView({ all, habits, onOpen, grown }) {
+function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
   const narrow = useNarrow();
   const [hot, setHot] = useState(null);
+  const [named, setNamed] = useState("pillars");
   const tree = useMemo(() => growTree(all, grown.growth), [all, grown.growth]);
 
   if (!all.length)
@@ -712,7 +853,8 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
       </Card>
     );
 
-  const { limbs, leaves, nodes, masses, trunk, roots, grain, box } = tree;
+  const { limbs, leaves, nodes, masses, names, trunk, roots, grain } = tree;
+  const { labels, box } = names[named] || names.pillars;
   const real = leaves.filter((l) => !l.idle);
   const pctOf = (g) => goalPct(g, all, habits);
   const grow = Math.round(grown.growth * 100);
@@ -758,6 +900,24 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
               </span>
             </div>
           ))}
+          {!narrow && (
+            <div className="flex bg-black/25 p-1 rounded-xl border border-white/10">
+              {[
+                { id: "pillars", label: "الركائز" },
+                { id: "all", label: "كل الأهداف" },
+              ].map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => setNamed(o.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                    named === o.id ? "bg-white/10 text-white" : "text-white/40 hover:text-white"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-300/20">
             <span className="text-[12px] font-black text-amber-200">
               {real.filter((l) => l.goal.done).length}
@@ -989,17 +1149,39 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
               return (
                 <g key={`p-${pillar.id}`} aria-hidden="true">
                   <circle cx={x} cy={y} r="6.5" fill="#20160F" stroke={tint} strokeWidth="2.5" />
-                  {/* الاسم يُدفَع إلى خارج التاج على اتجاه غصنه: ستّة أسماء
-                      فوق ستّة أطراف متجاورة تتراكب، والمتراكب لا يُقرأ. */}
-                  {!narrow && (
-                    <TreeLabel
-                      x={x + Math.sin(a) * 34}
-                      y={y - Math.cos(a) * 34 - 6}
-                      text={pillar.label}
-                      tint={tint}
-                      size={15}
-                      strong
-                    />
+                  {/* بُرعمٌ على كل ركيزة: هدفٌ جديد يُزرع من الشجرة نفسها،
+                      لا من زرٍّ في أعلى الصفحة لا يعرف أيّ ركيزة يقصد. */}
+                  {onAdd && (
+                    <g
+                      className="cursor-pointer los-bud"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`أضف هدفًا في ${pillar.label}`}
+                      onClick={() => onAdd(pillar.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onAdd(pillar.id);
+                        }
+                      }}
+                    >
+                      <circle
+                        cx={x + Math.cos(a) * 21}
+                        cy={y + Math.sin(a) * 21}
+                        r="9.5"
+                        fill="rgba(14,11,9,0.8)"
+                        stroke={tint}
+                        strokeOpacity="0.6"
+                        strokeWidth="1.4"
+                        strokeDasharray="3 2.5"
+                      />
+                      <path
+                        d={`M${x + Math.cos(a) * 21 - 4},${y + Math.sin(a) * 21} h8 M${x + Math.cos(a) * 21},${y + Math.sin(a) * 21 - 4} v8`}
+                        stroke={tint}
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </g>
                   )}
                 </g>
               );
@@ -1024,18 +1206,15 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
               >
                 <circle cx={x} cy={y} r={depth === 1 ? 8 : 6} fill="#20160F" stroke={tint} strokeWidth="2.2" />
                 {goal.done && <circle cx={x} cy={y} r={depth === 1 ? 4 : 3} fill={T.success} />}
-                {!narrow && depth === 1 && (
-                  <TreeLabel
-                    x={x + Math.sin(a) * 26}
-                    y={y - Math.cos(a) * 26 - 4}
-                    text={goal.text.length > 18 ? `${goal.text.slice(0, 18)}…` : goal.text}
-                    tint={tint}
-                    size={13}
-                  />
-                )}
               </g>
             );
           })}
+
+          {/* اللافتات آخر ما يُرسم: اسمٌ تحت ورقةٍ اسمٌ نصفه مخفيّ. */}
+          {!narrow &&
+            labels.map((l) => (
+              <TreeLabel key={l.key} label={l} onOpen={l.goal ? onOpen : null} />
+            ))}
         </svg>
 
         {hot && (
@@ -1075,16 +1254,19 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
               />
             </div>
             <p className="text-[10px] text-white/45 mt-2">
-              <span dir="ltr">{pctOf(hot.goal)}%</span> — اضغط لتفتح مكتب الهدف
+              <span dir="ltr">{pctOf(hot.goal)}%</span> — اضغط لتفتح مكتبه وتعدّله
             </p>
           </div>
         )}
       </div>
 
       <p className="text-[11px] text-white/35 mt-4 leading-relaxed">
-        الجذع برنامجك، والأغصان الكبرى ركائزك الست، وكل ورقة هدف تسعين يومًا — اضغط
-        ورقةً أو عقدةً ليفتح مكتبها. تمتلئ الورقة بقدر ما أُنجز من هدفها، والثمرة هدفٌ
-        تحقّق؛ وتطول الشجرة كلّها بتقدّم أهدافك وبالتزامك بالروتين هذا الأسبوع وبسلسلتك.
+        الجذع برنامجك، والأغصان الكبرى ركائزك الست، وكل ورقة هدف — اضغط ورقةً أو
+        اسمًا ليفتح مكتبه فتعدّله، واضغط{" "}
+        <span className="font-black text-white/60">＋</span> على أي ركيزة لتزرع فيها
+        هدفًا جديدًا، و«كل الأهداف» ليظهر اسم كل هدف كبير على غصنه. تمتلئ الورقة بقدر
+        ما أُنجز من هدفها، والثمرة هدفٌ تحقّق؛ وتطول الشجرة كلّها بتقدّم أهدافك
+        وبالتزامك بالروتين هذا الأسبوع وبسلسلتك.
       </p>
     </Card>
   );
