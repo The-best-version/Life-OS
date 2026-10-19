@@ -1,5 +1,5 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
-import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, streakRunFrom, treeGrowth, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
+import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, streakRunFrom, treeGrowth, GROWTH_STAGES, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
 import { AlertTriangle, Calendar, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity, Network, PartyPopper, Sprout } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -441,15 +441,49 @@ export function GoalsModule({ state, setState }) {
 
 /* ====================================================================== *
  *  شجرة الأهداف — جذعٌ يطول بما يُمشى عليه
- *  الجذع هو أفق الثلاث سنوات، والأغصان أهداف السنة، والورق تسعون يومًا.
- *  الشجرة لا تملك رقمًا واحدًا: `treeGrowth` يقرأ تقدّم الأهداف وما
- *  سجّله الأرشيف هذا الأسبوع والسلسلة، وهذا الملف يرسم ما قرأه. وكل
- *  ورقة زرٌّ يفتح مكتب هدفها — شجرةٌ لا تُفتح لوحةٌ لا خريطة.
+ *  الجذع هو البرنامج، والأغصان الكبرى الركائز الست، وكل ورقة هدف تسعين
+ *  يومًا. الشجرة لا تملك رقمًا واحدًا: `treeGrowth` يقرأ تقدّم الأهداف
+ *  وما سجّله الأرشيف هذا الأسبوع والسلسلة، وهذا الملف يرسم ما قرأه. وكل
+ *  ورقة زرٌّ يفتح مكتب هدفها — شجرةٌ تُفتح لا لوحةٌ تُتأمَّل.
+ *
+ *  والخشب خشب: الأغصان تُرسَم أجسامًا متناقصة العرض لا خطوطًا بعرضٍ
+ *  واحد — الخط الملوّن ذو الطرف المدوّر يقرأ أنبوبًا مهما حسُن لونه،
+ *  والأنبوب هو الفرق كله بين رسمٍ وشجرة. واللون يسكن الورق والأطراف
+ *  الرفيعة وحدها، لأن ستّة أنابيب مشبعة تخرج من جذعٍ بنيّ هي الشيء
+ *  الوحيد الذي تراه العين بعدها.
  * ====================================================================== */
 const GROUND_Y = 648;
 const TREE_CX = 500;
-/* ورقة ترتفع من أصلها إلى (0,-42)، فيكفي تدويرها بزاوية الغصن. */
-const LEAF_D = "M0,0 C11,-9 15,-27 0,-42 C-15,-27 -11,-9 0,0 Z";
+/* ورقة ترتفع من أصلها إلى طرفها، فيكفي تدويرها بزاوية الغصن. */
+const LEAF_D = "M0,0 C10,-9 16,-27 1,-45 C-14,-28 -10,-9 0,0 Z";
+const BARK = ["#6B4A2D", "#6F4F30", "#735434"];
+
+/* رقمٌ ثابت لكل معرّف: الورق يميل ويكبر ويصغر قليلًا، وورقةٌ تتبدّل
+   زاويتها في كل رسم ورقةٌ ترتجف كلما أعاد React الرسم. */
+const jitter = (seed) => {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 1000) / 1000;
+};
+
+const perp = (dx, dy) => {
+  const m = Math.hypot(dx, dy) || 1;
+  return [-dy / m, dx / m];
+};
+
+/* غصنٌ هو جسمٌ لا خط: حافّتان تلتقيان عند الطرف، فيدقّ كلما ابتعد عن
+   الجذع كما يفعل كل غصن. */
+const taper = (p0, c, p2, w0, w2) => {
+  const [n0x, n0y] = perp(c[0] - p0[0], c[1] - p0[1]);
+  const [n2x, n2y] = perp(p2[0] - c[0], p2[1] - c[1]);
+  const [ncx, ncy] = perp(p2[0] - p0[0], p2[1] - p0[1]);
+  const wc = (w0 + w2) / 4;
+  const f = (p, nx, ny, w) => `${p[0] + nx * w},${p[1] + ny * w}`;
+  return (
+    `M${f(p0, n0x, n0y, w0 / 2)} Q${f(c, ncx, ncy, wc)} ${f(p2, n2x, n2y, w2 / 2)}` +
+    ` L${f(p2, -n2x, -n2y, w2 / 2)} Q${f(c, -ncx, -ncy, wc)} ${f(p0, -n0x, -n0y, w0 / 2)} Z`
+  );
+};
 
 function useNarrow(px = 760) {
   const [narrow, setNarrow] = useState(
@@ -475,54 +509,90 @@ function growTree(all, growth) {
   const limbs = [];
   const leaves = [];
   const nodes = [];
+  const masses = [];
   const trunkH = 150 + 180 * growth;
   const topY = GROUND_Y - trunkH;
-  const w0 = 26 + 12 * growth;
-  const w1 = w0 * 0.42;
+  const w0 = 30 + 13 * growth;
+  const w1 = w0 * 0.44;
   const trunk =
     `M${TREE_CX - w0},${GROUND_Y}` +
-    ` C${TREE_CX - w0 * 0.86},${GROUND_Y - trunkH * 0.45} ${TREE_CX - w1 * 1.5},${GROUND_Y - trunkH * 0.78} ${TREE_CX - w1},${topY}` +
+    ` C${TREE_CX - w0 * 0.84},${GROUND_Y - trunkH * 0.42} ${TREE_CX - w1 * 1.55},${GROUND_Y - trunkH * 0.76} ${TREE_CX - w1},${topY}` +
     ` L${TREE_CX + w1},${topY}` +
-    ` C${TREE_CX + w1 * 1.5},${GROUND_Y - trunkH * 0.78} ${TREE_CX + w0 * 0.86},${GROUND_Y - trunkH * 0.45} ${TREE_CX + w0},${GROUND_Y} Z`;
+    ` C${TREE_CX + w1 * 1.55},${GROUND_Y - trunkH * 0.76} ${TREE_CX + w0 * 0.84},${GROUND_Y - trunkH * 0.42} ${TREE_CX + w0},${GROUND_Y} Z`;
+  /* انتشار الجذر عند التراب: جذعٌ ينتهي بخطٍّ مستقيم يقرأ عمودًا مغروسًا. */
+  const roots = [-1, 1].map(
+    (s) =>
+      `M${TREE_CX + s * w0 * 0.92},${GROUND_Y - 4}` +
+      ` C${TREE_CX + s * w0 * 1.5},${GROUND_Y + 2} ${TREE_CX + s * w0 * 1.9},${GROUND_Y + 10} ${TREE_CX + s * w0 * 2.5},${GROUND_Y + 15}` +
+      ` C${TREE_CX + s * w0 * 1.8},${GROUND_Y + 19} ${TREE_CX + s * w0 * 1.2},${GROUND_Y + 18} ${TREE_CX + s * w0 * 0.8},${GROUND_Y + 16} Z`,
+  );
+  /* خطوط اللحاء: ثلاثة، لأن الجذع المصمت يقرأ ورقةً بنيّة مقصوصة. */
+  const grain = [-0.45, 0.05, 0.5].map(
+    (u) =>
+      `M${TREE_CX + u * w0 * 0.8},${GROUND_Y - 14} C${TREE_CX + u * w0 * 0.6},${GROUND_Y - trunkH * 0.45} ${TREE_CX + u * w1 * 1.1},${GROUND_Y - trunkH * 0.7} ${TREE_CX + u * w1 * 0.7},${topY + 6}`,
+  );
+
+  const limbOf = (key, p0, a, len, wStart, wEnd, depth, tint, bend) => {
+    const ex = p0[0] + Math.sin(a) * len;
+    const ey = p0[1] - Math.cos(a) * len;
+    const [px, py] = perp(ex - p0[0], ey - p0[1]);
+    const c = [(p0[0] + ex) / 2 + px * bend, (p0[1] + ey) / 2 + py * bend];
+    limbs.push({
+      key,
+      d: taper(p0, c, [ex, ey], wStart, wEnd),
+      sheen: `M${p0[0]},${p0[1]} Q${c[0]},${c[1]} ${ex},${ey}`,
+      width: wStart,
+      depth,
+      tint,
+    });
+    return [ex, ey];
+  };
 
   const leafy = (goal, x, y, angle, tint, depth) => {
-    leaves.push({ goal, x, y, angle, tint });
+    const j = jitter(goal.id);
+    leaves.push({
+      goal,
+      x,
+      y,
+      angle: angle + (j - 0.5) * 0.5,
+      size: 0.88 + j * 0.3,
+      tint,
+    });
     /* غصنٌ ينتهي بورقةٍ وحيدة يقرأ عصًا؛ الورقتان الصامتتان زينةٌ تملأ
        الطرف ولا تدّعي هدفًا ثانيًا. */
     if (depth <= 2)
-      [-0.55, 0.55].forEach((s, j) =>
+      [-0.62, 0.58].forEach((s, k) => {
+        const jk = jitter(`${goal.id}${k}`);
         leaves.push({
           goal,
-          key: `${goal.id}-${j}`,
-          x: x + Math.sin(angle + s) * 24,
-          y: y - Math.cos(angle + s) * 24,
-          angle: angle + s,
+          key: `${goal.id}-${k}`,
+          x: x + Math.sin(angle + s) * (20 + jk * 10),
+          y: y - Math.cos(angle + s) * (20 + jk * 10),
+          angle: angle + s + (jk - 0.5) * 0.4,
+          size: 0.62 + jk * 0.22,
           tint,
           idle: true,
-        }),
-      );
+        });
+      });
   };
 
-  const walk = (goal, x, y, angle, len, width, depth, tint) => {
-    const ex = x + Math.sin(angle) * len;
-    const ey = y - Math.cos(angle) * len;
-    const bow = (depth % 2 === 0 ? 1 : -1) * len * 0.16;
-    const mx = (x + ex) / 2 + Math.cos(angle) * bow;
-    const my = (y + ey) / 2 + Math.sin(angle) * bow;
-    limbs.push({ key: goal.id, d: `M${x},${y} Q${mx},${my} ${ex},${ey}`, width, tint, depth });
+  const walk = (goal, p0, angle, len, width, depth, tint) => {
+    const bend = (depth % 2 === 0 ? 1 : -1) * len * 0.15;
     const kids = depth < 3 ? all.filter((g) => g.parent === goal.id) : [];
+    const end = width * (kids.length ? 0.72 : 0.42);
+    const [ex, ey] = limbOf(goal.id, p0, angle, len, width, end, depth, tint, bend);
     if (!kids.length) return leafy(goal, ex, ey, angle, tint, depth);
-    nodes.push({ goal, x: ex, y: ey, depth, tint });
-    const spread = 0.5 + 0.22 * kids.length;
+    nodes.push({ goal, x: ex, y: ey, a: angle, depth, tint });
+    const spread = Math.min(1.4, 0.5 + 0.22 * kids.length);
     kids.forEach((k, i) => {
       const t = kids.length === 1 ? 0 : i / (kids.length - 1) - 0.5;
+      const jk = jitter(k.id);
       walk(
         k,
-        ex,
-        ey,
-        angle + t * Math.min(1.5, spread),
-        len * (0.62 + 0.08 * growth),
-        Math.max(3, width * 0.6),
+        [ex, ey],
+        angle + t * spread + (jk - 0.5) * 0.12,
+        len * (0.6 + 0.08 * growth) * (0.9 + jk * 0.22),
+        Math.max(3.4, end * 0.92),
         depth + 1,
         tint,
       );
@@ -535,39 +605,52 @@ function growTree(all, growth) {
     roots: all.filter((g) => g.pillar === p.id && rooted(g)),
   })).filter((b) => b.roots.length);
 
-  const fan = boughs.length > 1 ? Math.min(2.3, 0.8 + 0.26 * boughs.length) : 0;
+  const fan = boughs.length > 1 ? Math.min(2.25, 0.85 + 0.25 * boughs.length) : 0;
   boughs.forEach((b, i) => {
     const t = boughs.length === 1 ? 0 : i / (boughs.length - 1) - 0.5;
     const a = t * fan;
     /* الأغصان لا تخرج من نقطةٍ واحدة: الأبعد عن العمود يخرج أنزل ويقصُر. */
-    const drop = Math.abs(t) * (62 + 30 * growth);
-    const len = (120 + 70 * growth) * (1 - Math.abs(t) * 0.2);
-    const x0 = TREE_CX + Math.sin(a) * 8;
-    const y0 = topY + 12 + drop;
-    const ex = x0 + Math.sin(a) * len;
-    const ey = y0 - Math.cos(a) * len;
-    const bow = (i % 2 ? -1 : 1) * len * 0.14;
-    limbs.push({
-      key: `p-${b.pillar.id}`,
-      d: `M${x0},${y0} Q${(x0 + ex) / 2 + Math.cos(a) * bow},${(y0 + ey) / 2 + Math.sin(a) * bow} ${ex},${ey}`,
-      width: 13 + 7 * growth,
-      tint: b.pillar.tint,
-      depth: 0,
-    });
-    nodes.push({ pillar: b.pillar, x: ex, y: ey, depth: 0, tint: b.pillar.tint });
-    const spread = Math.min(1.5, 0.45 + 0.2 * b.roots.length);
+    const drop = Math.abs(t) * (64 + 30 * growth);
+    const len = (122 + 70 * growth) * (1 - Math.abs(t) * 0.18);
+    const wide = w1 * 1.25;
+    const [ex, ey] = limbOf(
+      `p-${b.pillar.id}`,
+      [TREE_CX + Math.sin(a) * 10, topY + 14 + drop],
+      a,
+      len,
+      wide,
+      wide * 0.66,
+      0,
+      b.pillar.tint,
+      (i % 2 ? -1 : 1) * len * 0.13,
+    );
+    nodes.push({ pillar: b.pillar, x: ex, y: ey, a, depth: 0, tint: b.pillar.tint });
+    const spread = Math.min(1.45, 0.45 + 0.2 * b.roots.length);
     b.roots.forEach((g, j) => {
       const u = b.roots.length === 1 ? 0 : j / (b.roots.length - 1) - 0.5;
       walk(
         g,
-        ex,
-        ey,
+        [ex, ey],
         a + u * spread,
-        (110 + 60 * growth) * (j % 2 ? 0.9 : 1.05),
-        9 + 4 * growth,
+        (108 + 58 * growth) * (j % 2 ? 0.88 : 1.06),
+        wide * 0.6,
         1,
         b.pillar.tint,
       );
+    });
+  });
+
+  /* كتلة الظلّ خلف كل ركيزة: شجرةٌ كل ورقةٍ فيها على سطحٍ واحد تقرأ
+     قصاصاتٍ ملصوقة؛ الكتلة الباهتة خلفها هي العمق كلّه. */
+  boughs.forEach((b) => {
+    const own = leaves.filter((l) => l.goal.pillar === b.pillar.id);
+    if (!own.length) return;
+    masses.push({
+      id: b.pillar.id,
+      tint: b.pillar.tint,
+      x: own.reduce((n, l) => n + l.x, 0) / own.length,
+      y: own.reduce((n, l) => n + l.y, 0) / own.length,
+      r: 70 + 46 * growth + Math.min(60, own.length * 7),
     });
   });
 
@@ -575,11 +658,42 @@ function growTree(all, growth) {
      وعرضٌ أضيق من هذا يجعل الجذع يملأ الصورة فيقرأ جذعًا لا شجرة. */
   const xs = [...leaves, ...nodes].map((n) => n.x);
   const ys = [...leaves, ...nodes].map((n) => n.y);
-  const minY = Math.min(topY, ...ys) - 90;
-  const h = GROUND_Y + 56 - minY;
-  const reach = Math.max(380, h * 0.6, ...xs.map((x) => Math.abs(x - TREE_CX) + 80));
-  const box = { x: TREE_CX - reach, y: minY, w: reach * 2, h };
-  return { limbs, leaves, nodes, trunk, topY, box };
+  const minY = Math.min(topY, ...ys) - 95;
+  const h = GROUND_Y + 62 - minY;
+  const reach = Math.max(385, h * 0.6, ...xs.map((x) => Math.abs(x - TREE_CX) + 86));
+  return { limbs, leaves, nodes, masses, trunk, roots, grain, topY, box: { x: TREE_CX - reach, y: minY, w: reach * 2, h } };
+}
+
+/* اسمٌ فوق الشجرة بلا أرضيّة اسمٌ يقع على غصن: الحبّة خلف الكلمة هي
+   الفرق بين لافتةٍ ونصٍّ ضائع. */
+function TreeLabel({ x, y, text, tint, size = 15, strong = false }) {
+  const w = Math.max(46, text.length * size * 0.47 + 22);
+  return (
+    <g>
+      <rect
+        x={x - w / 2}
+        y={y - size - 7}
+        width={w}
+        height={size + 13}
+        rx={(size + 13) / 2}
+        fill="rgba(14,11,9,0.72)"
+        stroke={tint}
+        strokeOpacity={strong ? 0.5 : 0.28}
+        strokeWidth="1"
+      />
+      <circle cx={x - w / 2 + 10} cy={y - 0.5} r="3" fill={tint} />
+      <text
+        x={x + 5}
+        y={y + size * 0.33}
+        textAnchor="middle"
+        fill={strong ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.8)"}
+        fontSize={size}
+        fontWeight={strong ? 800 : 700}
+      >
+        {text}
+      </text>
+    </g>
+  );
 }
 
 function GoalTreeView({ all, habits, onOpen, grown }) {
@@ -598,53 +712,90 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
       </Card>
     );
 
-  const { limbs, leaves, nodes, trunk, box } = tree;
+  const { limbs, leaves, nodes, masses, trunk, roots, grain, box } = tree;
+  const real = leaves.filter((l) => !l.idle);
   const pctOf = (g) => goalPct(g, all, habits);
   const grow = Math.round(grown.growth * 100);
   const chips = [
-    { label: "الأهداف", v: Math.round(grown.parts.goals * 100) },
-    { label: "روتين الأسبوع", v: Math.round(grown.parts.week * 100) },
-    { label: "السلسلة", v: Math.round(grown.parts.streak * 100) },
+    { label: "الأهداف", v: Math.round(grown.parts.goals * 100), tint: T.primary },
+    { label: "روتين الأسبوع", v: Math.round(grown.parts.week * 100), tint: T.success },
+    { label: "السلسلة", v: Math.round(grown.parts.streak * 100), tint: T.achieve },
   ];
+  const sow = (x, y, a, s) =>
+    `translate(${x},${y}) rotate(${(a * 180) / Math.PI}) scale(${s})`;
 
   return (
     <Card className="p-5 md:p-7 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
-        <div className="min-w-[200px]">
+      <div className="flex flex-wrap items-end justify-between gap-5 mb-4">
+        <div className="min-w-[210px]">
           <div className="flex items-center gap-2">
-            <Sprout size={17} className="text-emerald-400" />
-            <h3 className="text-[15px] font-black text-white">
-              شجرتك الآن: {grown.stage.label}
-            </h3>
-            <Badge tint={T.success}>
-              <span dir="ltr">{grow}%</span>
-            </Badge>
+            <Sprout size={16} className="text-emerald-400" />
+            <span className="text-[11px] font-bold tracking-wide text-white/40">
+              شجرة الأهداف
+            </span>
           </div>
-          <p className="text-[12px] text-white/45 mt-1">{grown.stage.hint}</p>
+          <h3 className="text-[22px] font-black text-white mt-1 leading-none">
+            {grown.stage.label}
+            <span dir="ltr" className="text-[14px] font-bold text-emerald-300/80 ms-2">
+              {grow}%
+            </span>
+          </h3>
+          <p className="text-[12px] text-white/45 mt-1.5">{grown.stage.hint}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {chips.map((c) => (
             <div
               key={c.label}
-              className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] font-bold text-white/70"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10"
             >
-              {c.label} <span dir="ltr" className="text-white/90">{c.v}%</span>
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: c.tint }}
+              />
+              <span className="text-[11px] font-bold text-white/60">{c.label}</span>
+              <span dir="ltr" className="text-[12px] font-black text-white/90">
+                {c.v}%
+              </span>
             </div>
           ))}
-          <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-400/20 text-[11px] font-bold text-amber-200/90">
-            {grown.fruit} ثمرة من {grown.leaves} ورقة
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-300/20">
+            <span className="text-[12px] font-black text-amber-200">
+              {real.filter((l) => l.goal.done).length}
+            </span>
+            <span className="text-[11px] font-bold text-amber-100/60">
+              ثمرة من {real.length} ورقة
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="h-2 rounded-full bg-white/5 overflow-hidden mb-5">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${Math.max(2, grow)}%`,
-            backgroundImage: `linear-gradient(90deg, ${T.success}, ${T.achieve})`,
-          }}
-        />
+      {/* سُلَّم المراحل: نسبةٌ بلا سلّمٍ نسبةٌ لا يُعرف إلى أين تمشي. */}
+      <div className="mb-5">
+        <div className="relative h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${Math.max(1.5, grow)}%`,
+              backgroundImage: `linear-gradient(90deg, ${T.success}, ${T.achieve})`,
+            }}
+          />
+        </div>
+        {!narrow && (
+          <div className="flex justify-between mt-1.5">
+            {GROWTH_STAGES.map((s) => (
+              <span
+                key={s.id}
+                className="text-[10px] font-bold"
+                style={{
+                  color:
+                    grown.growth >= s.at ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.22)",
+                }}
+              >
+                {s.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div
@@ -658,94 +809,197 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
           aria-label="شجرة الأهداف"
         >
           <defs>
-            <linearGradient id="los-bark" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stopColor="#4A3122" />
-              <stop offset="0.45" stopColor="#8A5E3C" />
-              <stop offset="1" stopColor="#3D2819" />
+            <linearGradient id="los-trunk" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#3A2516" />
+              <stop offset="0.3" stopColor="#7A5634" />
+              <stop offset="0.55" stopColor="#8C6540" />
+              <stop offset="1" stopColor="#36220F" />
             </linearGradient>
-            <radialGradient id="los-canopy">
-              <stop offset="0" stopColor={T.success} stopOpacity="0.22" />
-              <stop offset="1" stopColor={T.success} stopOpacity="0" />
+            <radialGradient id="los-shade" cx="0.5" cy="0.5">
+              <stop offset="0" stopColor="#000" stopOpacity="0.38" />
+              <stop offset="1" stopColor="#000" stopOpacity="0" />
             </radialGradient>
-            {leaves.filter((l) => !l.idle).map(({ goal, tint }) => {
+            {masses.map((m) => (
+              <radialGradient key={m.id} id={`los-mass-${m.id}`}>
+                <stop offset="0" stopColor={m.tint} stopOpacity="0.2" />
+                <stop offset="0.55" stopColor={m.tint} stopOpacity="0.08" />
+                <stop offset="1" stopColor={m.tint} stopOpacity="0" />
+              </radialGradient>
+            ))}
+            {real.map(({ goal, tint }) => {
               const p = goal.done ? 1 : pctOf(goal) / 100;
               return (
-                <linearGradient
-                  key={goal.id}
-                  id={`los-leaf-${goal.id}`}
-                  x1="0"
-                  y1="1"
-                  x2="0"
-                  y2="0"
-                >
-                  <stop offset={p} stopColor={tint} stopOpacity="0.92" />
-                  <stop offset={p} stopColor={tint} stopOpacity="0.26" />
+                <linearGradient key={goal.id} id={`los-leaf-${goal.id}`} x1="0" y1="1" x2="0.25" y2="0">
+                  <stop offset={p} stopColor={tint} stopOpacity="0.95" />
+                  <stop offset={p} stopColor={tint} stopOpacity="0.24" />
                 </linearGradient>
               );
             })}
           </defs>
 
-          <ellipse
-            cx={TREE_CX}
-            cy={box.y + box.h * 0.38}
-            rx={box.w * 0.42}
-            ry={box.h * 0.36}
-            fill="url(#los-canopy)"
-            opacity={0.35 + 0.65 * grown.growth}
-          />
+          {/* الخلف: كتل الظلّ، ثم ورقٌ شبحيّ أوسع يعطي للتاج سُمكًا. */}
+          {masses.map((m) => (
+            <circle key={m.id} cx={m.x} cy={m.y} r={m.r} fill={`url(#los-mass-${m.id})`} />
+          ))}
+          <g opacity={0.17 + 0.13 * grown.growth}>
+            {real.map(({ goal, x, y, angle, size, tint }) => (
+              <path
+                key={goal.id}
+                d={LEAF_D}
+                fill={tint}
+                fillOpacity="0.2"
+                transform={sow(x, y - 10, angle - 0.22, size * 1.5)}
+              />
+            ))}
+          </g>
 
           <ellipse
             cx={TREE_CX}
-            cy={GROUND_Y + 6}
-            rx={132 + 52 * grown.growth}
-            ry={11}
-            fill="#000"
-            opacity="0.18"
+            cy={GROUND_Y + 14}
+            rx={150 + 55 * grown.growth}
+            ry={26}
+            fill="url(#los-shade)"
           />
           <path
-            d={`M${TREE_CX - 170},${GROUND_Y + 10} Q${TREE_CX},${GROUND_Y - 20} ${TREE_CX + 170},${GROUND_Y + 10} Q${TREE_CX},${GROUND_Y + 30} ${TREE_CX - 170},${GROUND_Y + 10} Z`}
-            fill="rgba(74,49,34,0.5)"
+            d={`M${TREE_CX - 180},${GROUND_Y + 11} Q${TREE_CX},${GROUND_Y - 19} ${TREE_CX + 180},${GROUND_Y + 11} Q${TREE_CX},${GROUND_Y + 31} ${TREE_CX - 180},${GROUND_Y + 11} Z`}
+            fill="#2E2116"
+            fillOpacity="0.62"
           />
+          {/* عشبٌ عند الجذر: يطول بالنموّ كما يطول كل شيء هنا. */}
+          <g stroke={T.success} strokeOpacity="0.38" strokeWidth="2" strokeLinecap="round" fill="none">
+            {Array.from({ length: 16 }, (_, i) => {
+              const t = i / 15 - 0.5;
+              const bx = TREE_CX + t * 320;
+              const bh = (7 + 13 * grown.growth) * (0.6 + jitter(`g${i}`) * 0.9);
+              const lean = (jitter(`l${i}`) - 0.5) * 16;
+              return (
+                <path
+                  key={i}
+                  d={`M${bx},${GROUND_Y + 14} Q${bx + lean * 0.5},${GROUND_Y + 14 - bh * 0.6} ${bx + lean},${GROUND_Y + 14 - bh}`}
+                />
+              );
+            })}
+          </g>
 
-          <g
-            className="los-sprout"
-            style={{ transformBox: "fill-box", transformOrigin: "50% 100%" }}
-          >
-            <path d={trunk} fill="url(#los-bark)" />
+          <g className="los-sprout" style={{ transformBox: "fill-box", transformOrigin: "50% 100%" }}>
+            {roots.map((d, i) => (
+              <path key={i} d={d} fill="#4A3120" />
+            ))}
+            <path d={trunk} fill="url(#los-trunk)" />
+            {grain.map((d, i) => (
+              <path
+                key={i}
+                d={d}
+                fill="none"
+                stroke="#2B1A0D"
+                strokeOpacity="0.3"
+                strokeWidth={i === 1 ? 2.4 : 1.6}
+              />
+            ))}
+
             {limbs
               .slice()
               .sort((a, b) => a.depth - b.depth)
               .map((l) => (
-                <path
-                  key={l.key}
-                  d={l.d}
-                  fill="none"
-                  strokeLinecap="round"
-                  stroke={l.depth === 0 ? "url(#los-bark)" : l.tint}
-                  strokeOpacity={l.depth === 0 ? 1 : 0.55}
-                  strokeWidth={l.width}
-                />
+                <g key={l.key}>
+                  <path d={l.d} fill={BARK[Math.min(2, l.depth)]} />
+                  {/* الطرف الرفيع وحده يحمل لون الركيزة: اللون في الخشب كلّه
+                      يُطفئ الورق الذي يُفترض أن يكون هو الملوّن. */}
+                  {l.depth >= 2 && <path d={l.d} fill={l.tint} fillOpacity="0.42" />}
+                  <path
+                    d={l.sheen}
+                    fill="none"
+                    stroke="#C79A6A"
+                    strokeOpacity="0.16"
+                    strokeWidth={Math.max(1, l.width * 0.3)}
+                    strokeLinecap="round"
+                  />
+                </g>
               ))}
           </g>
 
-          {nodes.map(({ goal, pillar, x, y, depth, tint }) => {
+          {leaves.map(({ goal, key, x, y, angle, size, tint, idle }, i) => {
+            const s = size * (0.86 + 0.26 * grown.growth);
+            if (idle)
+              return (
+                <g
+                  key={key}
+                  className="los-leaf"
+                  style={{ animationDelay: `${Math.min(900, i * 22)}ms` }}
+                  transform={sow(x, y, angle, s)}
+                  aria-hidden="true"
+                >
+                  <path d={LEAF_D} fill="rgba(10,16,12,0.5)" />
+                  <path d={LEAF_D} fill={tint} fillOpacity="0.3" stroke={tint} strokeWidth="1.1" strokeOpacity="0.4" />
+                </g>
+              );
+            return (
+              <g
+                key={goal.id}
+                className="los-leaf cursor-pointer"
+                style={{ animationDelay: `${Math.min(900, i * 22)}ms` }}
+                transform={sow(x, y, angle, s)}
+                role="button"
+                tabIndex={0}
+                aria-label={`${goal.text} — ${pctOf(goal)}٪`}
+                onClick={() => onOpen(goal.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpen(goal.id);
+                  }
+                }}
+                onMouseEnter={() => setHot({ goal, x, y })}
+                onMouseLeave={() => setHot(null)}
+                onFocus={() => setHot({ goal, x, y })}
+                onBlur={() => setHot(null)}
+              >
+                <path d={LEAF_D} fill="rgba(9,14,11,0.6)" />
+                <path
+                  d={LEAF_D}
+                  fill={`url(#los-leaf-${goal.id})`}
+                  stroke={goal.done ? T.success : tint}
+                  strokeWidth={goal.done ? 2.2 : 1.5}
+                  strokeOpacity="0.92"
+                />
+                {/* العِرق الأوسط وعِرقان جانبيّان: الورقة الملساء ريشة. */}
+                <path d="M0,-2 L1,-40" stroke="rgba(255,255,255,0.3)" strokeWidth="1" fill="none" />
+                <path
+                  d="M0,-14 L7,-21 M0,-22 L7,-29 M0,-14 L-6,-21 M0,-22 L-6,-29"
+                  stroke="rgba(255,255,255,0.14)"
+                  strokeWidth="0.9"
+                  fill="none"
+                />
+                {goal.done && (
+                  <g>
+                    <circle cx="11" cy="-33" r="11" fill={T.achieve} opacity="0.2" />
+                    <circle cx="11" cy="-33" r="6.2" fill={T.achieve} />
+                    <circle cx="9" cy="-35" r="2" fill="#FFF" opacity="0.5" />
+                    <path d="M11,-39 L10,-43" stroke="#5B3A18" strokeWidth="1.4" />
+                  </g>
+                )}
+              </g>
+            );
+          })}
+
+          {nodes.map(({ goal, pillar, x, y, a, depth, tint }) => {
             /* عقدة الركيزة اسمٌ لا هدف: لا تُفتح، وإلا فتح الضغط عليها
                مكتب هدفٍ لم يُضغط. */
             if (pillar)
               return (
                 <g key={`p-${pillar.id}`} aria-hidden="true">
-                  <circle cx={x} cy={y} r="7" fill="#1B1512" stroke={tint} strokeWidth="2.5" />
+                  <circle cx={x} cy={y} r="6.5" fill="#20160F" stroke={tint} strokeWidth="2.5" />
+                  {/* الاسم يُدفَع إلى خارج التاج على اتجاه غصنه: ستّة أسماء
+                      فوق ستّة أطراف متجاورة تتراكب، والمتراكب لا يُقرأ. */}
                   {!narrow && (
-                    <text
-                      x={x}
-                      y={y - 16}
-                      textAnchor="middle"
-                      fill={tint}
-                      fontSize="16"
-                      fontWeight="800"
-                    >
-                      {pillar.label}
-                    </text>
+                    <TreeLabel
+                      x={x + Math.sin(a) * 34}
+                      y={y - Math.cos(a) * 34 - 6}
+                      text={pillar.label}
+                      tint={tint}
+                      size={15}
+                      strong
+                    />
                   )}
                 </g>
               );
@@ -768,77 +1022,16 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
                 onFocus={() => setHot({ goal, x, y })}
                 onBlur={() => setHot(null)}
               >
-                <circle cx={x} cy={y} r={depth === 1 ? 9 : 7} fill="#1B1512" stroke={tint} strokeWidth="2.5" />
-                {goal.done && <circle cx={x} cy={y} r={depth === 1 ? 4.5 : 3.5} fill={T.success} />}
-                {!narrow && depth <= 1 && (
-                  <text
-                    x={x}
-                    y={y - 17}
-                    textAnchor="middle"
-                    fill="rgba(255,255,255,0.75)"
-                    fontSize="14"
-                    fontWeight="700"
-                  >
-                    {goal.text.length > 20 ? `${goal.text.slice(0, 20)}…` : goal.text}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          {leaves.map(({ goal, key, x, y, angle, tint, idle }, i) => {
-            const size = (idle ? 0.58 : 0.92) + 0.26 * grown.growth;
-            const place = `translate(${x},${y}) rotate(${(angle * 180) / Math.PI}) scale(${size})`;
-            /* الورقة الصامتة زينةٌ لا بيان: لا تُفتح ولا تُركَّز عليها
-               ولا تُقرأ لقارئ الشاشة، وإلا صار لهدفٍ واحدٍ ثلاثة أزرار. */
-            if (idle)
-              return (
-                <g
-                  key={key}
-                  className="los-leaf"
-                  style={{ animationDelay: `${Math.min(900, i * 24)}ms` }}
-                  transform={place}
-                  aria-hidden="true"
-                >
-                  <path d={LEAF_D} fill="rgba(10,16,12,0.45)" />
-                  <path d={LEAF_D} fill={tint} fillOpacity="0.22" stroke={tint} strokeWidth="1.2" strokeOpacity="0.45" />
-                </g>
-              );
-            return (
-              <g
-                key={goal.id}
-                className="los-leaf cursor-pointer"
-                style={{ animationDelay: `${Math.min(900, i * 24)}ms` }}
-                transform={place}
-                role="button"
-                tabIndex={0}
-                aria-label={`${goal.text} — ${pctOf(goal)}٪`}
-                onClick={() => onOpen(goal.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onOpen(goal.id);
-                  }
-                }}
-                onMouseEnter={() => setHot({ goal, x, y })}
-                onMouseLeave={() => setHot(null)}
-                onFocus={() => setHot({ goal, x, y })}
-                onBlur={() => setHot(null)}
-              >
-                <path d={LEAF_D} fill="rgba(10,16,12,0.55)" />
-                <path
-                  d={LEAF_D}
-                  fill={`url(#los-leaf-${goal.id})`}
-                  stroke={goal.done ? T.success : tint}
-                  strokeWidth={goal.done ? 2.4 : 1.6}
-                  strokeOpacity="0.9"
-                />
-                <path d="M0,-3 L0,-36" stroke={tint} strokeOpacity="0.45" strokeWidth="1" />
-                {goal.done && (
-                  <>
-                    <circle cx="10" cy="-34" r="10" fill={T.achieve} opacity="0.25" />
-                    <circle cx="10" cy="-34" r="6" fill={T.achieve} />
-                  </>
+                <circle cx={x} cy={y} r={depth === 1 ? 8 : 6} fill="#20160F" stroke={tint} strokeWidth="2.2" />
+                {goal.done && <circle cx={x} cy={y} r={depth === 1 ? 4 : 3} fill={T.success} />}
+                {!narrow && depth === 1 && (
+                  <TreeLabel
+                    x={x + Math.sin(a) * 26}
+                    y={y - Math.cos(a) * 26 - 4}
+                    text={goal.text.length > 18 ? `${goal.text.slice(0, 18)}…` : goal.text}
+                    tint={tint}
+                    size={13}
+                  />
                 )}
               </g>
             );
@@ -847,17 +1040,17 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
 
         {hot && (
           <div
-            className="pointer-events-none absolute z-10 w-[220px] rounded-2xl border border-white/15 p-3 shadow-xl"
+            className="pointer-events-none absolute z-10 w-[232px] rounded-2xl border border-white/15 p-3.5 shadow-2xl"
             style={{
-              backgroundColor: "rgba(18,14,12,0.94)",
+              backgroundColor: "rgba(16,12,10,0.95)",
               left: `${((hot.x - box.x) / box.w) * 100}%`,
               top: `${((hot.y - box.y) / box.h) * 100}%`,
-              marginInlineStart: "-110px",
-              marginTop: "-14px",
+              marginInlineStart: "-116px",
+              marginTop: "-16px",
               transform: "translateY(-100%)",
             }}
           >
-            <div className="flex items-center gap-1.5 mb-1">
+            <div className="flex items-center gap-1.5 mb-1.5">
               <span
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{ backgroundColor: pillarOf(hot.goal.pillar).tint }}
@@ -865,11 +1058,14 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
               <span className="text-[10px] font-bold text-white/50">
                 {pillarOf(hot.goal.pillar).label} · {horizonOf(hot.goal.horizon).short}
               </span>
+              {hot.goal.done && (
+                <span className="text-[10px] font-bold text-emerald-300 ms-auto">محقّق</span>
+              )}
             </div>
-            <p className="text-[12px] font-bold text-white leading-snug">
+            <p className="text-[12.5px] font-bold text-white leading-snug">
               {hot.goal.text || "هدف بلا عنوان"}
             </p>
-            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden mt-2">
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden mt-2.5">
               <div
                 className="h-full rounded-full"
                 style={{
@@ -878,21 +1074,22 @@ function GoalTreeView({ all, habits, onOpen, grown }) {
                 }}
               />
             </div>
-            <p className="text-[10px] text-white/45 mt-1.5">
+            <p className="text-[10px] text-white/45 mt-2">
               <span dir="ltr">{pctOf(hot.goal)}%</span> — اضغط لتفتح مكتب الهدف
             </p>
           </div>
         )}
       </div>
 
-      <p className="text-[11px] text-white/40 mt-4 leading-relaxed">
-        كل ورقة هدف تسعين يومًا، وكل غصن هدف سنة، والجذع أفق الثلاث سنوات — اضغط أيًّا
-        منها ليفتح مكتبه. تطول الشجرة بتقدّم أهدافك، وبالتزامك بالروتين هذا الأسبوع،
-        وبسلسلتك؛ والورقة الممتلئة هدفٌ قارب، والثمرة هدفٌ تحقّق.
+      <p className="text-[11px] text-white/35 mt-4 leading-relaxed">
+        الجذع برنامجك، والأغصان الكبرى ركائزك الست، وكل ورقة هدف تسعين يومًا — اضغط
+        ورقةً أو عقدةً ليفتح مكتبها. تمتلئ الورقة بقدر ما أُنجز من هدفها، والثمرة هدفٌ
+        تحقّق؛ وتطول الشجرة كلّها بتقدّم أهدافك وبالتزامك بالروتين هذا الأسبوع وبسلسلتك.
       </p>
     </Card>
   );
 }
+
 
 /* ==================================================================== *
  *  عجلة الحياة (Wheel of Life / Radar Chart)
