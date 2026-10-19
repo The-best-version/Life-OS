@@ -17,6 +17,14 @@ import {
   noteCue,
 } from "./ask.js";
 import { readVoice, VoiceError } from "./voice.js";
+import {
+  runAgent,
+  applyPlan,
+  agentCall,
+  AgentError,
+  agentReady,
+  HISTORY_KEEP,
+} from "./agent.js";
 import { line, notesWord, pagesWord } from "./fmt.js";
 import { startHealth, maskId } from "./health.js";
 import {
@@ -135,6 +143,65 @@ async function showWeek(ctx) {
   return ctx.reply(weekReview(got.state));
 }
 
+/* --- المساعد الذكي ------------------------------------------------------ *
+ *  مدخل صريح لا بديل صامت: `parse.js` يبقى أول من يرى كل رسالة، ويلتقط
+ *  المعتاد مجانًا وفورًا وبلا إنترنت. هذا يُستدعى بالاسم وحده — لأن كل
+ *  نداء هنا يكلّف توكنز، ولأن معرفة «متى أتكلّم مع نموذج» حقّ للمستخدم
+ *  لا تفصيلة داخلية.
+ *
+ *  المحادثة في الذاكرة فقط، مثل ناقل التراجع وناقل التأجيل: سياقُ حوارٍ
+ *  لا شيء مكتوب عن اليوم، ولا يستحق قرصًا ولا يُحفظ عبر إعادة التشغيل.
+ * ---------------------------------------------------------------------- */
+const chats = new Map();
+
+async function askAgent(ctx, said) {
+  const text = String(said || "").trim();
+  if (!text) {
+    return ctx.reply(
+      "اكتب سؤالك بعد الكلمة. مثال:\n«مساعد سجّل لي ٢٠ صفحة قراءة وقل لي وش باقي اليوم»",
+    );
+  }
+  if (!agentReady()) {
+    return ctx.reply(
+      "⚠️ المساعد الذكي مطفأ. ضع ANTHROPIC_API_KEY في services/telegram-bot/.env لتشغيله.",
+    );
+  }
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+
+  /* النداء يأخذ ثوانيَ، والصمت فيها يُقرأ كعطل. */
+  try {
+    await ctx.replyWithChatAction("typing");
+  } catch {
+    /* مؤشّر الكتابة رفاهية — فشله لا يمنع الجواب */
+  }
+
+  let out;
+  try {
+    out = await runAgent(got.state, text, { history: chats.get(ctx.chat.id) || [] });
+  } catch (e) {
+    const msg = e instanceof AgentError ? e.message : "صار خطأ غير متوقّع في المساعد.";
+    console.error("agent: " + (e && e.message ? e.message : e));
+    return ctx.reply("⚠️ " + msg);
+  }
+  if (out.refused) return ctx.reply("⚠️ " + out.refused);
+
+  if (out.messages) chats.set(ctx.chat.id, out.messages.slice(-HISTORY_KEEP));
+
+  /* دور بلا كتابة = جواب وحده، بلا قرص ولا زرّ تراجع. */
+  if (!out.plan || !out.plan.length) return ctx.reply(out.text);
+
+  /* دور فيه كتابة: الخطة تُعاد تزامنيًا على الحالة الطازجة داخل القفل،
+     وتنال نفس زرّ التراجع الذي تناله كل كتابة أخرى في هذا البوت. */
+  return apply(
+    ctx,
+    (s) => applyPlan(s, out.plan),
+    (o) =>
+      [out.text, ...(o.skipped || []).map((r) => "⚠️ " + r)].filter(Boolean).join("\n"),
+  );
+}
+
+
 async function showFocus(ctx) {
   const got = await dayOrTell(ctx);
   if (!got) return;
@@ -195,6 +262,7 @@ bot.command(["start", "help"], (ctx) => ctx.reply(V.HELP, { reply_markup: V.menu
 bot.command("today", showToday);
 bot.command("now", showOpen);
 bot.command("coach", showCoach);
+bot.command("ai", (ctx) => askAgent(ctx, ctx.match || ""));
 bot.command("week", showWeek);
 bot.command("focus", showFocus);
 bot.command("books", showShelf);
@@ -504,6 +572,11 @@ async function handleText(ctx) {
   const raw = ctx.message.text.trim();
   const word = WORDS.get(fold(raw.replace(/^\//, "")));
   if (word) return word(ctx);
+
+  /* نداء المساعد بالاسم، قبل القواعد. «مساعدة» وحدها تبقى المساعدة
+     القديمة أعلاه — fold يحوّل ة إلى ه فتبقى الكلمتان مختلفتين. */
+  const toAgent = agentCall(raw);
+  if (toAgent !== null) return askAgent(ctx, toAgent);
 
   const said = parse(raw);
 

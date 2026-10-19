@@ -105,6 +105,22 @@ export const CONFIG = {
   voiceUrl: String(pick("VOICE_API_URL", "")).replace(/\/+$/, ""),
   voiceKey: pick("VOICE_API_KEY", ""),
   voiceModel: pick("VOICE_MODEL", "whisper-1"),
+  /* --- المساعد الذكي: الاعتماد الخارجي الثاني والأخير ------------------- *
+   *  نفس عقد الصوت بالحرف: مفتاح واحد يشغّل الميزة، وبلا مفتاح تبقى مطفأة
+   *  ويُقال ذلك صراحةً عند أول استدعاء. الفرق الوحيد أن هذا يكلّف توكنز
+   *  بكل رسالة، وأن موجز اليوم (أرقامه وعناوينه) يغادر هذا الجهاز إلى
+   *  Anthropic — وهذا مكتوب في .env.example كي لا يكون مفاجأة.
+   *
+   *  القواعد المكتوبة بيد في parse.js و insight.js تبقى الطريق الافتراضي
+   *  لكل شيء: فورية، مجانية، مختبَرة، وتعمل بلا إنترنت. هذا للسؤال الحرّ
+   *  وللنصّ غير المهيكل وحدهما.
+   * -------------------------------------------------------------------- */
+  aiKey: pick("ANTHROPIC_API_KEY", ""),
+  aiUrl: String(pick("ANTHROPIC_API_URL", "https://api.anthropic.com")).replace(/\/+$/, ""),
+  aiModel: pick("ANTHROPIC_MODEL", "claude-sonnet-5"),
+  /* ردّ محادثة لا مقالة. ألف توكن تكفي جوابًا عربيًا مفصّلًا، وتضع سقفًا
+     على كلفة أي رسالة واحدة مهما طال سؤالها. */
+  aiMaxTokens: Number(pick("ANTHROPIC_MAX_TOKENS", "1024")) || 1024,
   /* Arabic, stated rather than detected: a ten-second clip of Arabic is
      short enough that a detector guesses, and a guess here turns a sentence
      into transliterated nonsense that then lands in the inbox as a task. */
@@ -114,6 +130,9 @@ export const CONFIG = {
 /* Whether a voice note can be read at all. The URL alone is enough — a local
    transcription server needs no key. */
 export const voiceReady = () => !!CONFIG.voiceUrl;
+
+/* هل المساعد الذكي مشغَّل. المفتاح وحده هو الشرط — كل ما عداه له افتراض. */
+export const aiReady = () => !!CONFIG.aiKey;
 
 /* What is missing, named. A bot that starts and then silently answers
    nothing is the single most confusing failure this can have, so it refuses
