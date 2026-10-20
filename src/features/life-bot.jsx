@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bot,
   Plus,
@@ -77,6 +77,7 @@ import {
   REVIEW_STEPS,
 } from "../state/life-state.mjs";
 import { prayerTimes, PRAYER_ROWS, blockTimes, BLOCK_ANCHORS } from "../utils/prayer-times.mjs";
+import { api } from "../utils/life-storage.mjs";
 
 /* ==================================================================== *
  *  MODULE — the Telegram bot's control hub
@@ -179,6 +180,162 @@ export function BotStatusCard({ health, checking, onPing, pinging, pinged }) {
           وتُطبَّق أول ما يعود.
         </p>
       )}
+    </Card>
+  );
+}
+
+/* --- the second live thing --------------------------------------------- *
+ *  The health strip above is "the one live thing" this screen was built
+ *  with, because the question it answers — «هل البوت شغّال؟» — is about a
+ *  process, and nothing on disk can answer it. A live conversation is a
+ *  second question of the same shape: «ماذا سيفعل النموذج بهذه الجملة؟» is
+ *  not a fact `state.bot` can hold either, and it still refuses to become a
+ *  command channel for the schedule above — it goes through
+ *  `local-sync-server.js`'s own `/ai`, which writes through `/sync` like
+ *  every other change in this app, not through a wire to the bot process.
+ *
+ *  Nothing here is `state`. The transcript lives in this component's own
+ *  memory — leaving the screen loses it, exactly like the data-health
+ *  panel's own scratch state — because a dialogue is not a fact about the
+ *  day the way a habit or a task is.
+ * ------------------------------------------------------------------------ */
+const AI_TRANSCRIPT_MAX = 60;
+
+function AssistantChatCard() {
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const listRef = useRef(null);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, sending]);
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setDraft("");
+    setMessages((m) => [...m, { role: "user", text }].slice(-AI_TRANSCRIPT_MAX));
+    setSending(true);
+    try {
+      const res = await fetch(api("/ai"), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-local-sync": "1" },
+        body: JSON.stringify({ message: text }),
+      });
+      const body = await res.json().catch(() => null);
+      const reply =
+        body && typeof body.text === "string" && body.text
+          ? body.text
+          : "⚠️ جواب غير مفهوم من المساعد.";
+      setMessages((m) => [...m, { role: "assistant", text: reply }].slice(-AI_TRANSCRIPT_MAX));
+    } catch {
+      setMessages((m) =>
+        [...m, { role: "assistant", text: "⚠️ ما قدرت أصل للخادم المحلي." }].slice(
+          -AI_TRANSCRIPT_MAX,
+        ),
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const reset = () => {
+    setMessages([]);
+    fetch(api("/ai"), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-local-sync": "1" },
+      body: JSON.stringify({ reset: true }),
+    }).catch(() => {});
+  };
+
+  return (
+    <Card className="p-6 sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border"
+            style={{ borderColor: `${T.ctaLift}45`, background: `${T.ctaLift}16`, color: T.ctaLift }}
+          >
+            <Sparkles size={19} strokeWidth={1.9} />
+          </span>
+          <div>
+            <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
+              تحدّث مع المساعد
+            </h3>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+              يقرأ حالتك ويقدر يسجّل عنك — بلا مغادرة هذه الشاشة
+            </p>
+          </div>
+        </div>
+        {messages.length > 0 && (
+          <button
+            onClick={reset}
+            className="shrink-0 text-[11px] font-bold"
+            style={{ color: T.faint }}
+          >
+            محادثة جديدة
+          </button>
+        )}
+      </div>
+
+      <div
+        ref={listRef}
+        className="los-scroll mt-4 max-h-72 space-y-2.5 overflow-y-auto rounded-xl border p-3"
+        style={{ borderColor: T.border, background: "rgba(0,0,0,0.15)" }}
+      >
+        {messages.length === 0 ? (
+          <p className="py-7 text-center text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
+            اكتب له أي شيء — «سجّل كوبين ماء» أو «وش باقي علي اليوم؟»
+          </p>
+        ) : (
+          messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === "user" ? "justify-start" : "justify-end"}`}>
+              <div
+                className="max-w-[85%] whitespace-pre-wrap rounded-2xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed"
+                style={{
+                  color: T.fg,
+                  borderColor: m.role === "user" ? T.border : `${T.primary}33`,
+                  background: m.role === "user" ? "rgba(255,255,255,0.05)" : `${T.primary}14`,
+                }}
+              >
+                {m.text}
+              </div>
+            </div>
+          ))
+        )}
+        {sending && (
+          <div className="flex justify-end">
+            <div
+              className="rounded-2xl border px-3.5 py-2.5 text-[12px]"
+              style={{ color: T.faint, borderColor: T.border }}
+            >
+              يكتب…
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <Field
+          as="textarea"
+          rows={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="اكتب رسالتك…"
+          className="flex-1 resize-none"
+        />
+        <Btn variant="default" onClick={send} disabled={sending || !draft.trim()} className="shrink-0">
+          <Send size={14} strokeWidth={2.4} />
+        </Btn>
+      </div>
     </Card>
   );
 }
@@ -1330,6 +1487,7 @@ export function BotModule({ state, setState }) {
         pinging={pinging}
         pinged={pinged}
       />
+      <AssistantChatCard />
       <TodayPlanCard bot={bot} state={state} />
       <BriefTimesCard bot={bot} onPatch={patch} />
       <PresetRemindersCard bot={bot} onPatch={patch} books={state.books} />

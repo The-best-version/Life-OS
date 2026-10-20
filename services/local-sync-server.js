@@ -658,6 +658,14 @@ const server = http.createServer((req, res) => {
 
   if (req.method !== "POST") return end(res, 405);
   if (req.headers["x-local-sync"] !== "1") return end(res, 403);
+
+  /* المساعد الذكي، من الموقع نفسه. نفس أصل الكتابة الذي يحمي /sync يحمي
+     هذا أيضًا — فرع مبكر، لا استثناء منه. */
+  if (url.pathname === "/ai") {
+    if (!writeOriginOk(origin)) return end(res, 403, "not the primary origin");
+    return handleAi(req, res);
+  }
+
   if (url.pathname !== "/sync") return end(res, 404);
   if (!writeOriginOk(origin)) return end(res, 403, "not the primary origin");
 
@@ -821,6 +829,164 @@ const server = http.createServer((req, res) => {
     });
   });
 });
+
+/* --- the agent, from the site itself ------------------------------------ *
+ *  The same brain the Telegram bot talks to (`agent.js`), reached from the
+ *  one place on this machine that already has a server: the site's own
+ *  origin. The browser cannot hold the Anthropic key — anything shipped to
+ *  it is readable from devtools — so the key stays here, in a process, same
+ *  as the bot's own `.env` never leaves its process.
+ *
+ *  **No second write path.** `/ai` never touches the disk itself. It builds
+ *  a plan, then writes it the only way anything in this app is allowed to:
+ *  a POST to this server's own `/sync`, with no `Origin` header — the exact
+ *  seam `writeOriginOk` already keeps open for «curl and this machine's own
+ *  tools». The revision guard, the backups, the shrink guard all run once,
+ *  because there is only one `/sync` and this is a call to it, not a copy
+ *  of it. A stale read loses the race the same way two browser tabs would:
+ *  409, and the chat says so rather than guessing which copy was meant.
+ *
+ *  The conversation lives in memory, like the undo bus and the snooze —
+ *  a dialogue is not a fact about the day, and a server restart clearing it
+ *  is the right default, not a bug.
+ * ------------------------------------------------------------------------- */
+let aiHistory = [];
+let aiModPromise = null;
+/* agent.js is ESM; this file is CommonJS. Loaded once, the same way the
+   prayer maths below is — a dynamic import resolved against this file's own
+   folder, not against ROOT. */
+function loadAgent() {
+  if (!aiModPromise) aiModPromise = import("./telegram-bot/agent.js");
+  return aiModPromise;
+}
+
+/* The one write this endpoint ever makes, and it makes it as a client of
+   its own server — no Origin header, so `writeOriginOk` reads it exactly as
+   it already reads curl. */
+function postSelf(pathname, payload) {
+  return new Promise((resolve, reject) => {
+    const body = Buffer.from(JSON.stringify(payload), "utf8");
+    const req = http.request(
+      {
+        host: HOST,
+        port: PORT,
+        path: pathname,
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-local-sync": "1",
+          "content-length": body.length,
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          let json = null;
+          try {
+            json = JSON.parse(data);
+          } catch {
+            /* the status code is the real answer */
+          }
+          resolve({ status: res.statusCode, body: json });
+        });
+      },
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+function sendAi(res, text) {
+  end(res, 200, JSON.stringify({ text }), {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+}
+
+function handleAi(req, res) {
+  readBody(req, async (err, buf) => {
+    if (err) return end(res, err.message === "too-large" ? 413 : 400);
+    let msg;
+    try {
+      msg = JSON.parse(buf.toString("utf8"));
+    } catch {
+      return end(res, 400);
+    }
+    if (!msg || typeof msg !== "object") return end(res, 400);
+
+    /* «محادثة جديدة» من الواجهة — تُمسح وحدها، أو مع رسالة جديدة في نفس
+       الطلب إن أرسلتهما معًا. */
+    if (msg.reset) aiHistory = [];
+    const text = typeof msg.message === "string" ? msg.message.trim() : "";
+    if (!text) return sendAi(res, "");
+
+    let disk;
+    try {
+      disk = JSON.parse(fs.readFileSync(path.join(DATA, PROJECTS.lifeos), "utf8"));
+    } catch {
+      return sendAi(res, "⚠️ ما فيه نسخة على القرص بعد. افتح 2027 Life OS مرّة على الحاسب.");
+    }
+
+    let A;
+    try {
+      A = await loadAgent();
+    } catch (e) {
+      console.error("ai: load " + (e && e.message ? e.message : e));
+      return sendAi(res, "⚠️ تعذّر تحميل المساعد.");
+    }
+
+    if (!A.agentReady()) {
+      return sendAi(
+        res,
+        "⚠️ المساعد الذكي مطفأ. ضع ANTHROPIC_API_KEY في services/telegram-bot/.env لتشغيله.",
+      );
+    }
+
+    let out;
+    try {
+      out = await A.runAgent(disk, text, { history: aiHistory });
+    } catch (e) {
+      console.error("ai: turn " + (e && e.message ? e.message : e));
+      return sendAi(res, "⚠️ " + (e instanceof A.AgentError ? e.message : "صار خطأ غير متوقّع في المساعد."));
+    }
+
+    if (out.refused) return sendAi(res, "⚠️ " + out.refused);
+    if (out.messages) aiHistory = out.messages.slice(-A.HISTORY_KEEP);
+
+    /* سؤال بلا كتابة — جواب وحده، بلا قرص ولا زرّ تراجع يلزمه شيء. */
+    if (!out.plan || !out.plan.length) return sendAi(res, out.text);
+
+    /* الخطة تُعاد تزامنيًا على الحالة الطازجة نفسها — تمامًا كما يفعل
+       `applyPlan` للبوت، ولنفس السبب: ما رآه النموذج أثناء تفكيره نسخة
+       عمل، لا الحالة الحقيقية وقت التطبيق. */
+    const applied = A.applyPlan(disk, out.plan);
+    if (applied.refused) return sendAi(res, [out.text, "⚠️ " + applied.refused].join("\n"));
+
+    const rev = (Number(disk.rev) || 0) + 1;
+    let synced;
+    try {
+      synced = await postSelf("/sync", { project: "lifeos", payload: { ...applied.next, rev } });
+    } catch (e) {
+      console.error("ai: sync " + (e && e.message ? e.message : e));
+      return sendAi(res, [out.text, "⚠️ نفّذت، لكن الكتابة على القرص فشلت."].join("\n"));
+    }
+
+    if (synced.status === 409) {
+      return sendAi(
+        res,
+        [out.text, "⚠️ القرص تغيّر وأنا أفكّر — أعد الطلب كي لا يضيع ما سجّلته الآن."].join("\n"),
+      );
+    }
+    if (synced.status !== 200) {
+      return sendAi(res, [out.text, `⚠️ الكتابة على القرص رُفضت (${synced.status}).`].join("\n"));
+    }
+
+    const lines = [out.text];
+    for (const r of applied.skipped || []) lines.push("⚠️ " + r);
+    return sendAi(res, lines.join("\n"));
+  });
+}
 
 /* --- the reminders ----------------------------------------------------- *
  *  The app's own evening prompt only fires while the app is open, and the

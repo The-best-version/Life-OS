@@ -117,10 +117,18 @@ export const CONFIG = {
    * -------------------------------------------------------------------- */
   aiKey: pick("ANTHROPIC_API_KEY", ""),
   aiUrl: String(pick("ANTHROPIC_API_URL", "https://api.anthropic.com")).replace(/\/+$/, ""),
-  aiModel: pick("ANTHROPIC_MODEL", "claude-sonnet-5"),
-  /* ردّ محادثة لا مقالة. ألف توكن تكفي جوابًا عربيًا مفصّلًا، وتضع سقفًا
-     على كلفة أي رسالة واحدة مهما طال سؤالها. */
-  aiMaxTokens: Number(pick("ANTHROPIC_MAX_TOKENS", "1024")) || 1024,
+  /* الأقوى افتراضًا، والنزول قرارك أنت لا قراري: ضع
+     ANTHROPIC_MODEL=claude-sonnet-5 في .env فتهبط الكلفة للخُمسين تقريبًا
+     (٢$/١٠$ لكل مليون توكن بدل ٥$/٢٥$). */
+  aiModel: pick("ANTHROPIC_MODEL", "claude-opus-5"),
+  /* سقف الردّ الواحد. ليس «طول الجواب» فقط: في نماذج Opus 5 التفكير مُفعّل
+     افتراضيًا وتوكناته تُحسب ضمن هذا السقف — فألفُ توكن كانت ستقطع الردّ في
+     منتصفه قبل أن يبدأ. ثمانية آلاف تكفي تفكيرًا وجوابًا عربيًا وافيًا. */
+  aiMaxTokens: Number(pick("ANTHROPIC_MAX_TOKENS", "8000")) || 8000,
+  /* عمق التفكير. «رسالة واتساب» لا «بحث»: المهمة هنا اختيار أداة وصياغة
+     سطرين عربيين، و«low» تكفيها وتوفّر توكنات التفكير وزمن الانتظار.
+     ارفعها إن أردته يحلّل بعمق أكبر. */
+  aiEffort: pick("ANTHROPIC_EFFORT", "low"),
   /* Arabic, stated rather than detected: a ten-second clip of Arabic is
      short enough that a detector guesses, and a guess here turns a sentence
      into transliterated nonsense that then lands in the inbox as a task. */

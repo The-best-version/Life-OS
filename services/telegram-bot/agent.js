@@ -292,21 +292,28 @@ export function stateBrief(state) {
   put(`الانضباط: ${day.pct}٪ (${day.habitsDone} من ${day.habitsAll} عادة)`);
   put(`الماء: ${day.water} من ${day.waterGoal} أكواب`);
 
+  /* القائمة تُقتطع لأن كل سطر توكنز — لكن **العدد يُقال كاملًا والمقتطع
+     يُعلن**. موجز يعرض اثنتي عشرة من ستّ عشرة بصمت يجعل النموذج يبلّغ
+     «باقي ١٢» بثقة تامّة، وهي كذبة مصدرها الموجز لا النموذج. نفس قاعدة
+     `focusBands` في طبقة الحالة: يقول كم ترك، ولا يخمّن. */
+  const tail = (all, shown) =>
+    all.length > shown ? `\n  (وبقيّتها ${all.length - shown} لم أسردها هنا)` : "";
+
   const open = day.openScored.slice(0, 12);
   put(
-    open.length
-      ? `عادات أساسية مفتوحة:\n${open
+    day.openScored.length
+      ? `عادات أساسية مفتوحة — العدد ${day.openScored.length}:\n${open
           .map((h) => `  - ${h.id} · ${h.label}${h.min ? ` (حدّ أدنى: ${h.min})` : ""}`)
-          .join("\n")}`
+          .join("\n")}${tail(day.openScored, open.length)}`
       : "كل العادات الأساسية مسجّلة اليوم.",
   );
 
   const tasks = day.tasks.slice(0, 6);
   put(
-    tasks.length
-      ? `مهام اليوم:\n${tasks
+    day.tasks.length
+      ? `مهام اليوم — العدد ${day.tasks.length}:\n${tasks
           .map((t) => `  - ${t.id} · ${t.text}${t.done ? " [منجزة]" : ""}`)
-          .join("\n")}`
+          .join("\n")}${tail(day.tasks, tasks.length)}`
       : "ما فيه مهام مختارة لليوم.",
   );
 
@@ -381,9 +388,30 @@ async function callClaude({ system, messages }) {
       body: JSON.stringify({
         model: CONFIG.aiModel,
         max_tokens: CONFIG.aiMaxTokens,
-        system,
+        /* عمق التفكير داخل `output_config` لا في الجذر — موضعه الصحيح في
+           الواجهة، ووضعه في الجذر يُرفض بـ 400. */
+        output_config: { effort: CONFIG.aiEffort },
+        /* الموجز يتغيّر بين دور وآخر (الأرقام تتحرّك) فلا يُقرأ من مؤقّت
+           الدور السابق — لكنه ثابت *داخل* الدور الواحد، والدور نداءان على
+           الأقل. فكتابةٌ واحدة بـ١٫٢٥ وقراءةٌ بـ٠٫١ أرخص من إرساله طازجًا
+           مرّتين بثمن كامل. */
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
         messages,
-        tools: TOOLS,
+        /* ــ التخزين المؤقّت، على الأدوات وحدها ــ
+           الواجهة تبني البادئة بالترتيب: tools ← system ← messages. فالثابت
+           يُوضع أولًا والمتغيّر بعده، وإلا أبطل المتغيّرُ كلَّ ما خلفه.
+
+           جدول الأدوات هو الثابت الوحيد هنا: لا يتغيّر بين نداء وآخر ولا
+           بين يوم وآخر، وهو أكبر قطعة في الطلب. الموجز خلفه يتغيّر كل دور
+           (الأرقام تتحرّك)، فلا يُخزَّن — ولو خُزِّن لأُبطل في كل مرّة ودفعنا
+           ثمن الكتابة بلا قراءة.
+
+           دور واحد = نداءان على الأقل بنفس الأدوات، فالقراءة الثانية تأتي
+           بعُشر الثمن. العلامة على الكتلة الأخيرة لأن التخزين مطابقةُ بادئة:
+           تغطّي كل ما قبلها. */
+        tools: TOOLS.map((t, i) =>
+          i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t,
+        ),
       }),
       signal: stop,
     });
