@@ -1,7 +1,88 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
 import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, streakRunFrom, treeGrowth, GROWTH_STAGES, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
-import { AlertTriangle, Calendar, Check, ChevronDown, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity, Network, PartyPopper, Sprout } from "lucide-react";
+import { AlertTriangle, Calendar, Check, ChevronDown, ChevronUp, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity, Network, PartyPopper, Sprout, GripVertical } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+// 👇 مكون السحب والإفلات مع أزرار احتياطية 👇
+function DraggableWidget({ id, order, setOrder, children, className = "" }) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const moveItem = (fromId, toId) => {
+    const newOrder = [...order];
+    const dragIdx = newOrder.indexOf(fromId);
+    const dropIdx = newOrder.indexOf(toId);
+    if (dragIdx !== -1 && dropIdx !== -1) {
+      newOrder.splice(dragIdx, 1);
+      newOrder.splice(dropIdx, 0, fromId);
+      setOrder(newOrder);
+      try { localStorage.setItem("life_goals_widget_order_v3", JSON.stringify(newOrder)); } catch {}
+    }
+  };
+
+  const handleDragStart = (e) => {
+    setIsDragging(true);
+    e.dataTransfer.setData("text/plain", id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData("text/plain");
+    if (draggedId && draggedId !== id) {
+      moveItem(draggedId, id);
+    }
+    setIsDragging(false);
+  };
+
+  const moveUp = () => {
+    const idx = order.indexOf(id);
+    if (idx > 0) moveItem(id, order[idx - 1]);
+  };
+
+  const moveDown = () => {
+    const idx = order.indexOf(id);
+    if (idx < order.length - 1) moveItem(id, order[idx + 1]);
+  };
+
+  return (
+    <div
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className={`relative group transition-all duration-300 ${className} ${isDragging ? "opacity-50 scale-95" : ""}`}
+    >
+      {/* 👇 شريط التحكم الواضح (يظهر عند التمرير بالماوس) 👇 */}
+      <div className="absolute top-3 left-3 z-50 flex items-center gap-1 rounded-xl bg-black/60 p-1.5 border border-white/20 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity">
+        <div 
+          draggable 
+          onDragStart={handleDragStart} 
+          onDragEnd={handleDragEnd} 
+          className="cursor-grab active:cursor-grabbing p-1 hover:bg-white/20 rounded-lg transition-colors" 
+          title="اسحبني لتغيير الترتيب"
+        >
+          <GripVertical size={18} className="text-white/80" />
+        </div>
+        <div className="w-px h-5 bg-white/20 mx-0.5" />
+        <button onClick={moveUp} className="p-1 hover:text-white text-white/60 transition-colors rounded-lg hover:bg-white/20" title="تحريك للأعلى">
+          <ChevronUp size={18} />
+        </button>
+        <button onClick={moveDown} className="p-1 hover:text-white text-white/60 transition-colors rounded-lg hover:bg-white/20" title="تحريك للأسفل">
+          <ChevronDown size={18} />
+        </button>
+      </div>
+      
+      {children}
+    </div>
+  );
+}
 
 export function GoalsModule({ state, setState }) {
   const here = new Date().getFullYear();
@@ -16,6 +97,17 @@ export function GoalsModule({ state, setState }) {
   const [view, setView] = useState("list");
   const [celebrateId, setCelebrateId] = useState(null);
 
+  // 👇 حالة ترتيب الكروت (غيرنا اسم الذاكرة إلى v3 عشان ينمسح الترتيب القديم) 👇
+  const DEFAULT_ORDER = ["countdownBlock", "searchBar", "yearInPixels", "analysis", "wheel", "upcoming"];
+  const [dashboardOrder, setDashboardOrder] = useState(() => {
+    try {
+      const saved = localStorage.getItem("life_goals_widget_order_v3");
+      return saved ? JSON.parse(saved) : DEFAULT_ORDER;
+    } catch {
+      return DEFAULT_ORDER;
+    }
+  });
+
   const all = useMemo(() => (state.goals || []).map(goalShape), [state.goals]);
   const byId = useMemo(() => new Map(all.map((g) => [g.id, g])), [all]);
   const kidsOf = useMemo(() => {
@@ -28,8 +120,6 @@ export function GoalsModule({ state, setState }) {
     return m;
   }, [all]);
 
-  /* نموّ الشجرة مقروء لا مخزَّن، والسلسلة تأتي من `streakRunFrom` وحدها
-     كما يأتي كل رقم آخر عنها في هذا المشروع. */
   const grown = useMemo(
     () =>
       treeGrowth(
@@ -133,8 +223,138 @@ export function GoalsModule({ state, setState }) {
     if (!qs.some((q) => q.id === quarter)) setQuarter(qs[0].id);
   };
 
+  // 👇 المكونات القابلة للسحب 👇
+  const WIDGETS = {
+    countdownBlock: {
+      title: "الأفق الزمني",
+      element: (
+        <div className="space-y-4">
+          <CountdownCard
+            all={all}
+            year={year}
+            quarter={quarter}
+            horizon={horizon}
+            onPick={(id) => {
+              setHorizon(id);
+              setOrphansOnly(false);
+            }}
+          />
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {years.map((y) => {
+                const on = y === year;
+                const list = all.filter((g) => g.horizon === horizon && g.year === y);
+                return (
+                  <button
+                    key={y}
+                    onClick={() => pickYear(y)}
+                    className={`flex-1 min-w-[100px] rounded-2xl border px-4 py-3 text-[13px] font-extrabold tabular-nums transition-all duration-300 ${
+                      on 
+                        ? "bg-white/10 border-white/20 text-white shadow-lg" 
+                        : "bg-white/[0.02] border-transparent text-white/40 hover:bg-white/5"
+                    }`}
+                  >
+                    {y} <span className="opacity-50 text-[11px] mr-1">({list.length})</span>
+                  </button>
+                );
+              })}
+            </div>
+            {horizon === "quarter" && view === "list" && (
+              <div className={`grid gap-3 ${quartersShown.length < 4 ? "sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-4"}`}>
+                {quartersShown.map((q) => {
+                  const on = q.id === quarter;
+                  const now = q.id === currentQuarter() && year === here;
+                  const list = all.filter((g) => g.horizon === "quarter" && g.quarter === q.id && g.year === year);
+                  const hit = list.filter((g) => g.done).length;
+                  const open = list.filter((g) => !g.done);
+                  const behindCount = open.filter((g) => goalPace(g, all).pace?.state === "behind").length;
+                  const allAhead = open.length > 0 && open.every((g) => goalPace(g, all).pace?.state === "ahead");
+                  const quarterTint = behindCount > 0 ? T.danger : allAhead ? T.primary : null;
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setQuarter(q.id)}
+                      className={`group relative overflow-hidden rounded-2xl border p-4 text-right transition-all duration-300 ${
+                        on
+                          ? "bg-white/10 border-white/20 shadow-lg"
+                          : "bg-white/[0.02] border-transparent hover:bg-white/5"
+                      }`}
+                      style={quarterTint && !on ? { borderInlineStart: `3px solid ${quarterTint}` } : undefined}
+                    >
+                      {on && <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[14px] font-extrabold ${on ? "text-white" : "text-white/60"}`}>{q.label}</span>
+                        {now && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+                      </div>
+                      <span className="block text-[11px] text-white/40 mb-3">{q.months}</span>
+                      <div className="flex items-center justify-between text-[11px] font-bold">
+                        <span className={on ? "text-emerald-400" : "text-white/30"}>مُنجز: {hit}</span>
+                        <span className={on ? "text-white/60" : "text-white/30"}>الكل: {list.length}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+      colSpan: "lg:col-span-2",
+    },
+    searchBar: {
+      title: "البحث",
+      element: (
+        <div className="relative">
+          <Search size={16} className="absolute top-1/2 right-4 -translate-y-1/2 text-white/30" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ابحث في كل أهدافك — بلا اعتبار للأفق أو الربع المختار..."
+            className="w-full rounded-2xl border bg-white/[0.02] py-3 pr-11 pl-4 text-[13px] outline-none transition-colors focus:border-white/30"
+            style={{ borderColor: T.border, color: T.fg }}
+          />
+        </div>
+      ),
+      colSpan: "lg:col-span-2",
+    },
+    yearInPixels: {
+      title: "سنة في بكسل",
+      element: <YearInPixels year={year} history={state.history || []} />,
+      colSpan: "lg:col-span-2",
+    },
+    analysis: {
+      title: "لوحة التحليل",
+      element: <GoalAnalysisDashboard goals={all} habits={state.habits || []} />,
+      colSpan: "lg:col-span-2",
+    },
+    wheel: {
+      title: "عجلة الحياة",
+      element: <LifeWheel goals={all} />,
+      colSpan: "lg:col-span-1",
+    },
+    upcoming: {
+      title: "الأقرب أجلًا",
+      element: <UpcomingDeadlinesCard goals={all} />,
+      colSpan: "lg:col-span-1",
+    },
+  };
+
   return (
     <div className="space-y-8 pb-20">
+      {orphans.length > 0 && view === "list" && (
+        <button
+          onClick={() => setOrphansOnly((v) => !v)}
+          className={`flex w-full items-center gap-3 rounded-2xl border px-5 py-4 text-right transition-all duration-300 ${
+            orphansOnly ? "bg-orange-500/20 border-orange-500/40" : "bg-orange-500/5 border-orange-500/10 hover:bg-orange-500/10"
+          }`}
+        >
+          <AlertTriangle size={18} className={orphansOnly ? "text-orange-400" : "text-orange-500/50"} />
+          <span className="flex-1 text-[13px] font-bold text-orange-200/80">
+            {orphans.length} أهداف لا تخدم هدفًا أعلى — اضغط للعرض
+          </span>
+        </button>
+      )}
+
       <Card className="relative overflow-hidden p-6 sm:p-8 bg-gradient-to-br from-white/[0.03] to-transparent border-white/5">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -186,24 +406,89 @@ export function GoalsModule({ state, setState }) {
         onSave={(northStar) => setState((s) => ({ ...s, northStar }))}
       />
 
-      <GoalAnalysisDashboard goals={all} habits={state.habits || []} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <LifeWheel goals={all} />
-        <YearInPixels year={year} history={state.history || []} />
+      {/* 👇 لوحة التحكم القابلة للسحب والإفلات 👇 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {dashboardOrder.map((id) => {
+          const widget = WIDGETS[id];
+          if (!widget) return null;
+          return (
+            <DraggableWidget
+              key={id}
+              id={id}
+              order={dashboardOrder}
+              setOrder={setDashboardOrder}
+              className={widget.colSpan}
+            >
+              {widget.element}
+            </DraggableWidget>
+          );
+        })}
       </div>
 
-      <UpcomingDeadlinesCard goals={all} />
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {years.map((y) => {
+            const on = y === year;
+            const list = all.filter((g) => g.horizon === horizon && g.year === y);
+            return (
+              <button
+                key={y}
+                onClick={() => pickYear(y)}
+                className={`flex-1 min-w-[100px] rounded-2xl border px-4 py-3 text-[13px] font-extrabold tabular-nums transition-all duration-300 ${
+                  on 
+                    ? "bg-white/10 border-white/20 text-white shadow-lg" 
+                    : "bg-white/[0.02] border-transparent text-white/40 hover:bg-white/5"
+                }`}
+              >
+                {y} <span className="opacity-50 text-[11px] mr-1">({list.length})</span>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="relative">
-        <Search size={16} className="absolute top-1/2 right-4 -translate-y-1/2 text-white/30" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ابحث في كل أهدافك — بلا اعتبار للأفق أو الربع المختار..."
-          className="w-full rounded-2xl border bg-white/[0.02] py-3 pr-11 pl-4 text-[13px] outline-none transition-colors focus:border-white/30"
-          style={{ borderColor: T.border, color: T.fg }}
-        />
+        {horizon === "quarter" && view === "list" && (
+          <div
+            className={`grid gap-3 ${
+              quartersShown.length < 4 ? "sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-4"
+            }`}
+          >
+            {quartersShown.map((q) => {
+              const on = q.id === quarter;
+              const now = q.id === currentQuarter() && year === here;
+              const list = all.filter(
+                (g) => g.horizon === "quarter" && g.quarter === q.id && g.year === year,
+              );
+              const hit = list.filter((g) => g.done).length;
+              const open = list.filter((g) => !g.done);
+              const behindCount = open.filter((g) => goalPace(g, all).pace?.state === "behind").length;
+              const allAhead = open.length > 0 && open.every((g) => goalPace(g, all).pace?.state === "ahead");
+              const quarterTint = behindCount > 0 ? T.danger : allAhead ? T.primary : null;
+              return (
+                <button
+                  key={q.id}
+                  onClick={() => setQuarter(q.id)}
+                  className={`group relative overflow-hidden rounded-2xl border p-4 text-right transition-all duration-300 ${
+                    on
+                      ? "bg-white/10 border-white/20 shadow-lg"
+                      : "bg-white/[0.02] border-transparent hover:bg-white/5"
+                  }`}
+                  style={quarterTint && !on ? { borderInlineStart: `3px solid ${quarterTint}` } : undefined}
+                >
+                  {on && <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[14px] font-extrabold ${on ? "text-white" : "text-white/60"}`}>{q.label}</span>
+                    {now && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+                  </div>
+                  <span className="block text-[11px] text-white/40 mb-3">{q.months}</span>
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span className={on ? "text-emerald-400" : "text-white/30"}>مُنجز: {hit}</span>
+                    <span className={on ? "text-white/60" : "text-white/30"}>الكل: {list.length}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <CountdownCard
@@ -282,20 +567,6 @@ export function GoalsModule({ state, setState }) {
           </div>
         )}
       </div>
-
-      {orphans.length > 0 && view === "list" && (
-        <button
-          onClick={() => setOrphansOnly((v) => !v)}
-          className={`flex w-full items-center gap-3 rounded-2xl border px-5 py-4 text-right transition-all duration-300 ${
-            orphansOnly ? "bg-orange-500/20 border-orange-500/40" : "bg-orange-500/5 border-orange-500/10 hover:bg-orange-500/10"
-          }`}
-        >
-          <AlertTriangle size={18} className={orphansOnly ? "text-orange-400" : "text-orange-500/50"} />
-          <span className="flex-1 text-[13px] font-bold text-orange-200/80">
-            {orphans.length} أهداف لا تخدم هدفًا أعلى — اضغط للعرض
-          </span>
-        </button>
-      )}
 
       {view === "tree" ? (
         <GoalTreeView
@@ -442,33 +713,16 @@ export function GoalsModule({ state, setState }) {
 
 /* ====================================================================== *
  *  شجرة الأهداف — جذعٌ يطول بما يُمشى عليه
- *  الجذع هو البرنامج، والأغصان الكبرى الركائز الست، وكل ورقة هدف تسعين
- *  يومًا. الشجرة لا تملك رقمًا واحدًا: `treeGrowth` يقرأ تقدّم الأهداف
- *  وما سجّله الأرشيف هذا الأسبوع والسلسلة، وهذا الملف يرسم ما قرأه. وكل
- *  ورقة زرٌّ يفتح مكتب هدفها — شجرةٌ تُفتح لا لوحةٌ تُتأمَّل.
- *
- *  والخشب خشب: الأغصان تُرسَم أجسامًا متناقصة العرض لا خطوطًا بعرضٍ
- *  واحد — الخط الملوّن ذو الطرف المدوّر يقرأ أنبوبًا مهما حسُن لونه،
- *  والأنبوب هو الفرق كله بين رسمٍ وشجرة. واللون يسكن الورق والأطراف
- *  الرفيعة وحدها، لأن ستّة أنابيب مشبعة تخرج من جذعٍ بنيّ هي الشيء
- *  الوحيد الذي تراه العين بعدها.
  * ====================================================================== */
 const GROUND_Y = 648;
 const TREE_CX = 500;
-/* ورقة ترتفع من أصلها إلى طرفها، فيكفي تدويرها بزاوية الغصن. */
 const LEAF_D = "M0,0 C10,-9 16,-27 1,-45 C-14,-28 -10,-9 0,0 Z";
 const BARK = ["#6B4A2D", "#6F4F30", "#735434"];
 const LABEL_GAP = 9;
 
-/* عرض اللافتة يُقاس مرّةً واحدة: الرسم والتباعد لا يجوز أن يقيسا بطريقتين،
-   وإلا تباعدت لافتاتٌ لا تتلامس وتلامست لافتاتٌ قيل إنها متباعدة. */
 const labelW = (text, size) => Math.max(46, text.length * size * 0.47 + 22);
 const labelH = (size) => size + 13;
 
-/* اسمٌ يخرج على اتجاه غصنه ثم يُزاح حتى لا يلمس جاره: ستّة أسماء فوق ستّة
-   أطراف متجاورة تتراكب حتمًا، والمتراكب لا يُقرأ — فالتباعد ليس زينة.
-   إزاحةٌ واحدة لا تكفي لأن دفع (أ) عن (ب) قد يدخلها في (ج)، فالمرور يعاد
-   حتى تهدأ أو تنتهي المحاولات. */
 function spreadLabels(labels) {
   const put = labels.map((l) => ({
     ...l,
@@ -502,8 +756,6 @@ function spreadLabels(labels) {
   return put;
 }
 
-/* رقمٌ ثابت لكل معرّف: الورق يميل ويكبر ويصغر قليلًا، وورقةٌ تتبدّل
-   زاويتها في كل رسم ورقةٌ ترتجف كلما أعاد React الرسم. */
 const jitter = (seed) => {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
@@ -515,8 +767,6 @@ const perp = (dx, dy) => {
   return [-dy / m, dx / m];
 };
 
-/* غصنٌ هو جسمٌ لا خط: حافّتان تلتقيان عند الطرف، فيدقّ كلما ابتعد عن
-   الجذع كما يفعل كل غصن. */
 const taper = (p0, c, p2, w0, w2) => {
   const [n0x, n0y] = perp(c[0] - p0[0], c[1] - p0[1]);
   const [n2x, n2y] = perp(p2[0] - c[0], p2[1] - c[1]);
@@ -541,13 +791,6 @@ function useNarrow(px = 760) {
   return narrow;
 }
 
-/* يبني الشجرة من الصفوف نفسها.
- *  الأغصان الكبرى هي الركائز الست لا الأهداف: خزانةٌ فيها عشرون هدفًا
- *  بلا أب تعطي عشرين غصنًا من نقطةٍ واحدة، وتلك سَعَفة لا شجرة — والركائز
- *  هي القسمة التي يقوم عليها هذا الكنز أصلًا. وتحتها الأهداف كما هي:
- *  الهدف ثم أبناؤه ثم أبناؤهم، وهدفٌ فقد أباه يصير غصنًا على ركيزته ولا
- *  يختفي، لأن الشجرة التي تُخفي هدفًا شجرةٌ تكذب على صاحبها.
- */
 function growTree(all, growth) {
   const byId = new Map(all.map((g) => [g.id, g]));
   const limbs = [];
@@ -564,14 +807,12 @@ function growTree(all, growth) {
     ` C${TREE_CX - w0 * 0.84},${GROUND_Y - trunkH * 0.42} ${TREE_CX - w1 * 1.55},${GROUND_Y - trunkH * 0.76} ${TREE_CX - w1},${topY}` +
     ` L${TREE_CX + w1},${topY}` +
     ` C${TREE_CX + w1 * 1.55},${GROUND_Y - trunkH * 0.76} ${TREE_CX + w0 * 0.84},${GROUND_Y - trunkH * 0.42} ${TREE_CX + w0},${GROUND_Y} Z`;
-  /* انتشار الجذر عند التراب: جذعٌ ينتهي بخطٍّ مستقيم يقرأ عمودًا مغروسًا. */
   const roots = [-1, 1].map(
     (s) =>
       `M${TREE_CX + s * w0 * 0.92},${GROUND_Y - 4}` +
       ` C${TREE_CX + s * w0 * 1.5},${GROUND_Y + 2} ${TREE_CX + s * w0 * 1.9},${GROUND_Y + 10} ${TREE_CX + s * w0 * 2.5},${GROUND_Y + 15}` +
       ` C${TREE_CX + s * w0 * 1.8},${GROUND_Y + 19} ${TREE_CX + s * w0 * 1.2},${GROUND_Y + 18} ${TREE_CX + s * w0 * 0.8},${GROUND_Y + 16} Z`,
   );
-  /* خطوط اللحاء: ثلاثة، لأن الجذع المصمت يقرأ ورقةً بنيّة مقصوصة. */
   const grain = [-0.45, 0.05, 0.5].map(
     (u) =>
       `M${TREE_CX + u * w0 * 0.8},${GROUND_Y - 14} C${TREE_CX + u * w0 * 0.6},${GROUND_Y - trunkH * 0.45} ${TREE_CX + u * w1 * 1.1},${GROUND_Y - trunkH * 0.7} ${TREE_CX + u * w1 * 0.7},${topY + 6}`,
@@ -603,8 +844,6 @@ function growTree(all, growth) {
       size: 0.88 + j * 0.3,
       tint,
     });
-    /* غصنٌ ينتهي بورقةٍ وحيدة يقرأ عصًا؛ الورقتان الصامتتان زينةٌ تملأ
-       الطرف ولا تدّعي هدفًا ثانيًا. */
     if (depth <= 2)
       [-0.62, 0.58].forEach((s, k) => {
         const jk = jitter(`${goal.id}${k}`);
@@ -626,15 +865,10 @@ function growTree(all, growth) {
     const kids = depth < 3 ? all.filter((g) => g.parent === goal.id) : [];
     const end = width * (kids.length ? 0.72 : 0.42);
     const [ex, ey] = limbOf(goal.id, p0, angle, len, width, end, depth, tint, bend);
-    /* الهدف الكبير يُسمّى على الشجرة سواءٌ تفرّع أم لا: هدفٌ بلا أبناء
-       كان ينتهي ورقةً بلا اسم، فكانت الشجرة تعرض عشرين هدفًا وتسمّي
-       واحدًا — وهدفٌ لا يُقرأ اسمه هدفٌ لا يُفتح. */
     if (depth === 1)
       labels.push({
         key: goal.id,
         goal,
-        /* الاسم يُقصّ لا يُطوى: لافتةٌ بعرض جملةٍ كاملة تدفع جاراتها
-           إلى خارج الإطار كلّه. */
         text:
           (goal.text || "هدف بلا عنوان").length > 22
             ? `${goal.text.slice(0, 22)}…`
@@ -676,7 +910,6 @@ function growTree(all, growth) {
   boughs.forEach((b, i) => {
     const t = boughs.length === 1 ? 0 : i / (boughs.length - 1) - 0.5;
     const a = t * fan;
-    /* الأغصان لا تخرج من نقطةٍ واحدة: الأبعد عن العمود يخرج أنزل ويقصُر. */
     const drop = Math.abs(t) * (64 + 30 * growth);
     const len = (122 + 70 * growth) * (1 - Math.abs(t) * 0.18);
     const wide = w1 * 1.25;
@@ -719,8 +952,6 @@ function growTree(all, growth) {
     });
   });
 
-  /* كتلة الظلّ خلف كل ركيزة: شجرةٌ كل ورقةٍ فيها على سطحٍ واحد تقرأ
-     قصاصاتٍ ملصوقة؛ الكتلة الباهتة خلفها هي العمق كلّه. */
   boughs.forEach((b) => {
     const own = leaves.filter((l) => l.goal.pillar === b.pillar.id);
     if (!own.length) return;
@@ -733,10 +964,6 @@ function growTree(all, growth) {
     });
   });
 
-  /* مجموعتا أسماء لا واحدة، ولكلٍّ إطارها: عشرون اسمًا على التاج تدفن
-     الشجرة التي جاء الرجل ليراها، واسمُ ركيزةٍ وحده لا يقول أين هدفه.
-     فالوضع الافتراضي شجرةٌ تُقرأ، و«كل الأهداف» على بُعد ضغطة — ولأن
-     التباعد يُحسب على المعروض وحده، لا تُزاح لافتةٌ هربًا من أخرى مخفيّة. */
   const frame = (set) => {
     const xs = [
       ...leaves.map((n) => n.x),
@@ -772,10 +999,6 @@ function growTree(all, growth) {
   };
 }
 
-/* اسمٌ فوق الشجرة بلا أرضيّة اسمٌ يقع على غصن: الحبّة خلف الكلمة هي الفرق
-   بين لافتةٍ ونصٍّ ضائع. واللافتة تُرسم حيث أقرّها التباعد لا حيث طرفها،
-   فيمدّ خيطٌ رفيع بينها وبين غصنها — لافتةٌ أُزيحت بلا خيطٍ لافتةٌ لا يُعرف
-   لمن هي. */
 function TreeLabel({ label, onOpen }) {
   const { x, y, w, h, ax, ay, text, tint, strong, goal } = label;
   const far = Math.hypot(x - ax, y - ay) > h * 0.9;
@@ -929,7 +1152,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
         </div>
       </div>
 
-      {/* سُلَّم المراحل: نسبةٌ بلا سلّمٍ نسبةٌ لا يُعرف إلى أين تمشي. */}
       <div className="mb-5">
         <div className="relative h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
           <div
@@ -997,7 +1219,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
             })}
           </defs>
 
-          {/* الخلف: كتل الظلّ، ثم ورقٌ شبحيّ أوسع يعطي للتاج سُمكًا. */}
           {masses.map((m) => (
             <circle key={m.id} cx={m.x} cy={m.y} r={m.r} fill={`url(#los-mass-${m.id})`} />
           ))}
@@ -1025,7 +1246,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
             fill="#2E2116"
             fillOpacity="0.62"
           />
-          {/* عشبٌ عند الجذر: يطول بالنموّ كما يطول كل شيء هنا. */}
           <g stroke={T.success} strokeOpacity="0.38" strokeWidth="2" strokeLinecap="round" fill="none">
             {Array.from({ length: 16 }, (_, i) => {
               const t = i / 15 - 0.5;
@@ -1063,8 +1283,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
               .map((l) => (
                 <g key={l.key}>
                   <path d={l.d} fill={BARK[Math.min(2, l.depth)]} />
-                  {/* الطرف الرفيع وحده يحمل لون الركيزة: اللون في الخشب كلّه
-                      يُطفئ الورق الذي يُفترض أن يكون هو الملوّن. */}
                   {l.depth >= 2 && <path d={l.d} fill={l.tint} fillOpacity="0.42" />}
                   <path
                     d={l.sheen}
@@ -1122,7 +1340,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
                   strokeWidth={goal.done ? 2.2 : 1.5}
                   strokeOpacity="0.92"
                 />
-                {/* العِرق الأوسط وعِرقان جانبيّان: الورقة الملساء ريشة. */}
                 <path d="M0,-2 L1,-40" stroke="rgba(255,255,255,0.3)" strokeWidth="1" fill="none" />
                 <path
                   d="M0,-14 L7,-21 M0,-22 L7,-29 M0,-14 L-6,-21 M0,-22 L-6,-29"
@@ -1143,14 +1360,10 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
           })}
 
           {nodes.map(({ goal, pillar, x, y, a, depth, tint }) => {
-            /* عقدة الركيزة اسمٌ لا هدف: لا تُفتح، وإلا فتح الضغط عليها
-               مكتب هدفٍ لم يُضغط. */
             if (pillar)
               return (
                 <g key={`p-${pillar.id}`} aria-hidden="true">
                   <circle cx={x} cy={y} r="6.5" fill="#20160F" stroke={tint} strokeWidth="2.5" />
-                  {/* بُرعمٌ على كل ركيزة: هدفٌ جديد يُزرع من الشجرة نفسها،
-                      لا من زرٍّ في أعلى الصفحة لا يعرف أيّ ركيزة يقصد. */}
                   {onAdd && (
                     <g
                       className="cursor-pointer los-bud"
@@ -1210,7 +1423,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
             );
           })}
 
-          {/* اللافتات آخر ما يُرسم: اسمٌ تحت ورقةٍ اسمٌ نصفه مخفيّ. */}
           {!narrow &&
             labels.map((l) => (
               <TreeLabel key={l.key} label={l} onOpen={l.goal ? onOpen : null} />
@@ -1272,7 +1484,6 @@ function GoalTreeView({ all, habits, onOpen, onAdd, grown }) {
   );
 }
 
-
 /* ==================================================================== *
  *  عجلة الحياة (Wheel of Life / Radar Chart)
  * ==================================================================== */
@@ -1308,7 +1519,7 @@ function LifeWheel({ goals }) {
   });
 
   return (
-    <Card className="p-5 flex flex-col items-center">
+    <Card className="p-5 flex flex-col items-center h-full">
       <div className="w-full flex items-center justify-between mb-2">
         <h3 className="flex items-center gap-2 text-[14px] font-extrabold text-white/90">
           <Target size={15} className="text-emerald-400" /> عجلة الحياة
@@ -1420,7 +1631,7 @@ function YearInPixels({ year, history }) {
   });
 
   return (
-    <Card className="p-5">
+    <Card className="p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h3 className="flex items-center gap-2 text-[14px] font-extrabold text-white/90"><Calendar size={15} className="text-indigo-400" /> سنة في بكسل ({year})</h3>
         <div className="flex gap-2 text-[9.5px] font-bold text-white/40">
@@ -1431,17 +1642,26 @@ function YearInPixels({ year, history }) {
         </div>
       </div>
       
-      <div className="overflow-x-auto pb-2">
-        <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(53, 1fr)", gridTemplateRows: "repeat(7, 1fr)", gridAutoFlow: "column", minWidth: "650px" }}>
-          {days.map((day, i) => {
-            let color = "bg-white/5"; 
-            if (day.isFuture) color = "bg-black/20 border border-white/5";
-            else if (day.pct >= 80) color = "bg-emerald-500";
-            else if (day.pct >= 50) color = "bg-yellow-500/60";
-            else if (day.pct > 0) color = "bg-red-500/40";
-            else if (day.dateStr <= todayStr) color = "bg-red-500/20";
-            return <div key={day.dateStr} title={`${day.dateStr}: ${day.isFuture ? "قادم" : `${day.pct}%`}`} className={`aspect-square w-full rounded-[2px] transition-all hover:scale-150 hover:z-10 ${color}`} />;
-          })}
+      <div className="overflow-x-auto pb-4 custom-scrollbar">
+        <div className="w-max mx-auto">
+          <div 
+            className="grid gap-1" 
+            style={{ 
+              gridTemplateColumns: "repeat(53, 14px)", 
+              gridTemplateRows: "repeat(7, 14px)", 
+              gridAutoFlow: "column",
+            }}
+          >
+            {days.map((day, i) => {
+              let color = "bg-white/5"; 
+              if (day.isFuture) color = "bg-black/20 border border-white/5";
+              else if (day.pct >= 80) color = "bg-emerald-500";
+              else if (day.pct >= 50) color = "bg-yellow-500/60";
+              else if (day.pct > 0) color = "bg-red-500/40";
+              else if (day.dateStr <= todayStr) color = "bg-red-500/20";
+              return <div key={day.dateStr} title={`${day.dateStr}: ${day.isFuture ? "قادم" : `${day.pct}%`}`} className={`w-[14px] h-[14px] rounded-[3px] transition-all hover:scale-125 hover:z-10 cursor-pointer ${color}`} />;
+            })}
+          </div>
         </div>
       </div>
     </Card>
@@ -1456,7 +1676,7 @@ function UpcomingDeadlinesCard({ goals }) {
   if (!items.length) return null;
 
   return (
-    <Card className="p-5">
+    <Card className="p-5 h-full">
       <p className="mb-3 flex items-center gap-2 text-[13px] font-extrabold" style={{ color: T.ctaLift }}><Hourglass size={14} /> الأقرب أجلًا</p>
       <div className="space-y-2">
         {items.map(({ goal, left }) => {
@@ -1500,7 +1720,7 @@ function GoalAnalysisDashboard({ goals, habits }) {
   else insight = `✅ كل أهدافك تسير حسب الخطة. استمر في إنجاز عاداتك اليومية.`;
 
   return (
-    <Card className="p-6 bg-gradient-to-br from-indigo-500/5 to-transparent border-white/5 overflow-hidden relative">
+    <Card className="p-6 bg-gradient-to-br from-indigo-500/5 to-transparent border-white/5 overflow-hidden relative h-full">
       <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -ml-10 -mt-10 pointer-events-none" />
       <div className="flex items-center gap-3 mb-6 relative z-10">
         <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20"><PieChart size={20} /></div>
@@ -2144,4 +2364,9 @@ export function horizonClock(id, all, year, quarter) {
   };
 }
 
-export const clockLabel = (id, year, quarter) => id === "h3" ? ARC_LABEL : id === "year" ? String(year) : `${quarterOf(quarter).label} · ${year}`;
+export const clockLabel = (id, year, quarter) =>
+  id === "h3"
+    ? ARC_LABEL
+    : id === "year"
+      ? String(year)
+      : `${quarterOf(quarter).label} · ${year}`;

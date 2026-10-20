@@ -1,3 +1,4 @@
+import LifeBalance from './life-balance.jsx';
 import { AR_MONTHS, Badge, Btn, Card, GROUPS, Modal, T, WEEK_LABELS, arDate, dayWord, daysPhrase, fallWord, timesWord } from "../components/life-shared.jsx";
 import { STREAK_TARGET, DAILY_GOAL_DEFAULT, DAILY_GOAL_MIN, DAILY_GOAL_MAX, clampDailyGoal, dayKey, daysBetween, habitStreak, historyIndex, isGap, levelOf, rows } from "../state/life-state.mjs";
 import { CalendarDays, CalendarRange, Check, ChevronLeft, ChevronRight, Feather, Flame, HeartCrack, Hourglass, ListChecks, ShieldCheck, Sparkles, Star, Target, TrendingDown, TrendingUp, X } from "lucide-react";
@@ -141,10 +142,9 @@ export function AnalyticsModule({ state, discipline, streak, setState }) {
         ))}
       </div>
 
+      <LifeBalance state={state} />
+
       <WeeklyInsightCard state={state} />
-
-      <TrendChart state={state} discipline={discipline} />
-
       <Card className="p-6 sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <Btn variant="outline" size="icon" onClick={() => shift(1)} aria-label="الشهر التالي">

@@ -5,22 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ==================================================================== *
  *  THE ACCOUNTABILITY MIRROR — كاسر العادات
- *
- *  One screen and everything only it renders: the bad habits he is
- *  breaking, the urge he rode out instead of obeying, the relapse he wrote
- *  down anyway, and the mirror that counts what the two add up to.
- *
- *  It is the largest feature in the app that nothing else reaches into.
- *  `BreakerModule` is the only name LifeOS.jsx imports back; the other
- *  seventeen blocks here are rendered by this screen alone. That is the
- *  whole test of where a seam can go, and it is why this one was cut first.
- *
- *  `CostEstimator` and `estimateBleedBleed` live here rather than in life-finance.jsx
- *  despite both being about money: the question they answer is what a habit
- *  bleeds in a year, which is an argument for stopping it rather than an
- *  entry in the income screen. Nothing in finance calls them.
  * ==================================================================== */
-
 
 export function BreakerModule({ state, setState }) {
   const list = state.badHabits || [];
@@ -28,9 +13,6 @@ export function BreakerModule({ state, setState }) {
   const [relapsing, setRelapsing] = useState(null);
   const [urging, setUrging] = useState(null);
   const [prefill, setPrefill] = useState(null);
-  /* Set synchronously and cleared on a timer, never through
-     requestAnimationFrame — a reward scheduled on a frame is swallowed in a
-     hidden tab and then replays when the tab comes back. */
   const [rewardId, setRewardId] = useState(null);
   const rewardTimer = useRef(null);
   useEffect(() => () => clearTimeout(rewardTimer.current), []);
@@ -51,8 +33,6 @@ export function BreakerModule({ state, setState }) {
     const edit = draft.id;
     setState((s) => {
       const rows = s.badHabits || [];
-      /* An edit must keep the journal the row already carries — the form
-         never shows the logs, so a blind spread would drop them. */
       const shaped = badHabitShape({
         ...draft,
         logs: edit ? rows.find((b) => b.id === edit)?.logs || [] : [],
@@ -81,8 +61,6 @@ export function BreakerModule({ state, setState }) {
         b.id === id
           ? {
               ...b,
-              /* The run that just ended is stamped on the log, so the record
-                 outlives the counter it cost. */
               logs: [
                 ...(b.logs || []),
                 urgeShape(
@@ -106,8 +84,6 @@ export function BreakerModule({ state, setState }) {
     setPrefill(null);
   };
 
-  /* A hold never touches startDate: surviving the urge is the streak
-     continuing, not an event in it. */
   const confirmUrge = ({ tag, mood, trigger }) => {
     const id = urging.id;
     setState((s) => ({
@@ -159,22 +135,22 @@ export function BreakerModule({ state, setState }) {
               <span dir="ltr" className="tabular-nums">
                 {cleanToday}/{list.length}
               </span>
-              {" صامدة"}
+              {" صامدة"}
             </Badge>
             <Badge tint={T.violet}>
               <Radar size={10} />
               <span dir="ltr" className="tabular-nums">
                 {breakerEvents(list).length}
               </span>
-              {` ${meetWord(breakerEvents(list).length)} مسجّلة`}
+              {` ${meetWord(breakerEvents(list).length)} مسجّلة`}
             </Badge>
             <Badge tint={T.ember}>
               <Flame size={10} />
-              {"أطول عدّاد حالي: "}
+              {"أطول عدّاد حالي: "}
               <span dir="ltr" className="tabular-nums">
                 {longest}
               </span>
-              {` ${dayWord(longest)}`}
+              {` ${dayWord(longest)}`}
             </Badge>
           </div>
         )}
@@ -259,8 +235,6 @@ function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
   const days = cleanDays(habit);
   const logs = habit.logs || [];
   const urges = habit.urges || [];
-  /* One journal, both outcomes. Two separate lists would hide the only
-     comparison that matters: the same trigger met twice, survived once. */
   const journal = useMemo(
     () =>
       [...logs, ...urges]
@@ -344,7 +318,7 @@ function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
         {best > 0 && (
           <Badge tint={best > days ? T.violet : T.primary}>
             <Flame size={10} />
-            {"الأطول: "}
+            {"الأطول: "}
             <span dir="ltr" className="tabular-nums">
               {best}
             </span>
@@ -358,15 +332,15 @@ function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
         <p className="mt-4 text-[11px] leading-relaxed" style={{ color: T.muted }}>
           <span style={{ color: T.violet }}>نمطك هنا: </span>
           {tagOf(own.tag.value)?.label}
-          {" في "}
+          {" في "}
           <span dir="ltr" className="font-extrabold tabular-nums">
             {own.tag.count}
           </span>
-          {" من "}
+          {" من "}
           <span dir="ltr" className="font-extrabold tabular-nums">
             {own.tag.total}
           </span>
-          {` ${meetWord(own.tag.total)}.`}
+          {` ${meetWord(own.tag.total)}.`}
         </p>
       )}
 
@@ -388,9 +362,6 @@ function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
         </div>
       </div>
 
-      {/* The resisted craving comes first and wears the success colour: it
-          is the button he should be reaching for on most days, and a card
-          whose only action is «سقطت» is a card he stops opening. */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Btn variant="success" size="sm" onClick={onUrge}>
           <ShieldCheck size={13} /> واجهت الرغبة
@@ -408,18 +379,18 @@ function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
             <span dir="ltr" className="tabular-nums">
               {journal.length}
             </span>
-            {` ${meetWord(journal.length)} مسجّلة`}
+            {` ${meetWord(journal.length)} مسجّلة`}
           </button>
         )}
       </div>
 
       {urges.length > 0 && (
         <p className="mt-2 text-[10.5px]" style={{ color: T.primary }}>
-          {"صمدت "}
+          {"صمدت "}
           <span dir="ltr" className="font-extrabold tabular-nums">
             {urges.length}
           </span>
-          {` ${timesWord(urges.length)} في وجه الرغبة — وهذه ليست صدفة.`}
+          {` ${timesWord(urges.length)} في وجه الرغبة — وهذه ليست صدفة.`}
         </p>
       )}
 
@@ -451,11 +422,11 @@ function BadHabitCard({ habit, onRelapse, onUrge, onEdit, onDelete, reward }) {
                   </span>
                   {fell ? (
                     <Badge tint={T.danger}>
-                      {"سقطت بعد "}
+                      {"سقطت بعد "}
                       <span dir="ltr" className="tabular-nums">
                         {l.days}
                       </span>
-                      {` ${dayWord(l.days)}`}
+                      {` ${dayWord(l.days)}`}
                     </Badge>
                   ) : (
                     <Badge tint={T.primary}>
@@ -511,14 +482,7 @@ function UrgeModal({ open, habit, onClose, onConfirm, onFell }) {
     }
   }, [open, habit?.id]);
 
-  /* Counted down from a stored end time rather than by decrementing a
-     number: a throttled background tab skips ticks, and a wave that pauses
-     while the user looks away is a wave that never ends. */
   useEffect(() => {
-    /* `open` belongs in the guard, not only in the reset above: closing the
-       modal mid-wave leaves this component mounted, and without it the
-       interval ran on in the background until the wave it no longer owned
-       hit zero. */
     if (mode !== "wave" || !open) return;
     const tick = () => {
       const l = Math.max(0, Math.round((endAt - Date.now()) / 1000));
@@ -760,11 +724,6 @@ function UrgeModal({ open, habit, onClose, onConfirm, onFell }) {
 }
 
 
-
-/* Reset friction. Nothing here is decoration: the streak and the recovered
-   cost are shown *before* the fields, the plan the user wrote for exactly
-   this moment is quoted back, and the destructive button stays disabled
-   until the trigger, the feeling and a deliberate acknowledgement are in. */
 function RelapseModal({ open, habit, prefill, onClose, onConfirm }) {
   const [trigger, setTrigger] = useState("");
   const [feeling, setFeeling] = useState("");
@@ -774,10 +733,6 @@ function RelapseModal({ open, habit, prefill, onClose, onConfirm }) {
 
   useEffect(() => {
     if (open) {
-      /* A relapse that arrives from a wave the user could not ride out
-         already knows the trigger and the mood — asking for them a second
-         time reads as the app not listening. The confession and the
-         acknowledgement are never prefilled: those are the friction. */
       setTrigger(prefill?.trigger || "");
       setFeeling("");
       setTag(prefill?.tag || "");
@@ -792,11 +747,6 @@ function RelapseModal({ open, habit, prefill, onClose, onConfirm }) {
   const kind = costType(habit.costType);
   const lost = Math.round(bleedSaved(habit));
   const picked = tagOf(tag);
-  /* The written confession stays required — it is the friction the reset is
-     supposed to cost. The free-text *feeling* does not: the mood chip
-     carries that answer in a form the mirror can actually count, and five
-     required fields at the worst moment of the day is a form abandoned
-     half-filled, which records nothing at all. */
   const ready = tag && mood && trigger.trim() && owned;
 
   return (
@@ -995,18 +945,11 @@ function RelapseModal({ open, habit, prefill, onClose, onConfirm }) {
 }
 
 
-/* Add and edit share one form — two forms for one shape is how the two
-   drift apart. The replacement plan is required: a habit you are quitting
-   without something to put in its place is a vacuum, not a plan. */
 function BadHabitFormModal({ open, draft, setDraft, onSave, onClose }) {
   if (!draft) return null;
   const ready = draft.title.trim() && draft.replacement.trim();
   const seed = BAD_PRESETS.find((p) => p.key === draft.preset);
 
-  /* A preset fills the three fields the user stalls on and seeds the
-     estimator with numbers that fit *that* habit — التسويف is measured as a
-     share of a planned day, الصرف as a weekly amount. It never touches the
-     date: the last time is his to answer. */
   const usePreset = (p) =>
     setDraft((d) => ({
       ...d,
@@ -1188,16 +1131,9 @@ function BadHabitFormModal({ open, draft, setDraft, onSave, onClose }) {
 }
 
 
-/* The screen the user asked for: not a counter, a diagnosis. Everything in
-   it is counted from what he logged and nothing is inferred — a mirror that
-   invents a weakness is worse than no mirror, because it is believed. Below
-   the threshold it says so plainly instead of drawing empty bars. */
 function WeaknessMirror({ list }) {
   const w = useMemo(() => weakSpots(list), [list]);
   const events = useMemo(() => breakerEvents(list), [list]);
-  /* Two different things that both used to be called `fatal`: the tally
-     (count, total, pct) and the tag it points at. Collapsing them cost the
-     verdict its numbers. */
   const fatal = w.fatal;
   const common = w.tag;
   const prescribe = (fatal && tagOf(fatal.value)) || (common && tagOf(common.value));
@@ -1228,11 +1164,11 @@ function WeaknessMirror({ list }) {
         <div className="mt-5">
           <div className="flex items-end justify-between gap-3">
             <p className="text-[11.5px]" style={{ color: T.muted }}>
-              {"التشخيص يبدأ بعد "}
+              {"التشخيص يبدأ بعد "}
               <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: T.cta }}>
                 {MIRROR_MIN}
               </span>
-              {" مواجهات مسجّلة"}
+              {" مواجهات مسجّلة"}
             </p>
             <p dir="ltr" className="shrink-0 text-[11px] font-extrabold tabular-nums" style={{ color: T.cta }}>
               {w.total}/{MIRROR_MIN}
@@ -1279,23 +1215,23 @@ function WeaknessMirror({ list }) {
               <p className="mt-1.5 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
                 {fatal ? (
                   <>
-                    {"سقطت بسببه "}
+                    {"سقطت بسببه "}
                     <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: T.danger }}>
                       {fatal.count}
                     </span>
-                    {" من أصل "}
+                    {" من أصل "}
                     <span dir="ltr" className="font-extrabold tabular-nums">
                       {fatal.total}
                     </span>
-                    {` ${fallWord(fatal.total)} مسجّلة.`}
+                    {` ${fallWord(fatal.total)} مسجّلة.`}
                   </>
                 ) : (
                   <>
-                    {"يتكرّر في "}
+                    {"يتكرّر في "}
                     <span dir="ltr" className="font-extrabold tabular-nums">
                       {common.pct}٪
                     </span>
-                    {" من مواجهاتك."}
+                    {" من مواجهاتك."}
                   </>
                 )}
               </p>
@@ -1314,7 +1250,7 @@ function WeaknessMirror({ list }) {
                     <span dir="ltr" className="tabular-nums">
                       {w.band.pct}٪
                     </span>
-                    {" من مواجهاتك تقع هنا"}
+                    {" من مواجهاتك تقع هنا"}
                   </>
                 ) : (
                   "لم تُسجَّل ساعات بعد"
@@ -1332,7 +1268,7 @@ function WeaknessMirror({ list }) {
                     <span dir="ltr" className="tabular-nums">
                       {w.dow.count}
                     </span>
-                    {` ${meetWord(w.dow.count)} في هذا اليوم`}
+                    {` ${meetWord(w.dow.count)} في هذا اليوم`}
                   </>
                 ) : (
                   "لا بيانات بعد"
@@ -1350,15 +1286,15 @@ function WeaknessMirror({ list }) {
               }
               sub={
                 <>
-                  {"صمدت في "}
+                  {"صمدت في "}
                   <span dir="ltr" className="tabular-nums">
                     {w.holds}
                   </span>
-                  {" من "}
+                  {" من "}
                   <span dir="ltr" className="tabular-nums">
                     {w.total}
                   </span>
-                  {` ${meetWord(w.total)}`}
+                  {` ${meetWord(w.total)}`}
                 </>
               }
             />
@@ -1372,7 +1308,7 @@ function WeaknessMirror({ list }) {
                     <span dir="ltr" className="tabular-nums">
                       {Math.round(w.avgRun)}
                     </span>
-                    {` ${dayWord(Math.round(w.avgRun))}`}
+                    {` ${dayWord(Math.round(w.avgRun))}`}
                   </>
                 ) : (
                   "بلا انتكاسة"
@@ -1488,16 +1424,13 @@ function CostEstimator({ type, seed, onPick }) {
     amount: seed?.minutes ?? 35,
   });
 
-  /* Pushed on every change rather than behind a «طبّق» button: the number
-     field above stays the one source of truth, and a second copy of the
-     figure waiting to be applied is a second copy that can disagree. */
   const set = (patch) => {
     const next = { ...e, ...patch };
     setE(next);
-    onPick(Math.round(estimateBleedBleed(type, next) * 10) / 10);
+    onPick(Math.round(estimateBleed(type, next) * 10) / 10);
   };
 
-  const daily = Math.round(estimateBleedBleed(type, e) * 10) / 10;
+  const daily = Math.round(estimateBleed(type, e) * 10) / 10;
   const kind = costType(type);
   const yearly = daily * 365;
   const asDays = type === "time" ? Math.round(yearly / 24) : 0;
@@ -1635,13 +1568,11 @@ function CostEstimator({ type, seed, onPick }) {
                 {daily}
               </span>
               <span className="mr-1.5 text-[12px] font-bold" style={{ color: kind.tint }}>
-                {/* ٢٫٤ ساعتان is nonsense — a fraction counts in the
-                    singular, and only a whole number takes the dual. */}
                 {Number.isInteger(daily) ? arCount(daily, kind.forms) : kind.forms[0]}
               </span>
             </p>
             <p className="mt-2 text-[11px] leading-relaxed" style={{ color: T.muted }}>
-              {"على هذا المعدّل تخسر "}
+              {"على هذا المعدّل تخسر "}
               <span
                 dir="ltr"
                 className="font-extrabold tabular-nums"
@@ -1650,8 +1581,8 @@ function CostEstimator({ type, seed, onPick }) {
                 {(type === "time" ? asDays : Math.round(yearly)).toLocaleString("en-US")}
               </span>
               {type === "time"
-                ? ` ${dayWord(asDays)} كاملة كل سنة — ليست ساعات فراغ، بل أيام من عمرك.`
-                : " ريال كل سنة."}
+                ? ` ${dayWord(asDays)} كاملة كل سنة — ليست ساعات فراغ، بل أيام من عمرك.`
+                : " ريال كل سنة."}
             </p>
           </div>
         </div>
@@ -1672,22 +1603,7 @@ function EstRow({ label, children }) {
   );
 }
 
-
-/* A stepper rather than a number field. The two numbers the estimator asks
-   for are small and get nudged, not typed, and a keyboard that covers half
-   a phone to turn «٣» into «٤» is a keyboard nobody opens twice. */
-
-/* Asked cold, «كم ساعة تخسرها يوميًا؟» is answered with a guess, and every
-   figure built on that guess is a lie the app then states confidently. So
-   the field is filled by arithmetic instead of by memory: two things a
-   person genuinely can answer — how often it happens and how long it takes
-   — multiply into the daily cost.
-
-   Procrastination needs the second method. It has no «مرات»: it eats a
-   share of a day that was already planned, so the questions become how many
-   hours you meant to work and how much of them evaporated — two questions
-   with real answers. */
-const estimateBleedBleedBleed = (type, e) =>
+const estimateBleed = (type, e) =>
   type === "money"
     ? (e.perWeek * e.amount) / 7
     : e.method === "share"
@@ -1695,8 +1611,6 @@ const estimateBleedBleedBleed = (type, e) =>
       : (e.bouts * e.minutes) / 60;
 
 
-/* What the habit has stopped costing. Hours roll up to days past 24 — "٧٢
-   ساعة" is an abstraction, "٣ أيام كاملة" is a thing you can picture. */
 function BleedPanel({ habit }) {
   const kind = costType(habit.costType);
   const total = bleedSaved(habit);
@@ -1731,11 +1645,11 @@ function BleedPanel({ habit }) {
         {habit.costPerDay > 0 ? (
           asDays > 0 ? (
             <>
-              {"≈ "}
+              {"≈ "}
               <span dir="ltr" className="tabular-nums" style={{ color: T.muted }}>
                 {asDays}
               </span>
-              {` ${dayWord(asDays)} كاملة عادت إليك`}
+              {` ${dayWord(asDays)} كاملة عادت إليك`}
             </>
           ) : (
             <>
@@ -1744,7 +1658,7 @@ function BleedPanel({ habit }) {
                   <span dir="ltr" className="tabular-nums">
                     {habit.costPerDay}
                   </span>
-                  {" "}
+                  {" "}
                 </>
               )}
               {`${arCount(habit.costPerDay, kind.forms)} تتسرّب كل يوم`}
@@ -1759,18 +1673,6 @@ function BleedPanel({ habit }) {
 }
 
 
-/* ==================================================================== *
- *  MODULE — habit breaker
- *  The mirror image of the routine screen: a streak you defend instead of
- *  one you build. The reset is deliberately expensive — it costs a written
- *  confession before it costs the days, because a counter you can zero
- *  with one tap is a counter that teaches nothing.
- * ==================================================================== */
-
-/* Days to the next milestone, drawn as a bar plus four gates. The bar is
-   scoped to the *next* gate rather than to 90 — at day 2 a bar that reads
-   2% is discouraging, while one that reads 66% of three days is true and
-   worth finishing. */
 function MilestoneTrack({ days }) {
   const next = MILESTONES.find((m) => m.d > days) || null;
   const prev = [...MILESTONES].reverse().find((m) => m.d <= days);
@@ -1794,11 +1696,7 @@ function MilestoneTrack({ days }) {
         </p>
         {next && (
           <p className="shrink-0 text-[11px]" style={{ color: T.muted }}>
-            {"باقٍ "}
-            {/* "٢ يومان" says two twice — under three, the word counts on
-                its own and the numeral is dropped. The separators are
-                non-breaking: an ordinary space at the edge of a dir="ltr"
-                span collapses, and the line renders as "باقٍ65يومًا". */}
+            {"باقٍ "}
             {next.d - days > 2 && (
               <>
                 <span
@@ -1808,7 +1706,7 @@ function MilestoneTrack({ days }) {
                 >
                   {next.d - days}
                 </span>
-                {" "}
+                {" "}
               </>
             )}
             <span style={{ color: next.d - days > 2 ? undefined : T.cta }}>
@@ -1922,9 +1820,6 @@ function MoodPicker({ value, onPick }) {
 }
 
 
-/* One picker for both modals. The relapse and the resisted urge must be
-   tagged from the identical list, or the counts beneath them are comparing
-   two different vocabularies. */
 function TagPicker({ value, onPick }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -1955,10 +1850,6 @@ function TagPicker({ value, onPick }) {
 }
 
 
-/* Four templates, because the hardest part of this screen is the blank
-   form: a user who cannot phrase his own habit writes "التسويف" and stops.
-   Each preset carries the cost unit that actually fits it, a replacement
-   plan written as an order, and the two numbers the estimator opens on. */
 const BAD_PRESETS = [
   {
     key: "delay",
@@ -1999,20 +1890,6 @@ const BAD_PRESETS = [
 ];
 
 
-
-/* --- prayer times ----------------------------------------------------- *
- *  The maths moved to ./prayer-times.mjs, because the sync server fires the
- *  block reminders and has to land on the same minute this screen shows. It
- *  is bundled in by esbuild, so the built page is still one self-contained
- *  file — the split is in the source, not in what ships.
- * ---------------------------------------------------------------------- */
-
-
-/* --- habit breaker ---------------------------------------------------- *
- *  The mirror image of a routine habit: a streak you defend rather than
- *  build. Everything here is keyed off one stored day — startDate — so the
- *  count can never drift out of sync with a separate counter.
- * ---------------------------------------------------------------------- */
 const MILESTONES = [
   { d: 3, label: "٣ أيام", hint: "أصعب ٧٢ ساعة" },
   { d: 7, label: "أسبوع", hint: "أسبوع كامل بلا رجعة" },
@@ -2022,19 +1899,7 @@ const MILESTONES = [
 
 const MILESTONE_CAP = MILESTONES[MILESTONES.length - 1].d;
 
-
-
-/* The craving logged *before* it wins. Without it the screen only ever sees
-   the losses, which makes a person look weaker than he is and teaches him
-   to stop opening it — and worse, it leaves the diagnosis blind to the
-   triggers he beats, which is exactly the half that proves what works.
- *
- *  It is also the one place the app intervenes instead of recording. A
- *  craving is a wave: it rises and falls inside a quarter of an hour
- *  whether it is obeyed or not, and the reason people lose is that in its
- *  third minute it feels permanent. The timer is there to show it falling. */
 const WAVE_OPTIONS = [
   { min: 5, label: "٥ دقائق" },
   { min: 15, label: "١٥ دقيقة" },
 ];
-
