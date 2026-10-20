@@ -303,12 +303,12 @@ export function ChartShell<T>({
   const hasTable = Boolean(tableRows?.length && tableColumns?.length);
 
   return (
-    <Card className={cn("overflow-hidden", className)}>
-      <div className="flex items-start justify-between gap-3 p-4 pb-2">
+    <Card className={cn("overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0E1422]/90 backdrop-blur-xl shadow-lg transition-all duration-200 hover:border-white/15", className)}>
+      <div className="flex items-start justify-between gap-3 p-5 pb-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-extrabold leading-tight">{title}</h3>
+          <h3 className="text-[16px] font-black tracking-tight text-white leading-tight">{title}</h3>
           {subtitle ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">{subtitle}</p>
           ) : null}
         </div>
         {hasTable ? (
@@ -317,7 +317,7 @@ export function ChartShell<T>({
             onClick={() => setView((v) => (v === "chart" ? "table" : "chart"))}
             aria-pressed={view === "table"}
             aria-controls={tableId}
-            className="shrink-0 rounded-sm border border-border p-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-all hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm"
             title={view === "chart" ? "عرض الأرقام كجدول" : "عرض الرسم"}
           >
             {view === "chart" ? (

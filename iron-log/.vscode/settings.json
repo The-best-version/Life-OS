@@ -1,0 +1,57 @@
+{
+  // ——— إعدادات عرض وتنظيم الملفات في VS Code ———
+  // إخفاء ملفات البناء المؤقتة والمجلدات الضخمة من شجرة الملفات ليبقى العرض نظيفاً وسريعاً
+  "files.exclude": {
+    "**/.git": false,
+    "**/.next": true,
+    "**/.next-verify": true,
+    "**/node_modules": true,
+    "**/.claude": true,
+    "**/tsconfig.tsbuildinfo": true,
+    "**/.DS_Store": true
+  },
+
+  // استثناء الملفات الضخمة من المراقبة والبحث لتفادي تعليق VS Code
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/.next-verify/**": true,
+    "**/backups/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.next-verify": true,
+    "**/backups": true,
+    "**/tsconfig.tsbuildinfo": true
+  },
+
+  // ——— تجميع وترتيب ملفات الإعدادات (File Nesting) ———
+  // يجمع كل ملفات التكوين (Tailwind, PostCSS, TSConfig, Next) تحت package.json
+  // فيظهر جذر المشروع مرتباً بدون فوضى وبنقرة واحدة يمكنك توسيعه
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, tsconfig.json, tsconfig.*.json, tsconfig.tsbuildinfo, tailwind.config.ts, postcss.config.mjs, next.config.mjs, next-env.d.ts, components.json, .gitignore",
+    "README.md": "HOW-TO-EDIT.md, CLAUDE.md"
+  },
+
+  // ——— دعم TypeScript و Tailwind والواجهة ———
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.preferences.includePackageJsonAutoImports": "auto",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "editor.tabSize": 2,
+  "tailwindCSS.includeLanguages": {
+    "typescript": "javascript",
+    "typescriptreact": "javascript"
+  }
+}

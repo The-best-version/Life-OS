@@ -30,7 +30,17 @@
     "archive/**": true
   },
   "files.exclude": {
-    "**/.netlify": true
+    "**/.netlify": true,
+    "**/.next": true,
+    "**/.next-verify": true,
+    "**/node_modules": true,
+    "**/tsconfig.tsbuildinfo": true
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, tsconfig.json, tsconfig.*.json, tsconfig.tsbuildinfo, tailwind.config.ts, postcss.config.mjs, next.config.mjs, next-env.d.ts, components.json, .gitignore",
+    "README.md": "HOW-TO-EDIT.md, CLAUDE.md"
   },
   "files.associations": {
     "*.mjs": "javascript"

@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Timer, TrendingUp } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Flame, Sparkles, Timer, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -9,85 +9,100 @@ import type { DashboardSummary } from "@/lib/metrics";
 import { formatNumber } from "@/lib/utils";
 
 /**
- * The hero.
+ * The elevated Studio Hero command card.
  *
- * Everything below it is charts; this is the only element in the app whose job
- * is to make you want to train. So it is the one surface that is not a white
- * card: it carries the brand ramp full-bleed, and the streak sits on it in solid
- * white at a size nothing else on the screen competes with.
- *
- * That inversion is the point. A dashboard where every card is the same white
- * rectangle has no focal point, and the number that is supposed to pull you back
- * tomorrow ends up the same visual weight as a lifetime tonnage total. One
- * saturated surface, at the top, and everything below it can stay calm.
- *
- * It has to survive being empty. A first-run user sees zeros, and zeros rendered
- * the same way as a 40-day streak is how an app announces it has nothing for you
- * — so at zero the hero drops the ring, changes the line, and puts a single
- * button where the number was.
+ * Designed with a deep midnight-titanium gradient, ambient neon glows,
+ * live workout readiness status, streak tracker, and circular weekly goal ring.
  */
 export function StudioHero({ summary }: { summary: DashboardSummary }) {
   const started = summary.streak > 0 || summary.totalSessions > 0;
-
   const goal = Math.max(1, summary.weeklyGoal);
   const progress = Math.min(1, summary.weekAttended / goal);
+  const trainedToday = summary.todaySets > 0;
 
   return (
-    <Card
-      /* `grad-primary` paints a background-IMAGE. The fill underneath it is set
-         with backgroundColor and never with the `background` shorthand, which
-         would wipe the gradient along with it. */
-      className="grad-primary relative isolate overflow-hidden border-transparent p-5 text-white shadow-lg"
-    >
-      {/* A light bloom in the top corner, so the ramp reads as a lit surface
-          rather than a flat swatch. Opacity only — see the note on the figure
-          below for why nothing here may animate a transform. */}
+    <Card className="relative isolate overflow-hidden rounded-3xl border border-white/[0.12] bg-gradient-to-br from-[#161D2E] via-[#0F1523] to-[#0A0D15] p-5 sm:p-6 text-white shadow-2xl transition-all">
+      {/* Dynamic atmospheric radial glows */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -z-10"
-        style={{
-          inset: "-60% -20% auto -20%",
-          height: "220%",
-          background:
-            "radial-gradient(46% 40% at 84% 14%, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)",
-        }}
+        className="pointer-events-none absolute -top-24 -right-24 -z-10 size-72 rounded-full bg-primary/25 blur-3xl"
       />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-24 -z-10 size-72 rounded-full bg-cyan-500/15 blur-3xl"
+      />
+
       <Barbell />
 
-      <p className="text-[11px] font-bold tracking-wide text-white/75">
-        {started ? "سلسلة أيام التدريب" : "أول يوم"}
-      </p>
+      {/* Top Status Bar: Day status and Streak Pill */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2">
+          <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
+          <p className="text-[12px] font-black tracking-wide text-white/90">
+            {trainedToday
+              ? "✅ حصة اليوم مكتملة بنجاح"
+              : started
+                ? "جاهز لحصة اليوم؟"
+                : "أول خطوة في رحلتك الرياضية"}
+          </p>
+        </div>
 
-      <div className="mt-1.5 flex items-end justify-between gap-4">
+        {trainedToday ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-0.5 text-[11px] font-bold text-emerald-300 shadow-sm backdrop-blur-md">
+            <CheckCircle2 className="size-3.5 text-emerald-400" />
+            <span>{summary.todaySets} مجموعات مُنجزة</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-0.5 text-[11px] font-bold text-white/90 backdrop-blur-md">
+            <Sparkles className="size-3 text-amber-300" />
+            <span>الهدف: {summary.weeklyGoal} حصص أسبوعياً</span>
+          </span>
+        )}
+      </div>
+
+      {/* Main Stats: Streak figure & Circular Goal Ring */}
+      <div className="mt-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
           {started ? (
-            <p className="flex items-baseline gap-2">
-              <span
-                className="animate-fade-in block"
-                style={{ filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.28))" }}
-              >
-                <span className="figure block text-[64px] leading-[0.82] text-white">
-                  {summary.streak}
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span
+                  className="animate-fade-in block"
+                  style={{ filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.5))" }}
+                >
+                  <span className="figure block text-[58px] sm:text-[68px] font-black leading-[0.82] tracking-tight text-white">
+                    {summary.streak}
+                  </span>
                 </span>
-              </span>
-              <span className="text-[15px] font-bold text-white/80">يوم</span>
-              {summary.streak > 0 ? (
-                <Flame className="size-5 text-white" aria-hidden />
-              ) : null}
-            </p>
-          ) : (
-            <p className="max-w-[24ch] text-[21px] font-black leading-snug text-white">
-              الحديد ما يرفع نفسه.
-            </p>
-          )}
+                <div className="flex flex-col">
+                  <span className="text-[16px] font-black text-white/90">أيام</span>
+                  <span className="text-[11px] font-bold text-white/60">متتالية</span>
+                </div>
+                {summary.streak > 0 ? (
+                  <span className="flex size-9 items-center justify-center rounded-xl border border-primary/40 bg-primary/20 shadow-[0_0_15px_rgba(255,42,85,0.35)] backdrop-blur-sm">
+                    <Flame className="size-5 text-primary animate-pulse" aria-hidden />
+                  </span>
+                ) : null}
+              </div>
 
-          <p className="mt-2 max-w-[30ch] text-[12.5px] font-medium leading-relaxed text-white/85">
-            {summary.streak > 0
-              ? `أطول سلسلة وصلتها ${summary.longestStreak} يوم · ${summary.totalSessions} حصة مسجّلة`
-              : started
-                ? `${summary.totalSessions} حصة مسجّلة · ارجع اليوم وابدأ السلسلة من جديد`
-                : "سجّل أول مجموعة، ومن بعدها كل رقم في هذي الشاشة يصير لك."}
-          </p>
+              <p className="mt-3 text-[12.5px] font-medium leading-relaxed text-slate-300">
+                {summary.streak > 0
+                  ? `أطول سلسلة حققتها ${summary.longestStreak} يوماً · ${summary.totalSessions} حصة مسجّلة بالإجمال`
+                  : started
+                    ? `${summary.totalSessions} حصة مسجّلة · تمرّن اليوم وأشعل السلسلة مجدداً 🔥`
+                    : "سجّل أول مجموعة، ومن بعدها كل رقم في التطبيق يبدأ بالتحرك معك."}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[25px] font-black leading-tight text-white drop-shadow-md">
+                الحديد ما يرفع نفسه.
+              </p>
+              <p className="mt-2 text-[13px] text-slate-300">
+                سجّل أول مجموعة اليوم لتبدأ منحنيات تقدمك وأرقامك القياسية.
+              </p>
+            </div>
+          )}
         </div>
 
         {started ? (
@@ -99,45 +114,50 @@ export function StudioHero({ summary }: { summary: DashboardSummary }) {
         ) : null}
       </div>
 
+      {/* Quick Status Chips & Action Button */}
       {started ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Chip
-            icon={<TrendingUp className="size-3.5" aria-hidden />}
-            label="حجم الأسبوع"
-            value={`${formatNumber(summary.weekVolumeKg)} كجم`}
-          />
-          {summary.typicalSessionMin !== null ? (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] pt-3.5">
+          <div className="flex flex-wrap items-center gap-2">
             <Chip
-              icon={<Timer className="size-3.5" aria-hidden />}
-              label="الحصة عادةً"
-              value={`${summary.typicalSessionMin} دقيقة`}
+              icon={<TrendingUp className="size-3.5 text-cyan-400" aria-hidden />}
+              label="حجم الأسبوع"
+              value={`${formatNumber(summary.weekVolumeKg)} كجم`}
             />
-          ) : null}
-          {summary.weightChange30d !== null ? (
-            <Chip
-              /* Latin digits, like every other figure on this screen. The
-                 Arabic-Indic "٣٠" that shipped here was the only one in the
-                 app, and it sat two chips away from "53,235 كجم". */
-              label="الوزن / 30 يوم"
-              value={`${
-                summary.weightChange30d > 0
-                  ? "زيادة"
-                  : summary.weightChange30d < 0
-                    ? "نزول"
-                    : "ثبات"
-              } ${formatNumber(Math.abs(summary.weightChange30d))} كجم`}
-            />
-          ) : null}
+            {summary.typicalSessionMin !== null ? (
+              <Chip
+                icon={<Timer className="size-3.5 text-amber-400" aria-hidden />}
+                label="متوسط الحصة"
+                value={`${summary.typicalSessionMin} دقيقة`}
+              />
+            ) : null}
+            {summary.weightChange30d !== null ? (
+              <Chip
+                label="الوزن / 30 يوم"
+                value={`${
+                  summary.weightChange30d > 0
+                    ? "زيادة"
+                    : summary.weightChange30d < 0
+                      ? "نزول"
+                      : "ثبات"
+                } ${formatNumber(Math.abs(summary.weightChange30d))} كجم`}
+              />
+            ) : null}
+          </div>
+
+          <Link
+            href="/workout"
+            className="group mr-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-[#C2002E] px-4 py-2 text-[12.5px] font-black text-white shadow-[0_0_20px_rgba(255,42,85,0.4)] transition-all duration-200 hover:scale-[1.03] hover:shadow-[0_0_26px_rgba(255,42,85,0.65)] active:scale-95"
+          >
+            <span>{trainedToday ? "إضافة تمارين للحصة" : "بدء تمرين الآن"}</span>
+            <ChevronLeft className="size-4 transition-transform duration-200 group-hover:-translate-x-1" />
+          </Link>
         </div>
       ) : (
-        /* Not the Button primitive: every primary button in the app is this
-           exact ramp, and a red button on a red card is invisible. On this one
-           surface the CTA inverts to solid white. */
         <Link
           href="/workout"
-          className="press mt-4 flex min-h-tap w-full items-center justify-center rounded-lg bg-white px-5 text-[15px] font-black text-primary-ink shadow-md transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto"
+          className="press mt-5 flex min-h-tap w-full items-center justify-center rounded-xl bg-gradient-to-r from-primary to-[#C2002E] px-6 py-3 text-[15px] font-black text-white shadow-[0_0_25px_rgba(255,42,85,0.45)] transition-all hover:scale-[1.02] sm:w-auto"
         >
-          ابدأ تمرين اليوم
+          ابدأ تمرين اليوم 🚀
         </Link>
       )}
     </Card>
@@ -145,16 +165,7 @@ export function StudioHero({ summary }: { summary: DashboardSummary }) {
 }
 
 /**
- * The week against its goal, as a ring.
- *
- * A ring rather than a bar because it sits beside a very large number and a bar
- * would read as that number's underline. The count is printed inside it, so the
- * value never depends on reading an arc.
- *
- * On the brand surface the ring is drawn in white rather than in a token colour:
- * `--success` and `--primary` are both tuned against a near-white page and
- * neither survives being laid on saturated red. The "goal met" state is carried
- * by the ring closing and by the figure inside it, not by a hue swap.
+ * Weekly goal progress ring with circular SVG gauge.
  */
 function GoalRing({
   progress,
@@ -167,12 +178,16 @@ function GoalRing({
 }) {
   const radius = 34;
   const circumference = 2 * Math.PI * radius;
+  const isGoalMet = attended >= goal;
 
   return (
     <div className="relative shrink-0">
       <svg
         viewBox="0 0 84 84"
-        className="size-[84px]"
+        width="86"
+        height="86"
+        style={{ width: 86, height: 86, minWidth: 86, maxWidth: 86 }}
+        className="size-[86px] drop-shadow-[0_0_12px_rgba(0,0,0,0.5)]"
         role="img"
         aria-label={`أيام التدريب هذا الأسبوع ${attended} من ${goal}`}
       >
@@ -181,7 +196,7 @@ function GoalRing({
           cy="42"
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.26)"
+          stroke="rgba(255,255,255,0.08)"
           strokeWidth="7"
         />
         <circle
@@ -189,21 +204,26 @@ function GoalRing({
           cy="42"
           r={radius}
           fill="none"
-          stroke="#FFFFFF"
+          stroke={isGoalMet ? "#10B981" : "#FF2D55"}
           strokeWidth="7"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - progress)}
           transform="rotate(-90 42 42)"
           className="transition-[stroke-dashoffset] duration-700"
+          style={{
+            filter: isGoalMet
+              ? "drop-shadow(0 0 8px rgba(16,185,129,0.7))"
+              : "drop-shadow(0 0 8px rgba(255,45,85,0.7))",
+          }}
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="figure text-[20px] text-white" dir="ltr">
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span className="figure text-[19px] font-black text-white leading-none" dir="ltr">
           {attended}/{goal}
         </span>
-        <span className="mt-0.5 text-[9px] font-bold text-white/75">
-          هذا الأسبوع
+        <span className="mt-1 text-[9px] font-bold text-slate-300">
+          {isGoalMet ? "اكتمل الهدف" : "هذا الأسبوع"}
         </span>
       </div>
     </div>
@@ -220,37 +240,26 @@ function Chip({
   value: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white/85 backdrop-blur">
+    <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-slate-200 backdrop-blur-md">
       {icon}
-      {label}
-      <span className="tnum font-black text-white">{value}</span>
+      <span>{label}</span>
+      <span className="tnum font-black text-white mr-0.5">{value}</span>
     </span>
   );
 }
 
-/**
- * A loaded bar lying across the bottom of the hero.
- *
- * Drawn, not photographed: the app ships offline with no image assets, and a
- * vector silhouette re-tints itself instead of baking a colour in. It is
- * decoration and carries no information, so it is hidden from the accessibility
- * tree entirely.
- */
 function Barbell() {
   return (
     <svg
       aria-hidden
       viewBox="0 0 400 60"
       preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-x-0 -bottom-2 -z-10 h-14 w-full opacity-[0.16]"
+      className="pointer-events-none absolute inset-x-0 -bottom-2 -z-10 h-14 w-full opacity-[0.06]"
     >
       <g fill="#FFFFFF">
-        {/* bar */}
         <rect x="70" y="27" width="260" height="6" rx="3" />
-        {/* collars */}
         <rect x="88" y="21" width="9" height="18" rx="2" />
         <rect x="303" y="21" width="9" height="18" rx="2" />
-        {/* plates, heaviest outermost */}
         <rect x="46" y="6" width="15" height="48" rx="4" />
         <rect x="64" y="11" width="12" height="38" rx="4" />
         <rect x="78" y="16" width="9" height="28" rx="3" />

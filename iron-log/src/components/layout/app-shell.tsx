@@ -32,23 +32,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="iron-lattice" />
 
       <header
-        className="sticky top-0 z-20 border-b border-border/60 bg-background/80 backdrop-blur-xl"
+        className="sticky top-0 z-20 border-b border-white/[0.08] bg-background/85 backdrop-blur-2xl shadow-sm"
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
-        <div className="mx-auto flex max-w-[560px] items-center justify-between gap-3 px-4 pb-2.5 pt-2.5 lg:max-w-[1060px]">
-          <div className="flex items-center gap-2.5">
+        <div className="mx-auto flex max-w-[560px] items-center justify-between gap-3 px-4 pb-3 pt-3 lg:max-w-[1060px]">
+          <div className="flex items-center gap-3">
             <PlateMark />
             <div className="leading-none">
-              <p className="molten-text display text-[17px] font-bold tracking-[0.16em]">
+              <p className="molten-text text-[18px] font-black tracking-[0.14em] drop-shadow-sm">
                 IRON&nbsp;LOG
               </p>
-              <p className="mt-[3px] text-[10px] font-bold text-muted-foreground">
+              <p className="mt-[4px] text-[10.5px] font-bold text-muted-foreground">
                 {formatFullDate(toIsoDate())}
               </p>
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2.5">
             {status === "ready" ? <TodayChip summary={summary} /> : null}
             <ThemeToggle />
           </div>
@@ -109,6 +109,9 @@ function PlateMark() {
   return (
     <svg
       viewBox="0 0 40 40"
+      width="36"
+      height="36"
+      style={{ width: 36, height: 36, minWidth: 36, maxWidth: 36 }}
       className="size-9 shrink-0"
       role="img"
       aria-label="شعار Iron Log"
@@ -148,32 +151,32 @@ function TodayChip({
 }) {
   if (summary.todaySets > 0) {
     return (
-      <div className="steel shrink-0 rounded-md border bg-card px-2.5 py-1.5 text-end">
-        <p className="figure text-[15px] text-foreground">
+      <div className="shrink-0 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-end shadow-sm backdrop-blur-md">
+        <p className="figure text-[14px] font-black text-emerald-400 leading-none">
           {formatCompact(summary.todayVolumeKg)}
-          <span className="ms-1 font-sans text-[9.5px] font-bold text-muted-foreground">
+          <span className="ms-1 font-sans text-[9.5px] font-bold text-emerald-300/80">
             كجم اليوم
           </span>
         </p>
-        <p className="mt-0.5 font-mono text-[9.5px] text-muted-foreground">
-          {summary.todaySets} مجموعة
+        <p className="mt-1 font-mono text-[9.5px] font-bold text-muted-foreground leading-none">
+          {summary.todaySets} مجموعات مُنجزة
         </p>
       </div>
     );
   }
 
   return (
-    <div className="steel flex shrink-0 items-center gap-1.5 rounded-md border bg-card px-2.5 py-2">
+    <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-card/80 px-3 py-1.5 backdrop-blur-md shadow-sm">
       <Flame
         className={
           summary.streak > 0
-            ? "size-3.5 text-primary"
-            : "size-3.5 text-muted-foreground"
+            ? "size-4 text-primary animate-pulse"
+            : "size-4 text-muted-foreground"
         }
         aria-hidden
       />
-      <span className="figure text-[14px]">{summary.streak}</span>
-      <span className="text-[9.5px] font-bold text-muted-foreground">
+      <span className="figure text-[14px] font-black text-foreground">{summary.streak}</span>
+      <span className="text-[10px] font-bold text-muted-foreground">
         يوم سلسلة
       </span>
     </div>

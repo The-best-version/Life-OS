@@ -5,33 +5,20 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/**
- * Which of the studio's five colours this tile wears.
- *
- * A grid of four identical white boxes is a spreadsheet. Giving each tile its
- * own colour is what makes the row scannable at a glance — you learn where the
- * tonnage lives by its colour long before you read its label — and it is where
- * the identity's secondaries actually earn their place on the screen.
- *
- * `fill` is the bar and the icon chip; `ink` is the only value allowed to carry
- * the figure, because the fills are tuned for saturation and none of them clears
- * 4.5:1 as text on white.
- */
 export type StatTone = "red" | "gold" | "cyan" | "violet" | "lime";
 
 const TONE: Record<StatTone, { fill: string; ink: string }> = {
-  red: { fill: "hsl(var(--primary))", ink: "hsl(var(--primary-ink))" },
-  gold: { fill: "var(--spark-gold)", ink: "var(--spark-gold-ink)" },
-  cyan: { fill: "var(--spark-cyan)", ink: "var(--spark-cyan-ink)" },
-  violet: { fill: "var(--spark-violet)", ink: "var(--spark-violet-ink)" },
-  lime: { fill: "var(--spark-lime)", ink: "var(--spark-lime-ink)" },
+  red: { fill: "#FF2D55", ink: "#FF5277" },
+  gold: { fill: "#FFB800", ink: "#FFC933" },
+  cyan: { fill: "#00E5FF", ink: "#33EBFF" },
+  violet: { fill: "#8B5CF6", ink: "#A78BFA" },
+  lime: { fill: "#10B981", ink: "#34D399" },
 };
 
 export interface StatTileProps {
   label: string;
   value: string;
   unit?: string;
-  /** Signed change vs a named period. `null` hides the delta row. */
   delta?: {
     value: ReactNode;
     direction: "up" | "down" | "flat";
@@ -39,26 +26,12 @@ export interface StatTileProps {
   } | null;
   trend?: readonly number[];
   trendLabel?: string;
-  /** A quiet mark in the corner. Decoration for scanning, never the meaning. */
   icon?: LucideIcon;
-  /** Set on the single tile that is the headline of the grid. */
   featured?: boolean;
-  /** Defaults to the brand red. */
   tone?: StatTone;
   className?: string;
 }
 
-/**
- * Stat tile: colour bar · label · value · optional delta · optional sparkline.
- *
- * The figure is the point of the tile, so it is set large and in the tone's ink
- * while the label sits small and muted above it — the number should be readable
- * from further away than anything else on the card.
- *
- * The delta's colour is direction × whether up is good, and it always ships with
- * an arrow, so the meaning never rests on colour alone. The icon chip is
- * decoration for scanning and carries nothing a screen reader would miss.
- */
 export function StatTile({
   label,
   value,
@@ -71,17 +44,6 @@ export function StatTile({
   tone = "red",
   className,
 }: StatTileProps) {
-  /*
-    Vertical arrows, never the diagonal pair.
-
-    `ArrowUpRight` / `ArrowDownRight` shipped here first and they were unreadable:
-    at this size, set on an Arabic line, a diagonal arrow has the silhouette of
-    the لا ligature, so "↘ انخفاض 16%" was read as the word "لا" followed by the
-    text. Enlarging it — the first attempt at a fix — only made the false letter
-    bigger. A purely vertical arrow has no counterpart in the Arabic script, so
-    it cannot be mistaken for one, and it carries no left/right bias to argue
-    with the RTL flow.
-  */
   const DeltaIcon =
     delta?.direction === "up"
       ? ArrowUp
@@ -91,9 +53,6 @@ export function StatTile({
 
   const { fill, ink } = TONE[tone];
 
-  /* Both values ride as custom properties so the fill can be reused at several
-     alphas below without repeating the colour, and so a `color-mix` is never
-     needed for a plain tint. */
   const style = {
     "--tone": fill,
     "--tone-ink": ink,
@@ -103,75 +62,79 @@ export function StatTile({
     <Card
       style={style}
       className={cn(
-        "relative flex flex-col overflow-hidden p-3.5 pt-4",
-        featured && "shadow-md",
+        "group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#131929]/95 via-[#0E1422]/90 to-[#0A0D16]/95 p-4 shadow-lg backdrop-blur-xl transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:shadow-2xl",
+        featured && "border-primary/40 shadow-[0_4px_24px_rgba(255,45,85,0.15)]",
         className,
       )}
     >
-      {/* The tone bar. Full-bleed across the top edge, which is what makes a
-          grid of these read as one coloured set rather than four white boxes. */}
+      {/* Neon Top Hairline */}
       <span
         aria-hidden
-        className="absolute inset-x-0 top-0 h-[3px]"
-        style={{ backgroundColor: "var(--tone)" }}
+        className="absolute inset-x-0 top-0 h-[2.5px]"
+        style={{
+          backgroundColor: "var(--tone)",
+          boxShadow: "0 0 12px var(--tone)",
+        }}
       />
 
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[10.5px] font-bold leading-tight text-muted-foreground">
-          {label}
-        </p>
-        {Icon ? (
+      <div>
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-[12px] font-extrabold leading-tight text-slate-300 group-hover:text-white transition-colors">
+            {label}
+          </p>
+          {Icon ? (
+            <span
+              aria-hidden
+              className="flex size-8 shrink-0 items-center justify-center rounded-xl shadow-inner transition-transform duration-200 group-hover:scale-110"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--tone) 16%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--tone) 35%, transparent)",
+              }}
+            >
+              <Icon className="size-4.5" style={{ color: "var(--tone)" }} />
+            </span>
+          ) : null}
+        </div>
+
+        <p className="mt-3 flex items-baseline gap-1.5">
           <span
-            aria-hidden
-            className="grid size-7 shrink-0 place-items-center rounded-sm"
-            style={{ backgroundColor: "color-mix(in srgb, var(--tone) 14%, transparent)" }}
+            className={cn(
+              "figure font-black tracking-tight text-white",
+              featured ? "text-[32px] sm:text-[36px]" : "text-[28px] sm:text-[32px]",
+            )}
           >
-            <Icon className="size-4" style={{ color: "var(--tone-ink)" }} />
+            {value}
           </span>
+          {unit ? (
+            <span className="text-[11px] font-bold text-slate-400">{unit}</span>
+          ) : null}
+        </p>
+
+        {delta ? (
+          <p
+            className={cn(
+              "mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-bold",
+              delta.direction === "up" && "text-emerald-400",
+              delta.direction === "down" && "text-rose-400",
+              delta.direction === "flat" && "text-slate-400",
+            )}
+          >
+            <span
+              aria-hidden
+              className="grid size-4 shrink-0 place-items-center rounded-md bg-white/[0.08]"
+            >
+              <DeltaIcon className="size-3" strokeWidth={3} />
+            </span>
+            <bdi className="tnum font-extrabold">{delta.value}</bdi>
+            <span className="font-medium text-slate-400">
+              {delta.period}
+            </span>
+          </p>
         ) : null}
       </div>
 
-      <p className="mt-2 flex items-baseline gap-1">
-        <span
-          className={cn("figure", featured ? "text-[34px]" : "text-[30px]")}
-          style={{ color: "var(--tone-ink)" }}
-        >
-          {value}
-        </span>
-        {unit ? (
-          <span className="text-xs font-bold text-muted-foreground">{unit}</span>
-        ) : null}
-      </p>
-
-      {delta ? (
-        <p
-          className={cn(
-            "mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] font-bold",
-            delta.direction === "up" && "text-success-ink",
-            delta.direction === "down" && "text-muted-foreground",
-            delta.direction === "flat" && "text-muted-foreground",
-          )}
-        >
-          {/* Set in its own chip rather than loose in the line. Spacing alone
-              was not enough to stop it being read as part of the word beside
-              it — the glyph needs to sit on its own ground to read as a mark. */}
-          <span
-            aria-hidden
-            className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-foreground/[0.07]"
-          >
-            <DeltaIcon className="size-3" strokeWidth={2.75} />
-          </span>
-          {/* <bdi> keeps a signed value like "−12%" from being reordered by the
-              surrounding RTL text into "%12−". */}
-          <bdi className="tnum">{delta.value}</bdi>
-          <span className="font-normal text-muted-foreground">
-            {delta.period}
-          </span>
-        </p>
-      ) : null}
-
       {trend && trend.length > 1 ? (
-        <div className="mt-auto pt-2.5">
+        <div className="mt-4 border-t border-white/[0.06] pt-2.5">
           <Sparkline values={trend} ariaLabel={trendLabel ?? label} />
         </div>
       ) : null}

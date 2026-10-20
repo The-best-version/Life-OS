@@ -37,62 +37,49 @@
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
 
     /* ---- surfaces ---------------------------------------------------- */
-    /* Never pure white for the page: a white card on a white field has no edge.
-       This is a hair warm so the coloured washes have something to sit in. */
-    --background: 20 60% 98%; /* #FEFBFA */
-    --foreground: 330 12% 8%; /* #171316 — 17.4:1 on the page */
+    --background: 224 32% 6%; /* #070A11 Deep Obsidian */
+    --foreground: 210 20% 98%; /* #F8FAFC Crisp Pure White */
 
-    --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 330 12% 8%;
+    --card: 222 24% 10%; /* #0F1523 Frosted Slate Titanium */
+    --card-foreground: 210 20% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 330 12% 8%;
+    --popover: 222 26% 12%; /* #131B2C */
+    --popover-foreground: 210 20% 98%;
 
-    /* shadcn's `--secondary` / `--muted` / `--accent` are SURFACES, not brand
-       colours — the hover fill, the inert chip, the pressed row. The brand
-       colour is `--primary`. Keeping shadcn's meaning intact is what lets the
-       existing ui/ primitives carry over untouched. */
-    --secondary: 20 20% 95%; /* #F5F1EF */
-    --secondary-foreground: 330 12% 8%;
-    --muted: 20 20% 95%;
-    --muted-foreground: 20 8% 42%; /* #736B67 — 5.2:1, the only muted ink */
-    --accent: 18 18% 92%; /* #EEE7E4 hover / pressed */
-    --accent-foreground: 330 12% 8%;
+    --secondary: 222 20% 15%; /* #1A2336 */
+    --secondary-foreground: 210 20% 98%;
+    --muted: 222 18% 14%;
+    --muted-foreground: 215 16% 65%; /* #94A3B8 */
+    --accent: 222 22% 18%;
+    --accent-foreground: 210 20% 98%;
 
-    --border: 18 22% 93%; /* #F0E9E7 hairline */
-    --border-strong: 14 16% 85%; /* #DFD5D1 a divider meant to be seen */
-    --input: 14 16% 85%; /* an input's edge is a hit target: darker */
-    --ring: 350 100% 56%;
+    --border: 222 18% 16%; /* #1B2436 Refined Tech Border */
+    --border-strong: 222 24% 24%;
+    --input: 222 22% 20%;
+    --ring: 348 100% 60%;
 
-    /* ---- the accent: iron red ---------------------------------------- */
-    /* One loud red, and it is loud on purpose. It fills arcs, marks, hero
-       figures and every primary action. */
-    --primary: 350 100% 56%; /* #FF1F44 */
-    --primary-ink: 348 91% 45%; /* #DC0A34 small accent text — 5.1:1 */
+    /* ---- athletic primary: neon crimson ------------------------------- */
+    --primary: 348 100% 60%; /* #FF3358 */
+    --primary-ink: 348 100% 68%;
     --primary-foreground: 0 0% 100%;
 
-    /* The primary-button ramp, and the only gradient in the system. Red into a
-       deeper crimson, because a flat red button at this saturation vibrates.
-       A gradient's contrast is set by its LIGHTEST end: white on #F5123C is
-       4.62:1, and 7.9:1 at the dark end — so a 14px label clears AA. */
-    --grad-primary-from: #f5123c;
-    --grad-primary-to: #a80a3f;
+    --grad-primary-from: #FF2A55;
+    --grad-primary-to: #B80028;
 
     /* ---- semantic ---------------------------------------------------- */
-    --success: 150 100% 36%; /* #00B85C a PR, a target hit, a green day */
-    --success-ink: 150 100% 26%; /* #008542 — 4.7:1 */
-    --caution: 40 100% 50%; /* #FFA800 a stall, a warning */
-    --caution-ink: 39 100% 27%; /* #8A5A00 — 5.9:1 */
-    --danger: 350 80% 40%; /* #B8123A a regression, a destructive act */
-    --danger-ink: 350 85% 38%; /* #B30B35 — 6.3:1 */
-    --recovery: 186 100% 42%; /* #00BFD4 rest, deload, cool-down */
-    --recovery-ink: 186 100% 28%; /* #00808F — 4.7:1 */
+    --success: 154 75% 48%; /* #1FD685 */
+    --success-ink: 154 75% 48%;
+    --caution: 38 100% 55%; /* #FFAE1A */
+    --caution-ink: 38 100% 55%;
+    --danger: 350 100% 65%; /* #FF4D6D */
+    --danger-ink: 350 100% 65%;
+    --recovery: 190 95% 50%; /* #06D6F2 */
+    --recovery-ink: 190 95% 50%;
 
-    /* shadcn aliases, so the ui/ primitives need no edit */
-    --destructive: 350 80% 40%;
+    --destructive: 350 100% 65%;
     --destructive-foreground: 0 0% 100%;
 
     /* ---- the four secondaries --------------------------------------- */
@@ -160,94 +147,71 @@
        rather than a Latin face with Arabic bolted on, a matching Latin
        companion, and tabular figures — so Latin figures and Arabic text share
        one run without a mid-heading fallback. */
-    --font-sans: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI",
+    --font-sans: "Cairo", "IBM Plex Sans Arabic", "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI",
       Tahoma, Arial, sans-serif;
-    --font-display: var(--font-sans);
-    --font-mono: "IBM Plex Sans Arabic", ui-monospace, "SF Mono",
+    --font-display: "Cairo", var(--font-sans);
+    --font-mono: "Plus Jakarta Sans", "IBM Plex Sans Arabic", ui-monospace, "SF Mono",
       "Segoe UI Mono", monospace;
 
     /* ---- elevation -------------------------------------------------- */
-    /* Two layers maximum, and very soft. This system leans on borders: a card
-       is found by its hairline, not by a drop shadow, which is what keeps a
-       screen of eight cards from looking like it is hovering. */
-    --shadow-sm: 0 1px 2px rgba(35, 15, 22, 0.04),
-      0 1px 3px rgba(35, 15, 22, 0.03);
-    --shadow-md: 0 1px 2px rgba(35, 15, 22, 0.04),
-      0 8px 18px -10px rgba(35, 15, 22, 0.12);
-    --shadow-lg: 0 2px 4px rgba(35, 15, 22, 0.05),
-      0 24px 38px -18px rgba(35, 15, 22, 0.16);
-    /* The brand's own glow, for a streak badge and a PR celebration. */
-    --glow-accent: 0 0 0 1px rgba(255, 31, 68, 0.24),
-      0 8px 24px -6px rgba(255, 31, 68, 0.48);
-    /* Named separately because three components still reach for it by this
-       name. Same value; it dies with the last of them. */
-    --ember-glow: rgba(255, 31, 68, 0.55);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 6px 20px -4px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.08);
+    --shadow-lg: 0 14px 38px -6px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.12);
+    --glow-accent: 0 0 24px -2px rgba(255, 42, 85, 0.5);
+    --ember-glow: rgba(255, 42, 85, 0.6);
 
     /* ---- geometry & motion ------------------------------------------ */
     --radius: 20px;
-    /* Interactive motion eases OUT. An ease-in-out on a press or a panel makes
-       the first third of the movement look like lag. */
-    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
     --dur-fast: 150ms;
     --dur: 200ms;
     --dur-slow: 250ms;
   }
 
   /*
-   * Dark: the same roles in a warm plum-charcoal, never a neutral grey and
-   * never near-black. Selected by `data-theme` on <html>, which an inline script
-   * in the document head sets before first paint — so the theme never flashes
-   * and the server render is never contradicted.
-   *
-   * Reached only from the toggle: a dark OS no longer drags the app into it.
+   * Dark: Sleek Obsidian Titanium Pro Athletic Theme
    */
   :root[data-theme="dark"] {
     color-scheme: dark;
 
-    --background: 340 12% 8%; /* #171216 */
-    --foreground: 20 30% 96%; /* #F9F5F3 — 16.8:1 */
+    --background: 224 32% 6%; /* #070A11 */
+    --foreground: 210 20% 98%; /* #F8FAFC */
 
-    --card: 340 10% 12%; /* #221C20 */
-    --card-foreground: 20 30% 96%;
-    --popover: 340 10% 15%;
-    --popover-foreground: 20 30% 96%;
+    --card: 222 24% 10%; /* #0F1523 */
+    --card-foreground: 210 20% 98%;
+    --popover: 222 26% 12%; /* #131B2C */
+    --popover-foreground: 210 20% 98%;
 
-    --secondary: 340 8% 17%;
-    --secondary-foreground: 20 30% 96%;
-    --muted: 340 8% 17%;
-    --muted-foreground: 20 10% 66%; /* #ADA4A0 — 6.6:1 on the card */
-    --accent: 340 8% 21%;
-    --accent-foreground: 20 30% 96%;
+    --secondary: 222 20% 15%; /* #1A2336 */
+    --secondary-foreground: 210 20% 98%;
+    --muted: 222 18% 14%;
+    --muted-foreground: 215 16% 65%; /* #94A3B8 */
+    --accent: 222 22% 18%;
+    --accent-foreground: 210 20% 98%;
 
-    --border: 340 8% 19%; /* #342C30 */
-    --border-strong: 340 8% 27%; /* #4A3E44 */
-    --input: 340 8% 27%;
-    --ring: 350 100% 68%;
+    --border: 222 18% 16%; /* #1B2436 */
+    --border-strong: 222 24% 24%;
+    --input: 222 22% 20%;
+    --ring: 348 100% 60%;
 
-    /* The brand hex does not move — a brand that changes colour with the theme
-       is two brands. Only the INK lifts, because #FF1F44 is already 5.1:1 on
-       the dark card and darkening it would be the unreadable direction. */
-    --primary: 350 100% 56%;
-    --primary-ink: 350 100% 71%; /* #FF6B84 — 7.1:1 */
+    --primary: 348 100% 60%; /* #FF3358 */
+    --primary-ink: 348 100% 68%;
     --primary-foreground: 0 0% 100%;
 
-    /* Same ramp in both themes: a button is its own surface, so its label's
-       contrast is a property of the button, not of the page behind it. */
-    --grad-primary-from: #f5123c;
-    --grad-primary-to: #a80a3f;
+    --grad-primary-from: #FF2A55;
+    --grad-primary-to: #B80028;
 
-    /* Fill and ink converge or lift — every value below already clears 4.5:1. */
-    --success: 150 72% 48%; /* #23D183 — 8.9:1 */
-    --success-ink: 150 72% 48%;
-    --caution: 42 100% 58%; /* #FFBC29 — 10.4:1 */
-    --caution-ink: 42 100% 58%;
-    --danger: 350 100% 71%; /* #FF6B84 — 7.1:1 */
-    --danger-ink: 350 100% 71%;
-    --recovery: 186 80% 52%; /* #1FD3E8 — 9.6:1 */
-    --recovery-ink: 186 80% 52%;
+    --success: 154 75% 48%; /* #1FD685 */
+    --success-ink: 154 75% 48%;
+    --caution: 38 100% 55%; /* #FFAE1A */
+    --caution-ink: 38 100% 55%;
+    --danger: 350 100% 65%; /* #FF4D6D */
+    --danger-ink: 350 100% 65%;
+    --recovery: 190 95% 50%; /* #06D6F2 */
+    --recovery-ink: 190 95% 50%;
 
-    --destructive: 350 100% 71%;
-    --destructive-foreground: 340 12% 8%;
+    --destructive: 350 100% 65%;
+    --destructive-foreground: 0 0% 100%;
 
     --spark-gold: #ffbc29;
     --spark-cyan: #1fd3e8;
@@ -363,58 +327,33 @@
    * as near-black, then as flat cream.
    */
   .daylight-ground,
-  .studio-ground {
+  .studio-ground,
+  :root[data-theme="dark"] .daylight-ground,
+  :root[data-theme="dark"] .studio-ground {
     position: fixed;
     inset: 0;
     z-index: -10;
     pointer-events: none;
     background-color: hsl(var(--background));
     background-image: radial-gradient(
-        58% 42% at 88% -6%,
-        rgba(255, 31, 68, 0.2) 0%,
-        transparent 64%
+        60% 45% at 85% -5%,
+        rgba(255, 42, 85, 0.22) 0%,
+        transparent 65%
       ),
       radial-gradient(
-        46% 34% at 10% 2%,
-        rgba(255, 168, 0, 0.16) 0%,
-        transparent 62%
-      ),
-      radial-gradient(
-        52% 40% at 2% 96%,
-        rgba(0, 191, 212, 0.16) 0%,
-        transparent 66%
-      ),
-      radial-gradient(
-        46% 36% at 98% 88%,
-        rgba(139, 92, 246, 0.16) 0%,
-        transparent 64%
-      );
-  }
-
-  /* Dark keeps every wash and pushes them harder: on a dark plane a 16% wash
-     disappears, and a dark ground with no colour in it is exactly the gloom
-     this identity replaced. */
-  :root[data-theme="dark"] .daylight-ground,
-  :root[data-theme="dark"] .studio-ground {
-    background-image: radial-gradient(
-        58% 42% at 88% -6%,
-        rgba(255, 31, 68, 0.3) 0%,
-        transparent 62%
-      ),
-      radial-gradient(
-        46% 34% at 10% 2%,
-        rgba(255, 168, 0, 0.16) 0%,
+        45% 35% at 10% 5%,
+        rgba(0, 229, 255, 0.14) 0%,
         transparent 60%
       ),
       radial-gradient(
-        52% 40% at 2% 96%,
-        rgba(0, 191, 212, 0.2) 0%,
-        transparent 64%
+        50% 40% at 5% 95%,
+        rgba(139, 92, 246, 0.15) 0%,
+        transparent 65%
       ),
       radial-gradient(
-        46% 36% at 98% 88%,
-        rgba(139, 92, 246, 0.22) 0%,
-        transparent 62%
+        45% 35% at 95% 90%,
+        rgba(16, 185, 129, 0.12) 0%,
+        transparent 60%
       );
   }
 

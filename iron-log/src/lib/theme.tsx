@@ -57,7 +57,7 @@ function readChoice(): ThemeChoice {
      provider would resolve the OS on mount and flip a dark-OS machine straight
      back to black a frame later — which is how nobody ever saw this identity.
      "system" is now something you pick, never something you land on. */
-  return "light";
+  return "dark";
 }
 
 function systemTheme(): ResolvedTheme {

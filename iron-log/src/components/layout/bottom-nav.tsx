@@ -40,12 +40,12 @@ export function BottomNav() {
     <nav
       aria-label="التنقل الرئيسي"
       className={cn(
-        "fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/85 backdrop-blur-xl",
-        "lg:inset-x-auto lg:bottom-5 lg:left-1/2 lg:w-[540px] lg:-translate-x-1/2 lg:rounded-full lg:border lg:shadow-2xl",
+        "fixed inset-x-3 bottom-2 z-30 rounded-2xl border border-white/[0.12] bg-[#0A0E18]/90 backdrop-blur-2xl shadow-[0_12px_40px_rgba(0,0,0,0.7)]",
+        "lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-[540px] lg:-translate-x-1/2",
       )}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <ul className="mx-auto flex max-w-[560px] px-1.5 py-1.5 lg:py-1">
+      <ul className="mx-auto flex max-w-[560px] items-center justify-between px-2 py-2">
         {ITEMS.map((item) => {
           const active =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -56,31 +56,21 @@ export function BottomNav() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-col items-center gap-1 rounded-md px-1 pb-1.5 pt-2.5 text-[10.5px] font-bold transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "relative flex flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-bold transition-all duration-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                   active
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "bg-primary/20 text-white shadow-[0_0_15px_rgba(255,42,85,0.25)]"
+                    : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
                 )}
               >
-                {/* The molten tick above the active tab. It is a separate
-                    element so the label keeps plain token colour — an active
-                    tab is marked by position and a bar, not by tinted text. */}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "molten absolute top-0 h-[3px] w-8 rounded-full transition-opacity lg:top-0.5",
-                    active ? "opacity-100 shadow-[0_0_12px_0_var(--ember-glow)]" : "opacity-0",
-                  )}
-                />
                 <Icon
                   className={cn(
-                    "size-[19px] transition-colors",
-                    active && "text-primary",
+                    "size-[18px] transition-transform duration-200",
+                    active ? "scale-110 text-primary drop-shadow-[0_0_8px_rgba(255,42,85,0.6)]" : "text-muted-foreground",
                   )}
                   aria-hidden
                 />
-                {item.label}
+                <span className={active ? "font-black" : "font-semibold"}>{item.label}</span>
               </Link>
             </li>
           );

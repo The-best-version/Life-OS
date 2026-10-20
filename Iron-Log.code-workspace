@@ -1,0 +1,26 @@
+{
+  "folders": [
+    {
+      "name": "🏋️ تطبيق النادي (Iron Log)",
+      "path": "./iron-log"
+    }
+  ],
+  "settings": {
+    "window.title": "${dirty}${activeEditorShort} — 🏋️ Iron Log [تطبيق النادي]",
+    "files.exclude": {
+      "**/.git": false,
+      "**/.next": true,
+      "**/.next-verify": true,
+      "**/node_modules": true,
+      "**/.claude": true,
+      "**/tsconfig.tsbuildinfo": true,
+      "**/.DS_Store": true
+    },
+    "explorer.fileNesting.enabled": true,
+    "explorer.fileNesting.expand": false,
+    "explorer.fileNesting.patterns": {
+      "package.json": "package-lock.json, tsconfig.json, tsconfig.*.json, tsconfig.tsbuildinfo, tailwind.config.ts, postcss.config.mjs, next.config.mjs, next-env.d.ts, components.json, .gitignore",
+      "README.md": "HOW-TO-EDIT.md, CLAUDE.md"
+    }
+  }
+}
