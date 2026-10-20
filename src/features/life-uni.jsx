@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Percent, UserSearch, Sparkles, Gauge, TrendingUp, Award, ExternalLink, Minus, Plus, X, ClipboardCheck, Clock, AlertTriangle, CalendarDays, Trash2, Check, Pencil, Hash, ClipboardList, ShieldCheck, BookMarked, AlarmClock, MapPin, Users, CircleDot, SquarePen, School, CheckCheck, Calculator, Crosshair, Milestone, BadgeCheck, Hourglass, Flag, BarChart3 } from "lucide-react";
 import { useBurst, safeUrl, whenWord, NumStep, DateField, TimeField, T, Card, Btn, Field, Badge, Modal, Checkbox, DOW_AR, minWord, timesWord, hourWord, courseWord, weekWord, lectureWord, prettyTime, arDate, gradePoints, gradeFromPct, coursesIn, termOf, courseIn, courseName, daySections, nextSection, useMinuteClock } from "../components/life-shared.jsx";
 import { TERM_WEEKS_DEFAULT, termShape, courseShape, uniTaskShape, UNI_TASK_KINDS, dayKey, clampNum, gradeOf, UNI_DAYS, uniDayOf, COURSE_TINTS, uniShape, GRADES, slotShape, markShape, isKey, minsIn, daysUntil } from "../state/life-state.mjs";
-import { AssistantChatCard } from "./life-bot.jsx";
 
 /* ==================================================================== *
  *  MODULE — the university desk
@@ -2226,8 +2225,6 @@ export function UniModule({ state, setState, onGo }) {
           />
         ))}
       </div>
-
-      <AssistantChatCard />
 
       {/* An absence is recorded by one tap and changes a number that can
           end a course. It has to say out loud what it just did — a silent

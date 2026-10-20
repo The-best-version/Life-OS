@@ -20,6 +20,7 @@ import {
   BellOff,
   Lightbulb,
   BookOpen,
+  X,
 } from "lucide-react";
 import {
   T,
@@ -337,6 +338,52 @@ export function AssistantChatCard() {
         </Btn>
       </div>
     </Card>
+  );
+}
+
+/* --- the one door to it, on every screen -------------------------------- *
+ *  The chat itself has one home (`AssistantChatCard`, above) and this is
+ *  the only place that renders it — a floating button mounted once in the
+ *  shell, because asking the assistant something is not a fact that
+ *  belongs to «بوت تيليجرام» any more than to «الجامعة» or «اليوم». Left
+ *  side, clear of the phone tab bar and the desktop sidebar both, which
+ *  sits at the opposite edge. Closed by default: a panel that reopens over
+ *  every screen you land on is the nagging «اليوم» already refuses to be. */
+export function AssistantFab() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label={open ? "أغلق المساعد" : "افتح المساعد"}
+        aria-expanded={open}
+        className="los-raise fixed left-4 z-[61] flex h-14 w-14 items-center justify-center rounded-full border transition-transform active:scale-95"
+        style={{
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
+          borderColor: `${T.cta}80`,
+          backgroundImage: `linear-gradient(135deg, ${T.cta}, ${T.ctaLift})`,
+          boxShadow: `0 10px 30px -8px ${T.cta}99`,
+        }}
+      >
+        {open ? (
+          <X size={22} color="#fff" strokeWidth={2.4} />
+        ) : (
+          <Sparkles size={22} color="#fff" strokeWidth={2.2} />
+        )}
+      </button>
+      {open && (
+        <div
+          className="los-in fixed inset-x-3 z-[60] sm:inset-x-auto sm:left-4 sm:w-[380px]"
+          style={{
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 164px)",
+            maxHeight: "min(70vh, 560px)",
+            overflowY: "auto",
+          }}
+        >
+          <AssistantChatCard />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1487,7 +1534,6 @@ export function BotModule({ state, setState }) {
         pinging={pinging}
         pinged={pinged}
       />
-      <AssistantChatCard />
       <TodayPlanCard bot={bot} state={state} />
       <BriefTimesCard bot={bot} onPatch={patch} />
       <PresetRemindersCard bot={bot} onPatch={patch} books={state.books} />

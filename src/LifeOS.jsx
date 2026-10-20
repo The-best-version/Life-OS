@@ -8,6 +8,7 @@ import { RoutineModule, SaveStamp, MirrorModal, EditYesterdayModal } from "./fea
 import { TodayModule } from "./features/life-today.jsx";
 import { MatrixModule, TomorrowModal } from "./features/life-matrix.jsx";
 import { NavGroups, BottomTabs, NowStamp, NAV } from "./layouts/life-nav.jsx";
+import { AssistantFab } from "./features/life-bot.jsx";
 import { SettingsModal } from "./features/life-settings.jsx";
 import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./components/life-shared.jsx";
 import { uniKindOf, uniDue, UniModule } from "./features/life-uni.jsx";
@@ -1767,6 +1768,8 @@ export default function LifeOS() {
           onSettings={() => setSettings(true)}
         />
       )}
+
+      {!hyperFocus && <AssistantFab />}
 
       {/* The one way back. Centred without a transform — `.los-in` on the
           screen below already owns `transform`, and `-translate-x-1/2` on a
