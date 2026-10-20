@@ -26,7 +26,7 @@ import {
   textOf,
   toolsOf,
 } from "../services/telegram-bot/agent.js";
-import { freshState, rows, disciplineOf } from "../src/state/life-state.mjs";
+import { freshState, rows, disciplineOf, uniShape, courseShape } from "../src/state/life-state.mjs";
 
 /* A reply the way the Messages API shapes one. */
 const says = (text) => ({ content: [{ type: "text", text }], stop_reason: "end_turn" });
@@ -62,6 +62,12 @@ const withHabit = () => {
   return { state: s, habit: rows(s.habits)[0] };
 };
 
+const withCourse = (over = {}) => {
+  const s = freshState();
+  const course = courseShape({ id: "c1", code: "ACCT", name: "محاسبة", absenceCap: 4, ...over });
+  return { ...s, uni: uniShape({ ...s.uni, courses: [course] }) };
+};
+
 /* --- the tools are a table, and the table is the contract -------------- */
 
 test("every tool names an action that exists and can actually run", () => {
@@ -93,6 +99,25 @@ test("a tool call reaches the real action and moves the real number", () => {
   assert.equal(out.pct, disciplineOf(out.next.habits), "the score is the action's own");
 });
 
+test("mark_absence reaches the real course and the cap is in the brief", () => {
+  const s = withCourse({});
+  const out = runTool(s, "mark_absence", { courseId: "c1" });
+  assert.ok(out.next, "the absence was not recorded");
+  assert.equal(out.next.uni.courses[0].absences, 1);
+  assert.ok(runTool(out.next, "mark_absence", { courseId: "c1" }).refused, "twice the same day must refuse");
+});
+
+test("add_mark reaches the real course and refuses a zero denominator", () => {
+  const s = withCourse({});
+  const out = runTool(s, "add_mark", { courseId: "c1", label: "الكويز الأول", score: 18, max: 20 });
+  assert.ok(out.next);
+  assert.deepEqual(
+    { label: out.next.uni.courses[0].marks[0].label, score: out.next.uni.courses[0].marks[0].score },
+    { label: "الكويز الأول", score: 18 },
+  );
+  assert.ok(runTool(s, "add_mark", { courseId: "c1", score: 5, max: 0 }).refused);
+});
+
 /* --- what the model is allowed to see ---------------------------------- */
 
 test("the brief carries the ids the tools need, and the day's real figures", () => {
@@ -103,6 +128,14 @@ test("the brief carries the ids the tools need, and the day's real figures", () 
   assert.ok(brief.includes(habit.label), "a habit label is missing");
   assert.match(brief, /الانضباط/);
   assert.match(brief, /الماء/);
+});
+
+test("the brief lists a course by id so mark_absence/add_mark can be called", () => {
+  const s = withCourse({ absences: 2 });
+  const brief = stateBrief(s);
+  assert.ok(brief.includes("c1"), "the course id is missing");
+  assert.ok(brief.includes("محاسبة"), "the course name is missing");
+  assert.match(brief, /غياب 2\/4/);
 });
 
 test("the system prompt forbids inventing a number and claiming an unmade write", () => {

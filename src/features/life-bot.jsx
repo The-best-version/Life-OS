@@ -201,7 +201,7 @@ export function BotStatusCard({ health, checking, onPing, pinging, pinged }) {
  * ------------------------------------------------------------------------ */
 const AI_TRANSCRIPT_MAX = 60;
 
-function AssistantChatCard() {
+export function AssistantChatCard() {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);

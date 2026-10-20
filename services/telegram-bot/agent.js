@@ -33,7 +33,7 @@
 import { CONFIG } from "./config.js";
 import * as act from "./actions.js";
 import { fold } from "./parse.js";
-import { rows } from "../../src/state/life-state.mjs";
+import { rows, uniShape, uniPending } from "../../src/state/life-state.mjs";
 
 export class AgentError extends Error {}
 
@@ -219,6 +219,29 @@ export const TOOLS = [
     },
   },
   {
+    name: "mark_absence",
+    description: "سجّل غيابًا عن محاضرة مادة. استعمل معرّف المادة (id) من موجز اليوم.",
+    input_schema: {
+      type: "object",
+      properties: { courseId: { type: "string", description: "معرّف المادة من الموجز" } },
+      required: ["courseId"],
+    },
+  },
+  {
+    name: "add_mark",
+    description: "سجّل درجة على مادة — كويز أو واجب أو اختبار. max هو «من» كم كانت الدرجة.",
+    input_schema: {
+      type: "object",
+      properties: {
+        courseId: { type: "string", description: "معرّف المادة من الموجز" },
+        label: { type: "string", description: "اسم التقييم، مثل «الكويز الأول»" },
+        score: { type: "number" },
+        max: { type: "number" },
+      },
+      required: ["courseId", "score", "max"],
+    },
+  },
+  {
     name: "reflect",
     description:
       "اكتب تقييم المساء: field='distraction' لما شتّته اليوم، أو field='fix' لما سيغيّره غدًا.",
@@ -250,6 +273,9 @@ const RUN = {
   move_goal: (s, a) => act.moveGoal(s, a.id, { value: a.value, add: !!a.add }),
   add_note: (s, a) => act.addNote(s, { body: a.body, bookId: a.bookId || null }),
   add_event: (s, a) => act.addEvent(s, { title: a.title, day: a.day, time: a.time || "" }),
+  mark_absence: (s, a) => act.markAbsence(s, a.courseId),
+  add_mark: (s, a) =>
+    act.addMark(s, a.courseId, { label: a.label || "", score: a.score, max: a.max }),
   reflect: (s, a) => act.reflect(s, { field: a.field, note: a.note }),
 };
 
@@ -339,6 +365,31 @@ export function stateBrief(state) {
 
   const run = state.focus?.run;
   if (run) put(`جولة تركيز قائمة الآن: ${run.phase} · ${run.planned} دقيقة`);
+
+  /* الملف الجامعي — معرّفات المواد وحدها ما تحتاجه `mark_absence`/`add_mark`،
+     وغيابٌ بلا سقفٍ معروض يغري النموذج بتجاهل سقفٍ موجود فعلًا. */
+  const uni = uniShape(state.uni);
+  const courses = rows(uni.courses);
+  if (courses.length) {
+    put(
+      `مواد الفصل — العدد ${courses.length}:\n${courses
+        .map(
+          (c) =>
+            `  - ${c.id} · ${c.code ? `${c.code} ` : ""}${c.name}` +
+            ` — غياب ${c.absences}${c.absenceCap ? `/${c.absenceCap}` : ""}`,
+        )
+        .join("\n")}`,
+    );
+  }
+  const pending = uniPending(uni).slice(0, 8);
+  if (pending.length) {
+    const nameOf = (id) => courses.find((c) => c.id === id)?.name || "";
+    put(
+      `مواعيد الجامعة القادمة — العدد ${uniPending(uni).length}:\n${pending
+        .map((t) => `  - ${t.title}${nameOf(t.course) ? ` (${nameOf(t.course)})` : ""} — ${t.due}`)
+        .join("\n")}`,
+    );
+  }
 
   return L.join("\n");
 }
