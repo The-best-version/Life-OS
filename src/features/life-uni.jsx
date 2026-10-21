@@ -365,6 +365,7 @@ export function CourseDesk({ course, term, scale, onClose, onPatch, onDelete }) 
       onClose={onClose}
       wide
       title={courseName(c)}
+      onDelete={course ? onDelete : undefined}
       footer={
         <>
           <Btn variant="default" className="flex-1" onClick={onClose}>
@@ -1264,6 +1265,7 @@ export function TermModal({ open, draft, setDraft, onClose, onSave, onDelete }) 
       open={open}
       onClose={onClose}
       title={d.isNew ? "فصل دراسي جديد" : "تعديل الفصل"}
+      onDelete={!d.isNew ? onDelete : undefined}
       footer={
         <>
           <Btn variant="default" className="flex-1" onClick={save}>

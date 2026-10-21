@@ -420,12 +420,28 @@ export function VaultModule({ state, setState }) {
         log={desk ? log.filter((r) => r.bookId === desk.id) : []}
         onClose={() => setDeskId(null)}
         onPatch={patch}
+        onDelete={
+          desk
+            ? () => {
+                remove(desk.id);
+                setDeskId(null);
+              }
+            : undefined
+        }
       />
 
       <Modal
         open={!!editing}
         onClose={() => setEditing(null)}
         title={editing?.id ? "تعديل الكتاب" : "كتاب جديد"}
+        onDelete={
+          editing?.id
+            ? () => {
+                remove(editing.id);
+                setEditing(null);
+              }
+            : undefined
+        }
         footer={
           <>
             <Btn variant="default" className="flex-1" onClick={save}>
@@ -574,7 +590,7 @@ export function VaultModule({ state, setState }) {
    reading has reached. Kept in a modal rather than on the card, because the
    card has to stay scannable — this is the place you come back to, not the
    place you glance at. */
-function BookDesk({ book, log = [], onClose, onPatch }) {
+function BookDesk({ book, log = [], onClose, onPatch, onDelete }) {
   const [draft, setDraft] = useState({ text: "", page: "" });
   const [copied, setCopied] = useState(false);
 
@@ -650,6 +666,7 @@ function BookDesk({ book, log = [], onClose, onPatch }) {
       open={!!book}
       onClose={onClose}
       title={book.title || "دفتر الكتاب"}
+      onDelete={book ? onDelete : undefined}
       footer={
         <>
           <Btn variant="outline" className="flex-1" onClick={copyAll}>

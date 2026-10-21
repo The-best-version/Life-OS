@@ -198,6 +198,14 @@ export function BreakerModule({ state, setState }) {
         draft={draft}
         setDraft={setDraft}
         onSave={save}
+        onDelete={
+          draft?.id
+            ? () => {
+                remove(draft.id);
+                setDraft(null);
+              }
+            : undefined
+        }
         onClose={() => setDraft(null)}
       />
 
@@ -945,7 +953,7 @@ function RelapseModal({ open, habit, prefill, onClose, onConfirm }) {
 }
 
 
-function BadHabitFormModal({ open, draft, setDraft, onSave, onClose }) {
+function BadHabitFormModal({ open, draft, setDraft, onSave, onClose, onDelete }) {
   if (!draft) return null;
   const ready = draft.title.trim() && draft.replacement.trim();
   const seed = BAD_PRESETS.find((p) => p.key === draft.preset);
@@ -977,6 +985,7 @@ function BadHabitFormModal({ open, draft, setDraft, onSave, onClose }) {
       open={open}
       onClose={onClose}
       title={draft.id ? "تعديل العادة" : "عادة جديدة تكسرها"}
+      onDelete={draft.id ? onDelete : undefined}
       footer={
         <>
           <Btn variant="default" className="flex-1" disabled={!ready} onClick={onSave}>

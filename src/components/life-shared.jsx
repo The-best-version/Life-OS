@@ -177,12 +177,26 @@ export function Badge({ children, tint = T.accent, className = "" }) {
   );
 }
 
-export function Modal({ open, onClose, title, children, footer, wide = false }) {
+/* `onDelete` is the one shortcut every desk in the app shares: Ctrl+Delete
+   (and Ctrl+Backspace, for the laptops with no dedicated Delete key) removes
+   whatever this modal is editing, through the same handler its own trash
+   button already calls — so the same eight-second undo (`useUndo`) covers it
+   too, with nothing new to wire. It never fires while the caret is in a text
+   field: Ctrl+Delete there is the browser's own "delete the next word", and
+   stealing it would turn an edit into a deletion. */
+export function Modal({ open, onClose, title, children, footer, wide = false, onDelete }) {
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
+    const onKey = (e) => {
+      if (e.key === "Escape") return onClose();
+      if (!onDelete || !e.ctrlKey || (e.key !== "Delete" && e.key !== "Backspace")) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault();
+      onDelete();
+    };
     if (open) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, onDelete]);
 
   if (!open) return null;
 

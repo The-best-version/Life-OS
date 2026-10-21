@@ -1945,7 +1945,7 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
   const label = "mb-1.5 block text-xs";
 
   return (
-    <Modal open={!!goal} onClose={onClose} title="مكتب الهدف" wide>
+    <Modal open={!!goal} onClose={onClose} title="مكتب الهدف" wide onDelete={goal ? onDelete : undefined}>
       <div className="space-y-5">
         <div>
           <label htmlFor="los-gd-text" className={label} style={{ color: T.muted }}>الهدف</label>

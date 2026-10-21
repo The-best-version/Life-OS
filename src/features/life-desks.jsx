@@ -1982,6 +1982,7 @@ export function PresetModal({ row, canDelete, full, onClose, onSave, onDelete })
       open
       onClose={onClose}
       title={isNew ? "إيقاع جديد" : `عدّل ${row.label}`}
+      onDelete={!isNew && canDelete ? () => onDelete(row.id) : undefined}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2.5">
           <div className="flex gap-2.5">

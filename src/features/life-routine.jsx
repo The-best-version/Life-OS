@@ -275,6 +275,14 @@ export function RoutineModule({
         open={!!editing}
         onClose={() => setEditing(null)}
         title={editing?.id ? "تعديل العادة" : "عادة جديدة"}
+        onDelete={
+          editing?.id
+            ? () => {
+                remove(editing.id);
+                setEditing(null);
+              }
+            : undefined
+        }
         footer={
           <>
             <Btn variant="default" className="flex-1" onClick={save}>

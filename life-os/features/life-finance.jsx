@@ -450,6 +450,14 @@ export function FinanceModule({ state, setState }) {
         open={!!venture}
         onClose={() => setVenture(null)}
         title={venture?.id ? "تعديل الفكرة" : "فكرة جديدة"}
+        onDelete={
+          venture?.id
+            ? () => {
+                removeVenture(venture.id);
+                setVenture(null);
+              }
+            : undefined
+        }
         footer={
           <>
             <Btn variant="default" className="flex-1" onClick={saveVenture}>

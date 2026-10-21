@@ -581,6 +581,10 @@ export function AgendaModule({ state, setState, onGo }) {
         setDraft={setDraft}
         onClose={() => setDraft(null)}
         onSave={save}
+        onDelete={(ev) => {
+          remove(ev);
+          setDraft(null);
+        }}
       />
     </div>
   );
@@ -588,7 +592,7 @@ export function AgendaModule({ state, setState, onGo }) {
 
 
 
-function EventModal({ open, draft, setDraft, onClose, onSave }) {
+function EventModal({ open, draft, setDraft, onClose, onSave, onDelete }) {
   const [err, setErr] = useState("");
   const d = draft || {};
   const repeating = d.repeat && d.repeat !== "none";
@@ -626,6 +630,7 @@ function EventModal({ open, draft, setDraft, onClose, onSave }) {
       open={open}
       onClose={onClose}
       title={d.isNew ? "موعد جديد" : "تعديل الموعد"}
+      onDelete={!d.isNew ? () => onDelete(d) : undefined}
       footer={
         <>
           <Btn variant="default" className="flex-1" onClick={save}>
