@@ -99,10 +99,15 @@ export function GoalsModule({ state, setState }) {
 
   // 👇 حالة ترتيب الكروت (غيرنا اسم الذاكرة إلى v3 عشان ينمسح الترتيب القديم) 👇
   const DEFAULT_ORDER = ["countdownBlock", "searchBar", "yearInPixels", "analysis", "wheel", "upcoming"];
+  // ترتيب محفوظ من قبل ما تُضاف بطاقة جديدة إلى DEFAULT_ORDER يبقى ناقصها للأبد —
+  // لا يوجد زر "أعد البطاقة المفقودة"، فالترتيب المحفوظ لا يجوز أن يُسقط بطاقة
+  // معروفة بصمت. أي مفتاح في DEFAULT_ORDER غائب عن الترتيب المحفوظ يُضاف في مقدمته.
   const [dashboardOrder, setDashboardOrder] = useState(() => {
     try {
       const saved = localStorage.getItem("life_goals_widget_order_v3");
-      return saved ? JSON.parse(saved) : DEFAULT_ORDER;
+      const parsed = saved ? JSON.parse(saved) : DEFAULT_ORDER;
+      const missing = DEFAULT_ORDER.filter((id) => !parsed.includes(id));
+      return missing.length ? [...missing, ...parsed] : parsed;
     } catch {
       return DEFAULT_ORDER;
     }
