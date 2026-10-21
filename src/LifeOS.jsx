@@ -10,7 +10,7 @@ import { MatrixModule, TomorrowModal } from "./features/life-matrix.jsx";
 import { NavGroups, BottomTabs, NowStamp, NAV } from "./layouts/life-nav.jsx";
 import { AssistantFab } from "./features/life-bot.jsx";
 import { SettingsModal } from "./features/life-settings.jsx";
-import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast } from "./components/life-shared.jsx";
+import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast, HoverDeleteProvider } from "./components/life-shared.jsx";
 import { uniKindOf, uniDue, UniModule } from "./features/life-uni.jsx";
 import { TopThree, useHabitTick, ReadLogModal, TaskChip, ReflectionModal } from "./components/life-day.jsx";
 import { FinanceModule } from "./features/life-finance.jsx";
@@ -1100,6 +1100,7 @@ export default function LifeOS() {
 
   return (
     <UndoBus.Provider value={arm}>
+    <HoverDeleteProvider>
     <div
       dir="rtl"
       className="min-h-screen w-full text-white antialiased relative overflow-hidden"
@@ -1572,6 +1573,7 @@ export default function LifeOS() {
         </div>
       )}
     </div>
+    </HoverDeleteProvider>
     </UndoBus.Provider>
   );
 }

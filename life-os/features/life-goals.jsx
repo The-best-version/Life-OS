@@ -1,4 +1,4 @@
-import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo } from "../components/life-shared.jsx";
+import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo, useHoverDelete } from "../components/life-shared.jsx";
 import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, streakRunFrom, treeGrowth, GROWTH_STAGES, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
 import { AlertTriangle, Calendar, Check, ChevronDown, ChevronUp, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity, Network, PartyPopper, Sprout, GripVertical } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -514,6 +514,7 @@ export function GoalsModule({ state, setState }) {
                             : null
                         }
                         onOpen={() => setDeskId(g.id)}
+                        onDelete={() => remove(g.id)}
                       />
                     ))
                   )}
@@ -1703,7 +1704,7 @@ function GoalHeatmap({ goal, history }) {
   );
 }
 
-function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, onOpen }) {
+function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, onOpen, onDelete }) {
   const [burst, fireBurst] = useBurst(700);
   const p = pillarOf(goal.pillar);
   const pct = goalPct(goal, all, habits);
@@ -1714,9 +1715,11 @@ function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, 
   const edgeTint = !goal.done && pace.pace?.state === "behind" ? T.danger : !goal.done && pace.pace?.state === "ahead" ? T.primary : null;
 
   const handle = () => { if (!goal.done) fireBurst(); onToggle(); };
+  const hoverDelete = useHoverDelete(onDelete);
 
   return (
     <div
+      {...hoverDelete}
       className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 ${
         goal.done ? "bg-white/[0.02] border-white/5 opacity-70" : "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]"
       } ${burst ? "ring-2 ring-emerald-500" : ""}`}

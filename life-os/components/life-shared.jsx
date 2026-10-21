@@ -1154,3 +1154,59 @@ export function UndoToast({ undo, onUndo, onDismiss }) {
     </div>
   );
 }
+
+/* --- Ctrl+Delete on whatever row the mouse is over ---------------------- *
+ *  The Modal's own Ctrl+Delete (above) only reaches the one item a desk has
+ *  open — useful, but not what a hand resting on the mouse actually expects:
+ *  point at a row, press the shortcut, it is gone. That needs a second path,
+ *  because a list row is never "open" the way a desk is.
+ *
+ *  One ref, not state: which row is hovered changes on every mouse move, and
+ *  a row re-rendering sixty times a second to announce it is being pointed
+ *  at would be the opposite of free. `HoverDeleteProvider` reads the ref once,
+ *  on the keypress itself, through one global listener — mounted once, at the
+ *  root, like `UndoBus`'s own provider.
+ *
+ *  Never fires with a desk open: a row still technically "hovered" behind a
+ *  modal overlay must not also eat the keystroke the modal's own Ctrl+Delete
+ *  already claimed for the single item it is editing. Never fires while
+ *  typing, for the same reason the Modal's own shortcut does not: Ctrl+Delete
+ *  in a text field is the browser's "delete the next word". */
+export const HoverDeleteBus = React.createContext(null);
+
+export function HoverDeleteProvider({ children }) {
+  const hovered = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!e.ctrlKey || (e.key !== "Delete" && e.key !== "Backspace")) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      const fn = hovered.current;
+      if (fn) {
+        e.preventDefault();
+        fn();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return <HoverDeleteBus.Provider value={hovered}>{children}</HoverDeleteBus.Provider>;
+}
+
+/* `useHoverDelete(onDelete)` — spread the two handlers it returns onto a
+   row's outer element (`<div {...useHoverDelete(() => remove(x.id))}>`).
+   `onDelete` may change every render (an inline arrow closing over the row's
+   own id is the normal case); only the mouseleave compares against the
+   value last set, so a stale closure never clears a different row's entry. */
+export function useHoverDelete(onDelete) {
+  const ref = useContext(HoverDeleteBus);
+  return {
+    onMouseEnter: () => {
+      if (ref) ref.current = onDelete;
+    },
+    onMouseLeave: () => {
+      if (ref && ref.current === onDelete) ref.current = null;
+    },
+  };
+}
