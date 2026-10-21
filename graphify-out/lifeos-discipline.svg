@@ -41,7 +41,7 @@
 <rect x="32" y="100" width="173.6" height="64" rx="14" fill="rgba(255,255,255,0.05)" stroke="rgba(255,225,210,0.18)"/>
 <rect x="201.6" y="112" width="3" height="40" rx="2" fill="#9D5CFF"/>
 <text x="191.6" y="124" fill="rgba(255,246,240,0.56)" font-size="11" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أهداف مكتملة</text>
-<text x="191.6" y="150" fill="#9D5CFF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/23</text>
+<text x="191.6" y="150" fill="#9D5CFF" font-size="21" font-weight="800" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/49</text>
 <g><rect x="32" y="186" width="916" height="262" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="186" width="916" height="262" rx="18" fill="url(#sheen)"/></g>
 <text x="928" y="218" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">خريطة الانضباط</text>
 <text x="928" y="237" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">٣٤ أسبوعًا · الأحدث على اليسار · الأسبوع يبدأ السبت</text>
@@ -296,27 +296,27 @@
 <rect x="94" y="282" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
 <rect x="94" y="306" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.35"/>
 <rect x="94" y="330" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.39"/>
-<rect x="94" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.20"/>
+<rect x="94" y="354" width="20" height="20" rx="4" fill="#FF5722" fill-opacity="0.35"/>
 <text x="928" y="434" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الأخضر: يوم بلغ الهدف · المرجاني: دونه · الفارغ: لم يُسجّل</text>
 <g><rect x="32" y="464" width="450" height="200" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="32" y="464" width="450" height="200" rx="18" fill="url(#sheen)"/></g>
 <text x="462" y="494" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">أهداف ٢٠٢٧ حسب الربع</text>
 <text x="462" y="513" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">منجَز مقابل مخطَّط</text>
 <text x="460" y="546.24" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الربع الأول</text>
 <rect x="106" y="534" width="258" height="17" rx="8.5" fill="rgba(255,255,255,0.055)"/>
-<rect x="321" y="534" width="43" height="17" rx="8.5" fill="#FF5722"/>
-<text x="96" y="546.24" fill="#FF5722" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/2</text>
+<rect x="146.73684210526318" y="534" width="217.26315789473682" height="17" rx="8.5" fill="#FF5722"/>
+<text x="96" y="546.24" fill="#FF5722" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/16</text>
 <text x="460" y="575.24" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الربع الثاني</text>
 <rect x="106" y="563" width="258" height="17" rx="8.5" fill="rgba(255,255,255,0.055)"/>
-<rect x="361" y="563" width="3" height="17" rx="8.5" fill="#FFB020"/>
-<text x="96" y="575.24" fill="#FFB020" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/0</text>
+<rect x="336.8421052631579" y="563" width="27.157894736842103" height="17" rx="8.5" fill="#FFB020"/>
+<text x="96" y="575.24" fill="#FFB020" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/2</text>
 <text x="460" y="604.24" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الربع الثالث</text>
 <rect x="106" y="592" width="258" height="17" rx="8.5" fill="rgba(255,255,255,0.055)"/>
-<rect x="106" y="592" width="258" height="17" rx="8.5" fill="#10B981"/>
+<rect x="201.05263157894737" y="592" width="162.94736842105263" height="17" rx="8.5" fill="#10B981"/>
 <text x="96" y="604.24" fill="#10B981" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/12</text>
 <text x="460" y="633.24" fill="#FFF6F0" font-size="12.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الربع الرابع</text>
 <rect x="106" y="621" width="258" height="17" rx="8.5" fill="rgba(255,255,255,0.055)"/>
-<rect x="170.5" y="621" width="193.5" height="17" rx="8.5" fill="#9D5CFF"/>
-<text x="96" y="633.24" fill="#9D5CFF" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/9</text>
+<rect x="106" y="621" width="258" height="17" rx="8.5" fill="#9D5CFF"/>
+<text x="96" y="633.24" fill="#9D5CFF" font-size="12" font-weight="700" text-anchor="end" style="direction:ltr;unicode-bidi:isolate">0/19</text>
 <g><rect x="498" y="464" width="450" height="200" rx="18" fill="rgba(255,255,255,0.045)" stroke="rgba(255,225,210,0.18)"/><rect x="498" y="464" width="450" height="200" rx="18" fill="url(#sheen)"/></g>
 <text x="928" y="494" fill="#FFF6F0" font-size="15" font-weight="700" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">الركائز الستّ</text>
 <text x="928" y="513" fill="rgba(255,246,240,0.56)" font-size="11.5" font-weight="500" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">نسبة الأهداف المنجَزة في كل ركيزة</text>
@@ -349,6 +349,6 @@
 <circle cx="724.5" cy="575.2" r="4" fill="#5B8CFF" stroke="#1B1418" stroke-width="1.5"/>
 <text x="786.0" y="543.6" fill="#FFF6F0" font-size="11.5" font-weight="600" text-anchor="end" style="direction:rtl;unicode-bidi:isolate">الشخصي</text>
 <text x="786.0" y="557.6" fill="#5B8CFF" font-size="10.5" font-weight="700" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">0%</text>
-<text x="32" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-10-21 11:13</text>
+<text x="32" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:ltr;unicode-bidi:isolate">2026-10-21 20:44</text>
 <text x="948" y="682" fill="rgba(255,246,240,0.30)" font-size="10.5" font-weight="600" text-anchor="start" style="direction:rtl;unicode-bidi:isolate">report-agent · للقراءة فقط</text>
 </svg>

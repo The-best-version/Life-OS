@@ -1,9 +1,9 @@
 import { ReadLogModal, TodayExtras, TopThree, useHabitTick } from "../components/life-day.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { todayBlocks } from "../life-config.js";
-import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, goalPct, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, rows, scoredOf, taskOverdue, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
+import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, rows, scoredOf, taskOverdue, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, CalendarClock, CalendarDays, ClipboardList, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, RotateCcw, School, Settings2, Star, Sunrise, Target, X, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, CalendarClock, CalendarDays, ClipboardList, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, RotateCcw, School, Settings2, Star, Sunrise, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /* Where a user's own layout of اليوم screen lives. localStorage and not
@@ -323,9 +323,6 @@ export function TodayModule({
           <ArrowLeft size={16} className="shrink-0" style={{ color: T.danger }} />
         </button>
       )}
-
-      {/* الصندوق الجديد: خطوتك اليوم نحو أهدافك */}
-      <DailyGoalFocus state={state} onGoGoals={() => onGo("goals")} />
 
       {layout
         .filter((b) => b.visible !== false)
@@ -1362,47 +1359,3 @@ export function WaterCard({ count, goal, onSet }) {
   );
 }
 
-/* ==================================================================== *
- *  الميزة الجوهرية: بطاقة الأهداف في شاشة اليوم
- * ==================================================================== */
-export function DailyGoalFocus({ state, onGoGoals }) {
-  const activeGoals = rows(state.goals).filter(
-    (g) => !g.done && g.nextAction && g.horizon === "quarter"
-  );
-
-  if (activeGoals.length === 0) return null;
-
-  return (
-    <Card className="p-5 sm:p-6 border-emerald-500/30 bg-emerald-500/[0.02]">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-[15px] font-extrabold flex items-center gap-2 text-emerald-400">
-          <Target size={18} /> خطوتك اليوم نحو أهدافك
-        </h3>
-        <button
-          onClick={onGoGoals}
-          className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1"
-        >
-          كل الأهداف <ArrowLeft size={12} />
-        </button>
-      </div>
-
-      <div className="space-y-3">
-        {activeGoals.map((g) => {
-          const pct = goalPct(g, state.goals, state.habits);
-          return (
-            <div key={g.id} className="flex flex-col gap-1.5 p-3 rounded-xl bg-white/[0.03] border border-white/5">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-bold text-white/90">{g.text}</span>
-                <span className="text-[11px] font-bold text-emerald-500">{pct}%</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11.5px] text-emerald-300/80 bg-emerald-500/10 p-2 rounded-lg mt-1">
-                <span className="font-bold">الخطوة القادمة:</span>
-                <span>{g.nextAction}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
