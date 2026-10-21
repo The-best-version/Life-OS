@@ -355,20 +355,6 @@ export function GoalsModule({ state, setState }) {
 
   return (
     <div className="space-y-8 pb-20">
-      {orphans.length > 0 && view === "list" && (
-        <button
-          onClick={() => setOrphansOnly((v) => !v)}
-          className={`flex w-full items-center gap-3 rounded-2xl border px-5 py-4 text-right transition-all duration-300 ${
-            orphansOnly ? "bg-orange-500/20 border-orange-500/40" : "bg-orange-500/5 border-orange-500/10 hover:bg-orange-500/10"
-          }`}
-        >
-          <AlertTriangle size={18} className={orphansOnly ? "text-orange-400" : "text-orange-500/50"} />
-          <span className="flex-1 text-[13px] font-bold text-orange-200/80">
-            {orphans.length} أهداف لا تخدم هدفًا أعلى — اضغط للعرض
-          </span>
-        </button>
-      )}
-
       <Card className="relative overflow-hidden p-6 sm:p-8 bg-gradient-to-br from-white/[0.03] to-transparent border-white/5">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -423,6 +409,20 @@ export function GoalsModule({ state, setState }) {
       {/* العد التنازلي وقائمة الأهداف تحته سؤال واحد — «أين أنا من الربع
           المختار؟» — فيُعرضان متجاورين دائمًا، قبل أي بطاقة قابلة للسحب. */}
       {WIDGETS.countdownBlock.element}
+
+      {orphans.length > 0 && view === "list" && (
+        <button
+          onClick={() => setOrphansOnly((v) => !v)}
+          className={`flex w-full items-center gap-3 rounded-2xl border px-5 py-4 text-right transition-all duration-300 ${
+            orphansOnly ? "bg-orange-500/20 border-orange-500/40" : "bg-orange-500/5 border-orange-500/10 hover:bg-orange-500/10"
+          }`}
+        >
+          <AlertTriangle size={18} className={orphansOnly ? "text-orange-400" : "text-orange-500/50"} />
+          <span className="flex-1 text-[13px] font-bold text-orange-200/80">
+            {orphans.length} أهداف لا تخدم هدفًا أعلى — اضغط للعرض
+          </span>
+        </button>
+      )}
 
       {view === "tree" ? (
         <GoalTreeView
