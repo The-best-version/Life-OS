@@ -98,7 +98,10 @@ export function GoalsModule({ state, setState }) {
   const [celebrateId, setCelebrateId] = useState(null);
 
   // 👇 حالة ترتيب الكروت (غيرنا اسم الذاكرة إلى v3 عشان ينمسح الترتيب القديم) 👇
-  const DEFAULT_ORDER = ["countdownBlock", "searchBar", "yearInPixels", "analysis", "wheel", "upcoming"];
+  // العد التنازلي لم يعد ضمن القابل للسحب: هو وقائمة الأهداف تحته طرفا سؤال واحد
+  // («أين أنا من الربع المختار؟») ويجب أن يبقيا متجاورين دائمًا، لا أن يفصل بينهما
+  // سحب بطاقة أخرى إلى مكانه.
+  const DEFAULT_ORDER = ["searchBar", "yearInPixels", "analysis", "wheel", "upcoming"];
   // ترتيب محفوظ يفقد بطاقة أُضيفت لاحقًا إلى DEFAULT_ORDER (كـ countdownBlock) هو ترتيب
   // قديم انتهت صلاحيته، لا تفضيل تعمّده المستخدم — إقحام الناقص في مقدّمة الترتيب
   // القديم كان يُبقي بقية البطاقات على تسلسلها القديم هي الأخرى (كـ "التحليل" قبل
@@ -417,24 +420,9 @@ export function GoalsModule({ state, setState }) {
         onSave={(northStar) => setState((s) => ({ ...s, northStar }))}
       />
 
-      {/* 👇 لوحة التحكم القابلة للسحب والإفلات 👇 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {dashboardOrder.map((id) => {
-          const widget = WIDGETS[id];
-          if (!widget) return null;
-          return (
-            <DraggableWidget
-              key={id}
-              id={id}
-              order={dashboardOrder}
-              setOrder={setDashboardOrder}
-              className={widget.colSpan}
-            >
-              {widget.element}
-            </DraggableWidget>
-          );
-        })}
-      </div>
+      {/* العد التنازلي وقائمة الأهداف تحته سؤال واحد — «أين أنا من الربع
+          المختار؟» — فيُعرضان متجاورين دائمًا، قبل أي بطاقة قابلة للسحب. */}
+      {WIDGETS.countdownBlock.element}
 
       {view === "tree" ? (
         <GoalTreeView
@@ -535,6 +523,25 @@ export function GoalsModule({ state, setState }) {
           })}
         </div>
       )}
+
+      {/* 👇 لوحة التحكم القابلة للسحب والإفلات 👇 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {dashboardOrder.map((id) => {
+          const widget = WIDGETS[id];
+          if (!widget) return null;
+          return (
+            <DraggableWidget
+              key={id}
+              id={id}
+              order={dashboardOrder}
+              setOrder={setDashboardOrder}
+              className={widget.colSpan}
+            >
+              {widget.element}
+            </DraggableWidget>
+          );
+        })}
+      </div>
 
       <GoalDesk
         key={deskId}
