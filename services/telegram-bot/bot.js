@@ -354,7 +354,27 @@ const WORDS = new Map(
   ].map(([word, run]) => [fold(word), run]),
 );
 
-bot.command(["start", "help"], (ctx) => ctx.reply(V.HELP, { reply_markup: V.menuKeys() }));
+bot.command(["start", "help"], (ctx) => ctx.reply(V.HELP, { reply_markup: V.menuKeys(CONFIG.webUrl) }));
+bot.command(["app", "open", "site"], (ctx) => {
+  const url = CONFIG.webUrl || "https://github.com/The-best-version/Life-OS";
+  const hasHttps = url.startsWith("https://");
+  const kb = new InlineKeyboard();
+  if (hasHttps) {
+    kb.web_app("🚀 فتح التطبيق داخل تيليجرام", url).row().url("🌐 فتح في المتصفح الخارجي", url);
+  } else {
+    kb.url("🌐 فتح التطبيق", url);
+  }
+  return ctx.reply(
+    `📱 *تطبيق Life OS*\n\n` +
+    `🔗 الرابط المباشر:\n${url}\n\n` +
+    `💡 *طريقة التثبيت على الآيباد والجوال (PWA):*\n` +
+    `1. افتح الرابط في متصفح Safari (على الآيباد/الآيفون) أو Chrome.\n` +
+    `2. اضغط على زر المشاركة (*Share* ⎋).\n` +
+    `3. اختر *إضافة إلى الصفحة الرئيسية (Add to Home Screen)*.\n` +
+    `4. سيفتح معك التطبيق بملء الشاشة وبدون شريط المتصفح كأنه تطبيق أصلي! ⚡`,
+    { parse_mode: "Markdown", reply_markup: kb }
+  );
+});
 bot.command("today", showToday);
 bot.command("now", showOpen);
 bot.command("coach", showCoach);
@@ -370,7 +390,7 @@ bot.command("week", showWeek);
 bot.command("focus", showFocus);
 bot.command("books", showShelf);
 bot.command("review", showReview);
-bot.command("menu", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys() }));
+bot.command("menu", (ctx) => ctx.reply("اختر:", { reply_markup: V.menuKeys(CONFIG.webUrl) }));
 bot.command("find", async (ctx) => {
   const q = ctx.match?.trim();
   if (!q) return ctx.reply("اكتب ما تبحث عنه بعد الأمر. مثال: /find التسويف");

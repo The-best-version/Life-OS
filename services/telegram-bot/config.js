@@ -76,6 +76,7 @@ export const CONFIG = {
      the live file, and it is the default; `--port 47699` plus this variable
      is how the bot is exercised against a throwaway copy. */
   origin: String(pick("LIFEOS_ORIGIN", "http://127.0.0.1:47615")).replace(/\/+$/, ""),
+  webUrl: String(pick("LIFEOS_WEB_URL", "")).replace(/\/+$/, ""),
   /* The two briefs' hours are NOT here any more. They live in `state.bot`,
      edited on the «بوت تيليجرام» screen and read off the disk by the
      scheduler — because a time that can only be changed by editing a file on

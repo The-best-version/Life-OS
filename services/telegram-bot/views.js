@@ -189,8 +189,16 @@ export function tagKeys(act, badId, tags) {
   return kb.row().text("سجّلها بدون محرّك", `${act}t:${badId}:`);
 }
 
-export const menuKeys = () =>
-  new InlineKeyboard()
+export const menuKeys = (webUrl) => {
+  const kb = new InlineKeyboard();
+  if (webUrl) {
+    if (webUrl.startsWith("https://")) {
+      kb.web_app("🚀 فتح التطبيق في تيليجرام", webUrl).row();
+    } else {
+      kb.url("🌐 فتح التطبيق", webUrl).row();
+    }
+  }
+  return kb
     .text("📅 يومي", "menu:today")
     .text("⏳ الباقي", "menu:open")
     .row()
@@ -208,8 +216,10 @@ export const menuKeys = () =>
     .row()
     .text("🔁 راجع فائدة", "rev:now")
     .text("📝 الشرح", "menu:help");
+};
 
 export const COMMANDS = [
+  { command: "app", description: "رابط فتح التطبيق على الجوال والآيباد" },
   { command: "today", description: "حالة اليوم الآن" },
   { command: "now", description: "ما زال مفتوحًا، بأزرار" },
   { command: "coach", description: "ما يستحق انتباهك الآن" },
