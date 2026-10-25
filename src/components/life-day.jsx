@@ -608,7 +608,7 @@ export function useHabitTick(state, setState) {
   const arm = useUndo();
 
   const toggle = useCallback(
-    (id, tiny = false) => {
+    (id, tiny = false, level = null) => {
       const habit = state.habits.find((h) => h.id === id);
       const turningOn = habit && !habit.done;
 
@@ -617,16 +617,22 @@ export function useHabitTick(state, setState) {
           habits: state.habits,
           reading: state.reading,
           books: state.books,
-          goals: state.goals, // أضفنا الأهداف هنا للتراجع
+          goals: state.goals,
         });
       }
 
       setState((s) => {
+        const effLevel = level ? level : (tiny ? "micro" : "standard");
         const next = {
           ...s,
           habits: s.habits.map((h) =>
             h.id === id
-              ? { ...h, done: !h.done, tiny: !h.done ? !!tiny : false }
+              ? {
+                  ...h,
+                  done: !h.done,
+                  tiny: !h.done ? (effLevel === "micro" || !!tiny) : false,
+                  levelDone: !h.done ? effLevel : null,
+                }
               : h
           ),
         };

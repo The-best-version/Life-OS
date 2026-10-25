@@ -52,6 +52,7 @@ import {
   habitShape,
   clampGoal,
   SEED_HABITS,
+  freezeShape,
 } from "./life-state-habits.mjs";
 import {
   ADDED_TASKS,
@@ -319,6 +320,7 @@ export const freshState = (carry = {}) => ({
   history: carry.history || [],
   streakBase: carry.streakBase || 0,
   bestStreak: carry.bestStreak || 0,
+  freezes: freezeShape(carry.freezes),
   dayBanked: false,
   goal: clampDailyGoal(carry.goal),
 });
@@ -693,6 +695,7 @@ export function migrate(saved) {
         ? Math.min(clampGoal(saved.waterGoal), Math.round(+saved.water))
         : 0,
     cueImage: typeof saved.cueImage === "string" ? saved.cueImage : null,
+    freezes: freezeShape(saved.freezes),
     goal: clampDailyGoal(saved.goal),
   };
 }
@@ -725,6 +728,7 @@ export const carryOf = (s) => ({
   cueImage: s.cueImage,
   history: s.history,
   bestStreak: s.bestStreak,
+  freezes: s.freezes,
   goal: s.goal,
 });
 
@@ -826,6 +830,12 @@ export {
   DANGER_MIN_SHARE,
   dangerWatch,
   breakerToday,
+  IDENTITIES,
+  HABIT_LEVEL_POINTS,
+  identityScores,
+  freezeShape,
+  contextualBlock,
+  chainedHabits,
 } from "./life-state-habits.mjs";
 
 export {

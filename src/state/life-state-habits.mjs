@@ -318,23 +318,123 @@ export const badHabitShape = (b) => (
  *  `habitShape` is the one place a habit's fields are written, like
  *  `taskShape` and `bookShape`.
  * ---------------------------------------------------------------------- */
+/* --- identities and habit levels -------------------------------------- */
+export const IDENTITIES = {
+  scholar: {
+    id: "scholar",
+    label: "المفكر والباحث",
+    tagline: "قراءة، كتابة، تعلّم عميق",
+    tint: "#38bdf8",
+  },
+  athlete: {
+    id: "athlete",
+    label: "الرياضي القوي",
+    tagline: "لياقة، تغذية، حركة ونشاط",
+    tint: "#10b981",
+  },
+  executor: {
+    id: "executor",
+    label: "المنجز المنضبط",
+    tagline: "تركيز، إتمام مهام، إنتاجية",
+    tint: "#f59e0b",
+  },
+  mindful: {
+    id: "mindful",
+    label: "الروحاني المتزن",
+    tagline: "صلوات، أذكار، صفاء الذهن",
+    tint: "#818cf8",
+  },
+  general: {
+    id: "general",
+    label: "تطوير الذات",
+    tagline: "تراكم يومي مستمر",
+    tint: "#a855f7",
+  },
+};
+
+export const HABIT_LEVEL_POINTS = {
+  ideal: 15,
+  standard: 10,
+  micro: 5,
+};
+
+export function identityScores(habits) {
+  const scores = {};
+  for (const k of Object.keys(IDENTITIES)) {
+    scores[k] = { ...IDENTITIES[k], total: 0, done: 0, pts: 0 };
+  }
+  for (const h of rows(habits)) {
+    const k = h.identity && IDENTITIES[h.identity] ? h.identity : "general";
+    scores[k].total += 1;
+    if (h.done) {
+      scores[k].done += 1;
+      const pts = HABIT_LEVEL_POINTS[h.levelDone] || (h.tiny ? 5 : 10);
+      scores[k].pts += pts;
+    }
+  }
+  return scores;
+}
+
+export function freezeShape(f) {
+  f = obj(f);
+  return {
+    count: Number.isFinite(+f.count) ? Math.max(0, Math.min(10, Math.round(+f.count))) : 2,
+    usedDates: Array.isArray(f.usedDates) ? f.usedDates.filter((d) => typeof d === "string") : [],
+  };
+}
+
+export function contextualBlock(nowDate = new Date()) {
+  const hour = nowDate.getHours();
+  if (hour >= 4 && hour < 12) return { id: "morning", label: "الفجر والصباح", period: "morning" };
+  if (hour >= 12 && hour < 15) return { id: "afternoon", label: "الظهر والعمل", period: "afternoon" };
+  if (hour >= 15 && hour < 18) return { id: "asr", label: "العصر والنشاط", period: "asr" };
+  if (hour >= 18 && hour < 21) return { id: "maghrib", label: "المغرب والعشاء", period: "evening" };
+  return { id: "night", label: "المساء والليل", period: "night" };
+}
+
+export function chainedHabits(habits, blockId) {
+  const list = habits.filter((h) => !blockId || h.group === blockId);
+  const chains = [];
+  const visited = new Set();
+
+  for (const h of list) {
+    if (visited.has(h.id)) continue;
+    let curr = h;
+    const path = [];
+    while (curr && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      path.push(curr);
+      curr = list.find((item) => item.stackAfter === curr.id && !visited.has(item.id));
+    }
+    chains.push(path);
+  }
+  return chains;
+}
+
 export const HABIT_MIN_MAX = 70;
-export const habitShape = (h) => (
-  (h = obj(h)),
-  {
-  id: h.id || uid(),
-  label: typeof h.label === "string" ? h.label : "",
-  /* Kept exactly as written, never re-pointed at a block this build knows:
-     `blockRank` already lands an unknown id last and `groupOf` renders it
-     in the night block, which is the safe side. Rewriting it here would
-     move the user's habit on the strength of a damaged payload. */
-  group: typeof h.group === "string" && h.group ? h.group : BLOCK_IDS[0],
-  done: h.done === true,
-  core: h.core === true,
-  book: typeof h.book === "string" && h.book ? h.book : null,
-  min: typeof h.min === "string" ? h.min.slice(0, HABIT_MIN_MAX) : "",
-  tiny: h.done === true && h.tiny === true,
-});
+export const habitShape = (h) => {
+  h = obj(h);
+  const tiny = h.done === true && h.tiny === true;
+  return {
+    id: h.id || uid(),
+    label: typeof h.label === "string" ? h.label : "",
+    group: typeof h.group === "string" && h.group ? h.group : BLOCK_IDS[0],
+    done: h.done === true,
+    core: h.core === true,
+    book: typeof h.book === "string" && h.book ? h.book : null,
+    min: typeof h.min === "string" ? h.min.slice(0, HABIT_MIN_MAX) : "",
+    tiny,
+    stackAfter: typeof h.stackAfter === "string" && h.stackAfter ? h.stackAfter : null,
+    identity: typeof h.identity === "string" && IDENTITIES[h.identity] ? h.identity : "general",
+    levels: h.levels && typeof h.levels === "object" ? {
+      ideal: typeof h.levels.ideal === "string" ? h.levels.ideal.slice(0, HABIT_MIN_MAX) : "",
+      standard: typeof h.levels.standard === "string" ? h.levels.standard.slice(0, HABIT_MIN_MAX) : "",
+      micro: typeof h.levels.micro === "string" ? h.levels.micro.slice(0, HABIT_MIN_MAX) : (h.min || ""),
+    } : null,
+    levelDone: typeof h.levelDone === "string" ? h.levelDone : (tiny ? "micro" : (h.done ? "standard" : null)),
+    durationMins: Number.isFinite(+h.durationMins) && +h.durationMins > 0 ? Math.min(120, Math.max(1, Math.round(+h.durationMins))) : 5,
+  };
+};
 
 export const SEED_HABITS = [
   { id: uid(), label: "شرب ماء", group: "morning", done: false },

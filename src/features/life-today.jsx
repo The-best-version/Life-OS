@@ -2,9 +2,9 @@ import { ReadLogModal, TodayExtras, TopThree, useHabitTick } from "../components
 import { GymBridgeCard } from "../components/life-command.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { todayBlocks } from "../life-config.js";
-import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
+import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows, IDENTITIES, HABIT_LEVEL_POINTS, identityScores, freezeShape, contextualBlock, chainedHabits } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, BatteryCharging, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ClipboardList, Coffee, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Library, ListChecks, MapPin, Moon, MoonStar, Plus, Rocket, RotateCcw, School, Settings2, Sparkles, Star, Sun, Sunrise, Target, Trophy, X, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BatteryCharging, BookOpen, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ChevronRight, ClipboardList, Clock, Coffee, Droplets, Eye, EyeOff, FastForward, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Layers, Library, Link2, ListChecks, MapPin, Moon, MoonStar, Pause, Play, Plus, RefreshCw, Rocket, RotateCcw, School, Settings2, Shield, ShieldCheck, Sparkles, Star, Sun, Sunrise, Target, TrendingUp, Trophy, Volume2, VolumeX, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const LAYOUT_KEY = "los-today-layout";
@@ -364,6 +364,9 @@ export function TodayModule({
         open={open}
         missed={missed}
         books={state.books}
+        habits={habits}
+        state={state}
+        setState={setState}
         remaining={habits.length - doneCount}
         allDone={allDone}
         onTick={tick}
@@ -647,10 +650,405 @@ function TodayLayoutModal({ open, onClose, layout, onSave, onReset }) {
 
 const REWARD_HOLD = 1100;
 
-function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
+
+/* ==========================================================================
+ * 1. واجهة تدفق الروتين الموجه (Routine Flow Runner)
+ * ========================================================================== */
+export function RoutineFlowModal({ open, onClose, habits, books, onTick, onTickLevel }) {
+  const pending = useMemo(() => habits.filter((h) => !h.done), [habits]);
+  const [currIdx, setCurrIdx] = useState(0);
+  const [seconds, setSeconds] = useState(300);
+  const [timerActive, setTimerActive] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [burst, fireBurst] = useBurst(700);
+  const [flowFinished, setFlowFinished] = useState(false);
+
+  const habit = pending[currIdx];
+  const identity = habit && IDENTITIES[habit.identity] ? IDENTITIES[habit.identity] : IDENTITIES.general;
+
+  useEffect(() => {
+    if (habit) {
+      setSeconds((habit.durationMins || 5) * 60);
+      setTimerActive(false);
+      setFlowFinished(false);
+    } else if (pending.length === 0 && open) {
+      setFlowFinished(true);
+    }
+  }, [currIdx, habit?.id, pending.length, open]);
+
+  useEffect(() => {
+    let t;
+    if (timerActive && seconds > 0) {
+      t = setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000);
+    }
+    return () => clearInterval(t);
+  }, [timerActive, seconds]);
+
+  const handleComplete = (level = "standard") => {
+    if (!habit) return;
+    fireBurst();
+    if (onTickLevel) {
+      onTickLevel(habit.id, level);
+    } else {
+      onTick(habit.id);
+    }
+    if (currIdx >= pending.length - 1) {
+      setFlowFinished(true);
+    } else {
+      setCurrIdx((i) => i + 1);
+    }
+  };
+
+  const handleSkip = () => {
+    if (currIdx >= pending.length - 1) {
+      setFlowFinished(true);
+    } else {
+      setCurrIdx((i) => i + 1);
+    }
+  };
+
+  if (!open) return null;
+
+  const fmtMinSec = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="⚡ وضع تدفق الروتين الموجه">
+      <div className="space-y-6 py-2">
+        {flowFinished || !habit ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+              🎉
+            </div>
+            <h3 className="text-2xl font-black text-white">رائع جداً! أتممت الروتين بنجاح</h3>
+            <p className="text-sm text-white/60 max-w-sm mx-auto leading-relaxed">
+              لقد حافظت على انضباطك وعززت هويتك اليومية. كل دقيقة استثمرتها هنا تبني مستقبلك الحقيقي.
+            </p>
+            <div className="pt-4">
+              <Btn variant="primary" className="w-full sm:w-auto px-8" onClick={onClose}>
+                إغلاق والعودة لليوم 🚀
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* شريط التقدم في الروتين */}
+            <div>
+              <div className="flex items-center justify-between text-xs font-bold text-white/60 mb-1.5">
+                <span>
+                  العادة {currIdx + 1} من {pending.length}
+                </span>
+                <span dir="ltr" className="font-mono text-sky-400">
+                  {Math.round(((currIdx + 1) / pending.length) * 100)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-300"
+                  style={{ width: `${((currIdx + 1) / pending.length) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* بطاقة العادة الحالية */}
+            <div
+              className="p-6 rounded-3xl border text-center space-y-4"
+              style={{
+                borderColor: `${identity.tint}40`,
+                background: `linear-gradient(135deg, ${identity.tint}12, rgba(0,0,0,0.4))`,
+                boxShadow: `0 0 40px -15px ${identity.tint}30`,
+              }}
+            >
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-black" style={{ borderColor: `${identity.tint}50`, color: identity.tint, background: `${identity.tint}15` }}>
+                <Sparkles size={12} /> {identity.label}
+              </div>
+
+              <h2 className="text-2xl font-black text-white tracking-tight">{habit.label}</h2>
+
+              {habit.stackAfter && (
+                <p className="text-xs text-amber-300/80 flex items-center justify-center gap-1 font-bold">
+                  <Link2 size={13} /> خطوة متتابعة بعد العادة السابقة
+                </p>
+              )}
+
+              {/* مؤقت التركيز التفاعلي للعادة */}
+              <div className="py-2">
+                <div className="inline-flex flex-col items-center justify-center w-36 h-36 rounded-full border border-white/20 bg-black/40 shadow-inner">
+                  <span dir="ltr" className="text-4xl font-black font-mono text-white tracking-tighter">
+                    {fmtMinSec(seconds)}
+                  </span>
+                  <span className="text-[10px] font-bold text-white/40 mt-1">مؤقت مقترح</span>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setTimerActive(!timerActive)}
+                    className="px-4 py-1.5 rounded-xl border border-white/20 bg-white/10 text-xs font-bold text-white hover:bg-white/20 transition-all flex items-center gap-1.5"
+                  >
+                    {timerActive ? <Pause size={14} /> : <Play size={14} />}
+                    {timerActive ? "إيقاف مؤقت" : "بدء المؤقت"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeconds((s) => s + 60)}
+                    className="px-2.5 py-1.5 rounded-xl border border-white/15 bg-white/5 text-[11px] font-mono font-bold text-white/70 hover:bg-white/10"
+                    title="زيادة دقيقة"
+                  >
+                    +1 د
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeconds((habit.durationMins || 5) * 60)}
+                    className="px-2.5 py-1.5 rounded-xl border border-white/15 bg-white/5 text-[11px] text-white/70 hover:bg-white/10"
+                    title="إعادة تعيين"
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {/* اختيار مستوى الإنجاز الثلاثي */}
+              <div className="pt-2">
+                <p className="text-[11.5px] font-bold text-white/50 mb-2">اختر مستوى إنجاز العادة:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleComplete("ideal")}
+                    className="p-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 transition-all text-xs font-bold flex flex-col justify-between"
+                  >
+                    <span className="flex items-center justify-between">
+                      <span>🟢 المثالي</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20">+15 ن</span>
+                    </span>
+                    <span className="text-[10.5px] font-normal text-white/50 mt-1">
+                      {habit.levels?.ideal || "إنجاز كامل ومتقن"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleComplete("standard")}
+                    className="p-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 transition-all text-xs font-bold flex flex-col justify-between"
+                  >
+                    <span className="flex items-center justify-between">
+                      <span>🟡 العادي</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20">+10 ن</span>
+                    </span>
+                    <span className="text-[10.5px] font-normal text-white/50 mt-1">
+                      {habit.levels?.standard || "الأداء اليومي المعتاد"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleComplete("micro")}
+                    className="p-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 transition-all text-xs font-bold flex flex-col justify-between"
+                  >
+                    <span className="flex items-center justify-between">
+                      <span>🔴 دقيقتين (خفيفة)</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20">+5 ن</span>
+                    </span>
+                    <span className="text-[10.5px] font-normal text-white/50 mt-1">
+                      {habit.levels?.micro || habit.min || "الحد الأدنى للطوارئ"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* أزرار الإجراءات */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={handleSkip}
+                className="text-xs font-bold text-white/40 hover:text-white transition-colors flex items-center gap-1"
+              >
+                تخطي مؤقتاً <FastForward size={14} />
+              </button>
+              <Btn variant="primary" onClick={() => handleComplete("standard")}>
+                تمت العادة ➔ التالية
+              </Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ==========================================================================
+ * 2. نافذة درع الستريك وحماية الاستمرارية (Streak Shield Modal)
+ * ========================================================================== */
+export function StreakShieldModal({ open, onClose, freezes, onActivate, date = dayKey() }) {
+  const f = freezeShape(freezes);
+  const alreadyUsedToday = f.usedDates.includes(date);
+
+  return (
+    <Modal open={open} onClose={onClose} title="🛡️ درع حماية الستريك (Streak Freeze)">
+      <div className="space-y-5 py-3 text-center sm:text-right">
+        <div className="p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 flex flex-col sm:flex-row items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0 text-indigo-300">
+            <Shield size={24} />
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-white">رصيدك المتبقي: {f.count} دروع حماية هذا الشهر</h4>
+            <p className="text-xs text-white/60 mt-1 leading-relaxed">
+              قاعدة ذهبية في علم العادات: «إياك والانقطاع مرتين». درع الحماية مخصص للأيام الاستثنائية كالسفر أو الإرهاق الشديد ليحمي سلسلة أيامك من الانهيار.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 p-4 space-y-2 bg-black/30">
+          <div className="flex items-center justify-between text-xs font-bold">
+            <span className="text-white/70">حالة اليوم ({date}):</span>
+            {alreadyUsedToday ? (
+              <span className="text-emerald-400 flex items-center gap-1">
+                <Check size={14} /> الدرع مفعّل لليوم
+              </span>
+            ) : (
+              <span className="text-amber-400">غير مفعّل</span>
+            )}
+          </div>
+          <div className="flex items-center justify-between text-xs font-bold text-white/50">
+            <span>الأيام المحمية سابقاً:</span>
+            <span>{f.usedDates.length} أيام</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <Btn variant="ghost" size="sm" onClick={onClose}>
+            إلغاء
+          </Btn>
+          {!alreadyUsedToday && f.count > 0 && (
+            <Btn
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                onActivate(date);
+                onClose();
+              }}
+            >
+              <ShieldCheck size={14} className="me-1" /> تفعيل الدرع لليوم
+            </Btn>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ==========================================================================
+ * 3. ودجت مقياس رصيد الهوية (Identity Pillars Widget)
+ * ========================================================================== */
+export function IdentityPillarsWidget({ habits }) {
+  const scores = useMemo(() => identityScores(habits), [habits]);
+  const totalPts = Object.values(scores).reduce((a, b) => a + (b.pts || 0), 0);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-black text-white/80 flex items-center gap-1.5">
+          <Sparkles size={13} className="text-purple-400" /> رصيد بناء الهوية اليوم
+        </h4>
+        <span className="text-xs font-black font-mono text-purple-300 bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
+          {totalPts} نقطة
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {Object.values(scores).map((idnt) => {
+          const pct = idnt.total ? Math.round((idnt.done / idnt.total) * 100) : 0;
+          return (
+            <div
+              key={idnt.id}
+              className="p-2.5 rounded-xl border flex flex-col justify-between space-y-1.5"
+              style={{
+                borderColor: `${idnt.tint}25`,
+                background: `${idnt.tint}08`,
+              }}
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold">
+                <span className="truncate" style={{ color: idnt.tint }}>{idnt.label}</span>
+                <span className="font-mono text-[10px] text-white/50">{idnt.done}/{idnt.total}</span>
+              </div>
+              <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${pct}%`, backgroundColor: idnt.tint }}
+                />
+              </div>
+              <span className="text-[10px] font-bold text-white/40 font-mono text-left" dir="ltr">
+                +{idnt.pts} pts
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================================
+ * 4. ودجت سلاسل العادات المتتابعة (Chained Habits View)
+ * ========================================================================== */
+export function ChainedHabitsView({ habits, books, onTick }) {
+  const chains = useMemo(() => chainedHabits(habits), [habits]);
+
+  return (
+    <div className="space-y-4">
+      {chains.length === 0 ? (
+        <p className="text-center py-6 text-xs text-white/40">لا توجد سلاسل عادات مربوطة بعد.</p>
+      ) : (
+        chains.map((chain, cIdx) => (
+          <div
+            key={cIdx}
+            className="p-3.5 rounded-2xl border border-white/10 bg-white/[0.015] space-y-2.5"
+          >
+            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400">
+              <Link2 size={13} />
+              <span>سلسلة عادات متتابعة #{cIdx + 1}</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {chain.map((h, hIdx) => {
+                const isDone = h.done;
+                return (
+                  <div key={h.id} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onTick(h.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                        isDone
+                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 line-through"
+                          : "border-white/15 bg-white/5 text-white hover:border-sky-400"
+                      }`}
+                    >
+                      {isDone ? <Check size={12} /> : <div className="w-2 h-2 rounded-full bg-sky-400" />}
+                      <span>{h.label}</span>
+                    </button>
+                    {hIdx < chain.length - 1 && (
+                      <ArrowLeft size={13} className="text-white/30 shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function TodayHabit({ habit, book, onToggle, onToggleTiny, onToggleLevel, late = false }) {
   const [burst, fireBurst] = useBurst(700);
   const g = groupOf(habit.group);
   const Icon = g.icon;
+  const identity = habit.identity && IDENTITIES[habit.identity] ? IDENTITIES[habit.identity] : null;
 
   const handle = () => {
     if (!habit.done) fireBurst();
@@ -658,12 +1056,18 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
   };
   const handleTiny = () => {
     if (!habit.done) fireBurst();
-    onToggleTiny();
+    if (onToggleLevel) onToggleLevel("micro");
+    else onToggleTiny();
+  };
+  const handleIdeal = () => {
+    if (!habit.done) fireBurst();
+    if (onToggleLevel) onToggleLevel("ideal");
+    else onToggle();
   };
 
   return (
     <div
-      className={`group flex items-center gap-2 rounded-xl border px-2 py-1 transition-all duration-200${
+      className={`group flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 transition-all duration-200${
         burst ? " los-reward" : ""
       }`}
       style={{
@@ -679,71 +1083,105 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
             : "rgba(255,255,255,0.025)",
       }}
     >
-      <span
-        aria-hidden="true"
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
-        style={{
-          borderColor: `${g.tint}33`,
-          backgroundColor: `${g.tint}14`,
-          color: g.tint,
-        }}
-        title={g.label}
-      >
-        <Icon size={13} />
-      </span>
-      <Checkbox
-        checked={habit.done}
-        onToggle={handle}
-        label={habit.label}
-        tint={T.primary}
-        size="sm"
-      />
-      {!!habit.min && (habit.tiny || !habit.done) && (
-        <button
-          onClick={handleTiny}
-          title={`نسخة خفيفة للطوارئ: ${habit.min}`}
-          aria-label={`إنجاز النسخة الصغيرة من ${habit.label}`}
-          className="shrink-0 inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-bold transition-all duration-200 hover:scale-105"
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          aria-hidden="true"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
           style={{
-            borderColor: habit.tiny ? `${T.sky}80` : `${T.sky}38`,
-            background: habit.tiny ? `${T.sky}24` : `${T.sky}10`,
-            color: T.sky,
+            borderColor: `${g.tint}33`,
+            backgroundColor: `${g.tint}14`,
+            color: g.tint,
           }}
+          title={g.label}
         >
-          <Feather
-            size={11}
-            style={habit.tiny ? { filter: `drop-shadow(0 0 5px ${T.sky}AA)` } : undefined}
-          />
-          <span className="hidden sm:inline">{habit.tiny ? "خفيفة ✓" : "خفيفة"}</span>
-        </button>
-      )}
-      {habit.core && (
-        <Star
-          size={12}
-          aria-label="عادة أساسية"
-          className="shrink-0"
-          fill={T.accent}
-          style={{ color: T.accent, filter: `drop-shadow(0 0 5px ${T.accent}AA)` }}
+          <Icon size={13} />
+        </span>
+        <Checkbox
+          checked={habit.done}
+          onToggle={handle}
+          label={habit.label}
+          tint={T.primary}
+          size="sm"
         />
-      )}
-      {late && (
-        <span
-          className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold"
-          style={{ backgroundColor: `${T.accent}1F`, color: T.accent }}
-        >
-          {g.label}
-        </span>
-      )}
-      {book && (
-        <span
-          title={`مربوطة بـ«${book.title}»`}
-          className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] sm:inline-flex"
-          style={{ backgroundColor: `${T.accent}1A`, color: T.accent }}
-        >
-          <Library size={10} />
-          <span className="max-w-[7rem] truncate">{book.title}</span>
-        </span>
-      )}
+
+        {habit.stackAfter && (
+          <span title="مرتبطة في سلسلة عادات متتابعة" className="text-sky-400 shrink-0">
+            <Link2 size={11} />
+          </span>
+        )}
+
+        {identity && (
+          <span
+            className="hidden sm:inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold border shrink-0"
+            style={{ borderColor: `${identity.tint}35`, backgroundColor: `${identity.tint}12`, color: identity.tint }}
+            title={`هوية: ${identity.label}`}
+          >
+            {identity.label}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 shrink-0 ms-auto sm:ms-0">
+        {habit.done ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black border"
+            style={{
+              borderColor: habit.levelDone === "ideal" ? "rgba(16,185,129,0.4)" : habit.levelDone === "micro" ? "rgba(14,165,233,0.4)" : "rgba(245,158,11,0.4)",
+              background: habit.levelDone === "ideal" ? "rgba(16,185,129,0.15)" : habit.levelDone === "micro" ? "rgba(14,165,233,0.15)" : "rgba(245,158,11,0.15)",
+              color: habit.levelDone === "ideal" ? "#34d399" : habit.levelDone === "micro" ? "#38bdf8" : "#fbbf24",
+            }}
+          >
+            {habit.levelDone === "ideal" ? "🟢 مثالي (+15ن)" : habit.levelDone === "micro" ? "🔴 دقيقتين (+5ن)" : "🟡 عادي (+10ن)"}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={handleIdeal}
+              title="إنجاز بالمستوى المثالي (+15 نقطة هوية)"
+              className="px-1.5 py-0.5 rounded border border-emerald-500/25 bg-emerald-500/10 text-[9.5px] font-bold text-emerald-400 hover:bg-emerald-500/20"
+            >
+              🟢 مثالي
+            </button>
+            <button
+              type="button"
+              onClick={handleTiny}
+              title={habit.min ? `قاعدة الدقيقتين: ${habit.min}` : "إنجاز خفيف للطوارئ (+5 نقاط)"}
+              className="px-1.5 py-0.5 rounded border border-sky-500/25 bg-sky-500/10 text-[9.5px] font-bold text-sky-400 hover:bg-sky-500/20"
+            >
+              🔴 دقيقتين
+            </button>
+          </div>
+        )}
+
+        {habit.core && (
+          <Star
+            size={12}
+            aria-label="عادة أساسية"
+            className="shrink-0"
+            fill={T.accent}
+            style={{ color: T.accent, filter: `drop-shadow(0 0 5px ${T.accent}AA)` }}
+          />
+        )}
+        {late && (
+          <span
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold"
+            style={{ backgroundColor: `${T.accent}1F`, color: T.accent }}
+          >
+            {g.label}
+          </span>
+        )}
+        {book && (
+          <span
+            title={`مربوطة بـ«${book.title}»`}
+            className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] sm:inline-flex"
+            style={{ backgroundColor: `${T.accent}1A`, color: T.accent }}
+          >
+            <Library size={10} />
+            <span className="max-w-[7rem] truncate">{book.title}</span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1253,46 +1691,150 @@ export function RemainingHabitsCard({
   open,
   missed,
   books,
+  habits = [],
+  state = {},
+  setState,
   remaining,
   allDone,
   onTick,
   onGo,
 }) {
+  const [flowOpen, setFlowOpen] = useState(false);
+  const [shieldOpen, setShieldOpen] = useState(false);
+  const [tabMode, setTabMode] = useState("contextual");
+
+  const f = freezeShape(state?.freezes);
+  const currentPeriod = useMemo(() => contextualBlock(), []);
+
+  const handleTickLevel = (id, level) => {
+    if (onTick) onTick(id, false, level);
+  };
+
   return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <h3
-          className="flex items-center gap-2 text-[15px] font-extrabold"
-          style={{ color: T.primaryLift }}
-        >
-          <ListChecks size={16} /> العادات المتبقية
-        </h3>
+    <Card className="p-5 sm:p-6 space-y-4">
+      {/* رأس البطاقة والأزرار التفاعلية المتقدمة */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
+          <h3
+            className="flex items-center gap-2 text-[15.5px] font-black"
+            style={{ color: T.primaryLift }}
+          >
+            <ListChecks size={18} className="text-emerald-400" />
+            الروتين والعادات الذكية
+          </h3>
           <Badge tint={allDone ? T.primary : T.cta}>
-            <span dir="ltr" className="tabular-nums">
+            <span dir="ltr" className="tabular-nums font-mono">
               {remaining}
             </span>
             {" متبقية"}
           </Badge>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* زر تشغيل الروتين الموجه */}
+          <button
+            type="button"
+            onClick={() => setFlowOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all transform hover:scale-105 shadow-md"
+            style={{
+              background: "linear-gradient(135deg, #10b981, #065f46)",
+              color: "#fff",
+              boxShadow: "0 0 20px -5px rgba(16,185,129,0.5)",
+            }}
+          >
+            <Rocket size={13} />
+            <span>تشغيل الروتين الموجه</span>
+          </button>
+
+          {/* زر درع الستريك */}
+          <button
+            type="button"
+            onClick={() => setShieldOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 transition-all"
+            title="حماية الستريك"
+          >
+            <Shield size={13} />
+            <span>الدرع: {f.count}</span>
+          </button>
+
           <Btn variant="ghost" size="sm" onClick={() => onGo("routine")}>
             الروتين <ArrowLeft size={13} />
           </Btn>
         </div>
       </div>
 
+      {/* تبويبات التصفية الذكية */}
+      <div className="flex items-center gap-1.5 border-b border-white/10 pb-2 text-xs font-bold">
+        <button
+          type="button"
+          onClick={() => setTabMode("contextual")}
+          className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+            tabMode === "contextual"
+              ? "bg-white/15 text-white border border-white/20 shadow-sm"
+              : "text-white/40 hover:text-white"
+          }`}
+        >
+          <Clock size={12} />
+          <span>الفترة الحالية ({block.label})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTabMode("all")}
+          className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+            tabMode === "all"
+              ? "bg-white/15 text-white border border-white/20 shadow-sm"
+              : "text-white/40 hover:text-white"
+          }`}
+        >
+          <ListChecks size={12} />
+          <span>كل العادات ({habits.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTabMode("chains")}
+          className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+            tabMode === "chains"
+              ? "bg-white/15 text-white border border-white/20 shadow-sm"
+              : "text-white/40 hover:text-white"
+          }`}
+        >
+          <Link2 size={12} />
+          <span>سلاسل العادات</span>
+        </button>
+      </div>
+
+      {/* محتوى العادات حسب التبويب المختار */}
       {allDone ? (
         <p
-          className="mt-4 rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
+          className="rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
           style={{
             borderColor: `${T.primary}3D`,
             backgroundColor: `${T.primary}12`,
             color: T.primaryLift,
           }}
         >
-          كل عادات اليوم تمّت. أغلق الشاشة واذهب — لا شيء ينتظرك هنا.
+          كل عادات اليوم تمّت بنجاح كامل! أغلق الشاشة وروح استمتع بيومك. 🎉
         </p>
+      ) : tabMode === "chains" ? (
+        <ChainedHabitsView habits={habits} books={books} onTick={onTick} />
+      ) : tabMode === "all" ? (
+        <div className="space-y-2">
+          {habits.map((h) => (
+            <TodayHabit
+              key={h.id}
+              habit={h}
+              book={bookForHabit(h, books)}
+              onToggle={() => onTick(h.id)}
+              onToggleTiny={() => onTick(h.id, true)}
+              onToggleLevel={(lvl) => handleTickLevel(h.id, lvl)}
+            />
+          ))}
+        </div>
       ) : (
-        <div className="mt-4 space-y-4">
+        /* تبويب الفترة الحالية المعتاد */
+        <div className="space-y-4">
           <div>
             <p className="mb-2 text-[11px] font-bold" style={{ color: block.tint }}>
               {block.label} — الآن
@@ -1306,6 +1848,7 @@ export function RemainingHabitsCard({
                     book={bookForHabit(h, books)}
                     onToggle={() => onTick(h.id)}
                     onToggleTiny={() => onTick(h.id, true)}
+                    onToggleLevel={(lvl) => handleTickLevel(h.id, lvl)}
                   />
                 ))}
               </div>
@@ -1314,7 +1857,7 @@ export function RemainingHabitsCard({
                 className="rounded-xl border border-dashed px-3 py-3 text-center text-[11.5px]"
                 style={{ borderColor: T.border, color: T.faint }}
               >
-                لا شيء متبقٍّ في هذا البلوك.
+                لا توجد عادات متبقية في هذا البلوك الحالي.
               </p>
             )}
           </div>
@@ -1322,8 +1865,8 @@ export function RemainingHabitsCard({
           {missed.length > 0 && (
             <div>
               <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
-                فاتك في بلوكات مضت —{" "}
-                <span dir="ltr" className="tabular-nums">
+                فاتك في بلوكات سابقة —{" "}
+                <span dir="ltr" className="tabular-nums font-mono">
                   {missed.length}
                 </span>
               </p>
@@ -1335,154 +1878,62 @@ export function RemainingHabitsCard({
                     book={bookForHabit(h, books)}
                     onToggle={() => onTick(h.id)}
                     onToggleTiny={() => onTick(h.id, true)}
+                    onToggleLevel={(lvl) => handleTickLevel(h.id, lvl)}
                     late
                   />
                 ))}
               </div>
               {missed.length > 5 && (
                 <button
-                  onClick={() => onGo("routine")}
+                  type="button"
+                  onClick={() => setTabMode("all")}
                   className="mt-2 w-full rounded-xl border border-dashed py-2 text-[11.5px] transition-colors hover:bg-white/[0.06]"
                   style={{ borderColor: T.border, color: T.muted }}
                 >
-                  وبقي{" "}
-                  <span dir="ltr" className="tabular-nums">
-                    {missed.length - 5}
-                  </span>{" "}
-                  — افتح الروتين
+                  عرض باقي العادات السابقة ({missed.length - 5})
                 </button>
               )}
             </div>
           )}
-
-          {open.later.length > 0 && (
-            <p className="text-[11px]" style={{ color: T.faint }}>
-              وأمامك{" "}
-              <span dir="ltr" className="tabular-nums">
-                {open.later.length}
-              </span>{" "}
-              عادة في بلوكات لم تبدأ بعد.
-            </p>
-          )}
         </div>
       )}
+
+      {/* ودجت رصيد الهوية */}
+      <IdentityPillarsWidget habits={habits} />
+
+      {/* نوافذ الروتين والدرع */}
+      <RoutineFlowModal
+        open={flowOpen}
+        onClose={() => setFlowOpen(false)}
+        habits={habits}
+        books={books}
+        onTick={onTick}
+        onTickLevel={handleTickLevel}
+      />
+
+      <StreakShieldModal
+        open={shieldOpen}
+        onClose={() => setShieldOpen(false)}
+        freezes={state?.freezes}
+        onActivate={(d) => {
+          if (setState) {
+            setState((s) => {
+              const cur = freezeShape(s.freezes);
+              return {
+                ...s,
+                freezes: {
+                  count: Math.max(0, cur.count - 1),
+                  usedDates: [...cur.usedDates, d],
+                },
+              };
+            });
+          }
+        }}
+      />
     </Card>
   );
 }
 
-export function LecturesCard({ dow, sections, ahead, mins, onGo }) {
-  return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3
-            className="flex items-center gap-2 text-[15px] font-extrabold"
-            style={{ color: T.sky }}
-          >
-            <School size={16} /> محاضرات اليوم
-          </h3>
-          <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
-            {uniDayOf(dow)?.label || "نهاية الأسبوع"}
-          </p>
-        </div>
-        <Btn variant="ghost" size="sm" onClick={() => onGo("uni")}>
-          الجامعة <ArrowLeft size={13} />
-        </Btn>
-      </div>
-
-      <div className="mt-4 space-y-1.5">
-        {sections.length ? (
-          sections.map((r) => (
-            <TodayLine
-              key={r.slot.id}
-              tint={r.course.tint}
-              icon={GraduationCap}
-              title={courseName(r.course)}
-              sub={[r.slot.room, r.course.instructor].filter(Boolean).join(" · ")}
-              time={`${prettyTime(r.slot.from)} – ${prettyTime(r.slot.to)}`}
-              when={r.now ? "الآن" : r.to <= mins ? "انتهت" : ""}
-              now={r.now}
-            />
-          ))
-        ) : (
-          <>
-            <p
-              className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
-              style={{ borderColor: T.border, color: T.faint }}
-            >
-              لا محاضرات اليوم.
-            </p>
-            {ahead && (
-              <TodayLine
-                tint={ahead.course.tint}
-                icon={CalendarClock}
-                title={courseName(ahead.course)}
-                sub={`القادمة · ${uniDayOf(ahead.slot.day)?.label || ""}`}
-                time={prettyTime(ahead.slot.from)}
-                when={ahead.inDays === 1 ? "غدًا" : ahead.inDays === 0 ? "اليوم" : ""}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-export function NearestDueCard({ items, onGo }) {
-  return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3
-            className="flex items-center gap-2 text-[15px] font-extrabold"
-            style={{ color: T.rose }}
-          >
-            <AlarmClock size={16} /> أقرب اختبار أو تسليم
-          </h3>
-          <p className="mt-1 text-[10.5px]" style={{ color: T.faint }}>
-            من الجامعة والتقويم معًا
-          </p>
-        </div>
-        <Btn variant="ghost" size="sm" onClick={() => onGo("agenda")}>
-          التقويم <ArrowLeft size={13} />
-        </Btn>
-      </div>
-
-      <div className="mt-4 space-y-1.5">
-        {items.length ? (
-          items.map((r) => {
-            const left = daysUntil(r.on);
-            return (
-              <button
-                key={r.key}
-                onClick={() => onGo(r.go)}
-                className="block w-full text-right"
-              >
-                <TodayLine
-                  tint={r.tint}
-                  icon={ClipboardList}
-                  title={r.title}
-                  sub={r.sub}
-                  time={r.time ? prettyTime(r.time) : ""}
-                  when={whenWord(r.on)}
-                  hot={left !== null && left <= 1}
-                />
-              </button>
-            );
-          })
-        ) : (
-          <p
-            className="rounded-xl border border-dashed px-3 py-4 text-center text-[11.5px]"
-            style={{ borderColor: T.border, color: T.faint }}
-          >
-            لا تسليمات ولا اختبارات مسجّلة.
-          </p>
-        )}
-      </div>
-    </Card>
-  );
-}
 
 export function PrayerCard({ place, onOpenSettings }) {
   useMinuteClock();
