@@ -699,7 +699,7 @@ export function BriefTimesCard({ bot, onPatch }) {
         رسالتان في اليوم، بالساعة التي تختارها.
       </p>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
         {briefs.map((b) => {
           const Icon = b.icon;
           const on = bot[`${b.key}On`];

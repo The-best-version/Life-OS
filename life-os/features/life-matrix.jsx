@@ -356,7 +356,7 @@ export function MatrixModule({ state, setState }) {
       )}
 
       {viewMode === "matrix" ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
           {QUADRANTS.map((q) => (
             <QuadrantCard
               key={q.id}

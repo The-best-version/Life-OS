@@ -337,7 +337,7 @@ export function TodayModule({
     ),
     readingCue: <ReadingCue list={state.reads} />,
     prayerWaterGrid: (
-      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
         <PrayerCard place={state.place} onOpenSettings={onOpenSettings} />
         <WaterCard
           count={state.water}
@@ -374,7 +374,7 @@ export function TodayModule({
       <TomorrowPrepCard prepared={prepared} on={tomorrowOn} onOpen={onOpenTomorrow} />
     ) : null,
     lecturesAndDeadlines: (
-      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
         <LecturesCard dow={dow} sections={sections} ahead={ahead} mins={mins} onGo={onGo} />
         <NearestDueCard items={nearest} onGo={onGo} />
       </div>
@@ -1021,9 +1021,9 @@ export function DayHeaderCard({
 }) {
   const Icon = block.icon;
   return (
-    <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 lg:flex-row lg:justify-between">
-      <div className="min-w-0 text-center lg:text-right">
-        <div className="flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+    <Card className="flex flex-col items-center gap-6 p-6 sm:p-7 md:flex-row md:justify-between">
+      <div className="min-w-0 text-center md:text-right">
+        <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start">
           <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">
             اليوم
           </h2>
@@ -1069,10 +1069,10 @@ export function DayHeaderCard({
             </button>
           )}
         </div>
-        <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 lg:justify-start">
+        <p className="mt-1.5 flex items-center justify-center gap-2 text-xs text-white/40 md:justify-start">
           <CalendarDays size={13} /> {dateLabel}
         </p>
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 md:justify-start">
           <span
             className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[12px] font-extrabold"
             style={{
@@ -2415,7 +2415,7 @@ export function MorningLaunchpadAndShutdownCard({
       {/* ==================== 1) تفاصيل طقس الإقلاع الصباحي ==================== */}
       {expanded && isMorning && (
         <div className="mt-5 space-y-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* المربع الأول: النوم + الطاقة + الماء الصباحي */}
             <div
               className="rounded-2xl border p-4 space-y-4"
@@ -2686,7 +2686,7 @@ export function MorningLaunchpadAndShutdownCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* المربع الأول: ترحيل المهام المتبقية للغد بلا تأنيب ضمير */}
             <div
               className="rounded-2xl border p-4 space-y-3"
@@ -2882,7 +2882,7 @@ export function MorningLaunchpadAndShutdownCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* المربع الأول: حصاد الأسبوع الماضي + العادة المحورية */}
             <div
               className="rounded-2xl border p-4 space-y-3"

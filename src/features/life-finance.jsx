@@ -437,7 +437,7 @@ export function FinanceModule({ state, setState }) {
         </div>
 
         {/* قائمة بطاقات المشاريع */}
-        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
           {filteredVentures.length === 0 ? (
             <p
               className="rounded-xl border border-dashed py-8 text-center text-[11.5px] lg:col-span-2"
@@ -689,7 +689,7 @@ export function FinanceModule({ state, setState }) {
           </Badge>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
           {skillLevels.map((sk) => (
             <div
               key={sk.id}

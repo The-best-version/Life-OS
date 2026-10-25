@@ -283,7 +283,7 @@ export function SleepLabModule({ state, setState }) {
             <p className="text-xs font-bold text-indigo-300 mb-3 flex items-center gap-1.5">
               <Clock size={14} /> إذا دخلت فراشك الآن، اضبط منبهك على أحد هذه الأوقات:
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               {wakeUpOptions.map((opt) => (
                 <div
                   key={opt.cycles}
@@ -327,7 +327,7 @@ export function SleepLabModule({ state, setState }) {
               <Bed size={14} /> للاستيقاظ بنشاط تام الساعة {targetWakeTime}، ادخل فراشك في أحد الأوقات:
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               {bedtimeOptions.map((opt) => (
                 <div
                   key={opt.cycles}
@@ -357,9 +357,9 @@ export function SleepLabModule({ state, setState }) {
       </Card>
 
       {/* 🛌 القسم الثاني: تسجيل ومتابعة النوم (Sleep Logger & Debt) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* نموذج تسجيل الليلة الماضية */}
-        <Card className="lg:col-span-1 p-6 border border-white/10 bg-white/[0.02] space-y-4">
+        <Card className="md:col-span-1 lg:col-span-1 p-6 border border-white/10 bg-white/[0.02] space-y-4">
           <h3 className="text-base font-black text-white flex items-center gap-2">
             <Bed size={16} className="text-sky-400" />
             تسجيل ليلة نوم
@@ -448,7 +448,7 @@ export function SleepLabModule({ state, setState }) {
         </Card>
 
         {/* سجل الليالي السابقة وتحليل دين النوم */}
-        <Card className="lg:col-span-2 p-6 border border-white/10 bg-white/[0.02] flex flex-col justify-between space-y-4">
+        <Card className="md:col-span-1 lg:col-span-2 p-6 border border-white/10 bg-white/[0.02] flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-black text-white flex items-center gap-2">

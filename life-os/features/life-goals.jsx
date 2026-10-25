@@ -961,7 +961,7 @@ export function GoalsModule({ state, setState }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {dashboardOrder.map((id) => {
           const widget = WIDGETS[id];
           if (!widget) return null;

@@ -672,7 +672,7 @@ function GraphModule() {
         </p>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
         {doors.map((d) => {
           const Icon = d.icon;
           return (
@@ -715,7 +715,7 @@ function GraphModule() {
         <h3 className="mb-3 px-1 text-[13.5px] font-extrabold text-white/70">
           الرسوم المبنيّة من بياناتك
         </h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
           {charts.map((c) => (
             <Card key={c.key} as="a" href={`/graphify/charts/${c.key}.svg`} className="block p-4">
               <p className="mb-2.5 text-[12.5px] font-extrabold" style={{ color: c.tint }}>
