@@ -2,12 +2,14 @@ import { StrictMode, useEffect, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { SportFilterProvider } from "@/components/session/sport-selector";
 import { ToastProvider } from "@/components/ui/toast";
 import { IronLogProvider } from "@/lib/store";
 
 import DashboardPage from "@/app/page";
 import HistoryPage from "@/app/history/page";
 import BodyScreen from "@/app/nutrition/page";
+import SessionPage from "@/app/session/page";
 import SettingsPage from "@/app/settings/page";
 import WorkoutPage from "@/app/workout/page";
 
@@ -30,6 +32,7 @@ import { usePathname } from "./shims/next-navigation";
 const ROUTES: Record<string, ComponentType> = {
   "/": DashboardPage,
   "/workout": WorkoutPage,
+  "/session": SessionPage,
   "/history": HistoryPage,
   "/nutrition": BodyScreen,
   "/settings": SettingsPage,
@@ -48,9 +51,14 @@ function App() {
   return (
     <IronLogProvider>
       <ToastProvider>
-        <AppShell>
-          <Page />
-        </AppShell>
+        {/* Same order as app/layout.tsx, including this one: without it
+            `useSportFilter` throws and the standalone file renders nothing
+            at all, on every screen. */}
+        <SportFilterProvider>
+          <AppShell>
+            <Page />
+          </AppShell>
+        </SportFilterProvider>
       </ToastProvider>
     </IronLogProvider>
   );

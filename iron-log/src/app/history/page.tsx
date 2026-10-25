@@ -97,7 +97,7 @@ export default function HistoryPage() {
           </div>
           <Link
             href="/workout"
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-xs font-bold text-fg shadow-glowAccent"
+            className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-xs font-bold text-bg shadow-glowAccent"
           >
             <Play className="size-3.5 fill-current" />
             <span>ابدأ أول تمرين الآن</span>

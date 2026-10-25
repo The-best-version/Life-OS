@@ -4,14 +4,27 @@ import { AlertTriangle, Flame } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 import { BottomNav } from "@/components/layout/bottom-nav";
+import {
+  SportSelector,
+  useSportFilter,
+} from "@/components/session/sport-selector";
 import { RestTimerBar, RestTimerProvider } from "@/components/workout/rest-timer";
-import { dashboardSummary } from "@/lib/metrics";
+import { activeDates, liveSession } from "@/lib/athletic-metrics";
+import { currentStreak, dashboardSummary } from "@/lib/metrics";
+import { getSport } from "@/lib/sports-config";
 import { useIronLog } from "@/lib/store";
 import { formatCompact, formatFullDate, toIsoDate } from "@/lib/utils";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { db, index, status, storage } = useIronLog();
+  const { sport, setSport } = useSportFilter();
   const summary = useMemo(() => dashboardSummary(db, index), [db, index]);
+
+  /* The streak in the header counts ANY discipline, not gym days: a ride on
+     Tuesday keeps it alive, which is the whole premise of a multi-sport
+     tracker and would be a lie if this chip read gym attendance only. */
+  const streak = useMemo(() => currentStreak(activeDates(db, index)), [db, index]);
+  const live = useMemo(() => liveSession(db), [db]);
 
   return (
     <div className="relative min-h-dvh bg-bg text-fg">
@@ -37,7 +50,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {summary.todaySets > 0 ? (
+            {live ? (
+              /* A session that is running outranks every other reading here:
+                 it is the one thing the header can tell you that you cannot
+                 see on the screen you are on. */
+              <span className="flex items-center gap-1.5 rounded-lg border border-steel/40 bg-steel/10 px-3 py-1.5 text-[11px] font-bold text-steel">
+                <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                {getSport(live.sport).nameAr} جارية
+              </span>
+            ) : summary.todaySets > 0 ? (
               <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1.5">
                 <div className="text-end leading-none">
                   <span className="num text-[13px] font-semibold text-accent-glow">
@@ -51,11 +72,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : (
               <div className="flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-1.5">
                 <Flame className="size-4 text-fg-3" />
-                <span className="num text-[13px] font-semibold text-fg">{summary.streak}</span>
+                <span className="num text-[13px] font-semibold text-fg">{streak}</span>
                 <span className="text-[10px] font-semibold text-fg-3">يوم</span>
               </div>
             )}
           </div>
+        </div>
+
+        {/* The global discipline switcher. One row, scrollable, under the
+            wordmark: every screen below filters from it, and the training tab
+            in the bottom bar follows it too. */}
+        <div className="mx-auto max-w-xl px-4 pb-3 lg:max-w-4xl">
+          <SportSelector value={sport} onChange={setSport} />
         </div>
       </header>
 

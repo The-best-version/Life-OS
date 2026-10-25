@@ -33,7 +33,7 @@ const TabsTrigger = React.forwardRef<
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
       // The active pill wears the same accent as the primary CTA, so "where
       // am I" and "what do I press" speak with one colour.
-      "data-[state=active]:border-transparent data-[state=active]:bg-accent data-[state=active]:text-fg",
+      "data-[state=active]:border-transparent data-[state=active]:bg-accent data-[state=active]:text-bg",
       className,
     )}
     {...props}

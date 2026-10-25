@@ -20,6 +20,8 @@
 import { createSeedDatabase, DB_VERSION, DEFAULT_SETTINGS } from "./seed";
 import {
   MUSCLE_GROUPS,
+  SPORT_IDS,
+  type AthleticSession,
   type BodyMetric,
   type Database,
   type Exercise,
@@ -31,6 +33,7 @@ import {
   type Session,
   type SetEntry,
   type Settings,
+  type SportId,
   type WeightUnit,
 } from "./types";
 import { clamp, createId, isIsoDate, round, toFiniteNumber } from "./utils";
@@ -115,6 +118,10 @@ function asMuscleGroup(value: unknown): MuscleGroup {
 /** Weight is allowed to be 0 (bodyweight work) but never negative or absurd. */
 export const MAX_WEIGHT_KG = 750;
 export const MAX_REPS = 200;
+export const MAX_ROUNDS = 60;
+export const MAX_ROUND_SECONDS = 1800;
+export const MAX_SESSION_MINUTES = 600;
+export const MAX_KM = 300;
 export const MIN_REST_SECONDS = 15;
 export const MAX_REST_SECONDS = 600;
 
@@ -233,6 +240,66 @@ function normalizeSetEntry(
     rpe: rpeRaw === null ? null : round(clamp(rpeRaw, 1, 10), 1),
     isWarmup: raw.isWarmup === true,
     createdAt: asTimestamp(raw.createdAt, now),
+  };
+}
+
+function asSportId(value: unknown): SportId | null {
+  return typeof value === "string" && (SPORT_IDS as readonly string[]).includes(value)
+    ? (value as SportId)
+    : null;
+}
+
+/**
+ * One session of a non-gym discipline.
+ *
+ * Dropped outright when the sport is unknown or the date is not a date: a row
+ * that cannot say which discipline it belongs to cannot be counted towards any
+ * of them, and a silent "gym" default would quietly inflate the one column the
+ * overload engine reads.
+ *
+ * Every measurement goes through `asNullableNumber`, so absent stays absent.
+ * A stored 0 bpm would be a claim the user never made, and it would drag every
+ * average that reads the column.
+ */
+function normalizeAthleticSession(
+  raw: unknown,
+  now: number,
+): AthleticSession | null {
+  if (!isRecord(raw)) return null;
+
+  const sport = asSportId(raw.sport);
+  if (!sport) return null;
+  if (!isIsoDate(raw.date)) return null;
+
+  const startedAt = asTimestamp(raw.startedAt, now);
+  const endedRaw = toFiniteNumber(raw.endedAt);
+  // An end before the start is a clock change or a hand edit, not a session.
+  const endedAt =
+    endedRaw === null || endedRaw <= 0 || endedRaw < startedAt
+      ? null
+      : Math.round(endedRaw);
+
+  const gaits = asArray(raw.gaits)
+    .map((g) => asString(g).trim())
+    .filter((g) => g.length > 0 && g.length <= 24)
+    .slice(0, 8);
+
+  return {
+    id: asString(raw.id) || createId("ath"),
+    sport,
+    date: raw.date,
+    mode: asString(raw.mode).slice(0, 32),
+    startedAt,
+    endedAt,
+    rounds: asNullableNumber(raw.rounds, 0, MAX_ROUNDS, 0),
+    roundSeconds: asNullableNumber(raw.roundSeconds, 15, MAX_ROUND_SECONDS, 0),
+    intensity: asNullableNumber(raw.intensity, 1, 10, 0),
+    minutes: asNullableNumber(raw.minutes, 0, MAX_SESSION_MINUTES, 0),
+    km: asNullableNumber(raw.km, 0, MAX_KM, 2),
+    avgHr: asNullableNumber(raw.avgHr, 25, 230, 0),
+    gaits,
+    horse: asString(raw.horse).slice(0, 60),
+    note: asString(raw.note).slice(0, 2000),
   };
 }
 
@@ -441,12 +508,18 @@ export function normalizeDatabase(raw: unknown, now = Date.now()): Database {
     .filter((item): item is SetEntry => item !== null)
     .sort((a, b) => a.createdAt - b.createdAt);
 
+  const athleticSessions = asArray(raw.athleticSessions)
+    .map((item) => normalizeAthleticSession(item, now))
+    .filter((item): item is AthleticSession => item !== null)
+    .sort((a, b) => a.startedAt - b.startedAt);
+
   return {
     version: DB_VERSION,
     exercises,
     programDays,
     sessions: dedupedSessions,
     setEntries,
+    athleticSessions,
     attendance: normalizeAttendance(raw.attendance),
     nutrition: normalizeNutrition(raw.nutrition),
     bodyMetrics: normalizeBodyMetrics(raw.bodyMetrics),
@@ -492,6 +565,24 @@ function migrate(raw: Record<string, unknown>): Record<string, unknown> {
       ...working,
       version: 3,
       health: isRecord(working.health) ? working.health : {},
+    };
+  }
+  if (version < 4) {
+    /* v4 turned a gym tracker into a multi-sport one. The container has to be
+       created here rather than left to the normaliser: everything else the
+       disciplines need is config (`SPORTS_CONFIG`) or nullable, but a missing
+       `athleticSessions` key would mean a v3 backup loaded perfectly today and
+       threw the first time a round was logged tomorrow.
+
+       Nothing is invented for it. A v3 payload has no non-gym history, and
+       guessing one from attendance days would put sessions in the trophy shelf
+       that nobody trained. */
+    working = {
+      ...working,
+      version: 4,
+      athleticSessions: Array.isArray(working.athleticSessions)
+        ? working.athleticSessions
+        : [],
     };
   }
   return working;

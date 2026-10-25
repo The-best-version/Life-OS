@@ -13,20 +13,53 @@ import {
 import Link from "next/link";
 import { useMemo } from "react";
 
+import { TrophyShelf } from "@/components/insights/trophy-shelf";
+import { WeeklyLoadRadar } from "@/components/insights/weekly-load-radar";
+import { useSportFilter } from "@/components/session/sport-selector";
+import { SportIcon } from "@/components/session/sport-icon";
 import { Card } from "@/components/ui/card";
+import { buttonClass } from "@/components/ui/button";
+import {
+  activeDates,
+  athleticRecords,
+  totalStrain,
+  weeklyLoad,
+} from "@/lib/athletic-metrics";
+import { ALL_SPORTS, getSport } from "@/lib/sports-config";
 import {
   currentWeek,
   deloadSignal,
   muscleRecovery,
   suggestDay,
 } from "@/lib/insights";
-import { dashboardSummary, personalRecords } from "@/lib/metrics";
+import { currentStreak, dashboardSummary, personalRecords } from "@/lib/metrics";
 import { useIronLog } from "@/lib/store";
 import { cn, formatCompact, toIsoDate } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { db, index } = useIronLog();
+  const { sport: filter } = useSportFilter();
   const today = toIsoDate();
+
+  /* The multi-sport layer. `weeklyLoad` scores the gym from its own sets and
+     every other discipline from its session row, so one week is comparable
+     across four kinds of training. */
+  const week = useMemo(() => weeklyLoad(db, index), [db, index]);
+  const strain = useMemo(() => totalStrain(week), [week]);
+  const anyStreak = useMemo(
+    () => currentStreak(activeDates(db, index)),
+    [db, index],
+  );
+  const records = useMemo(() => athleticRecords(db, today), [db, today]);
+
+  /* Gym-only insights — the program day, muscle recovery, the deload signal —
+     are hidden while a single non-gym discipline is selected, because none of
+     them has anything true to say about a ride. The overview shows everything. */
+  const gymView = filter === ALL_SPORTS || filter === "gym";
+  const focused = gymView ? null : getSport(filter);
+  const focusedWeek = focused
+    ? week.find((row) => row.sport === focused.id) ?? null
+    : null;
 
   const summary = useMemo(() => dashboardSummary(db, index), [db, index]);
   const weekDays = useMemo(() => currentWeek(db, index), [db, index]);
@@ -102,8 +135,43 @@ export default function DashboardPage() {
         </div>
       </Card>
 
-      {/* Today's protocol */}
-      {hasTrainedToday ? (
+      <WeeklyLoadRadar rows={week} totalStrain={strain} streak={anyStreak} />
+
+      {/* The focused discipline's own door. Shown only when one sport is
+          selected: on the overview there is no single session to start. */}
+      {focused && focusedWeek ? (
+        <Card className="sport-wash relative overflow-hidden p-5"
+          style={{ "--sport": `hsl(var(${focused.accentVar}))` } as React.CSSProperties}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-fg-3">
+                <SportIcon sport={focused.id} className="size-4 text-[var(--sport)]" />
+                {focused.nameAr}
+              </span>
+              <p className="mt-1.5 text-[19px] font-bold leading-tight text-fg">
+                <span className="num">{focusedWeek.sessions}</span> من{" "}
+                <span className="num">{focusedWeek.target}</span> حصص هذا الأسبوع
+              </p>
+              <p className="mt-1 text-[13px] text-fg-2">
+                حمل <span className="num">{focusedWeek.strain}</span> — محسوب
+                بمقياس هذه الرياضة وحدها.
+              </p>
+            </div>
+            <Link href="/session" className={cn(buttonClass("primary", "lg"), "shrink-0")}>
+              <Play className="size-[18px] fill-current" aria-hidden />
+              ابدأ حصة {focused.nameAr}
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      <TrophyShelf records={records} />
+
+      {/* Today's protocol — gym only: a program day, a muscle's recovery and
+          a deload signal are all statements about lifting, and none of them
+          has anything true to say about a ride or a run. */}
+      {gymView && hasTrainedToday ? (
         <Card className="p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -130,7 +198,7 @@ export default function DashboardPage() {
             </Link>
           </div>
         </Card>
-      ) : nextDay ? (
+      ) : gymView && nextDay ? (
         <Card className="tread p-5">
           <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-accent" />
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -168,7 +236,7 @@ export default function DashboardPage() {
 
           <Link
             href="/workout"
-            className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-bold text-fg shadow-glowAccent transition-transform active:scale-[0.98]"
+            className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-bold text-bg shadow-glowAccent transition-transform active:scale-[0.98]"
           >
             <Play className="size-4.5 fill-current" />
             <span>ابدأ التمرين الآن</span>
@@ -202,7 +270,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Deload warning — danger is earned here, not decorative */}
-      {deload.level !== "none" ? (
+      {gymView && deload.level !== "none" ? (
         <Card className="border-danger/30 bg-danger/[0.05] p-4">
           <div className="flex items-start gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-danger/30 bg-danger/12 text-danger">
@@ -224,8 +292,10 @@ export default function DashboardPage() {
         </Card>
       ) : null}
 
-      {/* Recent PRs — success is earned here too */}
-      {recentPrs.length > 0 ? (
+      {/* Recent gym PRs. The trophy shelf above carries every other
+          discipline's records; this one reads per-exercise, which only the
+          gym's set-level model can answer. */}
+      {gymView && recentPrs.length > 0 ? (
         <section className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h3 className="flex items-center gap-2 text-[15px] font-bold text-fg">
@@ -259,7 +329,7 @@ export default function DashboardPage() {
       ) : null}
 
       {/* Muscle recovery */}
-      {!isBrandNew ? (
+      {gymView && !isBrandNew ? (
         <section className="space-y-2.5">
           <h3 className="flex items-center gap-2 px-1 text-[15px] font-bold text-fg">
             <Activity className="size-4 text-fg-3" />

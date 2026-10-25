@@ -297,6 +297,14 @@ export interface Database {
   programDays: ProgramDay[];
   sessions: Session[];
   setEntries: SetEntry[];
+  /**
+   * Sessions of every discipline that is not the gym — boxing, riding,
+   * running. Gym days stay in `sessions` + `setEntries`, because that is the
+   * normalised shape the overload engine and the muscle-landmark maths read,
+   * and flattening a lift into one row would throw away the per-set facts
+   * they are built on. One sport, one shape; `SPORTS_CONFIG` says which.
+   */
+  athleticSessions: AthleticSession[];
   /** Explicit gym check-ins, including rest-day cardio. Keyed by date. */
   attendance: Record<IsoDate, boolean>;
   nutrition: Record<IsoDate, NutritionLog>;
@@ -421,4 +429,170 @@ export interface BodyPoint {
   value: number;
   /** Trailing 7-day mean — the line that should actually be read. */
   average: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Multi-sport: the disciplines beside the gym                         */
+/* ------------------------------------------------------------------ */
+
+export const SPORT_IDS = ["gym", "boxing", "equestrian", "running"] as const;
+
+export type SportId = (typeof SPORT_IDS)[number];
+
+/**
+ * How a session of a discipline is logged.
+ *
+ * The live HUD branches on this and never on a sport id, which is the whole
+ * reason a new discipline is a config change rather than a refactor: four
+ * sports already share three surfaces.
+ */
+export type SportEngine = "sets" | "rounds" | "stopwatch" | "distance";
+
+/** Which way is better for a record — heavier/longer/further, or faster. */
+export type RecordDirection = "max" | "min";
+
+export interface SportField {
+  key: AthleticField;
+  label: string;
+  /** Shown beside the figure, never inside it. Empty for unitless. */
+  unit: string;
+  step: number;
+  min: number;
+  max: number;
+}
+
+export interface SportMetric {
+  key: string;
+  label: string;
+  unit: string;
+  /** Pure: one session row in, a number out. No clock, no DOM. */
+  calc: (session: AthleticSession) => number;
+  /** For a number that is not read as a number — pace is "5:22", not 5.37. */
+  format?: (value: number) => string;
+}
+
+export interface SportRecordKind {
+  key: string;
+  label: string;
+  better: RecordDirection;
+  unit: string;
+  format?: (value: number) => string;
+}
+
+export interface SportTimer {
+  mode: "rest" | "round" | "stopwatch";
+  /** Work interval, seconds. 0 when the sport has none. */
+  work: number;
+  /** Rest interval, seconds. */
+  rest: number;
+  /** Planned rounds. 0 when the sport is not round-based. */
+  rounds: number;
+  /** Whether the clock starts itself when the session opens. */
+  autoStart: boolean;
+}
+
+/**
+ * Everything that makes a discipline a discipline.
+ *
+ * Nothing in here is optional detail: `fields` builds the inputs, `metrics`
+ * builds the HUD's stat strip, `records` builds the trophy shelf, and
+ * `strain` + `weeklyTarget` build the weekly radar. Fill all of them and the
+ * sport is supported everywhere by construction; leave one out and it is
+ * missing from exactly one screen, silently.
+ */
+export interface SportConfig {
+  id: SportId;
+  /** Latin name, set in the condensed display face. */
+  name: string;
+  /** Arabic label — the shipping UI reads this one. */
+  nameAr: string;
+  /** Key into `SPORT_ICONS` in `components/session/sport-icon.tsx`. */
+  icon: SportId;
+  /** The CSS custom property this sport is drawn in, e.g. "--sport-gym". */
+  accentVar: string;
+  engine: SportEngine;
+  /** Sessions a week the radar measures this sport's ring against. */
+  weeklyTarget: number;
+  timer: SportTimer;
+  /** Session flavours (bag / pads / sparring). Tags, never logic. */
+  modes: Array<{ id: string; label: string }>;
+  fields: SportField[];
+  metrics: SportMetric[];
+  records: SportRecordKind[];
+  /** One session → a 0–100 load, so a ride and a lift share one week. */
+  strain: (session: AthleticSession) => number;
+}
+
+export const ATHLETIC_FIELDS = [
+  "rounds",
+  "roundSeconds",
+  "intensity",
+  "minutes",
+  "km",
+  "avgHr",
+] as const;
+
+export type AthleticField = (typeof ATHLETIC_FIELDS)[number];
+
+/**
+ * One logged session of a non-gym discipline.
+ *
+ * Every measurement is nullable, for the same reason `BodyMetric`'s are: a
+ * stored zero is a claim. "0 bpm" and "I did not wear a strap" are different
+ * facts, and only the second one can be left out of an average.
+ *
+ * `endedAt` being null is what makes a session *live* — there is exactly one
+ * such row at a time, and the HUD renders it.
+ */
+export interface AthleticSession {
+  id: Id;
+  sport: SportId;
+  date: IsoDate;
+  /** One of the sport's own `modes`. Empty string when none was chosen. */
+  mode: string;
+  startedAt: number;
+  /** null while the session is still running. */
+  endedAt: number | null;
+  /** Rounds actually completed. Boxing and any other round-based sport. */
+  rounds: number | null;
+  /** Length of one round, seconds. */
+  roundSeconds: number | null;
+  /** Self-rated 1–10. The round-based answer to RPE. */
+  intensity: number | null;
+  minutes: number | null;
+  km: number | null;
+  avgHr: number | null;
+  /** Equestrian: which gaits the ride actually used. */
+  gaits: string[];
+  /** Equestrian: which horse. Free text — no two yards name them alike. */
+  horse: string;
+  note: string;
+}
+
+/** One discipline's week, measured against its own target. */
+export interface SportLoadRow {
+  sport: SportId;
+  name: string;
+  nameAr: string;
+  accentVar: string;
+  sessions: number;
+  target: number;
+  strain: number;
+  /** 0–1, clamped. */
+  progress: number;
+}
+
+/** A record, already resolved to the session that set it. */
+export interface AthleticRecord {
+  sport: SportId;
+  sportName: string;
+  accentVar: string;
+  key: string;
+  label: string;
+  unit: string;
+  value: number;
+  display: string;
+  date: IsoDate;
+  /** True when this record was set by the session that just finished. */
+  fresh: boolean;
 }

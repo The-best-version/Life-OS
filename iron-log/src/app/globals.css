@@ -3,65 +3,97 @@
 @tailwind utilities;
 
 /* ==================================================================
-   Iron Log — design tokens: "MEET DAY"
+   Iron Log — design tokens: "ARENA"
 
-   The 180° flip from "OXIDE": a pale concrete-and-chalk platform instead
-   of oxidized steel, one hazard-yellow accent instead of forge orange,
-   and flat printed scorecards with hard offset shadows instead of lit
-   bevels — this reads like meet-day signage, not a phone UI. Every
-   component still reads through the same four-role token system (bg /
-   surface / fg / accent / steel / success / danger), so almost nothing
-   outside this file and tailwind.config.ts had to change for the flip.
+   The flip away from "MEET DAY": a pitch-black athletic arena instead of
+   a pale concrete platform, and — the real change — the app stopped being
+   a weightlifting tracker. It is a multi-sport athletic OS now, so the
+   palette has to name four disciplines at once without any of them
+   borrowing the one primary-action colour.
 
-   One rule carried over from "OXIDE": a colour role exists as a FILL
-   (bright, for a background) and sometimes needs a separate INK (darker,
-   for text/small marks on the pale ground) — `--accent` is the fill,
-   `--accent-glow` is now the ink, because hazard yellow is too light for
-   13px text to clear contrast against chalk-white.
+   The role system from the previous two themes is unchanged, which is why
+   almost nothing outside this file and tailwind.config.ts moved:
+   bg / surface / line / fg / accent / steel / success / danger. Three
+   roles were ADDED, for the disciplines rather than for decoration:
+   --amber (a countdown running down), --violet (the sport hue held in
+   reserve for the fifth discipline) and the sport-* aliases that map a
+   discipline onto one of them.
+
+   Two rules carried over, and one new one:
+
+   1. A colour role is a FILL and sometimes needs a separate INK. Here it
+      inverts: on the pale theme `--accent-glow` was the dark ink form of
+      hazard yellow. Volt green on black needs no darkening to be read as
+      text, so `--accent-glow` IS volt — and a volt FILL carries `--bg`
+      as its ink, never `--fg`, because white on volt is 1.4:1.
+   2. Accents are never decorative. One meaning each: volt = the primary
+      action and every PR, steel/cyan = live measurement, danger/crimson =
+      intensity and destruction, amber = a countdown, success = logged.
+   3. NEW: a discipline's hue colours its identity — icon, ring, series —
+      and never its completion. A finished set, a met target and a logged
+      session are volt in every sport. If "done" borrowed the sport's
+      colour, finishing a ride would stop reading as finishing.
+
+   Depth is shadow plus one inset hairline, never a lighter fill: a card
+   that lightens to signal importance is the first thing that goes wrong
+   on a dark ground, because the next card up has nowhere left to go.
    ================================================================== */
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* ---- surfaces: poured concrete, chalk, platform tape ------------------ */
-  --bg: 40 18% 91%;          /* #E9E4D8  the platform floor */
-  --surface: 42 28% 97%;     /* #FBF9F3  a scorecard */
-  --surface-2: 40 20% 93%;   /* #EEE9DC  hover / pressed */
-  --surface-3: 38 16% 88%;   /* #E3DDCC  active row */
-  --line: 32 10% 24%;        /* #40392E  a seam you can see, like tape */
-  --line-strong: 30 10% 14%; /* #241F19  a border meant to read as ink */
+  /* ---- surfaces: the arena floor, then three layers above it --------- */
+  --bg: 225 20% 4%;          /* #08090C  the canvas. Nothing is darker.    */
+  --surface: 222 17% 11%;    /* #181B22  a card                            */
+  --surface-2: 222 16% 15%;  /* #21252E  hover / pressed / selected row    */
+  --surface-3: 221 16% 20%;  /* #2B303B  a progress track, an input well   */
+
+  /* ---- seams: a hairline, and an edge that has to be FOUND ----------- */
+  --line: 221 12% 19%;       /* #2A2D34  decorative separation only        */
+  --line-strong: 223 7% 44%; /* #6A6E78  an interactive edge — 3.3:1 on a card */
 
   /* ---- text --------------------------------------------------------- */
-  --fg: 30 16% 11%;      /* #211B14  stencilled black */
-  --fg-2: 30 9% 32%;     /* #514839  secondary ink */
-  --fg-3: 30 7% 48%;     /* #7A7163  faint ink */
+  --fg: 210 20% 96%;    /* #F4F6F8  primary ink and scoreboard numerals   */
+  --fg-2: 219 13% 69%;  /* #A7AEBB  units, axis labels, secondary copy    */
+  --fg-3: 218 9% 53%;   /* #7C8492  the floor — never set below 13px      */
 
-  /* ---- the one accent: hazard yellow ---------------------------------- */
-  --accent: 44 96% 52%;       /* #FAB80A  every primary action, active state, brand mark */
-  --accent-glow: 32 78% 32%;  /* #8F5A0E  the ink form — text on the pale ground */
+  /* ---- the one primary action: athletic volt ------------------------- */
+  --accent: 72 100% 50%;      /* #CCFF00  start, complete, confirm, every PR */
+  --accent-glow: 72 100% 50%; /* the ink form — volt reads as text on black  */
 
-  /* ---- the one secondary data hue: platform slate ---------------------- */
-  --steel: 205 30% 32%; /* #2B4C5E  second series on a chart, never a primary action */
+  /* ---- live measurement: electric cyan ------------------------------- */
+  --steel: 186 100% 50%; /* #00E5FF  timers, pace, elapsed, second series   */
 
-  /* ---- semantic only: never decorative ---------------------------------- */
-  --success: 142 46% 24%; /* #1E6B37  a PR, today complete */
-  --danger: 6 58% 36%;    /* #932C1C  stalled, overdue, a warning */
+  /* ---- semantic only: never decorative -------------------------------- */
+  --success: 153 82% 50%; /* #19E88C  logged, target met                   */
+  --danger: 349 100% 59%; /* #FF2E54  intensity, top HR zone, destructive   */
+  --amber: 39 100% 56%;   /* #FFB020  a countdown running down              */
+  --violet: 264 100% 68%; /* #9D5CFF  reserved for the next discipline      */
+
+  /* ---- the disciplines ------------------------------------------------
+     Aliases, not new hues: four sports, four meanings already in the
+     palette. A fifth sport takes --violet, which exists for exactly that
+     and is used for nothing else. */
+  --sport-gym: var(--accent);
+  --sport-boxing: var(--danger);
+  --sport-equestrian: var(--amber);
+  --sport-running: var(--steel);
 
   /* ---- chart chrome: grid, baseline, muted axis ink -------------------- */
-  --viz-grid: hsl(var(--line) / 0.15);
-  --viz-baseline: hsl(var(--line-strong) / 0.6);
+  --viz-grid: hsl(0 0% 100% / 0.06);
+  --viz-baseline: hsl(var(--line-strong));
   --viz-ink-muted: hsl(var(--fg-3));
 }
 
 @layer base {
   * {
-    border-color: hsl(var(--line) / 0.4);
+    border-color: hsl(var(--line) / 0.9);
     -webkit-tap-highlight-color: transparent;
   }
 
   html {
-    background-color: #e9e4d8;
-    color: #211b14;
+    background-color: #08090c;
+    color: #f4f6f8;
     font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
@@ -69,8 +101,8 @@
 
   body {
     min-height: 100dvh;
-    background-color: #e9e4d8;
-    color: #211b14;
+    background-color: #08090c;
+    color: #f4f6f8;
     overflow-x: hidden;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -78,8 +110,15 @@
   }
 
   ::selection {
-    background: hsl(var(--accent) / 0.55);
-    color: #211b14;
+    background: hsl(var(--accent) / 0.3);
+    color: #f4f6f8;
+  }
+
+  /* One focus ring for the whole app: solid volt, offset off the control.
+     Never removed and never replaced by a colour change alone. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--accent));
+    outline-offset: 2px;
   }
 
   /* Every weight, every rep, every kg — one condensed numeral face, isolated
@@ -93,43 +132,80 @@
   }
 
   /* A Latin title set in the condensed display face (program days: Push,
-     Pull, Legs). Arabic headings never take this — Oswald has no Arabic
-     glyphs and would fall through to a system face mid-heading. */
+     Pull, Legs; a sport's English name). Arabic headings never take this —
+     Oswald has no Arabic glyphs and would fall through to a system face
+     mid-heading. */
   .display {
     font-family: "Oswald", sans-serif;
+  }
+
+  /* The one number a screen is about: a round clock, a rest countdown, a
+     session's hero reading. ONE per screen — a second one means neither is
+     the hero. */
+  .score {
+    font-family: "Oswald", sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 0.9;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
 }
 
 @layer components {
-  /* The one card surface: a printed scorecard. Solid pale fill, a crisp
-     ink-dark 1.5px border, and a small HARD offset shadow — like a card
-     stacked on a platform under hard gym lighting, never a soft blurred
-     glow. No blur anywhere: flat surfaces render fast on a phone with
-     nothing to re-sample per frame. */
+  /* The one card surface. Solid graphite fill a layer above the canvas, a
+     1px hairline, and depth from the shadow stack alone: an inset top
+     highlight for thickness, a tight contact shadow, then a wide ambient
+     one. No blur — nothing here re-samples the ground per frame, which is
+     what keeps a long scroll cheap on a phone. */
   .plate {
     position: relative;
     background-color: hsl(var(--surface));
-    border: 1.5px solid hsl(var(--line-strong) / 0.85);
-    border-radius: 10px;
-    box-shadow: 3px 3px 0 0 hsl(var(--line-strong) / 0.18);
+    border: 1px solid hsl(var(--line));
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.05),
+      0 10px 26px -14px hsl(0 0% 0% / 0.85);
   }
 
   .plate-interactive {
     @apply plate;
     cursor: pointer;
-    transition: transform 120ms ease, box-shadow 120ms ease;
+    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .plate-interactive:hover {
+    border-color: hsl(var(--line-strong) / 0.7);
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.07),
+      0 20px 44px -20px hsl(0 0% 0% / 0.95);
   }
   .plate-interactive:active {
-    transform: translate(2px, 2px);
-    box-shadow: 1px 1px 0 0 hsl(var(--line-strong) / 0.18);
+    transform: translateY(1px) scale(0.995);
   }
 
-  /* The one decorative device: a hazard stripe, the way a competition
-     platform edge is taped off. Reserved for hero banners only. */
+  /* A panel that belongs to a discipline. The sport's hue arrives as
+     --sport and washes one corner at 10% — that is the whole adaptation,
+     so a discipline is recognisable at a glance while the primary action
+     keeps its own colour. */
+  .sport-wash::before {
+    content: "";
+    position: absolute;
+    inset: -40% -30% auto auto;
+    width: 320px;
+    height: 320px;
+    border-radius: 9999px;
+    background: var(--sport, hsl(var(--accent)));
+    opacity: 0.1;
+    pointer-events: none;
+  }
+
+  /* The one decorative device, kept from the platform theme and re-cut in
+     volt: a hazard stripe the way an arena floor is taped off. Hero
+     banners only. */
   .tread {
     background-image: repeating-linear-gradient(
       45deg,
-      hsl(var(--accent) / 0.16) 0 10px,
+      hsl(var(--accent) / 0.1) 0 10px,
       transparent 10px 20px
     );
   }
@@ -141,7 +217,7 @@
     height: 6px;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--line-strong) / 0.4);
+    background: hsl(var(--line-strong) / 0.5);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-track {

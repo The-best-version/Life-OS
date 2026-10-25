@@ -33,6 +33,7 @@ import {
   type StorageStatus,
 } from "./storage";
 import type {
+  AthleticSession,
   Database,
   Id,
   IsoDate,
@@ -40,6 +41,7 @@ import type {
   NutritionLog,
   SetEntry,
   Settings,
+  SportId,
 } from "./types";
 
 /**
@@ -53,6 +55,7 @@ const EMPTY_DB: Database = {
   programDays: [],
   sessions: [],
   setEntries: [],
+  athleticSessions: [],
   attendance: {},
   nutrition: {},
   bodyMetrics: {},
@@ -87,6 +90,22 @@ export interface IronLogActions {
   setSessionReadiness(date: IsoDate, readiness: number | null): void;
   setBodyMetric(date: IsoDate, patch: repo.BodyPatch): void;
   setHealth(date: IsoDate, patch: repo.HealthPatch): void;
+
+  /* ---- multi-sport: every discipline that is not the gym ----
+     The gym keeps `logSet` above; these drive the live HUD. */
+  startSession(input: {
+    sport: SportId;
+    mode?: string;
+    date?: IsoDate;
+  }): repo.Result<AthleticSession>;
+  patchSession(sessionId: Id, patch: repo.AthleticPatch): repo.Result<null>;
+  completeRound(sessionId: Id): repo.Result<null>;
+  finishSession(
+    sessionId: Id,
+    patch?: repo.AthleticPatch,
+  ): repo.Result<null>;
+  deleteSession(sessionId: Id): void;
+  discardLiveSession(): void;
 
   toggleAttendance(date: IsoDate): void;
   setNutrition(date: IsoDate, patch: Partial<Omit<NutritionLog, "date">>): void;
@@ -259,6 +278,46 @@ export function IronLogProvider({ children }: { children: ReactNode }) {
         commit(
           repo.reorderDayExercises(dbRef.current, dayId, exerciseId, direction),
         );
+      },
+
+      startSession(input) {
+        const result = repo.startAthleticSession(dbRef.current, input);
+        if (!result.ok) return result;
+        commit(result.value.db);
+        return { ok: true, value: result.value.session };
+      },
+
+      patchSession(sessionId, patch) {
+        const result = repo.patchAthleticSession(dbRef.current, sessionId, patch);
+        if (!result.ok) return result;
+        commit(result.value);
+        return { ok: true, value: null };
+      },
+
+      completeRound(sessionId) {
+        const result = repo.completeRound(dbRef.current, sessionId);
+        if (!result.ok) return result;
+        commit(result.value);
+        return { ok: true, value: null };
+      },
+
+      finishSession(sessionId, patch) {
+        const result = repo.finishAthleticSession(
+          dbRef.current,
+          sessionId,
+          patch,
+        );
+        if (!result.ok) return result;
+        commit(result.value);
+        return { ok: true, value: null };
+      },
+
+      deleteSession(sessionId) {
+        commit(repo.deleteAthleticSession(dbRef.current, sessionId));
+      },
+
+      discardLiveSession() {
+        commit(repo.discardLiveSession(dbRef.current));
       },
 
       toggleAttendance(date) {

@@ -143,7 +143,7 @@ export default function WorkoutPage() {
                     onClick={() => actions.setSessionReadiness(date, isSelected ? null : lvl)}
                     className={cn(
                       "size-6 rounded-lg text-[10px] font-bold transition-colors",
-                      isSelected ? "bg-accent text-fg" : "bg-surface-3 text-fg-3 hover:text-fg",
+                      isSelected ? "bg-accent text-bg" : "bg-surface-3 text-fg-3 hover:text-fg",
                     )}
                   >
                     {lvl}
@@ -166,7 +166,7 @@ export default function WorkoutPage() {
               className={cn(
                 "whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-colors",
                 isActive
-                  ? "bg-accent text-fg"
+                  ? "bg-accent text-bg"
                   : "border border-line-strong bg-surface-2 text-fg-3 hover:text-fg",
               )}
             >

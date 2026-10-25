@@ -8,12 +8,19 @@
  */
 
 import {
+  MAX_KM,
   MAX_REPS,
   MAX_REST_SECONDS,
+  MAX_ROUND_SECONDS,
+  MAX_ROUNDS,
+  MAX_SESSION_MINUTES,
   MAX_WEIGHT_KG,
   MIN_REST_SECONDS,
 } from "./storage";
 import {
+  ATHLETIC_FIELDS,
+  type AthleticField,
+  type AthleticSession,
   BODY_FIELD_META,
   BODY_FIELDS,
   type BodyMetric,
@@ -29,8 +36,17 @@ import {
   type Session,
   type SetEntry,
   type Settings,
+  SPORT_IDS,
+  type SportId,
 } from "./types";
-import { clamp, createId, isIsoDate, round, toIsoDate } from "./utils";
+import {
+  clamp,
+  createId,
+  isIsoDate,
+  round,
+  toFiniteNumber,
+  toIsoDate,
+} from "./utils";
 
 export type Result<T> =
   | { ok: true; value: T }
@@ -722,3 +738,201 @@ export function clearHistory(db: Database): Database {
 }
 
 export const TODAY = () => toIsoDate();
+
+/* ------------------------------------------------------------------ */
+/* Athletic sessions — every discipline that is not the gym            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Open a session.
+ *
+ * Only one session runs at a time, and a second `start` closes the first
+ * rather than refusing: somebody who left a ride open on Tuesday and opens the
+ * app at the track on Thursday wants to run, not to be told about Tuesday. The
+ * abandoned row is ended at its last known moment — never at *now*, because
+ * nobody can say he rode for two days, and minutes nobody can vouch for are
+ * worse than no minutes, since every figure above them becomes a guess.
+ */
+export function startAthleticSession(
+  db: Database,
+  input: { sport: SportId; mode?: string; date?: IsoDate },
+): Result<{ db: Database; session: AthleticSession }> {
+  if (!(SPORT_IDS as readonly string[]).includes(input.sport)) {
+    return fail("رياضة غير معروفة");
+  }
+  const date = input.date && isIsoDate(input.date) ? input.date : toIsoDate();
+  const now = Date.now();
+
+  const closed = db.athleticSessions.map((s) =>
+    s.endedAt === null ? { ...s, endedAt: s.startedAt } : s,
+  );
+
+  const session: AthleticSession = {
+    id: createId("ath"),
+    sport: input.sport,
+    date,
+    mode: (input.mode ?? "").slice(0, 32),
+    startedAt: now,
+    endedAt: null,
+    rounds: null,
+    roundSeconds: null,
+    intensity: null,
+    minutes: null,
+    km: null,
+    avgHr: null,
+    gaits: [],
+    horse: "",
+    note: "",
+  };
+
+  return ok({
+    db: touch({ ...db, athleticSessions: [...closed, session] }),
+    session,
+  });
+}
+
+export type AthleticPatch = Partial<
+  Pick<
+    AthleticSession,
+    | "mode"
+    | "rounds"
+    | "roundSeconds"
+    | "intensity"
+    | "minutes"
+    | "km"
+    | "avgHr"
+    | "gaits"
+    | "horse"
+    | "note"
+  >
+>;
+
+/** The bounds each measurement is clamped to, and the digits it keeps. */
+const ATHLETIC_BOUNDS: Record<
+  AthleticField,
+  { min: number; max: number; digits: number }
+> = {
+  rounds: { min: 0, max: MAX_ROUNDS, digits: 0 },
+  roundSeconds: { min: 15, max: MAX_ROUND_SECONDS, digits: 0 },
+  intensity: { min: 1, max: 10, digits: 0 },
+  minutes: { min: 0, max: MAX_SESSION_MINUTES, digits: 0 },
+  km: { min: 0, max: MAX_KM, digits: 2 },
+  avgHr: { min: 25, max: 230, digits: 0 },
+};
+
+/**
+ * Patch a session's own fields.
+ *
+ * `null` is a legitimate value and means "not measured" — passing it clears a
+ * reading rather than storing a zero, which is the same distinction
+ * `BodyMetric` keeps and for the same reason.
+ */
+export function patchAthleticSession(
+  db: Database,
+  sessionId: Id,
+  patch: AthleticPatch,
+): Result<Database> {
+  const existing = db.athleticSessions.find((s) => s.id === sessionId);
+  if (!existing) return fail("لم يتم العثور على الحصة");
+
+  const next: AthleticSession = { ...existing };
+
+  for (const field of ATHLETIC_FIELDS) {
+    if (!(field in patch)) continue;
+    const raw = patch[field];
+    if (raw === null || raw === undefined) {
+      next[field] = null;
+      continue;
+    }
+    const value = toFiniteNumber(raw);
+    if (value === null) return fail(`قيمة غير صحيحة في «${field}»`);
+    const bound = ATHLETIC_BOUNDS[field];
+    next[field] = round(clamp(value, bound.min, bound.max), bound.digits);
+  }
+
+  if (patch.mode !== undefined) next.mode = patch.mode.slice(0, 32);
+  if (patch.horse !== undefined) next.horse = patch.horse.slice(0, 60);
+  if (patch.note !== undefined) next.note = patch.note.slice(0, 2000);
+  if (patch.gaits !== undefined) {
+    next.gaits = patch.gaits
+      .map((g) => g.trim())
+      .filter((g) => g.length > 0 && g.length <= 24)
+      .slice(0, 8);
+  }
+
+  return ok(
+    touch({
+      ...db,
+      athleticSessions: db.athleticSessions.map((s) =>
+        s.id === sessionId ? next : s,
+      ),
+    }),
+  );
+}
+
+/** Add one completed round. The counter only ever moves through here. */
+export function completeRound(db: Database, sessionId: Id): Result<Database> {
+  const existing = db.athleticSessions.find((s) => s.id === sessionId);
+  if (!existing) return fail("لم يتم العثور على الحصة");
+  const rounds = clamp((existing.rounds ?? 0) + 1, 0, MAX_ROUNDS);
+  return patchAthleticSession(db, sessionId, { rounds });
+}
+
+/**
+ * Close a session, stamping the minutes it actually ran.
+ *
+ * The duration is taken from the clock and not from the field, unless the user
+ * typed one: a stopwatch that ran is a better witness than a number recalled
+ * afterwards. A span over eight hours is a row left open, so it is left for the
+ * user to fill in rather than stamped with a number nobody believes.
+ */
+export function finishAthleticSession(
+  db: Database,
+  sessionId: Id,
+  patch: AthleticPatch = {},
+): Result<Database> {
+  const existing = db.athleticSessions.find((s) => s.id === sessionId);
+  if (!existing) return fail("لم يتم العثور على الحصة");
+
+  const patched = patchAthleticSession(db, sessionId, patch);
+  if (!patched.ok) return patched;
+
+  const now = Date.now();
+  const ranMin = Math.round((now - existing.startedAt) / 60_000);
+  const measured = ranMin > 0 && ranMin <= 480 ? ranMin : null;
+
+  return ok(
+    touch({
+      ...patched.value,
+      athleticSessions: patched.value.athleticSessions.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              endedAt: now,
+              minutes: s.minutes ?? measured,
+            }
+          : s,
+      ),
+    }),
+  );
+}
+
+/** Drop a session. Returns the database unchanged when the id is unknown. */
+export function deleteAthleticSession(db: Database, sessionId: Id): Database {
+  if (!db.athleticSessions.some((s) => s.id === sessionId)) return db;
+  return touch({
+    ...db,
+    athleticSessions: db.athleticSessions.filter((s) => s.id !== sessionId),
+  });
+}
+
+/** Discard the session that is running, if any. Nothing is logged. */
+export function discardLiveSession(db: Database): Database {
+  const open = db.athleticSessions.filter((s) => s.endedAt === null);
+  if (open.length === 0) return db;
+  const ids = new Set(open.map((s) => s.id));
+  return touch({
+    ...db,
+    athleticSessions: db.athleticSessions.filter((s) => !ids.has(s.id)),
+  });
+}

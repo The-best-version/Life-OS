@@ -1,7 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -9,6 +10,15 @@ import { cn } from "@/lib/utils";
  * A bottom sheet. Modal: backdrop click and Escape close it, body scroll is
  * locked while open, and focus moves into the sheet so a keyboard user is not
  * left behind on the page underneath.
+ *
+ * It renders through a PORTAL into `document.body`, and must keep doing so.
+ * Every screen wraps its content in `animate-fade-in`, and an element with a
+ * filling opacity animation creates a stacking context: rendered in place, the
+ * sheet's `z-[60]` would be trapped inside that context at level 0 and the
+ * bottom nav's `z-40` would paint over it. That is not cosmetic — it lands
+ * exactly on the sheet's footer, so the primary action becomes unclickable
+ * while looking perfectly fine. Raising the z-index treats the symptom;
+ * leaving the subtree is the fix.
  */
 export function Sheet({
   open,
@@ -29,6 +39,11 @@ export function Sheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  /* `document` does not exist during the server render, so the portal only
+     opens after mount. The sheet is never part of the first paint anyway. */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
@@ -44,9 +59,9 @@ export function Sheet({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
       <button
         type="button"
@@ -80,6 +95,7 @@ export function Sheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
         {footer ? <div className="border-t border-line px-5 py-4">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

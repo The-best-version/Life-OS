@@ -6,7 +6,7 @@ import type {
 } from "./types";
 import { createId } from "./utils";
 
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 /**
  * The exercise catalogue, keyed by a stable slug.
@@ -321,6 +321,7 @@ export function createSeedDatabase(now = Date.now()): Database {
     programDays,
     sessions: [],
     setEntries: [],
+    athleticSessions: [],
     attendance: {},
     nutrition: {},
     bodyMetrics: {},

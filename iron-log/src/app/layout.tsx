@@ -4,13 +4,14 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { SportFilterProvider } from "@/components/session/sport-selector";
 import { ToastProvider } from "@/components/ui/toast";
 import { IronLogProvider } from "@/lib/store";
 
 export const metadata: Metadata = {
-  title: "Iron Log — متتبع التمرين",
+  title: "Iron Log — نظام رياضي متعدد التخصصات",
   description:
-    "متتبع تمارين محلي بالكامل: سجّل المجموعات والأوزان وشاهد تقدّمك في رسوم واضحة.",
+    "نظام رياضي متعدد التخصصات، محلي بالكامل: حديد وملاكمة وفروسية وجري — جولات ومجموعات ومسافات ومؤقتات في مكان واحد.",
   applicationName: "Iron Log",
 };
 
@@ -18,7 +19,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#E9E4D8",
+  themeColor: "#08090C",
   // The inputs are 16px so iOS will not zoom on focus; locking the scale as
   // well would break pinch-zoom for anyone who needs it.
   maximumScale: 5,
@@ -49,7 +50,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <IronLogProvider>
           <ToastProvider>
-            <AppShell>{children}</AppShell>
+            {/* The active discipline is a view preference, so it sits above
+                the shell and below the database: every screen reads it, and
+                none of it reaches the payload. */}
+            <SportFilterProvider>
+              <AppShell>{children}</AppShell>
+            </SportFilterProvider>
           </ToastProvider>
         </IronLogProvider>
       </body>
