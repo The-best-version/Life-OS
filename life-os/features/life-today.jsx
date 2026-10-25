@@ -4,7 +4,7 @@ import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, Progre
 import { todayBlocks } from "../life-config.js";
 import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows, IDENTITIES, HABIT_LEVEL_POINTS, identityScores, freezeShape, contextualBlock, chainedHabits } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, BatteryCharging, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ClipboardList, Coffee, Droplets, Eye, EyeOff, FastForward, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Layers, Library, Link2, ListChecks, MapPin, Moon, MoonStar, Pause, Play, Plus, Rocket, RotateCcw, School, Settings2, Shield, ShieldCheck, Sparkles, Star, Sun, Sunrise, Target, TrendingUp, Trophy, Volume2, VolumeX, X, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BatteryCharging, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ClipboardList, Clock, Coffee, Droplets, Eye, EyeOff, FastForward, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Layers, Library, Link2, ListChecks, MapPin, Moon, MoonStar, Pause, Play, Plus, Rocket, RotateCcw, School, Settings2, Shield, ShieldCheck, Sparkles, Star, Sun, Sunrise, Target, TrendingUp, Trophy, Volume2, VolumeX, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const LAYOUT_KEY = "los-today-layout";
@@ -1343,12 +1343,13 @@ export function RoutineFlowModal({ open, onClose, habits = [], books = [], onTic
   const [timeLeft, setTimeLeft] = useState(120);
   const [isRunning, setIsRunning] = useState(false);
 
-  const curr = pending[currIdx] || null;
+  const safeIdx = Math.min(currIdx, Math.max(0, pending.length - 1));
+  const curr = pending[safeIdx] || null;
 
   useEffect(() => {
     setTimeLeft(120);
     setIsRunning(false);
-  }, [currIdx, curr?.id]);
+  }, [safeIdx, curr?.id]);
 
   useEffect(() => {
     let t = null;
