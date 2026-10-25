@@ -360,7 +360,7 @@ bot.command(["app", "open", "site"], (ctx) => {
   const hasHttps = url.startsWith("https://");
   const kb = new InlineKeyboard();
   if (hasHttps) {
-    kb.web_app("🚀 فتح التطبيق داخل تيليجرام", url).row().url("🌐 فتح في المتصفح الخارجي", url);
+    kb.webApp("🚀 فتح التطبيق داخل تيليجرام", url).row().url("🌐 فتح في المتصفح الخارجي", url);
   } else {
     kb.url("🌐 فتح التطبيق", url);
   }

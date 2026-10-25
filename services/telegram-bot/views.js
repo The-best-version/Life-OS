@@ -193,7 +193,7 @@ export const menuKeys = (webUrl) => {
   const kb = new InlineKeyboard();
   if (webUrl) {
     if (webUrl.startsWith("https://")) {
-      kb.web_app("🚀 فتح التطبيق في تيليجرام", webUrl).row();
+      kb.webApp("🚀 فتح التطبيق في تيليجرام", webUrl).row();
     } else {
       kb.url("🌐 فتح التطبيق", webUrl).row();
     }
