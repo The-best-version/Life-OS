@@ -94,7 +94,7 @@ export function AddExerciseForm({ dayId }: { dayId: Id | null }) {
       </Select>
 
       {error ? (
-        <p role="alert" className="text-[11.5px] font-bold text-primary">
+        <p role="alert" className="text-[11.5px] font-bold text-accent-glow">
           {error}
         </p>
       ) : null}

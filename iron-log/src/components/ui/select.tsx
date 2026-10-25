@@ -18,8 +18,8 @@ const Select = React.forwardRef<
     <select
       ref={ref}
       className={cn(
-        "h-11 w-full appearance-none rounded-md border border-border bg-secondary px-3 pe-9 text-sm font-bold text-foreground",
-        "focus-visible:border-primary focus-visible:outline-none",
+        "h-11 w-full appearance-none rounded-lg border border-line-strong bg-surface px-3 pe-9 text-sm font-bold text-fg",
+        "focus-visible:border-accent/60 focus-visible:outline-none",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
@@ -29,7 +29,7 @@ const Select = React.forwardRef<
     </select>
     <ChevronDown
       aria-hidden
-      className="pointer-events-none absolute inset-y-0 end-3 my-auto size-4 text-muted-foreground"
+      className="pointer-events-none absolute inset-y-0 end-3 my-auto size-4 text-fg-3"
     />
   </div>
 ));

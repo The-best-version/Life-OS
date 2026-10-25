@@ -99,7 +99,7 @@ export function BodyPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-1.5">
-            <Scale className="size-4 text-primary" aria-hidden />
+            <Scale className="size-4 text-accent-glow" aria-hidden />
             قياس اليوم
           </CardTitle>
           <CardDescription>
@@ -147,7 +147,7 @@ export function BodyPanel() {
                       );
                     }}
                     placeholder="—"
-                    className="mt-1 tnum"
+                    className="mt-1 num"
                   />
                 </div>
               );
@@ -194,17 +194,17 @@ export function BodyPanel() {
           }
           readout={
             shown ? (
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
-                <span className="text-foreground">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1  text-[11px] text-fg-3">
+                <span className="text-fg">
                   {formatShortDate(shown.date)}
                 </span>
-                <span className="tnum text-base font-extrabold text-foreground">
+                <span className="num text-base font-extrabold text-fg">
                   {formatNumber(shown.average)}
-                  <span className="text-[11px] font-normal text-muted-foreground">
+                  <span className="text-[11px] font-normal text-fg-3">
                     {` ${meta.unit}`}
                   </span>
                 </span>
-                <span className="tnum">
+                <span className="num">
                   القياس نفسه {formatNumber(shown.value)}
                 </span>
               </div>
@@ -267,13 +267,13 @@ export function BodyPanel() {
                   <span className="text-[12.5px] font-bold">
                     {fieldMeta.label}
                   </span>
-                  <span className="tnum font-mono text-[11.5px]">
+                  <span className="num  text-[11.5px]">
                     {rowChange === null ? (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-fg-3">—</span>
                     ) : (
                       <>
                         <bdi dir="ltr">{formatNumber(rowChange.to)}</bdi>{" "}
-                        <span className="text-muted-foreground">
+                        <span className="text-fg-3">
                           {fieldMeta.unit} ·{" "}
                           {rowChange.delta > 0
                             ? "زيادة"

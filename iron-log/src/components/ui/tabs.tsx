@@ -29,12 +29,11 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "shrink-0 rounded-full border border-border bg-secondary px-3.5 py-2 text-[13px] font-bold text-muted-foreground transition-colors",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      // The active pill wears the same molten ramp as the primary CTA, so
-      // "where am I" and "what do I press" speak with one colour.
-      "data-[state=active]:molten data-[state=active]:border-transparent data-[state=active]:text-primary-foreground",
-      "data-[state=active]:shadow-[0_6px_18px_-10px_var(--ember-glow)]",
+      "shrink-0 rounded-full border border-line-strong bg-surface px-3.5 py-2 text-[13px] font-bold text-fg-2 transition-colors",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+      // The active pill wears the same accent as the primary CTA, so "where
+      // am I" and "what do I press" speak with one colour.
+      "data-[state=active]:border-transparent data-[state=active]:bg-accent data-[state=active]:text-white",
       className,
     )}
     {...props}

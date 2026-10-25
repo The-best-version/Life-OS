@@ -3,27 +3,14 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * A raised steel plate.
- *
- * The lit edge and the sheen come from the `.steel` class in `globals.css`,
- * which paints them through `background-image` and leaves `background-color` to
- * the `bg-card` token. Re-tint a card with `backgroundColor` (or a `bg-*`
- * utility) and it keeps its sheen; override the `background` *shorthand* and the
- * shorthand resets `background-image` too, so the card flattens into a plain
- * rectangle. That is the one mistake to avoid here.
+ * The one card surface: a flat stamped plate (`.plate` in globals.css). Solid
+ * fill, a crisp seam, a single lit top edge — no blur, no translucency.
  */
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "relative overflow-hidden rounded-2xl border border-white/[0.08] bg-card/95 backdrop-blur-xl text-card-foreground shadow-lg transition-all duration-200 hover:border-white/[0.14]",
-      className,
-    )}
-    {...props}
-  />
+  <div ref={ref} className={cn("plate text-fg", className)} {...props} />
 ));
 Card.displayName = "Card";
 
@@ -45,7 +32,7 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn("text-[15px] font-extrabold leading-tight", className)}
+    className={cn("text-[15px] font-bold leading-tight text-fg", className)}
     {...props}
   />
 ));
@@ -55,11 +42,7 @@ const CardDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p
-    ref={ref}
-    className={cn("text-xs leading-relaxed text-muted-foreground", className)}
-    {...props}
-  />
+  <p ref={ref} className={cn("text-xs leading-relaxed text-fg-3", className)} {...props} />
 ));
 CardDescription.displayName = "CardDescription";
 
@@ -75,19 +58,8 @@ const CardFooter = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("flex items-center gap-2 p-4 pt-0", className)}
-    {...props}
-  />
+  <div ref={ref} className={cn("flex items-center gap-2 p-4 pt-0", className)} {...props} />
 ));
 CardFooter.displayName = "CardFooter";
 
-export {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-};
+export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };

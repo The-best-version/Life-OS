@@ -97,13 +97,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={item.id}
             className={cn(
-              "pointer-events-auto flex w-full max-w-[420px] items-center gap-2 rounded-md border px-3 py-2.5 text-[13px] font-bold shadow-2xl backdrop-blur",
-              item.tone === "success" &&
-                "border-success/35 bg-success/15 text-success",
-              item.tone === "error" &&
-                "border-primary/40 bg-primary/15 text-primary",
-              item.tone === "info" &&
-                "border-border bg-popover/95 text-foreground",
+              "plate pointer-events-auto flex w-full max-w-[420px] items-center gap-2 px-3 py-2.5 text-[13px] font-bold shadow-lift",
+              item.tone === "success" && "border-success/35 bg-success/12 text-success",
+              item.tone === "error" && "border-danger/40 bg-danger/12 text-danger",
+              item.tone === "info" && "text-fg",
             )}
           >
             {item.tone === "success" ? (

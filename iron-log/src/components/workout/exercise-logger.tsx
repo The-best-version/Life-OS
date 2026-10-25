@@ -233,8 +233,8 @@ export function ExerciseLogger({
           <h3 className="text-[14.5px] font-extrabold leading-snug">
             {exercise.name}
           </h3>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-muted-foreground">
-            <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-sans text-[10px] font-bold">
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1  text-[11px] text-fg-3">
+            <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-sans text-[10px] font-bold">
               {MUSCLE_GROUP_LABELS[exercise.muscleGroup]}
             </span>
             {previous ? (
@@ -255,7 +255,7 @@ export function ExerciseLogger({
             )}
           </p>
           {best ? (
-            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+            <p className="mt-0.5  text-[11px] text-fg-3">
               أفضل رقم: <bdi>{formatNumber(best.set.weightKg)} كجم</bdi> ×{" "}
               {best.set.reps}
             </p>
@@ -271,8 +271,8 @@ export function ExerciseLogger({
             className={cn(
               "rounded-sm p-1.5 transition-colors",
               panelOpen
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground",
+                ? "text-accent-glow"
+                : "text-fg-3 hover:text-fg",
             )}
           >
             <Settings2 className="size-4" aria-hidden />
@@ -285,7 +285,7 @@ export function ExerciseLogger({
                   dayId && actions.reorderDayExercises(dayId, exerciseId, -1)
                 }
                 aria-label="تحريك لأعلى"
-                className="rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                className="rounded-sm p-1.5 text-fg-3 transition-colors hover:text-fg"
               >
                 <ChevronUp className="size-4" aria-hidden />
               </button>
@@ -295,7 +295,7 @@ export function ExerciseLogger({
                   dayId && actions.reorderDayExercises(dayId, exerciseId, 1)
                 }
                 aria-label="تحريك لأسفل"
-                className="rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                className="rounded-sm p-1.5 text-fg-3 transition-colors hover:text-fg"
               >
                 <ChevronDown className="size-4" aria-hidden />
               </button>
@@ -318,8 +318,8 @@ export function ExerciseLogger({
                 }
                 className={
                   confirmRemove
-                    ? "rounded-sm p-1.5 text-primary"
-                    : "rounded-sm p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                    ? "rounded-sm p-1.5 text-accent-glow"
+                    : "rounded-sm p-1.5 text-fg-3 transition-colors hover:text-accent-glow"
                 }
               >
                 <X className="size-4" aria-hidden />
@@ -331,7 +331,7 @@ export function ExerciseLogger({
 
       {/* The machine's own settings — the thing that makes the load repeatable. */}
       {exercise.setup ? (
-        <p className="mt-2.5 flex items-start gap-1.5 rounded-md border border-border bg-secondary/60 px-2.5 py-2 font-mono text-[11.5px] leading-relaxed text-muted-foreground">
+        <p className="mt-2.5 flex items-start gap-1.5 rounded-md border border-line-strong bg-surface-2/60 px-2.5 py-2  text-[11.5px] leading-relaxed text-fg-3">
           <Wrench className="mt-[2px] size-3.5 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1 break-words">{exercise.setup}</span>
         </p>
@@ -342,29 +342,29 @@ export function ExerciseLogger({
         <button
           type="button"
           onClick={applyTarget}
-          className="mt-2.5 flex w-full items-center gap-2.5 rounded-md border border-primary/30 p-2.5 text-start transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="mt-2.5 flex w-full items-center gap-2.5 rounded-md border border-accent/30 p-2.5 text-start transition-colors hover:border-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           style={{ backgroundImage: "var(--molten-soft)" }}
         >
-          <Target className="size-4 shrink-0 text-primary" aria-hidden />
+          <Target className="size-4 shrink-0 text-accent-glow" aria-hidden />
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-1.5">
-              <span className="text-[10.5px] font-bold text-muted-foreground">
+              <span className="text-[10.5px] font-bold text-fg-3">
                 هدف اليوم
               </span>
-              <span className="figure text-[17px] text-foreground" dir="ltr">
+              <span className="figure text-[17px] text-fg" dir="ltr">
                 {target.weightKg > 0
                   ? `${formatNumber(target.weightKg)} × ${target.reps}`
                   : `× ${target.reps}`}
               </span>
-              <span className="text-[10px] font-bold text-muted-foreground">
+              <span className="text-[10px] font-bold text-fg-3">
                 {target.weightKg > 0 ? "كجم" : "تكرار"}
               </span>
             </span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+            <span className="mt-0.5 block text-[11px] leading-snug text-fg-3">
               {REASON_TEXT[target.reason]}
             </span>
           </span>
-          <span className="shrink-0 rounded-sm border border-primary/40 px-2 py-1 text-[10.5px] font-extrabold text-primary">
+          <span className="shrink-0 rounded-sm border border-accent/40 px-2 py-1 text-[10.5px] font-extrabold text-accent-glow">
             طبّقه
           </span>
         </button>
@@ -372,7 +372,7 @@ export function ExerciseLogger({
 
       {/* Warm-up ramp: offered only before the first set of the exercise. */}
       {ramp.length > 0 ? (
-        <p className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+        <p className="mt-2 flex flex-wrap items-center gap-2  text-[11px] text-fg-3">
           <span className="font-sans font-bold">تسخين مقترح:</span>
           {ramp.map((step) => (
             <button
@@ -384,7 +384,7 @@ export function ExerciseLogger({
                 setIsWarmup(true);
                 setError(null);
               }}
-              className="rounded-sm border border-border px-2 py-1 transition-colors hover:border-primary/50 hover:text-foreground"
+              className="rounded-sm border border-line-strong px-2 py-1 transition-colors hover:border-accent/50 hover:text-fg"
             >
               <bdi dir="ltr">
                 {formatNumber(step.weightKg)}×{step.reps}
@@ -422,7 +422,7 @@ export function ExerciseLogger({
             }}
             aria-invalid={error !== null}
             placeholder="0"
-            className="mt-1 tnum"
+            className="mt-1 num"
           />
         </div>
         <div className="flex-1">
@@ -443,7 +443,7 @@ export function ExerciseLogger({
             }}
             aria-invalid={error !== null}
             placeholder="0"
-            className="mt-1 tnum"
+            className="mt-1 num"
           />
         </div>
         <Button onClick={handleSave} className="shrink-0">
@@ -460,14 +460,14 @@ export function ExerciseLogger({
           className={cn(
             "rounded-full border px-2.5 py-1 text-[10.5px] font-extrabold transition-colors",
             isWarmup
-              ? "border-primary/50 bg-primary/15 text-primary"
-              : "border-border text-muted-foreground hover:text-foreground",
+              ? "border-accent/50 bg-accent/15 text-accent-glow"
+              : "border-line-strong text-fg-3 hover:text-fg",
           )}
         >
           تسخين
         </button>
 
-        <span className="ms-1 font-mono text-[10px] text-muted-foreground">
+        <span className="ms-1  text-[10px] text-fg-3">
           الجهد
         </span>
         {[6, 7, 8, 9, 10].map((value) => (
@@ -480,8 +480,8 @@ export function ExerciseLogger({
             className={cn(
               "figure size-7 rounded-full border text-[11px] transition-colors",
               rpe === value
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border text-muted-foreground hover:text-foreground",
+                ? "border-accent bg-accent text-white"
+                : "border-line-strong text-fg-3 hover:text-fg",
             )}
           >
             {value}
@@ -490,7 +490,7 @@ export function ExerciseLogger({
       </div>
 
       {error ? (
-        <p role="alert" className="mt-2 text-[11.5px] font-bold text-primary">
+        <p role="alert" className="mt-2 text-[11.5px] font-bold text-accent-glow">
           {error}
         </p>
       ) : null}
@@ -504,16 +504,16 @@ export function ExerciseLogger({
               className={cn(
                 "flex items-center gap-2 rounded-md px-2.5 py-2",
                 entry.isWarmup
-                  ? "border border-dashed border-border bg-transparent"
-                  : "bg-secondary",
+                  ? "border border-dashed border-line-strong bg-transparent"
+                  : "bg-surface-2",
               )}
             >
               <span
                 className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px]",
+                  "flex size-5 shrink-0 items-center justify-center rounded-full  text-[10px]",
                   entry.isWarmup
-                    ? "text-muted-foreground"
-                    : "bg-background text-muted-foreground",
+                    ? "text-fg-3"
+                    : "bg-background text-fg-3",
                 )}
               >
                 {entry.isWarmup ? (
@@ -524,19 +524,19 @@ export function ExerciseLogger({
               </span>
               {/* <bdi> isolates each run: without it the trailing rep count and
                   the leading "1RM" reorder into one unreadable "101RM". */}
-              <span className="tnum flex flex-1 flex-wrap items-baseline gap-x-2 font-mono text-[12.5px] font-bold">
+              <span className="num flex flex-1 flex-wrap items-baseline gap-x-2  text-[12.5px] font-bold">
                 <bdi>
                   {formatNumber(entry.weightKg)} كجم × {entry.reps}
                 </bdi>
                 {entry.isWarmup ? (
-                  <bdi className="font-normal text-muted-foreground">تسخين</bdi>
+                  <bdi className="font-normal text-fg-3">تسخين</bdi>
                 ) : (
-                  <bdi className="font-normal text-muted-foreground">
+                  <bdi className="font-normal text-fg-3">
                     1RM ≈ {formatNumber(estimate1rm(entry.weightKg, entry.reps))}
                   </bdi>
                 )}
                 {entry.rpe !== null ? (
-                  <bdi className="font-normal text-muted-foreground">
+                  <bdi className="font-normal text-fg-3">
                     RPE {formatNumber(entry.rpe)}
                   </bdi>
                 ) : null}
@@ -548,7 +548,7 @@ export function ExerciseLogger({
                   toast.toast("تم حذف المجموعة");
                 }}
                 aria-label={`حذف المجموعة ${entry.setIndex}`}
-                className="shrink-0 rounded-sm p-1 text-muted-foreground transition-colors hover:text-primary"
+                className="shrink-0 rounded-sm p-1 text-fg-3 transition-colors hover:text-accent-glow"
               >
                 <Trash2 className="size-3.5" aria-hidden />
               </button>
@@ -564,8 +564,8 @@ export function ExerciseLogger({
             <span
               className={
                 delta > 0
-                  ? "tnum font-mono text-[12px] font-bold text-success"
-                  : "tnum font-mono text-[12px] font-bold text-muted-foreground"
+                  ? "num  text-[12px] font-bold text-success"
+                  : "num  text-[12px] font-bold text-fg-3"
               }
             >
               {/* Worded instead of signed: a leading "−" inside Arabic text is
@@ -624,17 +624,17 @@ function ExercisePanel({
   }
 
   return (
-    <div className="mt-3 space-y-3 rounded-md border border-border bg-background/60 p-3 animate-sheet-up">
+    <div className="mt-3 space-y-3 rounded-md border border-line-strong bg-background/60 p-3 animate-sheet-up">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1.5 text-[12px] font-extrabold">
-          <Wrench className="size-3.5 text-primary" aria-hidden />
+          <Wrench className="size-3.5 text-accent-glow" aria-hidden />
           إعداد المكينة والتقدم
         </p>
         <button
           type="button"
           onClick={onClose}
           aria-label="إغلاق الإعداد"
-          className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground"
+          className="rounded-sm p-1 text-fg-3 transition-colors hover:text-fg"
         >
           <X className="size-3.5" aria-hidden />
         </button>
@@ -650,7 +650,7 @@ function ExercisePanel({
           maxLength={240}
           className="mt-1 text-sm font-normal"
         />
-        <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[10.5px] leading-relaxed text-fg-3">
           الوزن بلا ضبط ما يتكرر — أي تغيير في المقعد يغيّر المدى ويغيّر معنى الرقم.
         </p>
       </div>
@@ -667,7 +667,7 @@ function ExercisePanel({
               commit({ repMin: parseOptional(event.target.value) })
             }
             placeholder={String(db.settings.repMin)}
-            className="mt-1 tnum"
+            className="mt-1 num"
           />
         </div>
         <div>
@@ -681,7 +681,7 @@ function ExercisePanel({
               commit({ repMax: parseOptional(event.target.value) })
             }
             placeholder={String(db.settings.repMax)}
-            className="mt-1 tnum"
+            className="mt-1 num"
           />
         </div>
         <div>
@@ -697,7 +697,7 @@ function ExercisePanel({
               commit({ incrementKg: parseOptional(event.target.value) })
             }
             placeholder={String(db.settings.incrementKg)}
-            className="mt-1 tnum"
+            className="mt-1 num"
           />
         </div>
         <div>
@@ -713,12 +713,12 @@ function ExercisePanel({
               commit({ restSeconds: parseOptional(event.target.value) })
             }
             placeholder={String(db.settings.restSeconds)}
-            className="mt-1 tnum"
+            className="mt-1 num"
           />
         </div>
       </div>
 
-      <p className="font-mono text-[10.5px] text-muted-foreground">
+      <p className=" text-[10.5px] text-fg-3">
         المطبّق الآن: <bdi dir="ltr">{rules.repMin}–{rules.repMax}</bdi> تكرار ·
         خطوة <bdi dir="ltr">{formatNumber(rules.incrementKg)}</bdi> كجم · راحة{" "}
         <bdi dir="ltr">{rules.restSeconds}</bdi> ثانية. الحقل الفاضي يعني

@@ -20,11 +20,11 @@ export function Meter({ label, value, target, unit, className }: MeterProps) {
 
   return (
     <div className={cn("space-y-1.5", className)}>
-      <div className="flex items-baseline justify-between font-mono text-xs text-muted-foreground">
+      <div className="flex items-baseline justify-between text-xs font-semibold text-fg-3">
         <span>{label}</span>
-        <span className="tnum text-foreground">
+        <span className="num text-fg">
           {formatNumber(value)}
-          <span className="text-muted-foreground">
+          <span className="text-fg-3">
             {" / "}
             {formatNumber(safeTarget)}
             {unit ? ` ${unit}` : ""}
@@ -32,10 +32,7 @@ export function Meter({ label, value, target, unit, className }: MeterProps) {
         </span>
       </div>
       <div
-        className={cn(
-          "h-2 overflow-hidden rounded-full",
-          met ? "bg-success/20" : "bg-primary/15",
-        )}
+        className={cn("h-2 overflow-hidden rounded-full", met ? "bg-success/20" : "bg-accent/15")}
         role="progressbar"
         aria-label={label}
         aria-valuenow={Math.round(value)}
@@ -45,7 +42,7 @@ export function Meter({ label, value, target, unit, className }: MeterProps) {
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-500",
-            met ? "bg-success" : "bg-primary",
+            met ? "bg-success" : "bg-accent",
           )}
           style={{ width: `${pct}%` }}
         />

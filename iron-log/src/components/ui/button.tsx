@@ -1,63 +1,58 @@
-"use client";
-
 import { Slot } from "@radix-ui/react-slot";
-import { cva, type VariantProps } from "class-variance-authority";
-import * as React from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 import { cn } from "@/lib/utils";
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]",
-  {
-    variants: {
-      variant: {
-        default:
-          "molten bg-primary text-primary-foreground shadow-[0_1px_0_0_rgba(255,255,255,0.22)_inset,0_8px_24px_-12px_var(--ember-glow)] transition-[filter,transform] hover:brightness-110",
-        secondary:
-          "bg-secondary text-secondary-foreground border border-border hover:bg-accent",
-        outline:
-          "border border-border bg-transparent text-foreground hover:bg-accent",
-        ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
-        danger:
-          "border border-primary bg-transparent text-primary hover:bg-primary/10",
-        success:
-          "bg-success text-success-foreground hover:bg-success/90",
-      },
-      size: {
-        default: "h-11 px-4 py-2",
-        sm: "h-9 rounded-sm px-3 text-xs",
-        lg: "h-12 px-6 text-base",
-        icon: "h-10 w-10",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  },
-);
+type Variant = "primary" | "default" | "secondary" | "ghost" | "outline" | "danger";
+type Size = "sm" | "md" | "lg" | "icon" | "icon-sm";
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+const VARIANTS: Record<Variant, string> = {
+  primary:
+    "bg-accent text-white font-bold shadow-glowAccent hover:brightness-110 active:brightness-95",
+  default:
+    "bg-accent text-white font-bold shadow-glowAccent hover:brightness-110 active:brightness-95",
+  secondary:
+    "bg-surface-3 text-fg font-bold border border-line-strong hover:border-fg-3",
+  ghost: "text-fg-2 font-bold hover:bg-white/[0.04] hover:text-fg",
+  outline: "border border-line-strong text-fg font-bold hover:border-fg-3",
+  danger:
+    "bg-danger/15 text-danger font-bold border border-danger/35 hover:bg-danger/22",
+};
+
+const SIZES: Record<Size, string> = {
+  sm: "h-9 px-3.5 text-[13px] rounded-lg gap-1.5",
+  md: "h-11 px-5 text-[14px] rounded-lg gap-2",
+  lg: "h-14 px-6 text-[16px] rounded-xl gap-2.5",
+  icon: "size-11 rounded-lg",
+  "icon-sm": "size-9 rounded-lg",
+};
+
+/** The class string, for a `<Link>` that should look like a button. */
+export function buttonClass(variant: Variant = "primary", size: Size = "md") {
+  return cn(
+    "inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap transition-all duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40",
+    VARIANTS[variant],
+    SIZES[size],
+  );
+}
+
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: Variant;
+  size?: Size;
   asChild?: boolean;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, type, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
-    return (
-      <Comp
-        ref={ref}
-        // A button inside a form defaults to `submit`; almost every button here
-        // is an action, so default to `button` unless told otherwise.
-        type={asChild ? type : (type ?? "button")}
-        className={cn(buttonVariants({ variant, size }), className)}
-        {...props}
-      />
-    );
-  },
-);
-Button.displayName = "Button";
-
-export { Button, buttonVariants };
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = "primary", size = "md", asChild = false, className, type = "button", ...props },
+  ref,
+) {
+  const Comp = asChild ? Slot : "button";
+  return (
+    <Comp
+      ref={ref}
+      type={asChild ? undefined : type}
+      className={cn(buttonClass(variant, size), className)}
+      {...props}
+    />
+  );
+});

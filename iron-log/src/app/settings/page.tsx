@@ -49,7 +49,7 @@ function ToggleRow({
           {label}
         </Label>
         {hint ? (
-          <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
+          <p className="mt-0.5 text-[10.5px] leading-relaxed text-fg-3">
             {hint}
           </p>
         ) : null}
@@ -270,7 +270,7 @@ export default function SettingsPage() {
                 max="7"
                 value={weeklyGoal}
                 onChange={(event) => setWeeklyGoal(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -285,7 +285,7 @@ export default function SettingsPage() {
                 value={bodyWeight}
                 onChange={(event) => setBodyWeight(event.target.value)}
                 placeholder="اختياري"
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
           </div>
@@ -305,7 +305,7 @@ export default function SettingsPage() {
               <option value="kg">كيلوجرام (كجم)</option>
               <option value="lb">رطل (lb)</option>
             </Select>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 text-[11px] leading-relaxed text-fg-3">
               التخزين دائماً بالكيلوجرام — الوحدة للعرض فقط، فتغييرها لا يمسّ سجلك.
             </p>
           </div>
@@ -330,7 +330,7 @@ export default function SettingsPage() {
                 inputMode="numeric"
                 value={restSeconds}
                 onChange={(event) => setRestSeconds(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -341,7 +341,7 @@ export default function SettingsPage() {
                 inputMode="decimal"
                 value={increment}
                 onChange={(event) => setIncrement(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -352,7 +352,7 @@ export default function SettingsPage() {
                 inputMode="numeric"
                 value={repMin}
                 onChange={(event) => setRepMin(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -363,12 +363,12 @@ export default function SettingsPage() {
                 inputMode="numeric"
                 value={repMax}
                 onChange={(event) => setRepMax(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
           </div>
 
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <p className="text-[11px] leading-relaxed text-fg-3">
             التقدم المزدوج: تثبت على نفس الوزن حتى تكمل{" "}
             <bdi dir="ltr">{db.settings.repMax}</bdi> تكرار في كل مجموعة، بعدها
             تزيد خطوة وزن واحدة وترجع إلى{" "}
@@ -376,7 +376,7 @@ export default function SettingsPage() {
             في كل بطاقة تمرين.
           </p>
 
-          <div className="space-y-2.5 border-t border-border pt-3">
+          <div className="space-y-2.5 border-t border-line-strong pt-3">
             <ToggleRow
               id="rest-auto"
               label="ابدأ المؤقّت تلقائياً بعد كل مجموعة"
@@ -431,7 +431,7 @@ export default function SettingsPage() {
                 value={heightCm}
                 onChange={(event) => setHeightCm(event.target.value)}
                 placeholder="ما سجّلت"
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -445,7 +445,7 @@ export default function SettingsPage() {
                 step="0.5"
                 value={sleepTarget}
                 onChange={(event) => setSleepTarget(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -459,7 +459,7 @@ export default function SettingsPage() {
                 step="500"
                 value={stepsTarget}
                 onChange={(event) => setStepsTarget(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -473,7 +473,7 @@ export default function SettingsPage() {
                 step="250"
                 value={waterTarget}
                 onChange={(event) => setWaterTarget(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
           </div>
@@ -495,7 +495,7 @@ export default function SettingsPage() {
                 min="0"
                 value={kcal}
                 onChange={(event) => setKcal(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -507,7 +507,7 @@ export default function SettingsPage() {
                 min="0"
                 value={protein}
                 onChange={(event) => setProtein(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -519,7 +519,7 @@ export default function SettingsPage() {
                 min="0"
                 value={carbs}
                 onChange={(event) => setCarbs(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
             <div>
@@ -531,7 +531,7 @@ export default function SettingsPage() {
                 min="0"
                 value={fat}
                 onChange={(event) => setFat(event.target.value)}
-                className="mt-1 tnum"
+                className="mt-1 num"
               />
             </div>
           </div>
@@ -576,16 +576,16 @@ export default function SettingsPage() {
             <Upload className="size-4" aria-hidden />
             استيراد نسخة (يستبدل البيانات الحالية)
           </Button>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <p className="text-[11px] leading-relaxed text-fg-3">
             يقبل نسخ Iron Log، ونسخ التطبيق القديم ذو الملف الواحد — يحوّل سجلاته
             تلقائياً إلى المخطط الجديد.
           </p>
         </CardContent>
       </Card>
 
-      <Card className="border-primary/30">
+      <Card className="border-accent/30">
         <CardHeader>
-          <CardTitle className="text-primary">منطقة الخطر</CardTitle>
+          <CardTitle className="text-accent-glow">منطقة الخطر</CardTitle>
           <CardDescription>
             لا يمكن الرجوع عن هذه الإجراءات. صدّر نسخة احتياطية أولاً.
           </CardDescription>

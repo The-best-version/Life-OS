@@ -35,22 +35,20 @@ export function BarList({ rows, className }: BarListProps) {
         return (
           <li key={row.key}>
             <div className="flex items-baseline justify-between gap-3 text-xs">
-              <span className="truncate font-bold text-foreground">
-                {row.label}
-              </span>
-              <span className="tnum shrink-0 font-mono text-muted-foreground">
+              <span className="truncate font-bold text-fg">{row.label}</span>
+              <span className="num shrink-0 font-semibold text-fg-3">
                 {row.display}
                 {row.note ? (
-                  <span className="text-muted-foreground/70">
+                  <span className="text-fg-3/70">
                     {" · "}
                     {row.note}
                   </span>
                 ) : null}
               </span>
             </div>
-            <div className="mt-1.5 h-2 rounded-sm bg-secondary">
+            <div className="mt-1.5 h-2 rounded-sm bg-surface-2">
               <div
-                className="h-full rounded-e-sm rounded-s-none bg-primary transition-[width] duration-500"
+                className="h-full rounded-e-sm rounded-s-none bg-accent transition-[width] duration-500"
                 style={{ width: `${pct}%` }}
               />
             </div>

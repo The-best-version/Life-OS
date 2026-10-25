@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import { AppShell } from "@/components/layout/app-shell";
 import { ToastProvider } from "@/components/ui/toast";
 import { IronLogProvider } from "@/lib/store";
-import { ThemeProvider } from "@/lib/theme";
 
 import DashboardPage from "@/app/page";
 import HistoryPage from "@/app/history/page";
@@ -18,11 +17,9 @@ import { usePathname } from "./shims/next-navigation";
  * The standalone entry: what `app/layout.tsx` is to Next, this is to the single
  * file build.
  *
- * The provider stack is copied from that layout deliberately, in the same order
- * — ThemeProvider outermost because the pre-paint script has already written
- * `data-theme` and the provider only keeps it in step, then the database, then
- * toasts, then the chrome. Reordering it here and not there is how the two
- * builds quietly stop being the same app.
+ * The provider stack is copied from that layout deliberately, in the same
+ * order — the database, then toasts, then the chrome. Reordering it here and
+ * not there is how the two builds quietly stop being the same app.
  *
  * Every page in `src/app` is already "use client", which is the only reason a
  * build like this is possible at all: there is no server half to replace.
@@ -49,15 +46,13 @@ function App() {
   }, [pathname]);
 
   return (
-    <ThemeProvider>
-      <IronLogProvider>
-        <ToastProvider>
-          <AppShell>
-            <Page />
-          </AppShell>
-        </ToastProvider>
-      </IronLogProvider>
-    </ThemeProvider>
+    <IronLogProvider>
+      <ToastProvider>
+        <AppShell>
+          <Page />
+        </AppShell>
+      </ToastProvider>
+    </IronLogProvider>
   );
 }
 

@@ -24,9 +24,9 @@ export default function ErrorBoundary({
 
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
-      <TriangleAlert className="size-7 text-primary" aria-hidden />
-      <h1 className="text-lg font-extrabold">صار خطأ غير متوقع</h1>
-      <p className="max-w-[36ch] text-xs leading-relaxed text-muted-foreground">
+      <TriangleAlert className="size-7 text-danger" aria-hidden />
+      <h1 className="text-lg font-bold text-fg">صار خطأ غير متوقع</h1>
+      <p className="max-w-[36ch] text-xs leading-relaxed text-fg-3">
         بياناتك محفوظة في المتصفح ولم تتأثر. جرّب إعادة المحاولة، وإذا تكرر الخطأ
         صدّر نسخة احتياطية من الإعدادات.
       </p>

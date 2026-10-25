@@ -20,7 +20,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import * as esbuild from "esbuild";
 
@@ -29,19 +29,7 @@ const outDir = join(root, "standalone");
 const work = mkdtempSync(join(tmpdir(), "ironlog-standalone-"));
 
 try {
-  // 1. The pre-paint theme script, read from its own module rather than copied,
-  //    so this build can never drift from what `app/layout.tsx` injects.
-  const themeModule = join(work, "theme-script.mjs");
-  await esbuild.build({
-    entryPoints: [join(root, "src/lib/theme-script.ts")],
-    outfile: themeModule,
-    bundle: true,
-    format: "esm",
-    platform: "node",
-  });
-  const { THEME_SCRIPT, CHROME_COLOR } = await import(pathToFileURL(themeModule).href);
-
-  // 2. The app.
+  // 1. The app.
   const bundleFile = join(work, "bundle.js");
   await esbuild.build({
     entryPoints: [join(root, "scripts/standalone/entry.tsx")],
@@ -56,7 +44,7 @@ try {
     legalComments: "none",
   });
 
-  // 3. The exact CSS these class names need, generated from the project's own
+  // 2. The exact CSS these class names need, generated from the project's own
   //    Tailwind config so the standalone and the dev server style identically.
   const cssFile = join(work, "app.css");
   //    Tailwind's own CLI entry is invoked through node rather than through the
@@ -75,7 +63,7 @@ try {
     { cwd: root, stdio: "inherit" },
   );
 
-  // 4. One file. Assembled by joining an array — never String.replace with the
+  // 3. One file. Assembled by joining an array — never String.replace with the
   //    bundle as the replacement, because `$&` and `$'` inside minified JS are
   //    substitution patterns and would silently corrupt the output.
   const html = [
@@ -84,17 +72,14 @@ try {
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">',
-    `<meta name="theme-color" content="${CHROME_COLOR.light}">`,
+    '<meta name="theme-color" content="#14120F">',
     '<meta name="description" content="متتبع تمارين محلي بالكامل: سجّل المجموعات والأوزان وشاهد تقدّمك في رسوم واضحة.">',
     "<title>Iron Log — متتبع التمرين</title>",
-    // Inline and synchronous, exactly as in the layout: a deferred script would
-    // paint light and then flip.
-    `<script>${THEME_SCRIPT}</script>`,
     '<link rel="preconnect" href="https://fonts.googleapis.com">',
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
     // The one network request in the file, and an optional one: the CSS stack in
     // globals.css falls back to the system sans when it does not arrive.
-    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap">',
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap">',
     "<style>",
     readFileSync(cssFile, "utf8"),
     "</style>",

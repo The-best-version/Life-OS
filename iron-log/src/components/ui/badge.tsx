@@ -4,14 +4,14 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-extrabold leading-none",
+  "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold leading-none",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary/15 text-primary",
-        neutral: "border-border bg-secondary text-muted-foreground",
-        success: "border-transparent bg-success/15 text-success",
-        outline: "border-border bg-transparent text-foreground",
+        default: "border-accent/35 bg-accent/15 text-accent-glow",
+        neutral: "border-line-strong bg-surface-2 text-fg-2",
+        success: "border-success/35 bg-success/15 text-success",
+        outline: "border-line-strong bg-transparent text-fg",
       },
     },
     defaultVariants: { variant: "default" },
@@ -23,9 +23,7 @@ export interface BadgeProps
     VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
-  return (
-    <span className={cn(badgeVariants({ variant }), className)} {...props} />
-  );
+  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
 export { Badge, badgeVariants };

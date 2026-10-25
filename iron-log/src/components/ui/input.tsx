@@ -1,40 +1,15 @@
-import * as React from "react";
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-/**
- * Two deliberate deviations from a plain `<input>`:
- *
- *  1. **16px base font size.** Anything smaller makes iOS Safari zoom the page
- *     on focus, which is unusable when you are logging a set one-handed.
- *  2. **`type="number"` is rendered as a numeric text field.** The document is
- *     `lang="ar"`, and browsers render a real number input in Arabic-Indic
- *     digits (٢٦٠٠) while every computed value in the app is formatted with
- *     Latin digits — the two would disagree on the same screen. A text field
- *     with `inputMode` still raises the numeric keypad on mobile, and the value
- *     is validated in `lib/repository.ts` regardless, so nothing is lost.
- *     Pass `type="text"` explicitly to opt out.
- */
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type = "text", inputMode, min, max, step, ...props }, ref) => {
-    const numeric = type === "number";
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className, ...props }, ref) {
     return (
       <input
         ref={ref}
-        type={numeric ? "text" : type}
-        inputMode={numeric ? (inputMode ?? "decimal") : inputMode}
-        // `min`/`max`/`step` mean nothing on a text field; keep them only where
-        // the browser will actually honour them.
-        min={numeric ? undefined : min}
-        max={numeric ? undefined : max}
-        step={numeric ? undefined : step}
-        lang={type === "date" ? "en" : undefined}
         className={cn(
-          "flex h-11 w-full rounded-md border border-border bg-secondary px-3 py-2 text-base font-bold text-foreground",
-          "placeholder:font-normal placeholder:text-muted-foreground",
-          "focus-visible:border-primary focus-visible:outline-none",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          "aria-[invalid=true]:border-primary",
+          // 16px text: iOS zooms into anything smaller on focus.
+          "h-11 w-full rounded-lg border border-line-strong bg-surface px-3.5 text-[16px] font-semibold text-fg outline-none transition-colors placeholder:font-medium placeholder:text-fg-3 focus:border-accent/60",
           className,
         )}
         {...props}
@@ -42,6 +17,28 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
     );
   },
 );
-Input.displayName = "Input";
 
-export { Input };
+/** Label + control, stacked. */
+export function Field({
+  label,
+  htmlFor,
+  hint,
+  children,
+  className,
+}: {
+  label: ReactNode;
+  htmlFor: string;
+  hint?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <label htmlFor={htmlFor} className="mb-1.5 block text-[12.5px] font-bold text-fg-2">
+        {label}
+      </label>
+      {children}
+      {hint ? <p className="mt-1 text-[11.5px] font-medium text-fg-3">{hint}</p> : null}
+    </div>
+  );
+}

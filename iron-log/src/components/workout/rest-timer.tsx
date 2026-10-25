@@ -293,8 +293,8 @@ export function RestTimerBar() {
         role="timer"
         aria-live="off"
         className={cn(
-          "steel relative mx-auto flex max-w-[560px] items-center gap-3 overflow-hidden rounded-lg border bg-popover/95 p-3 backdrop-blur",
-          over && "border-primary/50",
+          "steel relative mx-auto flex max-w-[560px] items-center gap-3 overflow-hidden rounded-lg border bg-surface-2/95 p-3 backdrop-blur",
+          over && "border-accent/50",
         )}
       >
         {/* The fill runs behind the content: the bar itself is the progress. */}
@@ -302,7 +302,7 @@ export function RestTimerBar() {
           aria-hidden
           className={cn(
             "pointer-events-none absolute inset-y-0 start-0 transition-[width] duration-300",
-            over ? "bg-primary/20" : "bg-primary/10",
+            over ? "bg-accent/20" : "bg-accent/10",
           )}
           style={{ width: `${progress}%` }}
         />
@@ -311,15 +311,15 @@ export function RestTimerBar() {
           className={cn(
             "relative flex size-12 shrink-0 items-center justify-center rounded-full border",
             over
-              ? "border-primary/60 bg-primary/15"
-              : "border-border bg-background",
-            nearlyDone && "animate-ember-pulse border-primary/60",
+              ? "border-accent/60 bg-accent/15"
+              : "border-line-strong bg-background",
+            nearlyDone && "animate-ember-pulse border-accent/60",
           )}
         >
           <span
             className={cn(
               "figure text-[15px]",
-              over ? "text-primary" : "text-foreground",
+              over ? "text-accent-glow" : "text-fg",
             )}
             dir="ltr"
           >
@@ -331,7 +331,7 @@ export function RestTimerBar() {
           <p className="truncate text-[12.5px] font-extrabold leading-tight">
             {over ? "انتهت الراحة — ابدأ المجموعة" : "راحة"}
           </p>
-          <p className="truncate font-mono text-[11px] text-muted-foreground">
+          <p className="truncate  text-[11px] text-fg-3">
             {label ?? ""}
           </p>
         </div>
@@ -341,7 +341,7 @@ export function RestTimerBar() {
             type="button"
             onClick={() => extend(-15)}
             aria-label="خصم ١٥ ثانية"
-            className="h-9 rounded-md border border-border px-2 font-mono text-[11px] font-bold text-muted-foreground transition-colors hover:text-foreground"
+            className="h-9 rounded-md border border-line-strong px-2  text-[11px] font-bold text-fg-3 transition-colors hover:text-fg"
           >
             <span dir="ltr">−15</span>
           </button>
@@ -349,7 +349,7 @@ export function RestTimerBar() {
             type="button"
             onClick={() => extend(30)}
             aria-label="إضافة ٣٠ ثانية"
-            className="h-9 rounded-md border border-border px-2 font-mono text-[11px] font-bold text-muted-foreground transition-colors hover:text-foreground"
+            className="h-9 rounded-md border border-line-strong px-2  text-[11px] font-bold text-fg-3 transition-colors hover:text-fg"
           >
             <span dir="ltr">+30</span>
           </button>
@@ -357,7 +357,7 @@ export function RestTimerBar() {
             type="button"
             onClick={over ? restart : togglePause}
             aria-label={over ? "إعادة الراحة" : paused ? "متابعة" : "إيقاف مؤقت"}
-            className="flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:text-foreground"
+            className="flex size-9 items-center justify-center rounded-md border border-line-strong text-fg-3 transition-colors hover:text-fg"
           >
             {over ? (
               <RotateCcw className="size-4" aria-hidden />
@@ -371,7 +371,7 @@ export function RestTimerBar() {
             type="button"
             onClick={stop}
             aria-label="إنهاء الراحة"
-            className="flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:text-primary"
+            className="flex size-9 items-center justify-center rounded-md border border-line-strong text-fg-3 transition-colors hover:text-accent-glow"
           >
             <X className="size-4" aria-hidden />
           </button>

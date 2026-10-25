@@ -118,7 +118,7 @@ export function HealthPanel() {
               return (
                 <div key={key}>
                   <Label htmlFor={`h-${key}`} className="flex items-center gap-1.5">
-                    <Icon className="size-3.5 text-muted-foreground" aria-hidden />
+                    <Icon className="size-3.5 text-fg-3" aria-hidden />
                     {meta.label}
                   </Label>
                   <Input
@@ -140,7 +140,7 @@ export function HealthPanel() {
                       );
                     }}
                     placeholder={meta.unit}
-                    className="mt-1 tnum"
+                    className="mt-1 num"
                   />
                 </div>
               );
@@ -149,7 +149,7 @@ export function HealthPanel() {
 
           <div>
             <Label htmlFor="h-bedtime" className="flex items-center gap-1.5">
-              <Bed className="size-3.5 text-muted-foreground" aria-hidden />
+              <Bed className="size-3.5 text-fg-3" aria-hidden />
               نمت الساعة
             </Label>
             <Input
@@ -159,9 +159,9 @@ export function HealthPanel() {
               onChange={(event) =>
                 actions.setHealth(date, { bedtime: event.target.value || null })
               }
-              className="mt-1 tnum"
+              className="mt-1 num"
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[11px] text-fg-3">
               ساعات النوم تقول كم نمت. هذي تقول متى — والاثنتان تفشلان بشكل مختلف.
             </p>
           </div>
@@ -193,10 +193,10 @@ export function HealthPanel() {
           )}
 
           {averages.restingHr ? (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-xs text-fg-3">
               <HeartPulse className="size-3.5" aria-hidden />
               متوسط نبض الراحة{" "}
-              <bdi dir="ltr" className="tnum font-bold text-foreground">
+              <bdi dir="ltr" className="num font-bold text-fg">
                 {formatNumber(averages.restingHr.average)}
               </bdi>{" "}
               ن/د
@@ -204,7 +204,7 @@ export function HealthPanel() {
           ) : null}
 
           {Object.values(averages).every((value) => value === null) ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-fg-3">
               ما فيه قياسات بعد — سجّل نومك الليلة ويبدأ المتوسط يرتسم.
             </p>
           ) : null}
@@ -234,7 +234,7 @@ export function HealthPanel() {
               >
                 <bdi dir="ltr">{ratio.ratio.toFixed(2)}</bdi>
               </span>
-              <span className="text-xs font-bold text-muted-foreground">
+              <span className="text-xs font-bold text-fg-3">
                 {ratio.band === "good"
                   ? "داخل النطاق الصحي"
                   : ratio.band === "watch"
@@ -249,7 +249,7 @@ export function HealthPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Activity className="size-4 text-primary" aria-hidden />
+            <Activity className="size-4 text-accent-glow" aria-hidden />
             نومك وأداؤك
           </CardTitle>
           <CardDescription>
@@ -258,7 +258,7 @@ export function HealthPanel() {
         </CardHeader>
         <CardContent>
           {sleepVerdict === null ? (
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-xs leading-relaxed text-fg-3">
               محتاج 4 حصص على الأقل بعد نوم كافٍ، ومثلها بعد نوم أقل، قبل ما
               يطلع حكم. سجّل ساعات نومك كل ليلة وبيجي.
             </p>
@@ -266,7 +266,7 @@ export function HealthPanel() {
             <div className="space-y-2">
               <p className="text-sm leading-relaxed">
                 حصصك بعد نوم{" "}
-                <bdi dir="ltr" className="tnum font-bold">
+                <bdi dir="ltr" className="num font-bold">
                   {formatNumber(db.settings.healthTargets.sleepHours)}
                 </bdi>{" "}
                 ساعات فأكثر متوسط حجمها{" "}
@@ -280,13 +280,13 @@ export function HealthPanel() {
                   }}
                 >
                   {sleepVerdict.deltaPct >= 0 ? "أعلى" : "أقل"} بـ{" "}
-                  <bdi dir="ltr" className="tnum">
+                  <bdi dir="ltr" className="num">
                     {Math.abs(sleepVerdict.deltaPct)}%
                   </bdi>
                 </span>{" "}
                 من حصصك بعد نوم أقل.
               </p>
-              <p className="tnum text-[11px] text-muted-foreground">
+              <p className="num text-[11px] text-fg-3">
                 <bdi dir="ltr">{formatNumber(sleepVerdict.restedVolume)}</bdi> كجم
                 في {sleepVerdict.restedCount} حصة ·{" "}
                 <bdi dir="ltr">{formatNumber(sleepVerdict.tiredVolume)}</bdi> كجم
