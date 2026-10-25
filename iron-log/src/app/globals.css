@@ -83,6 +83,20 @@
   --viz-grid: hsl(0 0% 100% / 0.06);
   --viz-baseline: hsl(var(--line-strong));
   --viz-ink-muted: hsl(var(--fg-3));
+
+  /* The other five chart tokens every chart under components/charts/ reads
+     (line-area-chart, column-chart, sparkline). They went missing across two
+     redesigns — "industrial-dark" had them, "MEET DAY" dropped them and
+     nothing caught it because an invalid var() fill fails silently on SVG
+     rather than throwing. Bound to the role system: the single data-series
+     colour is --steel (cyan is "live measurement", never an action), never
+     --accent — a chart line is not a button, and volt is reserved for the
+     thing a PR or a completed set earns. */
+  --viz-surface: hsl(var(--surface));
+  --viz-ink: hsl(var(--fg));
+  --viz-accent: hsl(var(--steel));
+  --viz-accent-wash: hsl(var(--steel) / 0.14);
+  --viz-recessive: hsl(var(--line-strong));
 }
 
 @layer base {

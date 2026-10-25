@@ -1,21 +1,51 @@
 "use client";
 
-import { Calculator, Calendar, Check, Dumbbell, Sparkles } from "lucide-react";
+import { Calculator, Calendar, Check, ChevronDown, Dumbbell, Flag } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { SportIcon } from "@/components/session/sport-icon";
 import { AddExerciseForm } from "@/components/workout/add-exercise-form";
 import { ExerciseLogger } from "@/components/workout/exercise-logger";
 import { PlateCalculator } from "@/components/workout/plate-calculator";
+import { Sheet } from "@/components/ui/sheet";
+import { useToast } from "@/components/ui/toast";
 import { sessionDurationMin, sessionVolume } from "@/lib/metrics";
+import { formatClock } from "@/lib/sports-config";
 import { useIronLog } from "@/lib/store";
 import { cn, formatFullDate, formatNumber, isIsoDate, toIsoDate } from "@/lib/utils";
 
+/**
+ * Tracks the rendered height of the app shell's `<header>` so this page's own
+ * sticky strip can dock directly under it instead of overlapping it. The
+ * shell header grew a second row (the global sport switcher) in an earlier
+ * pass, so a hardcoded offset would already be wrong — a `ResizeObserver`
+ * stays correct however tall it ends up being.
+ */
+function useStickyOffset(): number {
+  const [top, setTop] = useState(0);
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (!header) return undefined;
+    const update = () => setTop(header.getBoundingClientRect().height);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+  return top;
+}
+
 export default function WorkoutPage() {
   const { db, index, actions } = useIronLog();
+  const router = useRouter();
+  const toast = useToast();
   const today = toIsoDate();
   const [date, setDate] = useState<string>(today);
   const [dayId, setDayId] = useState<string | null>(null);
   const [plateCalcOpen, setPlateCalcOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const stickyTop = useStickyOffset();
 
   const days = useMemo(
     () => [...db.programDays].sort((a, b) => a.order - b.order),
@@ -48,114 +78,95 @@ export default function WorkoutPage() {
   const setsToday = session ? (index.setsBySession.get(session.id) ?? []).length : 0;
   const durationToday = session ? sessionDurationMin(index, session.id) : null;
 
+  /* ---- the live stopwatch ------------------------------------------------
+     Ticks from the session row's own `createdAt` — the moment the first set
+     landed today — rather than from a separate "workout started" flag the
+     schema does not have. Nothing invented: before the first set there is
+     nothing to count, so the clock sits at zero rather than pretending to
+     run. Only ticks for today; a past date shows its settled duration. */
+  const isToday = date === today;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isToday || !session) return undefined;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [isToday, session]);
+
+  const liveElapsedSeconds =
+    isToday && session ? Math.max(0, (now - session.createdAt) / 1000) : null;
+
+  function finishWorkout() {
+    toast.success(
+      setsToday > 0
+        ? `تم. ${setsToday} مجموعات بإجمالي ${formatNumber(volumeToday)} كجم`
+        : "رجعنا للرئيسية",
+    );
+    router.push("/");
+  }
+
   return (
-    <div className="space-y-4 pt-1 animate-fade-in">
-      <section className="plate space-y-4 p-4 sm:p-5">
-        <div className="flex flex-col justify-between gap-3 border-b border-line pb-3 sm:flex-row sm:items-center">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-accent/30 bg-accent/12 px-2.5 py-0.5 text-[10px] font-bold text-accent-glow">
-                بروتوكول اليوم
-              </span>
-              <span className="text-[11px] font-medium text-fg-3">{formatFullDate(date)}</span>
-            </div>
-            <h1 className="mt-1 text-xl font-bold text-fg sm:text-2xl">
-              {activeDay?.name ?? "تمرين مخصص"}
-            </h1>
-            {activeDay?.focus ? (
-              <p className="mt-0.5 text-xs font-semibold text-fg-3">
-                التركيز: <span className="text-fg-3">{activeDay.focus}</span>
-              </p>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => setPlateCalcOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-surface-2 px-3 py-2 text-xs font-bold text-fg-2 transition-colors hover:text-fg"
-            >
-              <Calculator className="size-3.5" />
-              <span>حاسبة البار</span>
-            </button>
-
-            {setsToday > 0 ? (
-              <div className="flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-1.5">
-                <Sparkles className="size-3.5 text-accent-glow" />
-                <div className="text-end">
-                  <span className="num text-xs font-semibold text-accent-glow">
-                    {formatNumber(volumeToday)} كجم
-                  </span>
-                  <p className="text-[9.5px] font-medium text-accent-glow/80">
-                    {setsToday} مجاميع {durationToday ? `· ${durationToday} د` : ""}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-2.5 pt-1 sm:grid-cols-3">
+    <div className="pt-1 animate-fade-in">
+      {/* The one compact session strip — discipline, routine, live clock and
+          volume, and the way out. Everything else (date, attendance,
+          readiness) lives one tap away in the details sheet. */}
+      <div
+        className="sticky z-20 -mx-4 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur-sm sm:mx-0 sm:mt-0 sm:rounded-2xl sm:border sm:border-line-strong sm:px-3.5"
+        style={{ top: stickyTop }}
+      >
+        <div className="flex h-10 items-center gap-2">
           <button
             type="button"
-            onClick={() => actions.toggleAttendance(date)}
-            className={cn(
-              "flex items-center justify-between rounded-xl border p-2.5 transition-colors",
-              attended
-                ? "border-success/40 bg-success/15 text-fg"
-                : "border-line bg-surface-2 text-fg-3 hover:text-fg",
-            )}
+            onClick={() => setDetailsOpen(true)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-start"
           >
-            <span className="text-xs font-bold">تسجيل الحضور</span>
-            <div
-              className={cn(
-                "flex size-5 items-center justify-center rounded-full border transition-colors",
-                attended ? "border-success bg-success text-black" : "border-line-strong bg-transparent",
-              )}
-            >
-              {attended ? <Check className="size-3 stroke-[3]" /> : null}
-            </div>
+            <span className="flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-surface-2 px-2 py-1 text-[10px] font-bold text-fg-2">
+              <SportIcon sport="gym" className="size-3" />
+              حديد
+            </span>
+            <span className="min-w-0 truncate text-[13.5px] font-bold text-fg">
+              {activeDay?.name ?? "تمرين مخصص"}
+            </span>
+            <ChevronDown className="size-3.5 shrink-0 text-fg-3" aria-hidden />
           </button>
 
-          <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 py-1.5">
-            <Calendar className="size-3.5 shrink-0 text-fg-3" />
-            <input
-              type="date"
-              value={date}
-              max={today}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (isIsoDate(val)) setDate(val);
-              }}
-              className="w-full bg-transparent text-xs font-medium text-fg focus:outline-none"
-            />
+          <div className="flex shrink-0 items-center gap-2.5">
+            {liveElapsedSeconds !== null ? (
+              <span className="num text-[13px] font-bold text-steel" dir="ltr">
+                {formatClock(liveElapsedSeconds)}
+              </span>
+            ) : durationToday ? (
+              <span className="num text-[12px] font-semibold text-fg-3" dir="ltr">
+                {durationToday} د
+              </span>
+            ) : null}
+            {setsToday > 0 ? (
+              <span className="num text-[13px] font-bold text-accent-glow" dir="ltr">
+                {formatNumber(volumeToday)} <span className="text-[10px] font-semibold text-fg-3">كجم</span>
+              </span>
+            ) : null}
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-3 py-1">
-            <span className="text-[11px] font-bold text-fg-3">الجاهزية:</span>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((lvl) => {
-                const isSelected = session?.readiness === lvl;
-                return (
-                  <button
-                    key={lvl}
-                    type="button"
-                    onClick={() => actions.setSessionReadiness(date, isSelected ? null : lvl)}
-                    className={cn(
-                      "size-6 rounded-lg text-[10px] font-bold transition-colors",
-                      isSelected ? "bg-accent text-bg" : "bg-surface-3 text-fg-3 hover:text-fg",
-                    )}
-                  >
-                    {lvl}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setPlateCalcOpen(true)}
+            aria-label="حاسبة البار"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full text-fg-3 transition-colors hover:text-fg"
+          >
+            <Calculator className="size-4" aria-hidden />
+          </button>
+
+          <button
+            type="button"
+            onClick={finishWorkout}
+            className="flex shrink-0 items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-[11.5px] font-black text-bg shadow-glowAccent active:scale-95"
+          >
+            <Flag className="size-3" aria-hidden />
+            إنهاء
+          </button>
         </div>
-      </section>
+      </div>
 
-      <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-1">
+      <div className="no-scrollbar mt-3 flex items-center gap-1.5 overflow-x-auto pb-1">
         {days.map((day) => {
           const isActive = day.id === dayId;
           return (
@@ -177,10 +188,10 @@ export default function WorkoutPage() {
       </div>
 
       {activeDay ? (
-        <div className="space-y-3">
+        <div className="mt-3 space-y-3">
           {activeDay.exerciseIds.length === 0 ? (
             <div className="plate space-y-2 p-6 text-center">
-              <Dumbbell className="mx-auto size-8 text-fg-3" />
+              <Dumbbell className="mx-auto size-8 text-fg-3" aria-hidden />
               <p className="text-xs text-fg-3">لا توجد تمارين مضافة لهذا اليوم حتى الآن</p>
             </div>
           ) : (
@@ -200,6 +211,82 @@ export default function WorkoutPage() {
           </div>
         </div>
       ) : null}
+
+      <Sheet
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title="تفاصيل الحصة"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 py-2.5">
+            <Calendar className="size-4 shrink-0 text-fg-3" aria-hidden />
+            <input
+              type="date"
+              value={date}
+              max={today}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (isIsoDate(value)) setDate(value);
+              }}
+              className="w-full bg-transparent text-[13px] font-medium text-fg focus:outline-none"
+            />
+          </div>
+
+          <p className="px-0.5 text-[11.5px] text-fg-3">{formatFullDate(date)}</p>
+
+          <button
+            type="button"
+            onClick={() => actions.toggleAttendance(date)}
+            className={cn(
+              "flex w-full items-center justify-between rounded-xl border p-3 transition-colors",
+              attended
+                ? "border-success/40 bg-success/15 text-fg"
+                : "border-line bg-surface-2 text-fg-3 hover:text-fg",
+            )}
+          >
+            <span className="text-[13px] font-bold">تسجيل الحضور</span>
+            <div
+              className={cn(
+                "flex size-5 items-center justify-center rounded-full border transition-colors",
+                attended ? "border-success bg-success text-bg" : "border-line-strong bg-transparent",
+              )}
+            >
+              {attended ? <Check className="size-3 stroke-[3]" aria-hidden /> : null}
+            </div>
+          </button>
+
+          <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-3 py-2.5">
+            <span className="text-[12px] font-bold text-fg-3">الجاهزية</span>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((level) => {
+                const isSelected = session?.readiness === level;
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => actions.setSessionReadiness(date, isSelected ? null : level)}
+                    className={cn(
+                      "num flex size-7 items-center justify-center rounded-lg text-[11px] font-bold transition-colors",
+                      isSelected ? "bg-accent text-bg" : "bg-surface-3 text-fg-3 hover:text-fg",
+                    )}
+                  >
+                    {level}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {setsToday > 0 ? (
+            <div className="flex items-center justify-between rounded-xl border border-accent/25 bg-accent/[0.06] px-3 py-2.5 text-[12.5px]">
+              <span className="font-bold text-fg">{setsToday} مجموعات</span>
+              <span className="num font-bold text-accent-glow" dir="ltr">
+                {formatNumber(volumeToday)} كجم
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </Sheet>
 
       <PlateCalculator isOpen={plateCalcOpen} onClose={() => setPlateCalcOpen(false)} />
     </div>

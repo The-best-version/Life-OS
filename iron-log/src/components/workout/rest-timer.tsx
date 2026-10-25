@@ -264,13 +264,18 @@ function formatClock(totalSeconds: number): string {
 }
 
 /**
- * The floating bar.
+ * The docked rest HUD.
  *
  * It sits clear of the bottom nav via `env(safe-area-inset-bottom)` plus the
  * nav's own height, so on a phone it never covers the tab you are trying to
- * reach. Once rest is over it stays on screen — turning red and counting *up* —
- * because the useful fact at that point is how long you have been standing
- * around, and a bar that vanishes takes that with it.
+ * reach. Once rest is over it stays on screen, turning to the danger hue and
+ * counting *up* — because the useful fact at that point is how long you have
+ * been standing around, and a bar that vanishes takes that with it.
+ *
+ * The progress track is a slim 2px line along the top edge rather than a
+ * filled wash behind the content: a bar this close to the thumb needs its
+ * text to stay at full contrast the whole way down, not fade as the fill
+ * creeps across it.
  */
 export function RestTimerBar() {
   const { remaining, totalSeconds, label, paused, extend, restart, togglePause, stop } =
@@ -293,85 +298,84 @@ export function RestTimerBar() {
         role="timer"
         aria-live="off"
         className={cn(
-          "plate relative mx-auto flex max-w-[560px] items-center gap-3 overflow-hidden p-3",
-          over && "border-accent/60",
+          "relative mx-auto flex max-w-[480px] items-center gap-2.5 overflow-hidden rounded-2xl border bg-surface/95 px-3 py-2.5 shadow-lift backdrop-blur",
+          over ? "border-danger/50" : "border-line-strong",
         )}
       >
-        {/* The fill runs behind the content: the bar itself is the progress. */}
+        {/* A slim top-edge progress line, never a filled wash: the labels and
+            the clock stay at full contrast at every point in the countdown. */}
         <div
           aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-y-0 start-0 transition-[width] duration-300",
-            over ? "bg-accent/25" : "bg-accent/12",
-          )}
-          style={{ width: `${progress}%` }}
-        />
-
-        <div
-          className={cn(
-            "relative flex size-12 shrink-0 items-center justify-center rounded-full border",
-            over ? "border-accent bg-accent/20" : "border-line-strong bg-surface",
-            nearlyDone && "animate-pulse border-accent",
-          )}
+          className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-surface-3"
         >
-          <span
+          <div
             className={cn(
-              "num text-[15px]",
-              over ? "text-accent-glow" : "text-fg",
+              "h-full transition-[width] duration-300",
+              over ? "bg-danger" : "bg-accent",
             )}
-            dir="ltr"
-          >
-            {over ? `+${formatClock(-remaining)}` : formatClock(remaining)}
-          </span>
+            style={{ width: `${progress}%` }}
+          />
         </div>
 
-        <div className="relative min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-extrabold leading-tight">
-            {over ? "انتهت الراحة — ابدأ المجموعة" : "راحة"}
-          </p>
-          <p className="truncate  text-[11px] text-fg-3">
-            {label ?? ""}
+        <span
+          className={cn(
+            "num shrink-0 text-[17px] font-black tabular-nums",
+            over ? "text-danger" : nearlyDone ? "text-accent-glow animate-pulse" : "text-fg",
+          )}
+          dir="ltr"
+        >
+          {over ? `+${formatClock(-remaining)}` : formatClock(remaining)}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11.5px] font-bold leading-tight text-fg-2">
+            {over ? "انتهت الراحة" : "راحة"}
+            {label ? <span className="text-fg-3"> · {label}</span> : null}
           </p>
         </div>
 
-        <div className="relative flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => extend(-15)}
-            aria-label="خصم ١٥ ثانية"
-            className="h-9 rounded-md border border-line-strong px-2  text-[11px] font-bold text-fg-3 transition-colors hover:text-fg"
-          >
-            <span dir="ltr">−15</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => extend(30)}
-            aria-label="إضافة ٣٠ ثانية"
-            className="h-9 rounded-md border border-line-strong px-2  text-[11px] font-bold text-fg-3 transition-colors hover:text-fg"
-          >
-            <span dir="ltr">+30</span>
-          </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {!over ? (
+            <>
+              <button
+                type="button"
+                onClick={() => extend(-15)}
+                aria-label="خصم ١٥ ثانية"
+                className="h-7 rounded-md px-1.5 text-[10.5px] font-bold text-fg-3 transition-colors hover:text-fg"
+              >
+                <span dir="ltr">−15</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => extend(30)}
+                aria-label="إضافة ٣٠ ثانية"
+                className="h-7 rounded-md px-1.5 text-[10.5px] font-bold text-fg-3 transition-colors hover:text-fg"
+              >
+                <span dir="ltr">+30</span>
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={over ? restart : togglePause}
             aria-label={over ? "إعادة الراحة" : paused ? "متابعة" : "إيقاف مؤقت"}
-            className="flex size-9 items-center justify-center rounded-md border border-line-strong text-fg-3 transition-colors hover:text-fg"
+            className="flex size-8 items-center justify-center rounded-full bg-surface-2 text-fg-2 transition-colors hover:text-fg"
           >
             {over ? (
-              <RotateCcw className="size-4" aria-hidden />
+              <RotateCcw className="size-3.5" aria-hidden />
             ) : paused ? (
-              <Play className="size-4" aria-hidden />
+              <Play className="size-3.5" aria-hidden />
             ) : (
-              <Pause className="size-4" aria-hidden />
+              <Pause className="size-3.5" aria-hidden />
             )}
           </button>
           <button
             type="button"
             onClick={stop}
-            aria-label="إنهاء الراحة"
-            className="flex size-9 items-center justify-center rounded-md border border-line-strong text-fg-3 transition-colors hover:text-accent-glow"
+            aria-label="تخطَّ الراحة"
+            className="flex size-8 items-center justify-center rounded-full bg-surface-2 text-fg-2 transition-colors hover:text-accent-glow"
           >
-            <X className="size-4" aria-hidden />
+            <X className="size-3.5" aria-hidden />
           </button>
         </div>
       </div>
