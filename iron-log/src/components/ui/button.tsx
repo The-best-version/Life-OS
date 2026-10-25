@@ -8,12 +8,12 @@ type Size = "sm" | "md" | "lg" | "icon" | "icon-sm";
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-accent text-white font-bold shadow-glowAccent hover:brightness-110 active:brightness-95",
+    "bg-accent text-fg font-bold shadow-glowAccent hover:brightness-110 active:brightness-95",
   default:
-    "bg-accent text-white font-bold shadow-glowAccent hover:brightness-110 active:brightness-95",
+    "bg-accent text-fg font-bold shadow-glowAccent hover:brightness-110 active:brightness-95",
   secondary:
     "bg-surface-3 text-fg font-bold border border-line-strong hover:border-fg-3",
-  ghost: "text-fg-2 font-bold hover:bg-white/[0.04] hover:text-fg",
+  ghost: "text-fg-2 font-bold hover:bg-surface-2 hover:text-fg",
   outline: "border border-line-strong text-fg font-bold hover:border-fg-3",
   danger:
     "bg-danger/15 text-danger font-bold border border-danger/35 hover:bg-danger/22",

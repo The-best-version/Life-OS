@@ -106,7 +106,7 @@ export default function NutritionPage() {
             className={cn(
               "flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors",
               tab === id
-                ? "bg-accent text-white"
+                ? "bg-accent text-fg"
                 : "border border-line-strong bg-surface-2 text-fg-3 hover:text-fg",
             )}
           >

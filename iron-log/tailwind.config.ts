@@ -36,14 +36,14 @@ const config: Config = {
         danger: withAlpha("--danger"),
       },
       borderRadius: {
-        lg: "14px",
-        xl: "18px",
-        "2xl": "22px",
+        lg: "10px",
+        xl: "14px",
+        "2xl": "18px",
       },
       boxShadow: {
-        plate: "inset 0 1px 0 0 hsl(var(--fg) / 0.05), 0 1px 0 0 hsl(0 0% 0% / 0.3)",
-        lift: "0 12px 32px -8px hsl(0 0% 0% / 0.55), inset 0 1px 0 0 hsl(var(--fg) / 0.06)",
-        glowAccent: "0 0 28px -6px hsl(var(--accent) / 0.45)",
+        plate: "3px 3px 0 0 hsl(var(--line-strong) / 0.18)",
+        lift: "4px 4px 0 0 hsl(var(--line-strong) / 0.22)",
+        glowAccent: "2px 2px 0 0 hsl(var(--line-strong) / 0.45)",
       },
       keyframes: {
         "fade-in": {

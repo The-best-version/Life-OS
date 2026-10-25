@@ -18,7 +18,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#14120F",
+  themeColor: "#E9E4D8",
   // The inputs are 16px so iOS will not zoom on focus; locking the scale as
   // well would break pinch-zoom for anyone who needs it.
   maximumScale: 5,

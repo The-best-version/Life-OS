@@ -72,7 +72,7 @@ try {
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">',
-    '<meta name="theme-color" content="#14120F">',
+    '<meta name="theme-color" content="#E9E4D8">',
     '<meta name="description" content="متتبع تمارين محلي بالكامل: سجّل المجموعات والأوزان وشاهد تقدّمك في رسوم واضحة.">',
     "<title>Iron Log — متتبع التمرين</title>",
     '<link rel="preconnect" href="https://fonts.googleapis.com">',

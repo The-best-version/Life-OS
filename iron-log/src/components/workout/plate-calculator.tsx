@@ -15,13 +15,13 @@ import { cn, formatNumber } from "@/lib/utils";
  * decorative, so it earns the exception to "one accent."
  */
 const PLATE_COLORS: Record<number, { bg: string; text: string; border: string }> = {
-  25: { bg: "bg-[#8A3A2E]/30", text: "text-[#E08A74]", border: "border-[#8A3A2E]/60" },
-  20: { bg: "bg-steel/20", text: "text-steel", border: "border-steel/45" },
-  15: { bg: "bg-[#8A7230]/30", text: "text-[#D9B860]", border: "border-[#8A7230]/60" },
-  10: { bg: "bg-success/20", text: "text-success", border: "border-success/45" },
-  5: { bg: "bg-fg/15", text: "text-fg", border: "border-fg/30" },
-  2.5: { bg: "bg-surface-3", text: "text-fg-2", border: "border-line-strong" },
-  1.25: { bg: "bg-surface-3", text: "text-fg-3", border: "border-line-strong" },
+  25: { bg: "bg-[#C0392B]/15", text: "text-[#7A2015]", border: "border-[#C0392B]/55" },
+  20: { bg: "bg-steel/15", text: "text-steel", border: "border-steel/40" },
+  15: { bg: "bg-[#D4A017]/20", text: "text-[#7A5A0A]", border: "border-[#D4A017]/55" },
+  10: { bg: "bg-success/15", text: "text-success", border: "border-success/40" },
+  5: { bg: "bg-surface", text: "text-fg", border: "border-line-strong" },
+  2.5: { bg: "bg-fg", text: "text-surface", border: "border-fg" },
+  1.25: { bg: "bg-fg-2", text: "text-surface", border: "border-fg-2" },
 };
 
 interface PlateCalculatorProps {

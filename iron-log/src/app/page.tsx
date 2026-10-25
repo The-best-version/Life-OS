@@ -168,7 +168,7 @@ export default function DashboardPage() {
 
           <Link
             href="/workout"
-            className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-bold text-white shadow-glowAccent transition-transform active:scale-[0.98]"
+            className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-bold text-fg shadow-glowAccent transition-transform active:scale-[0.98]"
           >
             <Play className="size-4.5 fill-current" />
             <span>ابدأ التمرين الآن</span>

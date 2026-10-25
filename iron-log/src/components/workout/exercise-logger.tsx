@@ -480,7 +480,7 @@ export function ExerciseLogger({
             className={cn(
               "figure size-7 rounded-full border text-[11px] transition-colors",
               rpe === value
-                ? "border-accent bg-accent text-white"
+                ? "border-accent bg-accent text-fg"
                 : "border-line-strong text-fg-3 hover:text-fg",
             )}
           >
