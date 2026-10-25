@@ -39,3 +39,7 @@ graphify-out/.obsidian/
 
 # The throwaway data directory the test server writes to.
 life-os-test-data/
+
+*.log
+*.lnk
+services/telegram-bot.js/

@@ -38,6 +38,14 @@
     "README.md": "HOW-TO-EDIT.md, CLAUDE.md"
   },
 
+  // تمييز أسماء التبويبات في Next.js لمنع تشابه أسماء page.tsx المتعددة
+  "workbench.editor.customLabels.patterns": {
+    "src/app/**/page.tsx": "${dirname}/page.tsx",
+    "src/app/**/layout.tsx": "${dirname}/layout.tsx",
+    "src/components/**": "${filename} [UI]",
+    "src/lib/**": "${filename} [Logic]"
+  },
+
   // ——— دعم TypeScript و Tailwind والواجهة ———
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.preferences.includePackageJsonAutoImports": "auto",

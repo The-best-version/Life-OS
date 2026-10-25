@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "name": "Life OS",
+      "path": "."
+    },
+    {
+      "name": "Iron Log",
+      "path": "./iron-log"
+    }
+  ],
+  "settings": {
+    "window.title": "${dirty}${activeEditorShort} — منظومة المشاريع",
+    "files.exclude": {
+      "**/.git": false,
+      "**/.next": true,
+      "**/.next-verify": true,
+      "**/node_modules": true,
+      "**/*.lnk": true
+    },
+    "editor.tabSize": 2
+  }
+}

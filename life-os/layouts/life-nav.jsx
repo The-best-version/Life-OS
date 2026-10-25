@@ -1,7 +1,7 @@
 import { T } from "../components/life-shared.jsx";
 import { sidebarNav } from "../life-config.js";
 import { GROUP_OF_TAB, NAV_GROUPS, NAV_IDS, TAB_BAR } from "../state/life-state.mjs";
-import { Menu, Settings, Award } from "lucide-react"; // أضفت أيقونة Award
+import { Menu, Settings, Award, Inbox, Bot, ChevronDown, ChevronUp, Bed } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 /* ==================================================================== *
@@ -11,13 +11,43 @@ export const NAV = sidebarNav
   .filter((n) => n.visible !== false && NAV_IDS.includes(n.id))
   .map((n) => ({ ...n }));
 
-// 👇 إضافة زر "حصاد السنة" برمجياً بدون ما تعدل life-config.js 👇
+// 👇 إضافة زر "حصاد السنة" برمجياً 👇
 if (!NAV.find(n => n.id === 'wrapped')) {
   NAV.push({
     id: 'wrapped',
     label: 'حصاد السنة',
     short: 'حصاد',
     icon: Award
+  });
+}
+
+// 👇 إضافة زر "صندوق الوارد" برمجياً 👇
+if (!NAV.find(n => n.id === 'inbox')) {
+  NAV.push({
+    id: 'inbox',
+    label: 'صندوق الوارد',
+    short: 'الوارد',
+    icon: Inbox
+  });
+}
+
+// 👇 إضافة زر "الوكيل الذكي" برمجياً 👇
+if (!NAV.find(n => n.id === 'agent')) {
+  NAV.push({
+    id: 'agent',
+    label: 'الوكيل الذكي',
+    short: 'الوكيل',
+    icon: Bot
+  });
+}
+
+// 👇 إضافة زر "مختبر النوم" برمجياً 👇
+if (!NAV.find(n => n.id === 'sleep')) {
+  NAV.push({
+    id: 'sleep',
+    label: 'مختبر النوم',
+    short: 'النوم',
+    icon: Bed
   });
 }
 
@@ -86,6 +116,27 @@ function NavList({ items, tab, onGo, showLabels }) {
 }
 
 export function NavGroups({ items, tab, onGo, showLabels }) {
+  const [collapsedMap, setCollapsedMap] = useState(() => {
+    try {
+      const raw = localStorage.getItem("los-nav-collapsed-groups");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleGroup = (groupId) => {
+    setCollapsedMap((prev) => {
+      const next = { ...prev, [groupId]: !prev[groupId] };
+      try {
+        localStorage.setItem("los-nav-collapsed-groups", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
     tabsIn: items.filter((n) => GROUP_OF_TAB.get(n.id) === g.id),
@@ -95,49 +146,96 @@ export function NavGroups({ items, tab, onGo, showLabels }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {groups.map((g, i) => (
-        <div key={g.id}>
-          {showLabels ? (
-            <div className="mb-2.5 flex items-center gap-3 px-3">
-              <p
-                className="shrink-0 text-[10px] font-extrabold tracking-widest uppercase"
-                style={{ color: "rgba(255,255,255,0.35)" }}
-              >
-                {g.label}
-              </p>
-              <span
-                aria-hidden="true"
-                className="h-px flex-1"
-                style={{
-                  background: "linear-gradient(to left, rgba(255,255,255,0.08), transparent)",
-                }}
-              />
-            </div>
-          ) : (
-            i > 0 && (
+      {groups.map((g, i) => {
+        const hasActive = g.tabsIn.some((n) => n.id === tab);
+        const isCollapsible = g.id === "tools";
+        const isCollapsed = isCollapsible && !hasActive && !!collapsedMap[g.id];
+
+        return (
+          <div key={g.id}>
+            {showLabels ? (
               <div
-                aria-hidden="true"
-                className="mx-auto mb-4 h-px w-8"
-                style={{ background: "rgba(255,255,255,0.08)" }}
-              />
-            )
-          )}
-          <NavList items={g.tabsIn} tab={tab} onGo={onGo} showLabels={showLabels} />
-        </div>
-      ))}
-      {loose.length > 0 && (
-        <div>
-          {showLabels && (
-            <p
-              className="mb-2 px-3 text-[10px] font-extrabold uppercase tracking-widest"
-              style={{ color: T.faint }}
-            >
-              غير مصنّف
-            </p>
-          )}
-          <NavList items={loose} tab={tab} onGo={onGo} showLabels={showLabels} />
-        </div>
-      )}
+                onClick={isCollapsible ? () => toggleGroup(g.id) : undefined}
+                className={`mb-2.5 flex items-center justify-between px-3 ${
+                  isCollapsible ? "cursor-pointer group select-none" : ""
+                }`}
+                title={isCollapsible ? (isCollapsed ? "اضغط لإظهار الأدوات" : "اضغط لطي الأدوات وتصفية القائمة") : undefined}
+              >
+                <div className="flex items-center gap-2">
+                  <p
+                    className={`shrink-0 text-[10px] font-extrabold tracking-widest uppercase transition-colors ${
+                      isCollapsible ? "group-hover:text-white/70" : ""
+                    }`}
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                  >
+                    {g.label}
+                  </p>
+                  {isCollapsible && (
+                    <span
+                      className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white/35 transition-colors group-hover:text-white/60"
+                      style={{ background: "rgba(255,255,255,0.05)" }}
+                    >
+                      {g.tabsIn.length}
+                    </span>
+                  )}
+                </div>
+                {isCollapsible && (
+                  <span className="text-white/30 transition-transform group-hover:text-white/60">
+                    {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                  </span>
+                )}
+              </div>
+            ) : (
+              i > 0 && (
+                <div
+                  aria-hidden="true"
+                  className="mx-auto mb-4 h-px w-8"
+                  style={{ background: "rgba(255,255,255,0.08)" }}
+                />
+              )
+            )}
+            {!isCollapsed && (
+              <NavList items={g.tabsIn} tab={tab} onGo={onGo} showLabels={showLabels} />
+            )}
+          </div>
+        );
+      })}
+      {loose.length > 0 && (() => {
+        const hasActive = loose.some((n) => n.id === tab);
+        const isCollapsed = !hasActive && !!collapsedMap["ai_assist"];
+        return (
+          <div>
+            {showLabels && (
+              <div
+                onClick={() => toggleGroup("ai_assist")}
+                className="mb-2.5 flex cursor-pointer select-none items-center justify-between px-3 group"
+                title={isCollapsed ? "اضغط لإظهار أدوات الذكاء والمساعد" : "اضغط لطي القسم"}
+              >
+                <div className="flex items-center gap-2">
+                  <p
+                    className="shrink-0 text-[10px] font-extrabold tracking-widest uppercase transition-colors group-hover:text-white/70"
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                  >
+                    الذكاء والمساعد
+                  </p>
+                  <span
+                    className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white/35 transition-colors group-hover:text-white/60"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    {loose.length}
+                  </span>
+                </div>
+                <span className="text-white/30 transition-transform group-hover:text-white/60">
+                  {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                </span>
+              </div>
+            )}
+            {!isCollapsed && (
+              <NavList items={loose} tab={tab} onGo={onGo} showLabels={showLabels} />
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

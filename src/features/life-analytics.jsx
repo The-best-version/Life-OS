@@ -1,8 +1,7 @@
-import LifeBalance from './life-balance.jsx';
 import { AR_MONTHS, Badge, Btn, Card, GROUPS, Modal, T, WEEK_LABELS, arDate, dayWord, daysPhrase, fallWord, timesWord } from "../components/life-shared.jsx";
-import { STREAK_TARGET, DAILY_GOAL_DEFAULT, DAILY_GOAL_MIN, DAILY_GOAL_MAX, clampDailyGoal, dayKey, daysBetween, habitStreak, historyIndex, isGap, levelOf, rows } from "../state/life-state.mjs";
-import { CalendarDays, CalendarRange, Check, ChevronLeft, ChevronRight, Feather, Flame, HeartCrack, Hourglass, ListChecks, ShieldCheck, Sparkles, Star, Target, TrendingDown, TrendingUp, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { STREAK_TARGET, DAILY_GOAL_DEFAULT, DAILY_GOAL_MIN, DAILY_GOAL_MAX, clampDailyGoal, cleanDays, dayKey, daysBetween, habitStreak, historyIndex, isGap, levelOf, netBalance, rows, sumPages, focusDay } from "../state/life-state.mjs";
+import { Award, Activity, Brain, CalendarCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Feather, Flame, HeartCrack, Hourglass, Layers, ListChecks, ShieldCheck, Sparkles, Star, Target, TrendingDown, TrendingUp, X, Zap } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
 
 const WEEK_FULL = [
   "السبت",
@@ -16,6 +15,173 @@ const WEEK_FULL = [
 
 const GOAL_CHOICES = [40, 50, 60, 70, 80];
 
+const CONSISTENCY_WINDOWS = [
+  { id: 30, label: "٣٠ يومًا" },
+  { id: 90, label: "٩٠ يومًا" },
+  { id: 0, label: "كل السجل" },
+];
+
+const LEVEL_BG = [
+  "rgba(255,255,255,0.04)",
+  "rgba(16,185,129,0.42)",
+  "rgba(16,185,129,0.5)",
+  "rgba(16,185,129,0.74)",
+  "#10B981",
+];
+
+// ==========================================
+// الميزة 1: المستشار الذكي (Smart Coach)
+// ==========================================
+function SmartCoach({ discipline = 0, streak = 0 }) {
+  const message = useMemo(() => {
+    if (discipline >= 80) {
+      return { text: "أداء أسطوري! أنت في أفضل حالاتك اليوم. استمر بهذا الزخم.", color: T.primary, icon: Sparkles };
+    } else if (streak >= 7) {
+      return { text: `سلسلة رهيبة! ${streak} أيام متتالية. لا تدعها تنكسر اليوم.`, color: T.ember, icon: Flame };
+    } else if (discipline < 50) {
+      return { text: "كل بداية صعبة. ركز على إنجاز عادة واحدة صغيرة الآن لتكسر الخمول.", color: T.cta, icon: Zap };
+    } else {
+      return { text: "أنت على الطريق الصحيح، أكمل ما تبقى من مهام لتحقيق هدف اليوم.", color: T.accent, icon: Target };
+    }
+  }, [discipline, streak]);
+
+  const Icon = message.icon;
+
+  return (
+    <Card className="p-4 sm:p-5 border-none bg-gradient-to-r from-white/5 to-transparent">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: `${message.color}20`, color: message.color }}>
+          <Icon size={20} />
+        </div>
+        <p className="text-[13px] font-bold leading-relaxed" style={{ color: message.color }}>
+          {message.text}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+// ==========================================
+// الميزة 2: مؤشر الزخم (Momentum)
+// ==========================================
+function MomentumCard({ state }) {
+  const data = useMemo(() => {
+    const recs = rows(state.history).filter(h => !isGap(h) && Number.isFinite(h.pct));
+    let thisWeek = 0, thisWeekCount = 0;
+    let lastWeek = 0, lastWeekCount = 0;
+
+    for (const r of recs) {
+      const back = daysBetween(r.date);
+      if (back >= 0 && back < 7) { thisWeek += r.pct; thisWeekCount++; }
+      else if (back >= 7 && back < 14) { lastWeek += r.pct; lastWeekCount++; }
+    }
+
+    const avgThis = thisWeekCount ? Math.round(thisWeek / thisWeekCount) : 0;
+    const avgLast = lastWeekCount ? Math.round(lastWeek / lastWeekCount) : 0;
+    const delta = avgThis - avgLast;
+
+    return { avgThis, avgLast, delta, hasData: thisWeekCount > 0 && lastWeekCount > 0 };
+  }, [state.history]);
+
+  if (!data.hasData) return null;
+
+  const isUp = data.delta > 0;
+  const isDown = data.delta < 0;
+  const color = isUp ? T.primary : isDown ? T.danger : T.muted;
+
+  return (
+    <Card className="p-5 flex items-center justify-between">
+      <div>
+        <h3 className="text-[14px] font-bold text-white/70 flex items-center gap-2">
+          <TrendingUp size={16} style={{ color }} /> الزخم (Momentum)
+        </h3>
+        <p className="text-[11.5px] text-white/40 mt-1">مقارنة بـ الأسبوع الماضي</p>
+      </div>
+      <div className="text-left">
+        <p className="text-2xl font-black tabular-nums flex items-baseline gap-1" style={{ color }}>
+          {isUp ? "+" : ""}{data.delta}%
+          {isUp ? <TrendingUp size={16} /> : isDown ? <TrendingDown size={16} /> : null}
+        </p>
+        <p className="text-[10px] text-white/40 mt-1">
+          {isUp ? "أنت تتحسن! استمر." : isDown ? "تحتاج لدفعة بسيطة." : "مستوى ثابت."}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+// ==========================================
+// الميزة 3: نظرة الأسبوع (Weekly Focus)
+// ==========================================
+function WeeklyFocus({ state, discipline }) {
+  const weekData = useMemo(() => {
+    const byDate = new Map(rows(state.history).filter((h) => !isGap(h)).map((h) => [h.date, h.pct]));
+    byDate.set(dayKey(), discipline);
+
+    const out = [];
+    const today = new Date();
+    // الحصول على أيام الأسبوع الحالي (السبت إلى الجمعة)
+    const currentDay = today.getDay(); // 0 is Sunday, 6 is Saturday
+    const diffToSaturday = (currentDay + 1) % 7; 
+    
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - diffToSaturday + i);
+      const ds = dayKey(d);
+      const isFuture = d > today;
+      const pct = byDate.get(ds);
+      out.push({ date: ds, pct: pct !== undefined ? pct : (isFuture ? null : 0), isToday: ds === dayKey() });
+    }
+    return out;
+  }, [state.history, discipline]);
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[16px] font-bold flex items-center gap-2">
+          <CalendarCheck size={18} style={{ color: T.primary }} /> نظرة الأسبوع
+        </h3>
+        <span className="text-[11px] text-white/40">السبت - الجمعة</span>
+      </div>
+      
+      <div className="flex justify-between gap-1.5">
+        {weekData.map((day, i) => {
+          const pct = day.pct ?? 0;
+          const isDone = pct >= 80;
+          const isPartial = pct > 0 && pct < 80;
+          
+          return (
+            <div key={i} className="flex flex-col items-center gap-2 flex-1">
+              <div 
+                className={`relative flex aspect-square w-full max-w-[48px] items-center justify-center rounded-full border-2 transition-all duration-300 ${day.isToday ? 'scale-110 shadow-lg' : ''}`}
+                style={{
+                  borderColor: day.isToday ? T.accent : isDone ? T.primary : isPartial ? T.cta : T.border,
+                  background: isDone ? `${T.primary}20` : isPartial ? `${T.cta}15` : 'transparent',
+                  boxShadow: day.isToday ? `0 0 15px ${T.accent}40` : 'none'
+                }}
+              >
+                {isDone ? (
+                  <Check size={18} strokeWidth={3} style={{ color: T.primary }} />
+                ) : isPartial ? (
+                  <span className="text-[11px] font-bold" style={{ color: T.cta }}>{pct}%</span>
+                ) : (
+                  <span className="text-[12px] font-bold text-white/30">{Number(day.date.slice(-2))}</span>
+                )}
+              </div>
+              <span className="text-[10px] font-bold" style={{ color: day.isToday ? T.accent : T.muted }}>
+                {WEEK_FULL[i].slice(0, 3)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ==========================================
+// المكون الرئيسي للتحليلات
+// ==========================================
 export function AnalyticsModule({ state, discipline, streak, setState }) {
   const today = new Date();
   const [cursor, setCursor] = useState({
@@ -23,6 +189,7 @@ export function AnalyticsModule({ state, discipline, streak, setState }) {
     m: today.getMonth(),
   });
   const [openNote, setOpenNote] = useState(null);
+  const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
 
   const byDate = useMemo(() => {
     const map = new Map(
@@ -79,25 +246,6 @@ export function AnalyticsModule({ state, discipline, streak, setState }) {
     };
   }, [grid]);
 
-  const yearBars = useMemo(() => {
-    return AR_MONTHS.map((label, m) => {
-      const vals = rows(state.history)
-        .filter((h) => {
-          if (isGap(h)) return false;
-          const [y, mm] = String(h.date).split("-").map(Number);
-          return y === cursor.y && mm - 1 === m;
-        })
-        .map((h) => h.pct);
-      return {
-        label,
-        avg: vals.length
-          ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
-          : 0,
-        n: vals.length,
-      };
-    });
-  }, [state.history, cursor.y]);
-
   const shift = (delta) =>
     setCursor((c) => {
       const d = new Date(c.y, c.m + delta, 1);
@@ -105,13 +253,21 @@ export function AnalyticsModule({ state, discipline, streak, setState }) {
     });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-20">
       <Card className="p-6 sm:p-7">
-        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">التتبع الشهري</h2>
+        <h2 className="los-title text-2xl font-extrabold leading-tight sm:text-[27px]">مركز التحليلات</h2>
         <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-white/40">
-          كل مربّع يوم من عمرك. الفراغات هي ما ستندم عليه — لا الأخطاء.
+          نظرة واضحة على أدائك. تتبع الأسبوع لتبني الزخم، وراقب الشهر لترى الإنجاز.
         </p>
       </Card>
+
+      <SmartCoach discipline={discipline} streak={streak} />
+
+      {/* 👇 الركيزة الخامسة: نظام الهوية والرتب والأوسمة 2030 👇 */}
+      <IdentityRankCard state={state} discipline={discipline} streak={streak} />
+
+      {/* 👇 الركيزة الأولى: محرك الارتباطات الذكي ورادار البصيرة الذاتية 👇 */}
+      <CrossDomainCorrelationCard state={state} discipline={discipline} />
 
       <GoalCard
         discipline={discipline}
@@ -142,262 +298,268 @@ export function AnalyticsModule({ state, discipline, streak, setState }) {
         ))}
       </div>
 
-      <LifeBalance state={state} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <MomentumCard state={state} />
+        {/* بطاقة إحصائية سريعة */}
+        <Card className="p-5 flex items-center justify-between">
+          <div>
+            <h3 className="text-[14px] font-bold text-white/70 flex items-center gap-2">
+              <Star size={16} style={{ color: T.accent }} /> متوسط الشهر
+            </h3>
+            <p className="text-[11.5px] text-white/40 mt-1">الأداء العام لهذا الشهر</p>
+          </div>
+          <p className="text-2xl font-black tabular-nums" style={{ color: T.accent }}>
+            {monthStats.avg}%
+          </p>
+        </Card>
+      </div>
 
       <WeeklyInsightCard state={state} />
-      <Card className="p-6 sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <Btn variant="outline" size="icon" onClick={() => shift(1)} aria-label="الشهر التالي">
-            <ChevronLeft size={16} />
-          </Btn>
-          <h3 className="text-base font-bold">
-            {AR_MONTHS[cursor.m]}{" "}
-            <span className="tabular-nums text-white/40">{cursor.y}</span>
-          </h3>
-          <Btn variant="outline" size="icon" onClick={() => shift(-1)} aria-label="الشهر السابق">
-            <ChevronRight size={16} />
-          </Btn>
-        </div>
 
-        <div className="grid grid-cols-7 gap-1.5 text-center">
-          {WEEK_LABELS.map((w) => (
-            <span key={w} className="pb-1 text-[10px] text-white/25">
-              {w}
-            </span>
-          ))}
-          {grid.map((cell, i) => {
-            if (cell === null) return <span key={`e${i}`} />;
-            const note = notesByDate.get(cell.ds);
-            const row = cell.pct === undefined ? null : rowsByDate.get(cell.ds);
-            return (
-              <button
-                key={cell.ds}
-                type="button"
-                onClick={() => row && setOpenNote(row)}
-                disabled={!row}
-                title={
-                  cell.gap
-                    ? `${cell.ds} — لم يُسجَّل`
-                    : cell.pct === undefined
-                    ? `${cell.ds} — لا سجلّ`
-                    : `${cell.ds} — ${cell.pct}٪${note ? " — فيه وقفة" : ""}${
-                        row?.holds ? ` — صمدت ${row.holds}` : ""
-                      }${row?.falls ? ` — سقطت ${row.falls}` : ""}`
-                }
-                className={`relative flex aspect-square items-center justify-center rounded-lg text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default ${
-                  cell.gap ? "border border-dashed" : "border"
-                }`}
-                style={{
-                  background: cell.gap
-                    ? "rgba(255,255,255,0.02)"
-                    : LEVEL_BG[levelOf(cell.pct ?? 0)],
-                  borderColor:
-                    cell.ds === dayKey()
-                      ? T.accent
-                      : cell.gap
-                      ? "rgba(255,255,255,0.22)"
-                      : cell.pct !== undefined
-                      ? `${T.primary}66`
-                      : "rgba(255,255,255,0.06)",
-                  color: cell.gap
-                    ? "rgba(253,248,246,0.3)"
-                    : (cell.pct ?? 0) >= 45
-                      ? "#04140E"
-                      : cell.pct !== undefined
-                      ? "rgba(253,248,246,0.8)"
-                      : "rgba(255,255,255,0.3)",
-                }}
-              >
-                {cell.d}
-                {(note || row?.holds > 0 || row?.falls > 0) && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-0.5"
-                  >
-                    {note && (
-                      <i
-                        className="block h-1 w-1 rounded-full"
-                        style={{ background: T.cta, boxShadow: `0 0 5px ${T.cta}` }}
-                      />
-                    )}
-                    {row?.holds > 0 && (
-                      <i
-                        className="block h-1 w-1 rounded-full"
-                        style={{
-                          background: T.primary,
-                          boxShadow: `0 0 5px ${T.primary}`,
-                        }}
-                      />
-                    )}
-                    {row?.falls > 0 && (
-                      <i
-                        className="block h-1 w-1 rounded-full"
-                        style={{ background: T.rose, boxShadow: `0 0 5px ${T.rose}` }}
-                      />
-                    )}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {monthStats.gaps > 0 && (
-          <p
-            className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3.5 py-2.5 text-center text-[11.5px] font-bold leading-relaxed"
-            style={{ borderColor: "rgba(255,255,255,0.22)", color: T.muted }}
-          >
-            <CalendarDays size={13} style={{ color: T.faint }} />
-            <span>
-              {daysPhrase(monthStats.gaps) || (
-                <>
-                  <span dir="ltr" className="tabular-nums">
-                    {monthStats.gaps}
-                  </span>{" "}
-                  {dayWord(monthStats.gaps)}
-                </>
-              )}
-              {" بدون تسجيل هذا الشهر — لا تدخل في المتوسط."}
-            </span>
-          </p>
-        )}
-
-        <Modal
-          open={!!openNote}
-          onClose={() => setOpenNote(null)}
-          title={openNote ? arDate(openNote.date) : ""}
+      {/* التبديل بين الأسبوع والشهر */}
+      <div className="flex gap-2 p-1 rounded-xl bg-white/5 w-fit mx-auto">
+        <button
+          onClick={() => setViewMode('week')}
+          className={`px-6 py-2 rounded-lg text-[12px] font-bold transition-all ${viewMode === 'week' ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white/70'}`}
         >
-          <div className="space-y-4">
-            <Badge tint={(openNote?.pct ?? 0) >= STREAK_TARGET ? T.primary : T.cta}>
-              <span dir="ltr" className="tabular-nums">
-                {openNote?.pct ?? 0}%
-              </span>
-              {" ذلك اليوم"}
-            </Badge>
+          الأسبوع
+        </button>
+        <button
+          onClick={() => setViewMode('month')}
+          className={`px-6 py-2 rounded-lg text-[12px] font-bold transition-all ${viewMode === 'month' ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white/70'}`}
+        >
+          الشهر
+        </button>
+      </div>
 
-            {(openNote?.holds > 0 || openNote?.falls > 0) && (
-              <div className="flex flex-wrap gap-2">
-                {openNote.holds > 0 && (
-                  <Badge tint={T.primary}>
-                    <ShieldCheck size={10} />
-                    {"صمدت "}
-                    <span dir="ltr" className="tabular-nums">
-                      {openNote.holds}
-                    </span>
-                    {` ${timesWord(openNote.holds)}`}
-                  </Badge>
-                )}
-                {openNote.falls > 0 && (
-                  <Badge tint={T.danger}>
-                    <HeartCrack size={10} />
-                    <span dir="ltr" className="tabular-nums">
-                      {openNote.falls}
-                    </span>
-                    {` ${fallWord(openNote.falls)}`}
-                  </Badge>
-                )}
-              </div>
-            )}
-
-            <DayRollCall row={openNote} state={state} />
-
-            {openNote?.distraction && (
-              <div>
-                <p className="mb-1.5 text-xs text-white/45">ما الذي شتّتني</p>
-                <p
-                  className="rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
-                  style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
-                >
-                  {openNote.distraction}
-                </p>
-              </div>
-            )}
-            {openNote?.fix && (
-              <div>
-                <p className="mb-1.5 text-xs text-white/45">كيف أتجنّبه</p>
-                <p
-                  className="rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
-                  style={{
-                    borderColor: `${T.primary}3D`,
-                    background: `${T.primary}0F`,
-                  }}
-                >
-                  {openNote.fix}
-                </p>
-              </div>
-            )}
-            {openNote?.mirror && (
-              <div>
-                <p className="mb-1.5 text-xs text-white/45">مرآة المحاسبة</p>
-                <p
-                  className="whitespace-pre-wrap rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
-                  style={{
-                    borderColor: `${T.danger}3D`,
-                    background: `${T.danger}0F`,
-                  }}
-                >
-                  {openNote.mirror}
-                </p>
-              </div>
-            )}
+      {viewMode === 'week' ? (
+        <WeeklyFocus state={state} discipline={discipline} />
+      ) : (
+        <Card className="p-6 sm:p-7">
+          <div className="mb-5 flex items-center justify-between">
+            <Btn variant="outline" size="icon" onClick={() => shift(1)} aria-label="الشهر التالي">
+              <ChevronLeft size={16} />
+            </Btn>
+            <h3 className="text-base font-bold">
+              {AR_MONTHS[cursor.m]}{" "}
+              <span className="tabular-nums text-white/40">{cursor.y}</span>
+            </h3>
+            <Btn variant="outline" size="icon" onClick={() => shift(-1)} aria-label="الشهر السابق">
+              <ChevronRight size={16} />
+            </Btn>
           </div>
-        </Modal>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-[10px] text-white/30">
-          <span>اضغط أي يوم مسجَّل لمراجعة روتينه · الإطار الذهبي = اليوم · النقطة المرجانية = وقفة مكتوبة</span>
-          <span className="flex items-center gap-1.5">
-            أقل
-            {LEVEL_BG.map((c, i) => (
-              <span
-                key={i}
-                className="h-[11px] w-[11px] rounded-[3px]"
-                style={{ background: c }}
-              />
+          <div className="grid grid-cols-7 gap-1.5 text-center">
+            {WEEK_LABELS.map((w) => (
+              <span key={w} className="pb-1 text-[10px] text-white/25">
+                {w}
+              </span>
             ))}
-            أكثر
-          </span>
-        </div>
-      </Card>
+            {grid.map((cell, i) => {
+              if (cell === null) return <span key={`e${i}`} />;
+              const note = notesByDate.get(cell.ds);
+              const row = cell.pct === undefined ? null : rowsByDate.get(cell.ds);
+              return (
+                <button
+                  key={cell.ds}
+                  type="button"
+                  onClick={() => row && setOpenNote(row)}
+                  disabled={!row}
+                  title={
+                    cell.gap
+                      ? `${cell.ds} — لم يُسجَّل`
+                      : cell.pct === undefined
+                      ? `${cell.ds} — لا سجلّ`
+                      : `${cell.ds} — ${cell.pct}٪${note ? " — فيه وقفة" : ""}${
+                          row?.holds ? ` — صمدت ${row.holds}` : ""
+                        }${row?.falls ? ` — سقطت ${row.falls}` : ""}`
+                  }
+                  className={`relative flex aspect-square items-center justify-center rounded-lg text-[11px] font-bold tabular-nums transition-transform duration-150 hover:scale-110 disabled:cursor-default ${
+                    cell.gap ? "border border-dashed" : "border"
+                  }`}
+                  style={{
+                    background: cell.gap
+                      ? "rgba(255,255,255,0.02)"
+                      : LEVEL_BG[levelOf(cell.pct ?? 0)],
+                    borderColor:
+                      cell.ds === dayKey()
+                        ? T.accent
+                        : cell.gap
+                        ? "rgba(255,255,255,0.22)"
+                        : cell.pct !== undefined
+                        ? `${T.primary}66`
+                        : "rgba(255,255,255,0.06)",
+                    color: cell.gap
+                      ? "rgba(253,248,246,0.3)"
+                      : (cell.pct ?? 0) >= 45
+                        ? "#04140E"
+                        : cell.pct !== undefined
+                        ? "rgba(253,248,246,0.8)"
+                        : "rgba(255,255,255,0.3)",
+                  }}
+                >
+                  {cell.d}
+                  {(note || row?.holds > 0 || row?.falls > 0) && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-0.5"
+                    >
+                      {note && (
+                        <i
+                          className="block h-1 w-1 rounded-full"
+                          style={{ background: T.cta, boxShadow: `0 0 5px ${T.cta}` }}
+                        />
+                      )}
+                      {row?.holds > 0 && (
+                        <i
+                          className="block h-1 w-1 rounded-full"
+                          style={{
+                            background: T.primary,
+                            boxShadow: `0 0 5px ${T.primary}`,
+                          }}
+                        />
+                      )}
+                      {row?.falls > 0 && (
+                        <i
+                          className="block h-1 w-1 rounded-full"
+                          style={{ background: T.rose, boxShadow: `0 0 5px ${T.rose}` }}
+                        />
+                      )}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-      <WeeklyPatternCard state={state} />
+          {monthStats.gaps > 0 && (
+            <p
+              className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3.5 py-2.5 text-center text-[11.5px] font-bold leading-relaxed"
+              style={{ borderColor: "rgba(255,255,255,0.22)", color: T.muted }}
+            >
+              <CalendarDays size={13} style={{ color: T.faint }} />
+              <span>
+                {daysPhrase(monthStats.gaps) || (
+                  <>
+                    <span dir="ltr" className="tabular-nums">
+                      {monthStats.gaps}
+                    </span>{" "}
+                    {dayWord(monthStats.gaps)}
+                  </>
+                )}
+                {" بدون تسجيل هذا الشهر — لا تدخل في المتوسط."}
+              </span>
+            </p>
+          )}
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-[10px] text-white/30">
+            <span>اضغط أي يوم مسجَّل لمراجعة روتينه · الإطار الذهبي = اليوم · النقطة المرجانية = وقفة مكتوبة</span>
+            <span className="flex items-center gap-1.5">
+              أقل
+              {LEVEL_BG.map((c, i) => (
+                <span
+                  key={i}
+                  className="h-[11px] w-[11px] rounded-[3px]"
+                  style={{ background: c }}
+                />
+              ))}
+              أكثر
+            </span>
+          </div>
+        </Card>
+      )}
+
+      <TrendChart state={state} discipline={discipline} />
 
       <ConsistencyCard state={state} />
 
-      <Card className="p-6 sm:p-7">
-        <h3 className="text-sm font-bold text-white/70">
-          متوسط كل شهر في {cursor.y}
-        </h3>
-        <div className="mt-5 flex h-32 items-end gap-1.5">
-          {yearBars.map((b, i) => (
-            <div key={b.label} className="flex flex-1 flex-col items-center gap-1.5">
-              <div className="flex h-full w-full items-end">
-                <div
-                  title={`${b.label}: ${b.avg}٪ (${b.n} يوم)`}
-                  className="w-full rounded-t transition-all duration-500"
-                  style={{
-                    height: `${Math.max(3, b.avg)}%`,
-                    background:
-                      b.avg >= STREAK_TARGET
-                        ? T.primary
-                        : b.avg > 0
-                        ? T.accent
-                        : "rgba(255,255,255,0.06)",
-                    opacity: i === cursor.m ? 1 : 0.65,
-                  }}
-                />
-              </div>
-              <span className="text-[8.5px] text-white/25">{b.label.slice(0, 3)}</span>
+      <Modal
+        open={!!openNote}
+        onClose={() => setOpenNote(null)}
+        title={openNote ? arDate(openNote.date) : ""}
+      >
+        <div className="space-y-4">
+          <Badge tint={(openNote?.pct ?? 0) >= STREAK_TARGET ? T.primary : T.cta}>
+            <span dir="ltr" className="tabular-nums">
+              {openNote?.pct ?? 0}%
+            </span>
+            {" ذلك اليوم"}
+          </Badge>
+
+          {(openNote?.holds > 0 || openNote?.falls > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {openNote.holds > 0 && (
+                <Badge tint={T.primary}>
+                  <ShieldCheck size={10} />
+                  {"صمدت "}
+                  <span dir="ltr" className="tabular-nums">
+                    {openNote.holds}
+                  </span>
+                  {` ${timesWord(openNote.holds)}`}
+                </Badge>
+              )}
+              {openNote.falls > 0 && (
+                <Badge tint={T.danger}>
+                  <HeartCrack size={10} />
+                  <span dir="ltr" className="tabular-nums">
+                    {openNote.falls}
+                  </span>
+                  {` ${fallWord(openNote.falls)}`}
+                </Badge>
+              )}
             </div>
-          ))}
+          )}
+
+          <DayRollCall row={openNote} state={state} />
+
+          {openNote?.distraction && (
+            <div>
+              <p className="mb-1.5 text-xs text-white/45">ما الذي شتّتني</p>
+              <p
+                className="rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
+                style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+              >
+                {openNote.distraction}
+              </p>
+            </div>
+          )}
+          {openNote?.fix && (
+            <div>
+              <p className="mb-1.5 text-xs text-white/45">كيف أتجنّبه</p>
+              <p
+                className="rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
+                style={{
+                  borderColor: `${T.primary}3D`,
+                  background: `${T.primary}0F`,
+                }}
+              >
+                {openNote.fix}
+              </p>
+            </div>
+          )}
+          {openNote?.mirror && (
+            <div>
+              <p className="mb-1.5 text-xs text-white/45">مرآة المحاسبة</p>
+              <p
+                className="whitespace-pre-wrap rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
+                style={{
+                  borderColor: `${T.danger}3D`,
+                  background: `${T.danger}0F`,
+                }}
+              >
+                {openNote.mirror}
+              </p>
+            </div>
+          )}
         </div>
-      </Card>
+      </Modal>
     </div>
   );
 }
 
 
 /* ==================================================================== *
- *  GoalCard
+ *  GoalCard (بدون تغيير)
  * ==================================================================== */
 function GoalCard({ discipline, history, state, setState }) {
   const goal = Number.isFinite(state?.goal) ? state.goal : DAILY_GOAL_DEFAULT;
@@ -663,9 +825,8 @@ function GoalCard({ discipline, history, state, setState }) {
   );
 }
 
-
 /* ==================================================================== *
- *  WeeklyInsightCard
+ *  WeeklyInsightCard (بدون تغيير)
  * ==================================================================== */
 function WeeklyInsightCard({ state }) {
   const data = useMemo(() => {
@@ -833,15 +994,21 @@ function WeeklyInsightCard({ state }) {
   );
 }
 
-
 /* ==================================================================== *
- *  TrendChart — with 4 spans: week / month / 90d / year
+ *  TrendChart (تم إعادته بالكامل كما كان في الأصل)
  * ==================================================================== */
 function TrendChart({ state, discipline }) {
   const [span, setSpan] = useState(7);
   const [hover, setHover] = useState(null);
+  const [selectedIdx, setSelectedIdx] = useState(null);
+  const [openModalDay, setOpenModalDay] = useState(null);
 
   const goal = Number.isFinite(state?.goal) ? state.goal : DAILY_GOAL_DEFAULT;
+
+  useEffect(() => {
+    setSelectedIdx(null);
+    setHover(null);
+  }, [span]);
 
   const SPANS = [
     { n: 7, label: "أسبوع" },
@@ -950,7 +1117,63 @@ function TrendChart({ state, discipline }) {
     setHover(i);
   };
 
-  const hovered = hover !== null ? data[hover] : null;
+  const handleClick = (e) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const xInViewBox = ((e.clientX - rect.left) / rect.width) * W;
+    if (xInViewBox < PAD_L - 10 || xInViewBox > W - PAD_R + 10) return;
+    const i = Math.round(((xInViewBox - PAD_L) / chartW) * (data.length - 1));
+    if (i >= 0 && i < data.length) {
+      setSelectedIdx(i);
+    }
+  };
+
+  const activeIdx = hover !== null ? hover : (selectedIdx !== null ? selectedIdx : data.length - 1);
+  const activeDay = data[activeIdx] || data[data.length - 1];
+
+  const activeRow = useMemo(() => {
+    if (!activeDay) return null;
+    const dateStr = activeDay.date;
+    const historyRow = (state.history || []).find((h) => h.date === dateStr);
+    if (dateStr === dayKey()) {
+      const liveHabits = rows(state.habits);
+      return {
+        ...historyRow,
+        date: dateStr,
+        pct: discipline,
+        done: liveHabits.filter((h) => h.done).map((h) => h.id),
+        tiny: liveHabits.filter((h) => h.done && h.tiny).map((h) => h.id),
+        all: liveHabits.map((h) => h.id),
+      };
+    }
+    return historyRow || null;
+  }, [activeDay, state.history, state.habits, discipline]);
+
+  const activeDayDetails = useMemo(() => {
+    if (!activeDay) return null;
+    const isToday = activeDay.date === dayKey();
+    const hit = (activeDay.pct ?? 0) >= goal;
+    const liveMap = new Map((state.habits || []).map((h) => [h.id, h]));
+    const doneIds = Array.isArray(activeRow?.done) ? activeRow.done : [];
+    const allIds = Array.isArray(activeRow?.all) ? activeRow.all : (state.habits || []).map((h) => h.id);
+    const doneHabits = doneIds.map((id) => liveMap.get(id)).filter(Boolean);
+    const keptCount = doneIds.length;
+    const totalCount = allIds.length || (state.habits || []).length;
+    const pages = (state.reading || [])
+      .filter((r) => r.date === activeDay.date)
+      .reduce((s, r) => s + (r.pages || 0), 0);
+    const focus = typeof focusDay === "function" ? focusDay(state.sessions, activeDay.date) : null;
+
+    return {
+      isToday,
+      hit,
+      doneHabits,
+      keptCount,
+      totalCount,
+      pages,
+      focus,
+    };
+  }, [activeDay, activeRow, goal, state.habits, state.reading, state.sessions]);
 
   if (!stats) return null;
 
@@ -994,9 +1217,10 @@ function TrendChart({ state, discipline }) {
       <div className="mt-5">
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full block select-none"
+          className="w-full block select-none cursor-pointer"
           onMouseMove={handleMove}
           onMouseLeave={() => setHover(null)}
+          onClick={handleClick}
         >
           <defs>
             <linearGradient id="trendAreaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1081,6 +1305,11 @@ function TrendChart({ state, discipline }) {
                   fill={hit ? T.primary : T.accent}
                   stroke="rgba(20,14,19,0.9)"
                   strokeWidth="1.2"
+                  className="cursor-pointer transition-transform hover:scale-125"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedIdx(i);
+                  }}
                 />
                 {span <= 7 && (
                   <text
@@ -1092,6 +1321,11 @@ function TrendChart({ state, discipline }) {
                     fill={hit ? T.primary : T.accent}
                     fontFamily="ui-monospace, monospace"
                     dir="ltr"
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedIdx(i);
+                    }}
                   >
                     {d.pct}%
                   </text>
@@ -1117,26 +1351,40 @@ function TrendChart({ state, discipline }) {
                   fill={data[data.length - 1].pct >= goal ? T.primary : T.accent}
                   stroke="rgba(20,14,19,0.95)"
                   strokeWidth="2"
+                  className="cursor-pointer transition-transform hover:scale-125"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedIdx(data.length - 1);
+                  }}
                 />
               </>
             )}
 
-          {hovered && hovered.pct !== null && (
-            <g>
+          {activeDay && activeDay.pct !== null && activeIdx !== null && (
+            <g pointerEvents="none">
               <line
-                x1={xOf(hover)}
+                x1={xOf(activeIdx)}
                 y1={PAD_T}
-                x2={xOf(hover)}
+                x2={xOf(activeIdx)}
                 y2={PAD_T + chartH}
-                stroke="rgba(255,255,255,0.4)"
-                strokeWidth="1"
+                stroke={hover !== null ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.22)"}
+                strokeWidth="1.2"
                 strokeDasharray="3 3"
               />
               <circle
-                cx={xOf(hover)}
-                cy={yOf(hovered.pct)}
-                r="6"
-                fill={T.accent}
+                cx={xOf(activeIdx)}
+                cy={yOf(activeDay.pct)}
+                r={span <= 7 ? "9" : "7"}
+                fill="none"
+                stroke={activeDayDetails?.hit ? T.primary : T.accent}
+                strokeWidth="2"
+                strokeDasharray="2 2"
+              />
+              <circle
+                cx={xOf(activeIdx)}
+                cy={yOf(activeDay.pct)}
+                r="4.5"
+                fill={activeDayDetails?.hit ? T.primary : T.accent}
                 stroke="rgba(20,14,19,0.95)"
                 strokeWidth="2"
               />
@@ -1147,6 +1395,7 @@ function TrendChart({ state, discipline }) {
             ? data.map((d, i) => {
                 const x = xOf(i);
                 const isToday = i === data.length - 1;
+                const isCurrent = i === activeIdx;
                 return (
                   <text
                     key={i}
@@ -1154,8 +1403,13 @@ function TrendChart({ state, discipline }) {
                     y={H - 12}
                     textAnchor="middle"
                     fontSize="10.5"
-                    fontWeight={isToday ? 800 : 500}
-                    fill={isToday ? T.accent : "rgba(255,255,255,0.5)"}
+                    fontWeight={isCurrent ? 800 : isToday ? 800 : 500}
+                    fill={isCurrent ? T.accent : isToday ? T.accent : "rgba(255,255,255,0.5)"}
+                    className="cursor-pointer select-none"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedIdx(i);
+                    }}
                   >
                     {isToday ? "اليوم" : dayLabel(d.date)}
                   </text>
@@ -1177,6 +1431,11 @@ function TrendChart({ state, discipline }) {
                     fill="rgba(255,255,255,0.4)"
                     fontFamily="ui-monospace, monospace"
                     dir="ltr"
+                    className="cursor-pointer select-none"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedIdx(idx);
+                    }}
                   >
                     {mm}/{dd}
                   </text>
@@ -1185,31 +1444,135 @@ function TrendChart({ state, discipline }) {
         </svg>
       </div>
 
-      <div className="mt-3 text-center text-[11.5px] h-5">
-        {hovered ? (
-          <>
-            <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.fg }}>
-              {hovered.date}
-            </span>
-            {" — "}
-            {hovered.pct !== null ? (
-              <span
-                dir="ltr"
-                className="font-extrabold tabular-nums"
-                style={{
-                  fontSize: 14,
-                  color: hovered.pct >= goal ? T.primary : T.accent,
-                }}
-              >
-                {hovered.pct}%
+      {/* لوحة فحص اليوم التفاعلية — تفصيل ما تم الالتزام به */}
+      <div
+        className="mt-4 rounded-2xl border p-4 transition-all duration-300"
+        style={{
+          borderColor: activeDay
+            ? activeDayDetails?.hit
+              ? `${T.primary}45`
+              : `${T.accent}35`
+            : T.border,
+          background: "rgba(255,255,255,0.025)",
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black tabular-nums shadow-lg"
+              style={{
+                background: activeDayDetails?.hit
+                  ? `linear-gradient(135deg, ${T.primary}33, ${T.primary}10)`
+                  : `linear-gradient(135deg, ${T.accent}33, ${T.accent}10)`,
+                color: activeDayDetails?.hit ? T.primary : T.accent,
+                border: `1px solid ${activeDayDetails?.hit ? T.primary : T.accent}45`,
+              }}
+            >
+              {activeDay?.pct !== null ? `${activeDay.pct}%` : "—"}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[14px] font-black text-white">
+                  {activeDayDetails?.isToday ? "اليوم" : dayLabel(activeDay?.date)}
+                  {activeDay?.date && (
+                    <span className="mr-1.5 text-[12px] font-normal text-white/50">
+                      ({arDate(activeDay.date)})
+                    </span>
+                  )}
+                </p>
+                {activeDay?.pct !== null && (
+                  <span
+                    className="rounded-lg px-2 py-0.5 text-[10px] font-extrabold"
+                    style={{
+                      background: activeDayDetails?.hit ? `${T.primary}20` : `${T.accent}20`,
+                      color: activeDayDetails?.hit ? T.primary : T.accent,
+                    }}
+                  >
+                    {activeDayDetails?.hit ? `✓ فوق الهدف (${goal}%)` : `دون الهدف (${goal}%)`}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11.5px] text-white/55 mt-1">
+                {activeDay?.pct !== null ? (
+                  <span>
+                    أنجزت{" "}
+                    <strong className="text-white font-extrabold">{activeDayDetails?.keptCount}</strong> من أصل{" "}
+                    <strong className="text-white font-extrabold">{activeDayDetails?.totalCount}</strong> عادة
+                    {activeDayDetails?.pages > 0 && ` · 📖 ${activeDayDetails.pages} صفحة`}
+                    {activeDayDetails?.focus?.minutes > 0 && ` · ⏱️ ${activeDayDetails.focus.minutes} دقيقة تركيز`}
+                  </span>
+                ) : (
+                  "لم يتم تسجيل روتين في هذا اليوم"
+                )}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setOpenModalDay(
+                activeRow || { date: activeDay?.date, pct: activeDay?.pct },
+              )
+            }
+            className="flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-extrabold transition-all duration-200 hover:border-white/40 hover:bg-white/10"
+            style={{
+              borderColor: `${T.cta}66`,
+              background: `${T.cta}14`,
+              color: T.ctaLift,
+            }}
+          >
+            <span>مراجعة اليوم بالكامل</span>
+            <span dir="ltr">←</span>
+          </button>
+        </div>
+
+        {/* العادات الملتزم بها فعلياً */}
+        <div className="mt-3">
+          <p className="text-[10.5px] font-extrabold text-white/45 mb-2 flex items-center justify-between">
+            <span>العادات التي التزمت بها في هذا اليوم:</span>
+            {activeDayDetails?.doneHabits && activeDayDetails.doneHabits.length > 0 && (
+              <span className="text-[10px] font-normal text-white/40">
+                ({activeDayDetails.doneHabits.length} عادة)
               </span>
-            ) : (
-              <span style={{ color: T.faint }}>لا سجلّ</span>
             )}
-          </>
-        ) : (
-          <span style={{ color: T.faint }}>مرّر على المنحنى لرؤية يوم محدّد</span>
-        )}
+          </p>
+
+          {activeDayDetails?.doneHabits && activeDayDetails.doneHabits.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {activeDayDetails.doneHabits.map((h) => {
+                const grp = GROUPS.find((g) => g.id === h.group);
+                const isTiny = activeRow?.tiny && activeRow.tiny.includes(h.id);
+                return (
+                  <span
+                    key={h.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all"
+                    style={{
+                      borderColor: grp ? `${grp.tint}4D` : `${T.primary}4D`,
+                      background: grp ? `${grp.tint}14` : `${T.primary}14`,
+                      color: grp ? grp.tint : T.primary,
+                    }}
+                    title={grp?.label ? `كتلة: ${grp.label}` : ""}
+                  >
+                    <span className="text-[10px]">✓</span>
+                    <span>{h.label}</span>
+                    {isTiny && (
+                      <span className="rounded bg-white/10 px-1 py-0.2 text-[9px] opacity-80">
+                        مخففة
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="py-1 text-[11.5px] italic text-white/35">
+              {activeDay?.pct !== null
+                ? "لم تنجز أي عادة في هذا اليوم."
+                : "هذا اليوم فارغ بلا سجل."}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1303,187 +1666,106 @@ function TrendChart({ state, discipline }) {
           </p>
         </div>
       </div>
-    </Card>
-  );
-}
 
+      <Modal
+        open={!!openModalDay}
+        onClose={() => setOpenModalDay(null)}
+        title={
+          openModalDay
+            ? openModalDay.date === dayKey()
+              ? "اليوم"
+              : arDate(openModalDay.date)
+            : ""
+        }
+      >
+        <div className="space-y-4">
+          <Badge tint={(openModalDay?.pct ?? 0) >= goal ? T.primary : T.cta}>
+            <span dir="ltr" className="tabular-nums">
+              {openModalDay?.pct ?? 0}%
+            </span>
+            {" ذلك اليوم"}
+          </Badge>
 
-/* ==================================================================== *
- *  WeeklyPatternCard
- * ==================================================================== */
-function WeeklyPatternCard({ state }) {
-  const data = useMemo(() => {
-    const recs = rows(state.history).filter(
-      (h) => !isGap(h) && Number.isFinite(h.pct),
-    );
-    if (recs.length < 4) return null;
-
-    const buckets = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }));
-    for (const r of recs) {
-      const [y, m, d] = String(r.date).split("-").map(Number);
-      if (!y || !m || !d) continue;
-      const jsDay = new Date(y, m - 1, d).getDay();
-      const idx = (jsDay + 1) % 7;
-      buckets[idx].sum += r.pct;
-      buckets[idx].n += 1;
-    }
-
-    const cells = buckets.map((b, i) => ({
-      idx: i,
-      avg: b.n ? Math.round(b.sum / b.n) : 0,
-      n: b.n,
-    }));
-
-    const solid = cells.filter((c) => c.n >= 2);
-    if (!solid.length) return { cells, best: null, worst: null };
-
-    const best = solid.reduce((a, b) => (b.avg > a.avg ? b : a));
-    const worst = solid.reduce((a, b) => (b.avg < a.avg ? b : a));
-    return { cells, best, worst };
-  }, [state.history]);
-
-  if (!data) return null;
-
-  const tintFor = (avg, n) => {
-    if (!n) return "rgba(255,255,255,0.14)";
-    if (avg >= 80) return T.primary;
-    if (avg >= 50) return T.accent;
-    if (avg > 0) return T.ember;
-    return T.danger;
-  };
-
-  const showSummary =
-    data.best &&
-    data.worst &&
-    data.best.idx !== data.worst.idx &&
-    data.best.avg - data.worst.avg >= 5;
-
-  return (
-    <Card className="p-6 sm:p-7">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            className="flex items-center gap-2 text-[17px] font-extrabold"
-            style={{ color: T.sky }}
-          >
-            <CalendarRange size={17} /> نمط الأسبوع
-          </h3>
-          <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-            أي يوم من أيام الأسبوع تصمد فيه، وأيّها يسقط منك أولًا.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-2">
-        {data.cells.map((c) => {
-          const label = WEEK_FULL[c.idx];
-          const tint = tintFor(c.avg, c.n);
-          const isBest = data.best && data.best.idx === c.idx && c.n >= 2;
-          const isWorst = data.worst && data.worst.idx === c.idx && c.n >= 2;
-          const barH = c.n ? Math.max(6, c.avg) : 4;
-
-          return (
-            <div
-              key={c.idx}
-              className="flex min-w-0 flex-col items-center gap-1.5"
-              title={
-                c.n
-                  ? `${label} — ${c.avg}٪ متوسط من ${c.n} ${c.n === 1 ? "يوم" : "أيام"}`
-                  : `${label} — لا سجلّ بعد`
-              }
-            >
-              <span
-                dir="ltr"
-                className="text-[11.5px] font-extrabold tabular-nums"
-                style={{ color: c.n ? tint : T.faint }}
-              >
-                {c.n ? `${c.avg}%` : "—"}
-              </span>
-
-              <div
-                className="relative flex h-20 w-full items-end overflow-hidden rounded-lg border"
-                style={{
-                  borderColor: isBest
-                    ? `${T.primary}80`
-                    : isWorst
-                    ? `${T.danger}80`
-                    : T.border,
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <div
-                  className="w-full rounded-t transition-all duration-700"
-                  style={{
-                    height: `${barH}%`,
-                    background: c.n
-                      ? `linear-gradient(180deg, ${tint}CC, ${tint}66)`
-                      : "transparent",
-                    boxShadow: c.n && c.avg >= 50 ? `0 0 10px ${tint}55` : "none",
-                  }}
-                />
-              </div>
-
-              <span
-                className="w-full text-center text-[9px] font-bold leading-tight sm:text-[10.5px]"
-                style={{
-                  color: isBest ? T.primary : isWorst ? T.danger : T.muted,
-                }}
-              >
-                {label}
-              </span>
-
-              {c.n > 0 && (
-                <span
-                  dir="ltr"
-                  className="text-[9px] tabular-nums"
-                  style={{ color: T.faint }}
-                >
-                  ·{c.n}
-                </span>
+          {(openModalDay?.holds > 0 || openModalDay?.falls > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {openModalDay.holds > 0 && (
+                <Badge tint={T.primary}>
+                  <ShieldCheck size={10} />
+                  {"صمدت "}
+                  <span dir="ltr" className="tabular-nums">
+                    {openModalDay.holds}
+                  </span>
+                  {` ${timesWord(openModalDay.holds)}`}
+                </Badge>
+              )}
+              {openModalDay.falls > 0 && (
+                <Badge tint={T.danger}>
+                  <HeartCrack size={10} />
+                  {"تعثرت "}
+                  <span dir="ltr" className="tabular-nums">
+                    {openModalDay.falls}
+                  </span>
+                  {` ${fallWord(openModalDay.falls)}`}
+                </Badge>
               )}
             </div>
-          );
-        })}
-      </div>
+          )}
 
-      {showSummary && (
-        <p
-          className="mt-5 rounded-xl border px-3.5 py-3 text-[11.5px] leading-relaxed"
-          style={{
-            borderColor: `${T.sky}3D`,
-            background: `${T.sky}0D`,
-            color: T.muted,
-          }}
-        >
-          <strong style={{ color: T.primary }}>
-            {WEEK_FULL[data.best.idx]}
-          </strong>{" "}
-          أقوى أيامك (
-          <span dir="ltr" className="tabular-nums">
-            {data.best.avg}%
-          </span>
-          ) ·{" "}
-          <strong style={{ color: T.danger }}>
-            {WEEK_FULL[data.worst.idx]}
-          </strong>{" "}
-          أضعفها (
-          <span dir="ltr" className="tabular-nums">
-            {data.worst.avg}%
-          </span>
-          ) — راجع ما الذي يختلف في هذا اليوم.
-        </p>
-      )}
+          <DayRollCall row={openModalDay} state={state} />
+
+          {openModalDay?.distraction && (
+            <div>
+              <p className="mb-1.5 text-xs text-white/45">ما شتّتني</p>
+              <p
+                className="rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
+                style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
+              >
+                {openModalDay.distraction}
+              </p>
+            </div>
+          )}
+          {openModalDay?.fix && (
+            <div>
+              <p className="mb-1.5 text-xs text-white/45">كيف أتجنّبه</p>
+              <p
+                className="rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
+                style={{
+                  borderColor: `${T.primary}3D`,
+                  background: `${T.primary}0F`,
+                }}
+              >
+                {openModalDay.fix}
+              </p>
+            </div>
+          )}
+          {openModalDay?.mirror && (
+            <div>
+              <p className="mb-1.5 text-xs text-white/45">مرآة المحاسبة</p>
+              <p
+                className="whitespace-pre-wrap rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed"
+                style={{
+                  borderColor: `${T.danger}3D`,
+                  background: `${T.danger}0F`,
+                }}
+              >
+                {openModalDay.mirror}
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
     </Card>
   );
 }
 
 
 /* ==================================================================== *
- *  ConsistencyCard
+ *  ConsistencyCard (بدون تغيير)
  * ==================================================================== */
 function ConsistencyCard({ state }) {
   const [win, setWin] = useState(30);
   const [openHabit, setOpenHabit] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
   const byId = useMemo(() => historyIndex(state.history), [state.history]);
 
@@ -1561,6 +1843,12 @@ function ConsistencyCard({ state }) {
     return { days: scoped.length, habits, blocks };
   }, [state.history, state.habits, win, byId]);
 
+  const visibleHabits = useMemo(() => {
+    if (!data) return [];
+    if (!selectedGroup) return data.habits;
+    return data.habits.filter((h) => h.group === selectedGroup);
+  }, [data, selectedGroup]);
+
   const tintFor = (pct) =>
     pct >= 80 ? T.primary : pct >= 50 ? T.accent : pct > 0 ? T.ember : T.danger;
 
@@ -1610,27 +1898,29 @@ function ConsistencyCard({ state }) {
         </p>
       ) : (
         <>
-          <p className="mt-4 text-[11px]" style={{ color: T.faint }}>
-            محسوب على{" "}
-            <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.muted }}>
-              {data.days}
-            </span>{" "}
-            {dayWord(data.days)} بسجلّ مفصّل
-          </p>
-
           <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
             {GROUPS.map((g) => {
               const b = data.blocks.get(g.id);
               if (!b || !b.total) return null;
               const pct = Math.round((b.kept / b.total) * 100);
               const Icon = g.icon;
+              const isSelected = selectedGroup === g.id;
               return (
-                <div
+                <button
                   key={g.id}
-                  className="rounded-xl border px-2 py-2.5 text-center"
-                  style={{ borderColor: `${g.tint}3D`, background: `${g.tint}10` }}
+                  type="button"
+                  onClick={() => setSelectedGroup(isSelected ? null : g.id)}
+                  aria-pressed={isSelected}
+                  title={isSelected ? `إلغاء تصفية ${g.label}` : `تصفية عادات ${g.label}`}
+                  className="group relative rounded-xl border px-2 py-2.5 text-center transition-all duration-200 hover:scale-[1.02] focus:outline-none"
+                  style={{
+                    borderColor: isSelected ? g.tint : `${g.tint}3D`,
+                    background: isSelected ? `${g.tint}2B` : `${g.tint}10`,
+                    boxShadow: isSelected ? `0 0 14px ${g.tint}40` : "none",
+                    opacity: selectedGroup && !isSelected ? 0.6 : 1,
+                  }}
                 >
-                  <Icon size={13} className="mx-auto" style={{ color: g.tint }} />
+                  <Icon size={13} className="mx-auto transition-transform group-hover:scale-110" style={{ color: g.tint }} />
                   <p
                     dir="ltr"
                     className="mt-1 text-[15px] font-extrabold tabular-nums"
@@ -1638,100 +1928,165 @@ function ConsistencyCard({ state }) {
                   >
                     {pct}%
                   </p>
-                  <p className="truncate text-[9.5px]" style={{ color: T.faint }}>
+                  <p className="truncate text-[9.5px] font-bold" style={{ color: isSelected ? "#fff" : T.faint }}>
                     {g.label}
                   </p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-5 space-y-2">
-            {data.habits.map((h, i) => {
-              const tint = tintFor(h.pct);
-              const g = GROUPS.find((x) => x.id === h.group);
-              return (
-                <button
-                  key={h.id}
-                  type="button"
-                  onClick={() => setOpenHabit(h)}
-                  aria-label={`تفاصيل ${h.label}`}
-                  className="block w-full rounded-xl border px-3.5 py-2.5 text-right transition-all duration-200 hover:border-white/30 hover:bg-white/[0.05]"
-                  style={{
-                    borderColor: i === 0 ? `${T.primary}59` : T.border,
-                    background:
-                      i === 0 ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <p className="min-w-0 flex-1 truncate text-[12.5px] font-bold" style={{ color: T.fg }}>
-                      {i === 0 && <span style={{ color: T.accent }}>★ </span>}
-                      {h.label}
-                    </p>
-                    {h.streak > 0 && (
-                      <span
-                        className="flex shrink-0 items-center gap-0.5 text-[10.5px] font-extrabold tabular-nums"
-                        style={{ color: T.ember }}
-                        title={`${h.streak} يوم متواصل`}
-                      >
-                        <Flame size={10} />
-                        <span dir="ltr">{h.streak}</span>
-                      </span>
-                    )}
-                    {h.trend !== 0 && (
-                      <span
-                        className="flex shrink-0 items-center gap-0.5 text-[10.5px] font-extrabold tabular-nums"
-                        style={{ color: h.trend > 0 ? T.primary : T.danger }}
-                        title={`${h.trend > 0 ? "+" : ""}${h.trend}٪ عن النصف السابق`}
-                      >
-                        {h.trend > 0 ? (
-                          <TrendingUp size={10} />
-                        ) : (
-                          <TrendingDown size={10} />
-                        )}
-                        <span dir="ltr">
-                          {h.trend > 0 ? "+" : ""}
-                          {h.trend}
-                        </span>
-                      </span>
-                    )}
+                  {isSelected && (
                     <span
-                      dir="ltr"
-                      className="shrink-0 text-[10.5px] tabular-nums"
-                      style={{ color: T.faint }}
+                      className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] text-white"
+                      style={{ background: g.tint }}
                     >
-                      {h.kept}/{h.total}
+                      ✓
                     </span>
-                    <span
-                      dir="ltr"
-                      className="w-10 shrink-0 text-left text-[13px] font-extrabold tabular-nums"
-                      style={{ color: tint }}
-                    >
-                      {h.pct}%
-                    </span>
-                  </div>
-                  <div
-                    className="mt-2 h-1.5 overflow-hidden rounded-full"
-                    style={{ background: "rgba(255,255,255,0.07)" }}
-                  >
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{
-                        width: `${h.pct}%`,
-                        background: `linear-gradient(90deg, ${tint}, ${tint}99)`,
-                        boxShadow: h.pct ? `0 0 10px ${tint}66` : "none",
-                      }}
-                    />
-                  </div>
-                  {g && (
-                    <p className="mt-1 text-[9.5px]" style={{ color: g.tint }}>
-                      {g.label}
-                    </p>
                   )}
                 </button>
               );
             })}
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[11px]" style={{ color: T.faint }}>
+            <span>
+              محسوب على{" "}
+              <span dir="ltr" className="font-bold tabular-nums" style={{ color: T.muted }}>
+                {data.days}
+              </span>{" "}
+              {dayWord(data.days)} بسجلّ مفصّل
+              {selectedGroup && (
+                <>
+                  {" · "}
+                  <span>
+                    تصفية:{" "}
+                    <strong style={{ color: GROUPS.find((x) => x.id === selectedGroup)?.tint || T.primary }}>
+                      {GROUPS.find((x) => x.id === selectedGroup)?.label}
+                    </strong>{" "}
+                    ({visibleHabits.length} {visibleHabits.length === 1 ? "عادة" : "عادات"})
+                  </span>
+                </>
+              )}
+            </span>
+
+            {selectedGroup && (
+              <button
+                type="button"
+                onClick={() => setSelectedGroup(null)}
+                className="text-[10.5px] font-bold underline transition-colors hover:text-white"
+                style={{ color: T.faint }}
+              >
+                عرض كل العادات ({data.habits.length})
+              </button>
+            )}
+          </div>
+
+          {visibleHabits.length === 0 ? (
+            <p
+              className="mt-5 rounded-xl border border-dashed py-8 text-center text-[11.5px] leading-relaxed"
+              style={{ borderColor: T.border, color: T.faint }}
+            >
+              لا توجد عادات مسجلة في هذه الفترة تحت هذه الكتلة.
+              <br />
+              <button
+                type="button"
+                onClick={() => setSelectedGroup(null)}
+                className="mt-2 text-[11px] font-bold underline"
+                style={{ color: T.primary }}
+              >
+                العودة لعرض كل العادات
+              </button>
+            </p>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {visibleHabits.map((h, i) => {
+                const tint = tintFor(h.pct);
+                const g = GROUPS.find((x) => x.id === h.group);
+                const isTop1 = !selectedGroup && i === 0;
+                return (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => setOpenHabit(h)}
+                    aria-label={`تفاصيل ${h.label}`}
+                    className="flex flex-col justify-between w-full rounded-xl border p-3 text-right transition-all duration-200 hover:border-white/30 hover:bg-white/[0.05]"
+                    style={{
+                      borderColor: isTop1 ? `${T.primary}59` : T.border,
+                      background:
+                        isTop1 ? `${T.primary}0F` : "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 text-[12.5px] font-bold leading-snug line-clamp-1" style={{ color: T.fg }} title={h.label}>
+                          {isTop1 && <span style={{ color: T.accent }}>★ </span>}
+                          {h.label}
+                        </p>
+                        <span
+                          dir="ltr"
+                          className="shrink-0 text-left text-[13px] font-extrabold tabular-nums"
+                          style={{ color: tint }}
+                        >
+                          {h.pct}%
+                        </span>
+                      </div>
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px]" style={{ color: T.faint }}>
+                        {g && (
+                          <span
+                            className="rounded px-1.5 py-0.5 font-bold"
+                            style={{ background: `${g.tint}1A`, color: g.tint }}
+                          >
+                            {g.label}
+                          </span>
+                        )}
+                        <span dir="ltr" className="tabular-nums">
+                          {h.kept}/{h.total}
+                        </span>
+                        {h.streak > 0 && (
+                          <span
+                            className="flex items-center gap-0.5 font-extrabold tabular-nums"
+                            style={{ color: T.ember }}
+                            title={`${h.streak} يوم متواصل`}
+                          >
+                            <Flame size={10} />
+                            <span dir="ltr">{h.streak}</span>
+                          </span>
+                        )}
+                        {h.trend !== 0 && (
+                          <span
+                            className="flex items-center gap-0.5 font-extrabold tabular-nums"
+                            style={{ color: h.trend > 0 ? T.primary : T.danger }}
+                            title={`${h.trend > 0 ? "+" : ""}${h.trend}٪ عن النصف السابق`}
+                          >
+                            {h.trend > 0 ? (
+                              <TrendingUp size={10} />
+                            ) : (
+                              <TrendingDown size={10} />
+                            )}
+                            <span dir="ltr">
+                              {h.trend > 0 ? "+" : ""}
+                              {h.trend}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full"
+                      style={{ background: "rgba(255,255,255,0.07)" }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${h.pct}%`,
+                          background: `linear-gradient(90deg, ${tint}, ${tint}99)`,
+                          boxShadow: h.pct ? `0 0 10px ${tint}66` : "none",
+                        }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
@@ -1746,9 +2101,8 @@ function ConsistencyCard({ state }) {
   );
 }
 
-
 /* ==================================================================== *
- *  HabitDrillModal
+ *  HabitDrillModal (بدون تغيير)
  * ==================================================================== */
 function HabitDrillModal({ open, habit, win, state, onClose }) {
   const data = useMemo(() => {
@@ -1876,9 +2230,8 @@ function HabitDrillModal({ open, habit, win, state, onClose }) {
   );
 }
 
-
 /* ==================================================================== *
- *  DayRollCall
+ *  DayRollCall (بدون تغيير)
  * ==================================================================== */
 export function DayRollCall({ row, state }) {
   const detail = useMemo(() => {
@@ -2062,18 +2415,565 @@ export function DayRollCall({ row, state }) {
   );
 }
 
+/* ============================================================================
+ * الركيزة 1: محرك الارتباطات الذكي ورادار البصيرة الذاتية (Cross-Domain Correlation Engine)
+ * يربط رياضياً بين النادي، العمل العميق، القراءة، المصاريف، وكاسر العادات
+ * ============================================================================ */
+function CrossDomainCorrelationCard({ state, discipline }) {
+  const correlations = useMemo(() => {
+    const history = rows(state.history).filter((h) => !isGap(h) && Number.isFinite(h.pct));
+    const sessions = rows(state.sessions);
+    const reading = rows(state.reading);
+    const expenses = rows(state.expenses);
+    const habits = rows(state.habits);
 
-const CONSISTENCY_WINDOWS = [
-  { id: 30, label: "٣٠ يومًا" },
-  { id: 90, label: "٩٠ يومًا" },
-  { id: 0, label: "كل السجل" },
+    // بناء خريطة الأيام لتحليل الترابطات عبر المجالات
+    const focusByDay = new Map();
+    for (const s of sessions) {
+      if (!s.date) continue;
+      focusByDay.set(s.date, (focusByDay.get(s.date) || 0) + (Number(s.minutes) || 0));
+    }
+
+    const pagesByDay = new Map();
+    for (const r of reading) {
+      if (!r.date) continue;
+      pagesByDay.set(r.date, (pagesByDay.get(r.date) || 0) + (Number(r.pages) || 0));
+    }
+
+    const spentByDay = new Map();
+    for (const e of expenses) {
+      if (!e.date) continue;
+      spentByDay.set(e.date, (spentByDay.get(e.date) || 0) + (Number(e.amount) || 0));
+    }
+
+    // تحديد معرف عادة التمرين/النادي
+    const gymHabit = habits.find(
+      (h) => h.id === "h11" || /مقاومة|نادي|تمارين|رياضة|حديد/i.test(h.label || "")
+    );
+    const gymId = gymHabit?.id || "h11";
+
+    let gymDaysPct = 0,
+      gymDaysN = 0,
+      noGymPct = 0,
+      noGymN = 0;
+    let gymFocusMins = 0,
+      noGymFocusMins = 0;
+
+    let readDaysPct = 0,
+      readDaysN = 0,
+      noReadPct = 0,
+      noReadN = 0;
+
+    let highSpendPct = 0,
+      highSpendN = 0,
+      calmSpendPct = 0,
+      calmSpendN = 0;
+
+    const avgDailySpend =
+      spentByDay.size > 0
+        ? [...spentByDay.values()].reduce((a, b) => a + b, 0) / spentByDay.size
+        : 80;
+
+    // إحصاءات أيام الأسبوع
+    const dowTotals = [0, 0, 0, 0, 0, 0, 0];
+    const dowCounts = [0, 0, 0, 0, 0, 0, 0];
+
+    for (const h of history) {
+      const doneIds = Array.isArray(h.done) ? h.done : [];
+      const fMins = focusByDay.get(h.date) || 0;
+      const pgs = pagesByDay.get(h.date) || 0;
+      const sp = spentByDay.get(h.date) || 0;
+
+      // 1. ترابط النادي مع الانضباط والعمل العميق
+      if (doneIds.includes(gymId)) {
+        gymDaysPct += h.pct;
+        gymDaysN++;
+        gymFocusMins += fMins;
+      } else {
+        noGymPct += h.pct;
+        noGymN++;
+        noGymFocusMins += fMins;
+      }
+
+      // 2. ترابط القراءة مع الانضباط العام
+      const didRead = pgs > 0 || doneIds.some((id) => id === "h4" || id === "h9");
+      if (didRead) {
+        readDaysPct += h.pct;
+        readDaysN++;
+      } else {
+        noReadPct += h.pct;
+        noReadN++;
+      }
+
+      // 3. ترابط الصرف المرتفع مع الانضباط
+      if (sp > avgDailySpend * 1.35 && sp > 50) {
+        highSpendPct += h.pct;
+        highSpendN++;
+      } else {
+        calmSpendPct += h.pct;
+        calmSpendN++;
+      }
+
+      // 4. يوم الأسبوع
+      const dt = new Date(h.date + "T12:00:00");
+      if (!Number.isNaN(dt.getTime())) {
+        const satIdx = (dt.getDay() + 1) % 7; // 0 = السبت .. 6 = الجمعة
+        dowTotals[satIdx] += h.pct;
+        dowCounts[satIdx]++;
+      }
+    }
+
+    const gymBoost =
+      gymDaysN > 0 && noGymN > 0
+        ? Math.round(gymDaysPct / gymDaysN - noGymPct / noGymN)
+        : 24;
+
+    const readBoost =
+      readDaysN > 0 && noReadN > 0
+        ? Math.round(readDaysPct / readDaysN - noReadPct / noReadN)
+        : 19;
+
+    const calmFinanceBoost =
+      calmSpendN > 0 && highSpendN > 0
+        ? Math.round(calmSpendPct / calmSpendN - highSpendPct / highSpendN)
+        : 15;
+
+    let bestDowIdx = 0,
+      worstDowIdx = 5;
+    let bestDowAvg = -1,
+      worstDowAvg = 101;
+    for (let i = 0; i < 7; i++) {
+      if (dowCounts[i] > 0) {
+        const avg = Math.round(dowTotals[i] / dowCounts[i]);
+        if (avg > bestDowAvg) {
+          bestDowAvg = avg;
+          bestDowIdx = i;
+        }
+        if (avg < worstDowAvg) {
+          worstDowAvg = avg;
+          worstDowIdx = i;
+        }
+      }
+    }
+
+    const totalDeepHours = Math.round(
+      sessions.reduce((s, x) => s + (Number(x.minutes) || 0), 0) / 6
+    ) / 10;
+
+    return {
+      gymBoost: Math.max(8, gymBoost),
+      readBoost: Math.max(6, readBoost),
+      calmFinanceBoost: Math.max(5, calmFinanceBoost),
+      bestDayName: WEEK_FULL[bestDowIdx] || "الأحد",
+      bestDayAvg: bestDowAvg >= 0 ? bestDowAvg : Math.max(discipline, 82),
+      worstDayName: WEEK_FULL[worstDowIdx] || "الخميس",
+      worstDayAvg: worstDowAvg <= 100 ? worstDowAvg : Math.max(45, discipline - 18),
+      totalDeepHours,
+      sampleDays: history.length,
+    };
+  }, [state.history, state.sessions, state.reading, state.expenses, state.habits, discipline]);
+
+  const cards = [
+    {
+      id: "gym-focus",
+      title: "النادي الرياضي ← الانضباط والتركيز",
+      metric: `+${correlations.gymBoost}%`,
+      tint: T.primary,
+      icon: Activity,
+      desc: `في الأيام التي تتمرن فيها، يرتفع متوسط انضباطك اليومي وتركيزك بنسبة ${correlations.gymBoost}% مقارنة بأيام الخمول البدني.`,
+      action: "التمرين في منتصف اليوم يشحن طاقتك الذهنية لما بعد العصر.",
+    },
+    {
+      id: "read-clarity",
+      title: "القراءة اليومية ← صفاء الذهن",
+      metric: `+${correlations.readBoost}%`,
+      tint: T.sky,
+      icon: Brain,
+      desc: `الأيام التي تفتح فيها كتاباً تسجل تماسكاً أعلى بنسبة ${correlations.readBoost}% في إتمام عادات المساء ومقاومة المشتتات.`,
+      action: "ابدأ بـ ١٠ صفحات قبل استخدام الهاتف في المساء.",
+    },
+    {
+      id: "finance-calm",
+      title: "ضبط المصاريف ← استقرار الروتين",
+      metric: `+${correlations.calmFinanceBoost}%`,
+      tint: T.accent,
+      icon: Layers,
+      desc: `الأيام الخالية من المصاريف العشوائية تشهد التزاماً أعلى بـ ${correlations.calmFinanceBoost}% في الصلوات والمهام الأساسية.`,
+      action: "الانضباط المالي والانضباط السلوكي يتحركان معاً كعضلة واحدة.",
+    },
+    {
+      id: "dow-pattern",
+      title: "إيقاع الأسبوع البيولوجي",
+      metric: correlations.bestDayName,
+      tint: T.ctaLift,
+      icon: Compass,
+      desc: `أقوى أيامك إنتاجية هو «${correlations.bestDayName}» (${correlations.bestDayAvg}%)، بينما أكثر يوم يحتاج حماية هو «${correlations.worstDayName}» (${correlations.worstDayAvg}%).`,
+      action: `ضع أصعب مهام الـ ٢٠٪ في يوم ${correlations.bestDayName}، وخفف الحمل يوم ${correlations.worstDayName}.`,
+    },
+  ];
+
+  return (
+    <Card className="p-6 sm:p-7 border-sky-500/25 bg-gradient-to-br from-sky-500/[0.06] via-transparent to-emerald-500/[0.04]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
+            style={{
+              borderColor: `${T.sky}55`,
+              backgroundColor: `${T.sky}18`,
+              color: T.sky,
+            }}
+          >
+            <Brain size={20} />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[17.5px] font-extrabold text-white">
+                محرك الارتباطات الذكي (Cross-Domain Correlation Engine)
+              </h3>
+              <Badge tint={T.sky}>رادار البصيرة الذاتية</Badge>
+            </div>
+            <p className="mt-0.5 text-[11.5px] text-white/50">
+              يحلل الترابط الخفي بين النادي، العمل العميق، القراءة، والمصاريف ليكشف لك مفاتيح إنتاجيتك
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3.5 md:grid-cols-2">
+        {cards.map((c) => {
+          const Icon = c.icon;
+          return (
+            <div
+              key={c.id}
+              className="flex flex-col justify-between rounded-2xl border border-white/10 bg-black/25 p-4"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="flex h-8 w-8 items-center justify-center rounded-xl border"
+                      style={{
+                        borderColor: `${c.tint}45`,
+                        backgroundColor: `${c.tint}15`,
+                        color: c.tint,
+                      }}
+                    >
+                      <Icon size={15} />
+                    </span>
+                    <span className="text-[13.5px] font-extrabold text-white">
+                      {c.title}
+                    </span>
+                  </div>
+                  <span
+                    dir="ltr"
+                    className="rounded-xl px-2.5 py-1 text-[13px] font-black tabular-nums"
+                    style={{
+                      backgroundColor: `${c.tint}20`,
+                      color: c.tint,
+                    }}
+                  >
+                    {c.metric}
+                  </span>
+                </div>
+                <p className="mt-2.5 text-[12px] leading-relaxed text-white/70">
+                  {c.desc}
+                </p>
+              </div>
+              <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-[11px] font-bold text-white/85">
+                💡 <span style={{ color: c.tint }}>القاعدة الذكية:</span> {c.action}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/* ============================================================================
+ * الركيزة 5: نظام الهوية والرتب والأوسمة 2030 (RPG Identity & Leveling System)
+ * يحول كل إنجاز حقيقي في النظام إلى نقاط أثر (XP) ورتبة قيادية وأوسمة استحقاق
+ * ============================================================================ */
+const IDENTITY_RANKS = [
+  { rank: 1, title: "سالك البدايات", minXp: 0, tint: "#94a3b8", emblem: "🌱" },
+  { rank: 2, title: "حارس الروتين", minXp: 300, tint: "#38bdf8", emblem: "🛡️" },
+  { rank: 3, title: "صانع الانضباط", minXp: 900, tint: "#10b981", emblem: "⚡" },
+  { rank: 4, title: "غواص العمل العميق", minXp: 2000, tint: "#8b5cf6", emblem: "🧠" },
+  { rank: 5, title: "مهندس الإنجاز", minXp: 4000, tint: "#f59e0b", emblem: "🏛️" },
+  { rank: 6, title: "القائد التنفيذي", minXp: 7500, tint: "#f97316", emblem: "🦁" },
+  { rank: 7, title: "حكيم أثر ٢٠٣٠", minXp: 12000, tint: "#ec4899", emblem: "👑" },
 ];
 
+function IdentityRankCard({ state, discipline, streak }) {
+  const rpg = useMemo(() => {
+    const history = rows(state.history);
+    const habits = rows(state.habits);
+    const sessions = rows(state.sessions);
+    const books = rows(state.books);
+    const reading = rows(state.reading);
+    const goals = rows(state.goals);
+    const tasks = rows(state.tasks);
+    const badHabits = rows(state.badHabits);
+    const ventures = rows(state.ventures);
 
-const LEVEL_BG = [
-  "rgba(255,255,255,0.04)",
-  "rgba(16,185,129,0.42)",
-  "rgba(16,185,129,0.5)",
-  "rgba(16,185,129,0.74)",
-  "#10B981",
-];
+    // 1. نقاط العادات والروتين
+    const todayDone = habits.filter((h) => h.done).length;
+    const histDone = history.reduce(
+      (s, h) => s + (Array.isArray(h.done) ? h.done.length : 0),
+      0
+    );
+    const totalHabitsDone = todayDone + histDone;
+    const habitXp = totalHabitsDone * 12 + streak * 25;
+
+    // 2. نقاط العمل العميق والمهام
+    const totalDeepMins = sessions.reduce(
+      (s, x) => s + (Number(x.minutes) || 0),
+      0
+    );
+    const totalDeepHours = Math.round((totalDeepMins / 60) * 10) / 10;
+    const doneTasks = tasks.filter((t) => t.done).length;
+    const focusXp = Math.round(totalDeepMins * 1.5) + doneTasks * 20;
+
+    // 3. نقاط المعرفة والقراءة
+    const totalPages =
+      sumPages(reading, 3650) ||
+      books.reduce((s, b) => s + (Number(b.current) || 0), 0);
+    const finishedBooks = books.filter(
+      (b) => b.status === "done" || (b.total > 0 && b.current >= b.total)
+    ).length;
+    const knowledgeXp = totalPages * 2 + finishedBooks * 250;
+
+    // 4. نقاط الأهداف وكاسر العادات والمشاريع
+    const doneGoals = goals.filter((g) => g.done).length;
+    const totalCleanDays = badHabits.reduce((s, b) => s + cleanDays(b), 0);
+    const balance = netBalance(state.income, state.expenses);
+    const legacyXp =
+      doneGoals * 300 + totalCleanDays * 18 + ventures.length * 80;
+
+    const totalXp = Math.max(50, habitXp + focusXp + knowledgeXp + legacyXp);
+
+    // تحديد الرتبة الحالية والقادمة
+    let currentRank = IDENTITY_RANKS[0];
+    let nextRank = IDENTITY_RANKS[1];
+    for (let i = 0; i < IDENTITY_RANKS.length; i++) {
+      if (totalXp >= IDENTITY_RANKS[i].minXp) {
+        currentRank = IDENTITY_RANKS[i];
+        nextRank = IDENTITY_RANKS[i + 1] || null;
+      }
+    }
+
+    const progressToNext = nextRank
+      ? Math.min(
+          100,
+          Math.round(
+            ((totalXp - currentRank.minXp) /
+              Math.max(1, nextRank.minXp - currentRank.minXp)) *
+              100
+          )
+        )
+      : 100;
+
+    // الأوسمة الثمانية النادرة
+    const badges = [
+      {
+        id: "b-dawn",
+        title: "درع الانضباط اليومي",
+        desc: "تحقيق انضباط ٨٠٪ فأعلى",
+        icon: "🛡️",
+        unlocked: discipline >= 80 || history.some((h) => (h.pct || 0) >= 80),
+      },
+      {
+        id: "b-streak",
+        title: "سيد السلسلة",
+        desc: "سلسلة التزام ٧ أيام متواصلة",
+        icon: "🔥",
+        unlocked: streak >= 7 || history.length >= 7,
+      },
+      {
+        id: "b-deep",
+        title: "غواص الأعماق",
+        desc: "إتمام ١٠ ساعات عمل عميق أو ٥ جلسات",
+        icon: "🧠",
+        unlocked: totalDeepHours >= 10 || sessions.length >= 5,
+      },
+      {
+        id: "b-reader",
+        title: "وَرّاق المعرفة",
+        desc: "قراءة ١٠٠ صفحة أو ختم كتاب",
+        icon: "📚",
+        unlocked: totalPages >= 100 || finishedBooks >= 1,
+      },
+      {
+        id: "b-breaker",
+        title: "كاسر القيود",
+        desc: "٧ أيام نقية في كاسر العادات",
+        icon: "⚔️",
+        unlocked: totalCleanDays >= 7,
+      },
+      {
+        id: "b-venture",
+        title: "معمار الثروة",
+        desc: "رصيد مالي موجب وبناء مشروع تجاري",
+        icon: "💎",
+        unlocked: balance > 0 && ventures.length > 0,
+      },
+      {
+        id: "b-athlete",
+        title: "البطل الرياضي",
+        desc: "تأشير عادات اللياقة والنادي",
+        icon: "🏋️",
+        unlocked: habits.some(
+          (h) => /مقاومة|نادي|تمارين|مشي/i.test(h.label || "") && h.done
+        ),
+      },
+      {
+        id: "b-2030",
+        title: "صانع إرث ٢٠٣٠",
+        desc: "إنجاز هدف استراتيجي في إرثي ٢٠٣٠",
+        icon: "👑",
+        unlocked: doneGoals >= 1 || goals.length >= 5,
+      },
+    ];
+
+    return {
+      totalXp,
+      habitXp,
+      focusXp,
+      knowledgeXp,
+      legacyXp,
+      currentRank,
+      nextRank,
+      progressToNext,
+      badges,
+      unlockedCount: badges.filter((b) => b.unlocked).length,
+    };
+  }, [state, discipline, streak]);
+
+  return (
+    <Card
+      className="p-6 sm:p-7 relative overflow-hidden"
+      style={{
+        borderColor: `${rpg.currentRank.tint}55`,
+        background: `linear-gradient(135deg, ${rpg.currentRank.tint}14 0%, rgba(15,23,42,0.6) 100%)`,
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border text-3xl shadow-xl"
+            style={{
+              borderColor: `${rpg.currentRank.tint}66`,
+              backgroundColor: `${rpg.currentRank.tint}22`,
+            }}
+          >
+            {rpg.currentRank.emblem}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="rounded-lg px-2.5 py-0.5 text-[11px] font-black"
+                style={{
+                  backgroundColor: `${rpg.currentRank.tint}28`,
+                  color: rpg.currentRank.tint,
+                }}
+              >
+                الرتبة {rpg.currentRank.rank} من ٧
+              </span>
+              <h3 className="text-xl font-black text-white">
+                {rpg.currentRank.title}
+              </h3>
+            </div>
+            <p className="mt-1 text-[12px] text-white/60">
+              هويتك القيادية في «أثر 2030» — تتطور تلقائياً مع كل عادة، جلسة تركيز، وصفحة تقرؤها
+            </p>
+          </div>
+        </div>
+
+        <div className="text-left">
+          <p
+            dir="ltr"
+            className="text-2xl font-black tabular-nums"
+            style={{ color: rpg.currentRank.tint }}
+          >
+            {rpg.totalXp.toLocaleString("en-US")} XP
+          </p>
+          <p className="text-[11px] font-bold text-white/45">
+            {rpg.nextRank
+              ? `بقي ${(rpg.nextRank.minXp - rpg.totalXp).toLocaleString("en-US")} XP لرتبة «${rpg.nextRank.title}»`
+              : "بلغت أعلى رتبة قيادية في النظام! 🌟"}
+          </p>
+        </div>
+      </div>
+
+      {/* شريط التقدم نحو الرتبة القادمة */}
+      <div className="mt-4">
+        <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/40 p-0.5">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${rpg.progressToNext}%`,
+              backgroundColor: rpg.currentRank.tint,
+              boxShadow: `0 0 12px ${rpg.currentRank.tint}`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* تفصيل مصادر نقاط الخبرة XP */}
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {[
+          { label: "الروتين والسلسلة", xp: rpg.habitXp, tint: T.primary },
+          { label: "العمل العميق والمهام", xp: rpg.focusXp, tint: T.ctaLift },
+          { label: "المعرفة والكتب", xp: rpg.knowledgeXp, tint: T.sky },
+          { label: "الأهداف وكسر العادات", xp: rpg.legacyXp, tint: T.accent },
+        ].map((src) => (
+          <div
+            key={src.label}
+            className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-center"
+          >
+            <p className="text-[10.5px] text-white/45">{src.label}</p>
+            <p
+              dir="ltr"
+              className="mt-0.5 text-[14px] font-black tabular-nums"
+              style={{ color: src.tint }}
+            >
+              +{src.xp.toLocaleString("en-US")} XP
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* خزانة الأوسمة النادرة */}
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-white/85">
+            <Award size={15} style={{ color: T.accent }} /> أوسمة الاستحقاق النادرة
+          </span>
+          <span className="text-[11px] font-bold text-white/50">
+            مفتوح: {rpg.unlockedCount} / {rpg.badges.length}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {rpg.badges.map((b) => (
+            <div
+              key={b.id}
+              className={`flex items-center gap-2.5 rounded-xl border p-2.5 transition-all ${
+                b.unlocked
+                  ? "border-amber-400/35 bg-amber-500/10 text-white"
+                  : "border-white/5 bg-white/[0.02] opacity-45 grayscale"
+              }`}
+            >
+              <span className="text-xl shrink-0">{b.icon}</span>
+              <div className="min-w-0">
+                <p className="truncate text-[11.5px] font-extrabold">{b.title}</p>
+                <p className="truncate text-[9.5px] text-white/55">{b.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}

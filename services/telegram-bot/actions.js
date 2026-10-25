@@ -80,6 +80,11 @@ import {
   prepPicks,
   tomorrowKey,
   TOP_TASK_CAP,
+  eventsIn,
+  isEventDone,
+  uniPending,
+  logicalNow,
+  minsIn,
   
   // الميزة الجوهرية: استيراد دوال الأهداف
   syncHabitToGoals,
@@ -179,6 +184,38 @@ export function finishTask(state, id) {
   };
 }
 
+export function postponeTask(state, id) {
+  const list = rows(state.tasks);
+  const t = list.find((x) => x.id === id);
+  if (!t) return { refused: "هذه المهمة لم تعد موجودة." };
+  const tomorrow = tomorrowKey();
+  const nextTasks = list.map((x) =>
+    x.id === id ? { ...x, today: false, scheduled: true, due: tomorrow } : x
+  );
+  return {
+    kind: "task-postpone",
+    row: t,
+    tomorrow,
+    next: { ...state, tasks: nextTasks },
+    before: { tasks: state.tasks },
+  };
+}
+
+export function promoteTaskToToday(state, id) {
+  const list = rows(state.tasks);
+  const t = list.find((x) => x.id === id);
+  if (!t) return { refused: "هذه المهمة لم تعد موجودة." };
+  const nextTasks = list.map((x) =>
+    x.id === id ? { ...x, today: true, done: false } : x
+  );
+  return {
+    kind: "task-promote",
+    row: t,
+    next: { ...state, tasks: nextTasks },
+    before: { tasks: state.tasks },
+  };
+}
+
 /* --- the water -------------------------------------------------------- */
 export function drinkWater(state, count = 1) {
   const goal = clampGoal(state.waterGoal);
@@ -193,6 +230,45 @@ export function drinkWater(state, count = 1) {
     goal,
     next: stampToday({ ...state, water: now }),
     before: { water: state.water, history: state.history },
+  };
+}
+
+/* --- the sleep -------------------------------------------------------- */
+export function logSleep(state, hours, note = "") {
+  const h = Math.min(24, Math.max(1, Number(hours) || 0));
+  const cycles = +(h / 1.5).toFixed(1);
+  const date = dayKey();
+  const existingSleepLogs = Array.isArray(state.sleepLogs) ? state.sleepLogs : [];
+  const newLog = {
+    id: uid(),
+    date,
+    hours: h,
+    cycles,
+    notes: note || "",
+    source: "telegram",
+    at: new Date().toISOString(),
+  };
+  const nextLogs = [newLog, ...existingSleepLogs.filter((l) => l.date !== date)];
+
+  // تحديث ساعات النوم في طقوس الصباح أيضاً
+  const ritual = state.morningRitual || {};
+  const nextRitual = { ...ritual, sleepHours: h };
+
+  return {
+    kind: "sleep",
+    hours: h,
+    cycles,
+    date,
+    next: stampToday({
+      ...state,
+      sleepLogs: nextLogs,
+      morningRitual: nextRitual,
+    }),
+    before: {
+      sleepLogs: state.sleepLogs,
+      morningRitual: state.morningRitual,
+      history: state.history,
+    },
   };
 }
 
@@ -571,10 +647,27 @@ export function startFocus(state, { minutes = 0, label = "", taskId = null } = {
     }),
     now,
   );
+  const nowD = new Date(now);
+  const sched = daySchedule(state, nowD);
+  const endEpoch = now + planned * 60000;
+  let clash = null;
+  for (const lec of sched.lectures) {
+    const mins = minsIn(lec.from);
+    if (mins !== null) {
+      const lecDate = new Date(nowD);
+      lecDate.setHours(0, mins, 0, 0);
+      if (lecDate.getTime() >= now && lecDate.getTime() <= endEpoch) {
+        clash = `محاضرة «${lec.courseName}» في ${lec.from}`;
+        break;
+      }
+    }
+  }
+
   return {
     kind: "focus-start",
     run,
     preset,
+    clash,
     next: { ...base.state, focus: { ...focus, run } },
     before: { focus: state.focus, sessions: state.sessions },
   };
@@ -1024,7 +1117,13 @@ export function undo(state, before) {
 export function dayAt(state) {
   const habits = rows(state.habits);
   const scored = scoredOf(habits);
-  const tasks = rows(state.tasks).filter((t) => t.today);
+  const goalsById = new Map(rows(state.goals).map((g) => [g.id, g]));
+  const tasks = rows(state.tasks)
+    .filter((t) => t.today)
+    .map((t) => ({
+      ...t,
+      goalTitle: t.linkedGoalId && goalsById.has(t.linkedGoalId) ? goalsById.get(t.linkedGoalId).text : null,
+    }));
   return {
     date: state.date,
     pct: disciplineOf(habits),
@@ -1047,6 +1146,127 @@ export function dayAt(state) {
       (n, b) => n + rows(b.notes).filter((x) => x && x.text && x.at === state.date).length,
       0,
     ),
+    emergencyMode: !!state.emergencyMode,
+  };
+}
+
+/* --- وضع الطوارئ والحد الأدنى ----------------------------------------- */
+export function triggerEmergency(state, { active = true, completeTinyCore = false } = {}) {
+  const habits = rows(state.habits);
+  let rescuedCount = 0;
+  let nextHabits = habits;
+
+  if (active && completeTinyCore) {
+    nextHabits = habits.map((h) => {
+      if (h.core && !h.done) {
+        rescuedCount++;
+        return { ...h, done: true, tiny: true };
+      }
+      return h;
+    });
+  }
+
+  const nextState = stampToday({
+    ...state,
+    habits: nextHabits,
+    emergencyMode: active,
+  });
+
+  return {
+    kind: "emergency",
+    active,
+    rescuedCount,
+    next: nextState,
+    before: { habits: state.habits, history: state.history, emergencyMode: !!state.emergencyMode },
+  };
+}
+
+/* --- مراجعة وتخطيط الأسبوع -------------------------------------------- */
+export function saveWeeklyReview(state, { win = "", lesson = "", keystoneHabitId = "", focusGoalId = "", priorityTasks = [] } = {}) {
+  const d = new Date();
+  const day = d.getDay();
+  const diffToSat = (day + 1) % 7;
+  const sat = new Date(d);
+  sat.setDate(d.getDate() - diffToSat);
+  const weekKeyStr = dayKey(sat);
+
+  const entry = {
+    done: true,
+    savedAt: new Date().toISOString(),
+    weeklyWin: win.trim(),
+    weeklyLesson: lesson.trim(),
+    keystoneHabitId,
+    focusGoalId,
+    avgPct: disciplineOf(rows(state.habits)),
+  };
+
+  let nextTasks = rows(state.tasks);
+  if (Array.isArray(priorityTasks) && priorityTasks.length > 0) {
+    const created = priorityTasks.map((txt, idx) =>
+      taskShape({
+        id: uid(),
+        text: txt.trim(),
+        quadrant: "q2",
+        today: idx === 0,
+        scheduled: idx > 0,
+        done: false,
+        linkedGoalId: focusGoalId || null,
+        createdAt: dayKey(),
+      })
+    );
+    nextTasks = capToday([...created, ...nextTasks]);
+  }
+
+  const nextState = {
+    ...state,
+    tasks: nextTasks,
+    weeklyReviews: {
+      ...(state.weeklyReviews && typeof state.weeklyReviews === "object" ? state.weeklyReviews : {}),
+      [weekKeyStr]: entry,
+    },
+  };
+
+  return {
+    kind: "weekly_review",
+    entry,
+    next: nextState,
+    before: { tasks: state.tasks, weeklyReviews: state.weeklyReviews },
+  };
+}
+
+/* --- تفكيك مهمة وتثبيت خطوة البدء ------------------------------------- */
+export function breakdownTask(state, { query = "", step = "", today = true } = {}) {
+  const q = String(query || "").trim();
+  const s = String(step || "").trim();
+  if (!q || !s) return { refused: "حدّد المهمة والخطوة الأولى الصغيرة." };
+  const list = rows(state.tasks);
+  const task = list.find((t) => fold(t.text).includes(fold(q)) || fold(q).includes(fold(t.text)));
+  let nextTasks;
+  if (task) {
+    nextTasks = list.map((t) =>
+      t.id === task.id
+        ? { ...t, step: s, today: today ? true : t.today, scheduled: today ? false : t.scheduled }
+        : t
+    );
+  } else {
+    const newTask = taskShape({
+      id: uid(),
+      text: q,
+      step: s,
+      today: !!today,
+      scheduled: !today,
+      quadrant: "q1",
+      createdAt: dayKey(),
+    });
+    nextTasks = [newTask, ...list];
+  }
+  const finalTasks = today ? capToday(nextTasks) : nextTasks;
+  return {
+    kind: "breakdown_task",
+    query: q,
+    step: s,
+    next: { ...state, tasks: finalTasks },
+    before: { tasks: state.tasks },
   };
 }
 
@@ -1106,4 +1326,57 @@ export function goalReport(state, horizon = "quarter") {
   };
 
   return { text, kb };
+}
+
+/* ==================================================================== *
+ *  جدول المواعيد والتقويم والجامعة
+ * ==================================================================== */
+export function daySchedule(state, now = new Date()) {
+  const today = dayKey(logicalNow ? logicalNow(now) : now);
+  const next3Days = addDays(today, 3);
+
+  // 1. الأحداث والتقويم (اليوم والقادم)
+  const todayEvents = [];
+  const upcomingEvents = [];
+  for (const [date, list] of eventsIn(rows(state.events), today, next3Days)) {
+    for (const { ev } of list) {
+      if (isEventDone(ev, date)) continue;
+      const item = { ...ev, onDate: date, isToday: date === today };
+      if (date === today) todayEvents.push(item);
+      else upcomingEvents.push(item);
+    }
+  }
+
+  // 2. المحاضرات الجامعية لليوم
+  const uni = uniShape(state.uni);
+  const dow = now.getDay();
+  const lectures = [];
+  for (const c of rows(uni.courses)) {
+    for (const s of rows(c.slots)) {
+      if (Number(s.day) === dow) {
+        lectures.push({
+          courseId: c.id,
+          courseName: c.name,
+          courseCode: c.code,
+          from: s.from,
+          to: s.to,
+          room: s.room || s.place || "",
+          absences: c.absences || 0,
+          absenceCap: c.absenceCap || 0,
+        });
+      }
+    }
+  }
+  lectures.sort((a, b) => String(a.from || "").localeCompare(String(b.from || "")));
+
+  // 3. المهام الجامعية المستحقة قريباً (3 أيام)
+  const pendingUni = uniPending(uni).filter((t) => !t.done && t.due && t.due <= next3Days);
+
+  return {
+    today,
+    todayEvents,
+    upcomingEvents,
+    lectures,
+    pendingUni,
+  };
 }

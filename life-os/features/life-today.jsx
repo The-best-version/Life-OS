@@ -1,18 +1,12 @@
 import { ReadLogModal, TodayExtras, TopThree, useHabitTick } from "../components/life-day.jsx";
+import { GymBridgeCard } from "../components/life-command.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { todayBlocks } from "../life-config.js";
-import { CORE_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, clampGoal, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepReady, remainingIn, rows, scoredOf, taskOverdue, tomorrowKey, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
+import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, CalendarClock, CalendarDays, ClipboardList, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, Library, ListChecks, MapPin, MoonStar, RotateCcw, School, Settings2, Star, Sunrise, X, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, BatteryCharging, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ClipboardList, Coffee, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Library, ListChecks, MapPin, Moon, MoonStar, Plus, Rocket, RotateCcw, School, Settings2, Sparkles, Star, Sun, Sunrise, Target, Trophy, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/* Where a user's own layout of اليوم screen lives. localStorage and not
-   `state` for the same reason the daily goal is: the layout outlives a day,
-   a rollover and a migration — it is a standing preference, not a piece of
-   today. The config file above stays the *defaults*; this is only the set
-   of overrides the user has actually touched. Merging them is what lets a
-   new block added to the config later still appear on a profile that had
-   saved a layout before the block existed. */
 const LAYOUT_KEY = "los-today-layout";
 
 function useTodayLayout() {
@@ -53,7 +47,7 @@ function useTodayLayout() {
     try {
       localStorage.setItem(LAYOUT_KEY, JSON.stringify(clean));
     } catch {
-      /* ignore — the state still updates for the session */
+      /* ignore */
     }
     setStored(clean);
   };
@@ -68,6 +62,43 @@ function useTodayLayout() {
   };
 
   return { layout, save, reset };
+}
+
+// 👇 مكون جديد للسحب والإفلات 👇
+function SortableBlock({ id, isEditing, isDragging, children, onDragStart, onDragOver, onDrop }) {
+  return (
+    <div
+      draggable={isEditing}
+      onDragStart={(e) => onDragStart(e, id)}
+      onDragOver={onDragOver}
+      onDrop={(e) => onDrop(e, id)}
+      className={`relative transition-all duration-300 ${
+        isEditing 
+          ? `cursor-grab active:cursor-grabbing border-2 border-dashed rounded-[32px] p-1.5 ${isDragging ? 'opacity-30 border-indigo-500 scale-[0.98]' : 'border-white/20 bg-white/[0.02]'}`
+          : ''
+      }`}
+      style={{
+        animation: isEditing && !isDragging ? 'wiggle 0.3s ease-in-out infinite alternate' : 'none',
+      }}
+    >
+      {isEditing && (
+        <div className="absolute -top-3 -right-3 z-50 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg cursor-grab active:cursor-grabbing">
+          <GripVertical size={16} />
+        </div>
+      )}
+      
+      <div className={isEditing ? 'pointer-events-none opacity-60 grayscale-[20%]' : ''}>
+        {children}
+      </div>
+      
+      <style>{`
+        @keyframes wiggle {
+          0% { transform: rotate(-0.3deg); }
+          100% { transform: rotate(0.3deg); }
+        }
+      `}</style>
+    </div>
+  );
 }
 
 export function TodayModule({
@@ -95,6 +126,31 @@ export function TodayModule({
   const { layout, save: saveLayout, reset: resetLayout } = useTodayLayout();
   const [layoutOpen, setLayoutOpen] = useState(false);
 
+  // 👇 حالات جديدة لوضع التعديل والسحب + وضع الطوارئ (الأساسيات فقط) 👇
+  const [isEditing, setIsEditing] = useState(false);
+  const [draggedId, setDraggedId] = useState(null);
+  const todayStr = dayKey();
+  const [emergencyMode, setEmergencyMode] = useState(() => {
+    try {
+      return localStorage.getItem("los-emergency-day") === todayStr;
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleEmergencyMode = () => {
+    setEmergencyMode((prev) => {
+      const next = !prev;
+      try {
+        if (next) localStorage.setItem("los-emergency-day", todayStr);
+        else localStorage.removeItem("los-emergency-day");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   const [fading, setFading] = useState(() => new Set());
   const timers = useRef([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -115,6 +171,34 @@ export function TodayModule({
       );
     }
     toggle(id, tiny);
+  };
+
+  // 👇 دوال السحب والإفلات 👇
+  const handleDragStart = (e, id) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) return;
+
+    const currentLayout = [...layout];
+    const draggedIdx = currentLayout.findIndex((b) => b.key === draggedId);
+    const targetIdx = currentLayout.findIndex((b) => b.key === targetId);
+
+    if (draggedIdx !== -1 && targetIdx !== -1) {
+      const [moved] = currentLayout.splice(draggedIdx, 1);
+      currentLayout.splice(targetIdx, 0, moved);
+      saveLayout(currentLayout); 
+    }
+    setDraggedId(null);
   };
 
   const habits = state.habits || [];
@@ -203,6 +287,22 @@ export function TodayModule({
       .filter((r) => r.task);
   }, [state.tomorrow, state.tasks, state.events, tomorrowOn]);
 
+  const activeGoalsPulse = useMemo(() => {
+    const goals = (state.goals || []).filter((gl) => !gl.done);
+    if (!goals.length) return { total: 0, connectedToday: 0 };
+    const todayTasks = (state.tasks || []).filter((t) => t.today || t.scheduled);
+    const connectedIds = new Set();
+    for (const t of todayTasks) {
+      if (t.linkedGoalId) connectedIds.add(t.linkedGoalId);
+    }
+    for (const gl of goals) {
+      if (Array.isArray(gl.linkedHabits) && gl.linkedHabits.length > 0) {
+        connectedIds.add(gl.id);
+      }
+    }
+    return { total: goals.length, connectedToday: connectedIds.size };
+  }, [state.goals, state.tasks]);
+
   const blockRegistry = {
     dayHeader: (
       <DayHeaderCard
@@ -216,6 +316,23 @@ export function TodayModule({
         discipline={discipline}
         onOpenSettings={onOpenSettings}
         onOpenLayout={() => setLayoutOpen(true)}
+        isEditing={isEditing}
+        onToggleEdit={() => setIsEditing(!isEditing)}
+        emergencyMode={emergencyMode}
+        onToggleEmergency={toggleEmergencyMode}
+        activeGoalsPulse={activeGoalsPulse}
+        onGo={onGo}
+      />
+    ),
+    ritualLaunchpad: (
+      <MorningLaunchpadAndShutdownCard
+        state={state}
+        setState={setState}
+        discipline={discipline}
+        doneCount={doneCount}
+        totalHabits={habits.length}
+        onOpenTomorrow={onOpenTomorrow}
+        onGo={onGo}
       />
     ),
     readingCue: <ReadingCue list={state.reads} />,
@@ -226,14 +343,15 @@ export function TodayModule({
           count={state.water}
           goal={clampGoal(state.waterGoal)}
           onSet={(n) =>
-            setState((s) => ({
-              ...s,
-              water: Math.max(0, Math.min(clampGoal(s.waterGoal), n)),
-            }))
+            setState((s) => {
+              const nextWater = Math.max(0, Math.min(clampGoal(s.waterGoal), n));
+              return stampToday({ ...s, water: nextWater });
+            })
           }
         />
       </div>
     ),
+    gymBridge: <GymBridgeCard state={state} setState={setState} />,
     tasksModule: (
       <>
         <TopThree state={state} setState={setState} />
@@ -273,6 +391,16 @@ export function TodayModule({
           onTick={tick}
           onTickTiny={(id) => tick(id, true)}
           onClose={onCloseComeback}
+        />
+      )}
+
+      {emergencyMode && comeback === 0 && (
+        <EmergencyModeCard
+          state={state}
+          setState={setState}
+          onTick={tick}
+          onTickTiny={(id) => tick(id, true)}
+          onClose={toggleEmergencyMode}
         />
       )}
 
@@ -327,8 +455,30 @@ export function TodayModule({
       {layout
         .filter((b) => b.visible !== false)
         .map((b) => (
-          <ConfigBlockBoundary key={b.key}>{blockRegistry[b.key] ?? null}</ConfigBlockBoundary>
+          <SortableBlock
+            key={b.key}
+            id={b.key}
+            isEditing={isEditing}
+            isDragging={draggedId === b.key}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            <ConfigBlockBoundary>{blockRegistry[b.key] ?? null}</ConfigBlockBoundary>
+          </SortableBlock>
         ))}
+
+      {/* 👇 زر حفظ الترتيب يظهر في الأسفل عند وضع التعديل 👇 */}
+      {isEditing && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5">
+          <button 
+            onClick={() => setIsEditing(false)}
+            className="flex items-center gap-2 px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-bold shadow-2xl shadow-indigo-900/60 transition-all hover:scale-105 active:scale-95 border border-indigo-400/50"
+          >
+            <Check size={20} /> حفظ الترتيب
+          </button>
+        </div>
+      )}
 
       <ReadLogModal
         open={!!logging}
@@ -350,20 +500,6 @@ export function TodayModule({
 
 /* ==================================================================== *
  *  TodayLayoutModal — hide, reorder, or reset the اليوم cards.
- *
- *  The config file above is the *defaults*; this is the set of overrides
- *  the user has actually touched, kept in localStorage under `LAYOUT_KEY`.
- *  Opening the modal passes the merged layout in; saving writes only the
- *  key/visible pairs back, so a future block added to `todayBlocks` still
- *  shows on a profile that saved a layout before the block existed.
- *
- *  Rows move by one step at a time — an Up arrow and a Down arrow, one per
- *  row. A drag-and-drop sortable list is the sort of thing that reads as
- *  an upgrade and behaves as a tax on a screen with seven rows: the arrows
- *  say exactly which line went where, and there is nothing to misread on a
- *  phone. The two ends disable rather than wrap, because a move that takes
- *  the first card to the bottom when the user meant to nudge it up is a
- *  mistake nobody undoes on purpose.
  * ==================================================================== */
 function TodayLayoutModal({ open, onClose, layout, onSave, onReset }) {
   const [draft, setDraft] = useState(layout);
@@ -565,15 +701,20 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
       {!!habit.min && (habit.tiny || !habit.done) && (
         <button
           onClick={handleTiny}
-          title={`نسخة صغيرة: ${habit.min}`}
+          title={`نسخة خفيفة للطوارئ: ${habit.min}`}
           aria-label={`إنجاز النسخة الصغيرة من ${habit.label}`}
-          className="shrink-0 rounded p-1 opacity-50 transition-all duration-200 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-          style={{ color: T.sky }}
+          className="shrink-0 inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-bold transition-all duration-200 hover:scale-105"
+          style={{
+            borderColor: habit.tiny ? `${T.sky}80` : `${T.sky}38`,
+            background: habit.tiny ? `${T.sky}24` : `${T.sky}10`,
+            color: T.sky,
+          }}
         >
           <Feather
-            size={12}
+            size={11}
             style={habit.tiny ? { filter: `drop-shadow(0 0 5px ${T.sky}AA)` } : undefined}
           />
+          <span className="hidden sm:inline">{habit.tiny ? "خفيفة ✓" : "خفيفة"}</span>
         </button>
       )}
       {habit.core && (
@@ -746,6 +887,120 @@ function ComebackCard({ state, setState, days, onTick, onTickTiny, onClose }) {
   );
 }
 
+function EmergencyModeCard({ state, setState, onTick, onTickTiny, onClose }) {
+  const coreHabits = scoredOf(state.habits || []).slice(0, CORE_CAP);
+  const openCore = coreHabits.filter((h) => !h.done);
+  const doneCoreCount = coreHabits.length - openCore.length;
+
+  const rescueAllTiny = () => {
+    for (const h of openCore) {
+      onTickTiny(h.id);
+    }
+  };
+
+  return (
+    <Card
+      className="p-6 sm:p-7"
+      style={{
+        borderColor: `${T.warn}66`,
+        background:
+          "linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(56,189,248,0.06) 55%, rgba(12,15,28,0.95) 100%)",
+        boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.15), 0 0 46px -20px ${T.warn}`,
+      }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
+            style={{
+              borderColor: `${T.warn}59`,
+              background: `linear-gradient(160deg, ${T.warn}33, ${T.warn}0F)`,
+              color: T.warn,
+            }}
+          >
+            <Feather size={20} strokeWidth={2.4} />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[17px] font-extrabold" style={{ color: T.warn }}>
+                وضع الطوارئ · الحد الأدنى غير القابل للكسر
+              </h3>
+              <Badge tint={T.warn}>
+                <span dir="ltr" className="tabular-nums">
+                  {doneCoreCount}/{coreHabits.length}
+                </span>{" "}
+                جذور اليوم
+              </Badge>
+            </div>
+            <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: T.muted }}>
+              في أيام الضغط العالي أو الإرهاق أو الاختبارات، الانتصار الحقيقي هو{" "}
+              <strong className="text-white">عدم السقوط للصفر</strong>. ركّز فقط على الجذور
+              الأساسية أدناه أو أنجزها بالنسخة الخفيفة (🪶).
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {openCore.length > 0 && (
+            <button
+              type="button"
+              onClick={rescueAllTiny}
+              className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-all hover:scale-105"
+              style={{
+                borderColor: `${T.sky}66`,
+                background: `${T.sky}1F`,
+                color: T.sky,
+              }}
+              title="إنجاز النسخة الخفيفة لكل العادات الأساسية المتبقية لحماية السلسلة"
+            >
+              <Feather size={13} /> إنقاذ اليوم بالنسخة الخفيفة ({openCore.length})
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إيقاف وضع الطوارئ"
+            title="العودة للوضع الكامل"
+            className="shrink-0 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold text-white/60 transition-colors hover:text-white"
+            style={{ borderColor: T.border }}
+          >
+            إنهاء الطوارئ ✕
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-2 flex items-center gap-1.5 text-[11.5px] font-extrabold" style={{ color: T.primaryLift }}>
+          <Star size={12} fill={T.accent} style={{ color: T.accent }} /> العادات الجذرية فقط (تجاهل الكماليات اليوم)
+        </p>
+        {openCore.length ? (
+          <div className="space-y-1.5">
+            {openCore.map((h) => (
+              <TodayHabit
+                key={h.id}
+                habit={h}
+                book={bookForHabit(h, state.books)}
+                onToggle={() => onTick(h.id)}
+                onToggleTiny={() => onTickTiny(h.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p
+            className="rounded-xl border px-3.5 py-4 text-center text-[12px] font-extrabold"
+            style={{
+              borderColor: `${T.primary}45`,
+              background: `${T.primary}14`,
+              color: T.primaryLift,
+            }}
+          >
+            🛡️ أتممت جميع الجذور الأساسية لليوم! سلسلتك في أمان تام — يمكنك الاستراحة الآن بلا أي تأنيب ضمير.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function DayHeaderCard({
   dateLabel,
   block,
@@ -757,6 +1012,12 @@ export function DayHeaderCard({
   discipline,
   onOpenSettings,
   onOpenLayout,
+  isEditing,
+  onToggleEdit,
+  emergencyMode = false,
+  onToggleEmergency,
+  activeGoalsPulse,
+  onGo,
 }) {
   const Icon = block.icon;
   return (
@@ -770,12 +1031,41 @@ export function DayHeaderCard({
             <button
               type="button"
               onClick={onOpenLayout}
-              title="ترتيب بطاقات اليوم"
-              aria-label="ترتيب بطاقات اليوم"
+              title="إخفاء/إظهار البطاقات"
+              aria-label="إخفاء أو إظهار البطاقات"
               className="rounded-lg border p-1.5 text-white/40 transition-colors hover:border-white/40 hover:text-white"
               style={{ borderColor: T.border }}
             >
               <Settings2 size={13} />
+            </button>
+          )}
+          
+          {/* 👇 الزر الجديد لتفعيل السحب والإفلات 👇 */}
+          <button
+            type="button"
+            onClick={onToggleEdit}
+            title={isEditing ? "حفظ الترتيب" : "تعديل الترتيب بالسحب"}
+            className={`rounded-lg border p-1.5 transition-colors ${isEditing ? 'border-indigo-500 bg-indigo-500/20 text-indigo-400' : 'text-white/40 hover:border-white/40 hover:text-white'}`}
+            style={{ borderColor: isEditing ? undefined : T.border }}
+          >
+            {isEditing ? <Check size={13} /> : <GripVertical size={13} />}
+          </button>
+
+          {/* 👇 زر وضع الطوارئ (الحد الأدنى غير القابل للكسر) 👇 */}
+          {onToggleEmergency && (
+            <button
+              type="button"
+              onClick={onToggleEmergency}
+              title="تفعيل وضع الطوارئ للأيام المزدحمة والمرهقة (التركيز على الجذور والنسخة الخفيفة فقط)"
+              className="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-extrabold transition-all hover:scale-105"
+              style={{
+                borderColor: emergencyMode ? `${T.warn}80` : T.border,
+                background: emergencyMode ? `${T.warn}24` : "rgba(255,255,255,0.03)",
+                color: emergencyMode ? T.warn : T.muted,
+              }}
+            >
+              <Feather size={12} />
+              <span>{emergencyMode ? "وضع الطوارئ مفعّل 🛡️" : "وضع الطوارئ"}</span>
             </button>
           )}
         </div>
@@ -829,6 +1119,27 @@ export function DayHeaderCard({
                 {countedWord(streak)}
               </span>
             </span>
+          )}
+          {activeGoalsPulse && activeGoalsPulse.total > 0 && (
+            <button
+              type="button"
+              onClick={() => onGo && onGo("goals")}
+              title="اضغط لفتح شاشة إرثي 2030 ومراجعة أهدافك الكبرى"
+              className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-all hover:bg-white/[0.06]"
+              style={{
+                borderColor: `${T.primary}45`,
+                backgroundColor: `${T.primary}12`,
+                color: T.primaryLift,
+              }}
+            >
+              <Target size={13} />
+              <span>
+                إرث 2030:{" "}
+                {activeGoalsPulse.connectedToday > 0
+                  ? `تخدم ${activeGoalsPulse.connectedToday} أهداف اليوم`
+                  : `${activeGoalsPulse.total} أهداف نشطة`}
+              </span>
+            </button>
           )}
         </div>
         <p className="mt-3 max-w-md text-xs leading-relaxed text-white/35">
@@ -1359,3 +1670,1376 @@ export function WaterCard({ count, goal, onSet }) {
   );
 }
 
+/* ==================================================================== *
+ *  MorningLaunchpadAndShutdownCard — طقس الإقلاع الصباحي وإغلاق المساء
+ *  30-second Morning Launchpad + Cal Newport Evening Shutdown Ritual
+ * ==================================================================== */
+const RITUAL_STORAGE_KEY = "los-daily-rituals-v1";
+
+function readRitualStore() {
+  try {
+    const raw = localStorage.getItem(RITUAL_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRitualStore(nextMap) {
+  try {
+    localStorage.setItem(RITUAL_STORAGE_KEY, JSON.stringify(nextMap));
+  } catch {
+    /* ignore */
+  }
+}
+
+const SLEEP_PRESETS = [
+  { val: 5, label: "5 س", hint: "أقل من الكفاية" },
+  { val: 6, label: "6 س", hint: "متوسط" },
+  { val: 7, label: "7 س", hint: "جيد" },
+  { val: 7.5, label: "7.5 س", hint: "مثالي (5 دورات)" },
+  { val: 8, label: "8 س", hint: "استشفاء كامل" },
+  { val: 9, label: "9+ س", hint: "تعويض عميق" },
+];
+
+const ENERGY_LEVELS = [
+  { val: 1, label: "١ · خمول", color: "#F43F5E" },
+  { val: 2, label: "٢ · هادئ", color: "#F59E0B" },
+  { val: 3, label: "٣ · متوازن", color: "#38BDF8" },
+  { val: 4, label: "٤ · نشيط", color: "#10B981" },
+  { val: 5, label: "٥ · ذروة", color: "#A78BFA" },
+];
+
+export function MorningLaunchpadAndShutdownCard({
+  state,
+  setState,
+  discipline = 0,
+  doneCount = 0,
+  totalHabits = 0,
+  onOpenTomorrow,
+  onGo,
+}) {
+  const [burst, fireBurst] = useBurst(850);
+  const today = dayKey();
+  const tomorrowOn = tomorrowKey();
+  const currentHour = new Date().getHours();
+  const isEveningDefault = currentHour >= 17 || currentHour < 4;
+
+  const [ritualMap, setRitualMap] = useState(() => readRitualStore());
+  const todayRowFromHistory = useMemo(
+    () => rows(state.history).find((h) => h && h.date === today) || null,
+    [state.history, today],
+  );
+
+  const savedRitual = useMemo(() => {
+    const fromState = state.dailyRituals?.[today] || {};
+    const fromStorage = ritualMap[today] || {};
+    return {
+      morningDone: !!(fromState.morningDone || fromStorage.morningDone),
+      morningAt: fromState.morningAt || fromStorage.morningAt || "",
+      sleepHours:
+        Number.isFinite(+fromState.sleepHours) && +fromState.sleepHours > 0
+          ? +fromState.sleepHours
+          : Number.isFinite(+todayRowFromHistory?.sleepHours) && +todayRowFromHistory.sleepHours > 0
+            ? +todayRowFromHistory.sleepHours
+            : Number.isFinite(+fromStorage.sleepHours) && +fromStorage.sleepHours > 0
+              ? +fromStorage.sleepHours
+              : 7.5,
+      morningEnergy:
+        Number.isFinite(+fromState.morningEnergy) && +fromState.morningEnergy >= 1
+          ? +fromState.morningEnergy
+          : Number.isFinite(+fromStorage.morningEnergy) && +fromStorage.morningEnergy >= 1
+            ? +fromStorage.morningEnergy
+            : 4,
+      intention:
+        typeof fromState.intention === "string"
+          ? fromState.intention
+          : typeof fromStorage.intention === "string"
+            ? fromStorage.intention
+            : "",
+      eveningDone: !!(fromState.eveningDone || fromStorage.eveningDone),
+      eveningAt: fromState.eveningAt || fromStorage.eveningAt || "",
+      eveningWin:
+        typeof fromState.eveningWin === "string"
+          ? fromState.eveningWin
+          : typeof fromStorage.eveningWin === "string"
+            ? fromStorage.eveningWin
+            : "",
+      rolledCount:
+        Number.isFinite(+fromState.rolledCount)
+          ? +fromState.rolledCount
+          : Number.isFinite(+fromStorage.rolledCount)
+            ? +fromStorage.rolledCount
+            : 0,
+    };
+  }, [state.dailyRituals, ritualMap, today, todayRowFromHistory]);
+
+  const [mode, setMode] = useState(() => (isEveningDefault ? "evening" : "morning"));
+  const [expanded, setExpanded] = useState(() => {
+    if (isEveningDefault) return !savedRitual.eveningDone;
+    return !savedRitual.morningDone;
+  });
+
+  const [sleepDraft, setSleepDraft] = useState(savedRitual.sleepHours);
+  const [energyDraft, setEnergyDraft] = useState(savedRitual.morningEnergy);
+  const [intentionDraft, setIntentionDraft] = useState(savedRitual.intention);
+  const [quickTaskText, setQuickTaskText] = useState("");
+  const [eveningWinDraft, setEveningWinDraft] = useState(savedRitual.eveningWin);
+  const [brainDumpText, setBrainDumpText] = useState("");
+  const [statusToast, setStatusToast] = useState("");
+
+  // 👇 بيانات ورشة المراجعة والتخطيط الأسبوعي 👇
+  const weekKey = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay(); // 0=Sun..6=Sat
+    const diffToSat = (day + 1) % 7;
+    const sat = new Date(d);
+    sat.setDate(d.getDate() - diffToSat);
+    return dayKey(sat);
+  }, []);
+
+  const savedWeekly = useMemo(() => {
+    const fromState = state.weeklyReviews?.[weekKey] || {};
+    let fromStorage = {};
+    try {
+      const raw = localStorage.getItem("los-weekly-reviews-v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed[weekKey]) fromStorage = parsed[weekKey];
+      }
+    } catch {
+      /* ignore */
+    }
+    return {
+      done: !!(fromState.done || fromStorage.done),
+      savedAt: fromState.savedAt || fromStorage.savedAt || "",
+      weeklyWin: fromState.weeklyWin || fromStorage.weeklyWin || "",
+      weeklyLesson: fromState.weeklyLesson || fromStorage.weeklyLesson || "",
+      keystoneHabitId: fromState.keystoneHabitId || fromStorage.keystoneHabitId || "",
+      focusGoalId: fromState.focusGoalId || fromStorage.focusGoalId || "",
+    };
+  }, [state.weeklyReviews, weekKey]);
+
+  const [weeklyWinDraft, setWeeklyWinDraft] = useState(savedWeekly.weeklyWin);
+  const [weeklyLessonDraft, setWeeklyLessonDraft] = useState(savedWeekly.weeklyLesson);
+  const [keystoneDraft, setKeystoneDraft] = useState(savedWeekly.keystoneHabitId);
+  const [focusGoalDraft, setFocusGoalDraft] = useState(savedWeekly.focusGoalId);
+  const [weeklyTaskText, setWeeklyTaskText] = useState("");
+
+  useEffect(() => {
+    setWeeklyWinDraft(savedWeekly.weeklyWin);
+    setWeeklyLessonDraft(savedWeekly.weeklyLesson);
+    setKeystoneDraft(savedWeekly.keystoneHabitId);
+    setFocusGoalDraft(savedWeekly.focusGoalId);
+  }, [
+    savedWeekly.weeklyWin,
+    savedWeekly.weeklyLesson,
+    savedWeekly.keystoneHabitId,
+    savedWeekly.focusGoalId,
+  ]);
+
+  const weekStats = useMemo(() => {
+    const last7Keys = [];
+    const nowD = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(nowD);
+      d.setDate(nowD.getDate() - i);
+      last7Keys.push(dayKey(d));
+    }
+    const keySet = new Set(last7Keys);
+    const histRows = rows(state.history).filter((h) => h && keySet.has(h.date));
+    const avgPct = histRows.length
+      ? Math.round(histRows.reduce((s, h) => s + (Number(h.pct) || 0), 0) / histRows.length)
+      : discipline;
+    const bestRow = histRows.reduce(
+      (best, h) => (!best || (Number(h.pct) || 0) > (Number(best.pct) || 0) ? h : best),
+      null,
+    );
+    const pages = rows(state.reads)
+      .filter((r) => r && keySet.has(r.date))
+      .reduce((s, r) => s + (Number(r.pages) || 0), 0);
+    const focusMins = rows(state.pomodoros)
+      .filter((p) => p && keySet.has(p.date))
+      .reduce((s, p) => s + (Number(p.mins) || 0), 0);
+    return {
+      loggedDays: histRows.length,
+      avgPct,
+      bestPct: bestRow ? Math.round(Number(bestRow.pct) || 0) : discipline,
+      bestDate: bestRow ? bestRow.date : today,
+      pages,
+      focusMins,
+    };
+  }, [state.history, state.reads, state.pomodoros, discipline, today]);
+
+  useEffect(() => {
+    setSleepDraft(savedRitual.sleepHours);
+    setEnergyDraft(savedRitual.morningEnergy);
+    setIntentionDraft(savedRitual.intention);
+    setEveningWinDraft(savedRitual.eveningWin);
+  }, [
+    savedRitual.sleepHours,
+    savedRitual.morningEnergy,
+    savedRitual.intention,
+    savedRitual.eveningWin,
+  ]);
+
+  const flashNote = (msg) => {
+    setStatusToast(msg);
+    setTimeout(() => setStatusToast(""), 3200);
+  };
+
+  const persistRitualPatch = (patch, extraStateUpdater) => {
+    const mergedToday = {
+      ...savedRitual,
+      ...patch,
+    };
+    const nextMap = {
+      ...ritualMap,
+      [today]: mergedToday,
+    };
+    setRitualMap(nextMap);
+    writeRitualStore(nextMap);
+
+    setState((prev) => {
+      const prevRituals = prev.dailyRituals && typeof prev.dailyRituals === "object" ? prev.dailyRituals : {};
+      const nextHistory = rows(prev.history).some((h) => h && h.date === today)
+        ? rows(prev.history).map((h) =>
+            h && h.date === today
+              ? {
+                  ...h,
+                  sleepHours: mergedToday.sleepHours,
+                  morningEnergy: mergedToday.morningEnergy,
+                  morningIntention: mergedToday.intention,
+                  eveningWin: mergedToday.eveningWin,
+                }
+              : h,
+          )
+        : [
+            ...rows(prev.history),
+            {
+              date: today,
+              pct: discipline,
+              sleepHours: mergedToday.sleepHours,
+              morningEnergy: mergedToday.morningEnergy,
+              morningIntention: mergedToday.intention,
+              eveningWin: mergedToday.eveningWin,
+            },
+          ];
+
+      const baseNext = {
+        ...prev,
+        sleepHours: mergedToday.sleepHours,
+        history: nextHistory,
+        dailyRituals: {
+          ...prevRituals,
+          [today]: mergedToday,
+        },
+      };
+      return extraStateUpdater ? extraStateUpdater(baseNext) : baseNext;
+    });
+  };
+
+  const allTasks = rows(state.tasks);
+  const topTasks = useMemo(
+    () => allTasks.filter((t) => t.today && !t.done),
+    [allTasks],
+  );
+  const completedTasksToday = useMemo(
+    () => allTasks.filter((t) => t.done && (t.today || t.scheduled)),
+    [allTasks],
+  );
+  const openTodayTasks = useMemo(
+    () => allTasks.filter((t) => !t.done && (t.today || t.scheduled)),
+    [allTasks],
+  );
+  const candidatePool = useMemo(
+    () => allTasks.filter((t) => !t.done && !t.today).slice(0, 5),
+    [allTasks],
+  );
+
+  const waterGoal = clampGoal(state.waterGoal);
+  const waterCount = Math.min(waterGoal, Math.max(0, state.water || 0));
+
+  const addMorningCup = () => {
+    setState((s) => ({
+      ...s,
+      water: Math.min(clampGoal(s.waterGoal), Math.max(0, (s.water || 0) + 1)),
+    }));
+    flashNote("💧 تم تسجيل كوب ماء صباحي لتنشيط الدورة الدموية!");
+  };
+
+  const promoteTaskToTop = (taskId) => {
+    if (topTasks.length >= TOP_TASK_CAP) {
+      flashNote("قائمة أهم ٣ مهام مكتملة (٣/٣)");
+      return;
+    }
+    setState((s) => ({
+      ...s,
+      tasks: capToday(
+        rows(s.tasks).map((t) =>
+          t.id === taskId ? { ...t, today: true, scheduled: false } : t,
+        ),
+      ),
+    }));
+  };
+
+  const handleQuickAddTopTask = (e) => {
+    e.preventDefault();
+    const clean = quickTaskText.trim();
+    if (!clean) return;
+    const asTop = topTasks.length < TOP_TASK_CAP;
+    const created = taskShape({
+      id: uid(),
+      text: clean,
+      quadrant: "q1",
+      today: asTop,
+      scheduled: !asTop,
+      done: false,
+      createdAt: today,
+    });
+    setState((s) => ({
+      ...s,
+      tasks: capToday([created, ...rows(s.tasks)]),
+    }));
+    setQuickTaskText("");
+    flashNote(asTop ? "✅ أُضيفت إلى أهم ٣ مهام اليوم" : "✅ أُضيفت إلى مهام اليوم الإضافية");
+  };
+
+  const handleLaunchMorning = () => {
+    const nowTime = new Date().toLocaleTimeString("ar-SA", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    fireBurst();
+    persistRitualPatch({
+      morningDone: true,
+      morningAt: nowTime,
+      sleepHours: sleepDraft,
+      morningEnergy: energyDraft,
+      intention: intentionDraft.trim(),
+    });
+    setExpanded(false);
+    flashNote("🚀 تم اعتماد الإقلاع الصباحي! انطلق ليوم استثنائي.");
+  };
+
+  const handleRolloverOpenTasks = () => {
+    if (openTodayTasks.length === 0) {
+      flashNote("✨ لا توجد مهام مفتوحة لترحيلها — يومك نظيف تمامًا!");
+      return;
+    }
+    const toRoll = openTodayTasks;
+    persistRitualPatch(
+      {
+        rolledCount: (savedRitual.rolledCount || 0) + toRoll.length,
+      },
+      (s) => {
+        let nextPrep = s.tomorrow;
+        for (const t of toRoll.slice(0, TOP_TASK_CAP)) {
+          nextPrep = prepPickAdd(nextPrep, t.id, tomorrowOn);
+        }
+        return {
+          ...s,
+          tomorrow: nextPrep,
+        };
+      },
+    );
+    flashNote(`📦 تم تجهيز وترحيل ${toRoll.length} مهام إلى خطة الغد (${tomorrowOn}) بنجاح!`);
+  };
+
+  const handleBrainDumpToInbox = (e) => {
+    e.preventDefault();
+    const clean = brainDumpText.trim();
+    if (!clean) return;
+    const item = {
+      id: `inb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      text: clean,
+      source: "shutdown-ritual",
+      createdAt: new Date().toISOString(),
+    };
+    setState((s) => ({
+      ...s,
+      inbox: [item, ...rows(s.inbox)],
+    }));
+    setBrainDumpText("");
+    flashNote("🧠 تم تفريغ الفكرة إلى صندوق الوارد — نم بذهن صافٍ!");
+  };
+
+  const handleCompleteEveningShutdown = () => {
+    const nowTime = new Date().toLocaleTimeString("ar-SA", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    fireBurst();
+    persistRitualPatch({
+      eveningDone: true,
+      eveningAt: nowTime,
+      eveningWin: eveningWinDraft.trim(),
+    });
+    setExpanded(false);
+    flashNote("🌙 تم ختم اليوم وإغلاق المكتب بسلام. تصبح على خير وإنجاز!");
+  };
+
+  const handleAddWeeklyPriorityTask = (e) => {
+    e.preventDefault();
+    const clean = weeklyTaskText.trim();
+    if (!clean) return;
+    const asTop = topTasks.length < TOP_TASK_CAP;
+    const created = taskShape({
+      id: uid(),
+      text: clean,
+      quadrant: "q2",
+      today: asTop,
+      scheduled: !asTop,
+      done: false,
+      linkedGoalId: focusGoalDraft || null,
+      createdAt: today,
+    });
+    setState((s) => ({
+      ...s,
+      tasks: capToday([created, ...rows(s.tasks)]),
+    }));
+    setWeeklyTaskText("");
+    flashNote(
+      focusGoalDraft
+        ? "🎯 أُضيفت الأولوية الأسبوعية ورُبطت بهدفك في إرث 2030!"
+        : "✅ أُضيفت الأولوية الأسبوعية إلى قائمة مهامك!",
+    );
+  };
+
+  const handleSaveWeeklyReview = () => {
+    const nowTime = new Date().toLocaleDateString("ar-SA", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const entry = {
+      done: true,
+      savedAt: nowTime,
+      weeklyWin: weeklyWinDraft.trim(),
+      weeklyLesson: weeklyLessonDraft.trim(),
+      keystoneHabitId: keystoneDraft || "",
+      focusGoalId: focusGoalDraft || "",
+      avgPct: weekStats.avgPct,
+    };
+    try {
+      const raw = localStorage.getItem("los-weekly-reviews-v1");
+      const map = raw ? JSON.parse(raw) : {};
+      map[weekKey] = entry;
+      localStorage.setItem("los-weekly-reviews-v1", JSON.stringify(map));
+    } catch {
+      /* ignore */
+    }
+    setState((s) => ({
+      ...s,
+      weeklyReviews: {
+        ...(s.weeklyReviews && typeof s.weeklyReviews === "object" ? s.weeklyReviews : {}),
+        [weekKey]: entry,
+      },
+    }));
+    fireBurst();
+    setExpanded(false);
+    flashNote("🗓️ تم اعتماد مراجعة وخطة الأسبوع بنجاح! أسبوع مبارك وواضح الاتجاه.");
+  };
+
+  const isMorning = mode === "morning";
+  const isWeekly = mode === "weekly";
+  const accentColor = isWeekly ? T.primary : isMorning ? T.warn : T.indigo;
+  const isWeekend = new Date().getDay() === 5 || new Date().getDay() === 6;
+
+  return (
+    <Card
+      className={`overflow-hidden p-5 sm:p-6 transition-all duration-300${burst ? " los-reward" : ""}`}
+      style={{
+        borderColor: `${accentColor}45`,
+        background: isWeekly
+          ? "linear-gradient(135deg, rgba(16,185,129,0.10) 0%, rgba(56,189,248,0.05) 55%, rgba(12,16,28,0.95) 100%)"
+          : isMorning
+            ? "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(16,185,129,0.04) 55%, rgba(15,18,30,0.92) 100%)"
+            : "linear-gradient(135deg, rgba(99,102,241,0.10) 0%, rgba(167,139,250,0.05) 55%, rgba(12,14,24,0.95) 100%)",
+      }}
+    >
+      {/* الشريط العلوي والتبديل بين الإقلاع الصباحي وإغلاق المساء والتخطيط الأسبوعي */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
+            style={{
+              borderColor: `${accentColor}55`,
+              background: `${accentColor}1A`,
+              color: accentColor,
+              boxShadow: `0 0 22px -8px ${accentColor}`,
+            }}
+          >
+            {isWeekly ? <CalendarDays size={21} /> : isMorning ? <Sunrise size={21} /> : <MoonStar size={21} />}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[15.5px] font-extrabold" style={{ color: T.ink }}>
+                {isWeekly
+                  ? "ورشة المراجعة والتخطيط الأسبوعي (١٠ دقائق)"
+                  : isMorning
+                    ? "طقس الإقلاع الصباحي (٣٠ ثانية)"
+                    : "طقس إغلاق اليوم المسائي (Shutdown Ritual)"}
+              </h3>
+              {savedRitual.morningDone && (
+                <Badge tint={T.primary}>
+                  🌅 إقلاع الصباح {savedRitual.morningAt ? `· ${savedRitual.morningAt}` : "✓"}
+                </Badge>
+              )}
+              {savedRitual.eveningDone && (
+                <Badge tint={T.violet}>
+                  🌙 إغلاق المساء {savedRitual.eveningAt ? `· ${savedRitual.eveningAt}` : "✓"}
+                </Badge>
+              )}
+              {savedWeekly.done && (
+                <Badge tint={T.sky}>
+                  🗓️ خطة الأسبوع ✓
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-[11.5px]" style={{ color: T.muted }}>
+              {isWeekly
+                ? "حصاد آخر ٧ أيام تلقائيًا، تثبيت العادة المحورية، وربط أولويات الأسبوع بإرث 2030"
+                : isMorning
+                  ? "اضبط بوصلتك الصباحية: النوم، الطاقة البيولوجية، أول كوب ماء، وأهم ٣ مهام"
+                  : "أغلق ملفات اليوم بلا قلق: جرد الإنجاز، ترحيل المهام المتبقية، وتصفية الذهن قبل النوم"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="inline-flex flex-wrap rounded-xl border p-1"
+            style={{ borderColor: T.border, background: "rgba(0,0,0,0.28)" }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setMode("morning");
+                setExpanded(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-extrabold transition-all"
+              style={{
+                background: isMorning ? `${T.warn}26` : "transparent",
+                color: isMorning ? T.warn : T.muted,
+              }}
+            >
+              <Sun size={13} /> إقلاع الصباح
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("evening");
+                setExpanded(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-extrabold transition-all"
+              style={{
+                background: mode === "evening" ? `${T.indigo}2E` : "transparent",
+                color: mode === "evening" ? T.violet : T.muted,
+              }}
+            >
+              <Moon size={13} /> إغلاق المساء
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("weekly");
+                setExpanded(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-extrabold transition-all"
+              style={{
+                background: isWeekly ? `${T.primary}26` : "transparent",
+                color: isWeekly ? T.primaryLift : isWeekend && !savedWeekly.done ? T.warn : T.muted,
+              }}
+            >
+              <CalendarDays size={13} /> تخطيط الأسبوع
+              {isWeekend && !savedWeekly.done && (
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              )}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="rounded-xl border px-3 py-1.5 text-[11.5px] font-bold transition-colors hover:bg-white/10"
+            style={{ borderColor: T.border, color: T.ink }}
+          >
+            {expanded ? "طيّ البطاقة" : "فتح الطقس"}
+          </button>
+        </div>
+      </div>
+
+      {statusToast && (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[12px] font-bold"
+          style={{
+            borderColor: `${T.primary}55`,
+            background: `${T.primary}18`,
+            color: T.primaryLift,
+          }}
+        >
+          <Sparkles size={14} />
+          <span>{statusToast}</span>
+        </div>
+      )}
+
+      {/* العرض المضغوط عند إتمام الطقس وطيّ البطاقة */}
+      {!expanded && isMorning && savedRitual.morningDone && (
+        <div
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+          style={{
+            borderColor: "rgba(255,255,255,0.08)",
+            background: "rgba(0,0,0,0.22)",
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-3 text-[12px]">
+            <span className="inline-flex items-center gap-1.5 font-extrabold" style={{ color: T.primary }}>
+              <Rocket size={14} /> تم الإقلاع الصباحي
+            </span>
+            <span style={{ color: T.muted }}>
+              😴 نوم: <strong dir="ltr" className="text-white">{savedRitual.sleepHours}h</strong>
+            </span>
+            <span style={{ color: T.muted }}>
+              ⚡ طاقة: <strong dir="ltr" className="text-white">{savedRitual.morningEnergy}/5</strong>
+            </span>
+            <span style={{ color: T.muted }}>
+              🎯 أهم المهام: <strong dir="ltr" className="text-white">{topTasks.length}/{TOP_TASK_CAP}</strong>
+            </span>
+            {savedRitual.intention && (
+              <span
+                className="rounded-lg border px-2.5 py-0.5 text-[11.5px] font-bold"
+                style={{
+                  borderColor: `${T.warn}40`,
+                  background: `${T.warn}14`,
+                  color: T.warn,
+                }}
+              >
+                🧭 نية اليوم: «{savedRitual.intention}»
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="text-[11.5px] font-bold underline-offset-4 hover:underline"
+            style={{ color: T.warn }}
+          >
+            تعديل الإقلاع
+          </button>
+        </div>
+      )}
+
+      {!expanded && mode === "evening" && savedRitual.eveningDone && (
+        <div
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+          style={{
+            borderColor: `${T.violet}38`,
+            background: "rgba(15, 12, 32, 0.5)",
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-3 text-[12px]">
+            <span className="inline-flex items-center gap-1.5 font-extrabold" style={{ color: T.violet }}>
+              <CheckCircle2 size={14} /> Shutdown Complete — المكتب مغلق بسلام
+            </span>
+            <span style={{ color: T.muted }}>
+              📊 انضباط اليوم: <strong dir="ltr" className="text-white">{discipline}%</strong>
+            </span>
+            {savedRitual.eveningWin && (
+              <span
+                className="rounded-lg border px-2.5 py-0.5 text-[11.5px] font-bold"
+                style={{
+                  borderColor: `${T.primary}40`,
+                  background: `${T.primary}14`,
+                  color: T.primaryLift,
+                }}
+              >
+                🏆 مكسب اليوم: «{savedRitual.eveningWin}»
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="text-[11.5px] font-bold underline-offset-4 hover:underline"
+            style={{ color: T.violet }}
+          >
+            مراجعة الإغلاق
+          </button>
+        </div>
+      )}
+
+      {!expanded && isWeekly && savedWeekly.done && (
+        <div
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+          style={{
+            borderColor: `${T.primary}38`,
+            background: "rgba(10, 26, 22, 0.45)",
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-3 text-[12px]">
+            <span className="inline-flex items-center gap-1.5 font-extrabold" style={{ color: T.primaryLift }}>
+              <CheckCircle2 size={14} /> خطة الأسبوع معتمدة
+            </span>
+            <span style={{ color: T.muted }}>
+              📊 متوسط آخر ٧ أيام: <strong dir="ltr" className="text-white">{weekStats.avgPct}%</strong>
+            </span>
+            {savedWeekly.weeklyWin && (
+              <span
+                className="rounded-lg border px-2.5 py-0.5 text-[11.5px] font-bold"
+                style={{
+                  borderColor: `${T.primary}40`,
+                  background: `${T.primary}14`,
+                  color: T.primaryLift,
+                }}
+              >
+                🏆 انتصار الأسبوع: «{savedWeekly.weeklyWin}»
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="text-[11.5px] font-bold underline-offset-4 hover:underline"
+            style={{ color: T.primaryLift }}
+          >
+            تعديل خطة الأسبوع
+          </button>
+        </div>
+      )}
+
+      {/* ==================== 1) تفاصيل طقس الإقلاع الصباحي ==================== */}
+      {expanded && isMorning && (
+        <div className="mt-5 space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* المربع الأول: النوم + الطاقة + الماء الصباحي */}
+            <div
+              className="rounded-2xl border p-4 space-y-4"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.22)",
+              }}
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                    <Moon size={14} style={{ color: T.sky }} /> ١. كم ساعة نمت الليلة الماضية؟
+                  </label>
+                  <span dir="ltr" className="text-[12px] font-extrabold tabular-nums" style={{ color: T.sky }}>
+                    {sleepDraft} hrs
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+                  {SLEEP_PRESETS.map((p) => {
+                    const active = Math.abs(sleepDraft - p.val) < 0.1;
+                    return (
+                      <button
+                        key={p.val}
+                        type="button"
+                        onClick={() => setSleepDraft(p.val)}
+                        title={p.hint}
+                        className="rounded-xl border py-2 text-center transition-all"
+                        style={{
+                          borderColor: active ? T.sky : T.border,
+                          background: active ? `${T.sky}22` : "rgba(255,255,255,0.03)",
+                          color: active ? T.sky : T.muted,
+                        }}
+                      >
+                        <div className="text-[12px] font-extrabold">{p.label}</div>
+                        <div className="text-[9.5px] opacity-75">{p.hint}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                    <BatteryCharging size={14} style={{ color: T.warn }} /> ٢. شحنة الطاقة والتركيز الآن
+                  </label>
+                  <span className="text-[11px] font-bold" style={{ color: T.warn }}>
+                    {ENERGY_LEVELS.find((e) => e.val === energyDraft)?.label}
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-5 gap-1.5">
+                  {ENERGY_LEVELS.map((lv) => {
+                    const active = energyDraft === lv.val;
+                    return (
+                      <button
+                        key={lv.val}
+                        type="button"
+                        onClick={() => setEnergyDraft(lv.val)}
+                        className="rounded-xl border py-2 text-center text-[11px] font-extrabold transition-all"
+                        style={{
+                          borderColor: active ? lv.color : T.border,
+                          background: active ? `${lv.color}24` : "rgba(255,255,255,0.03)",
+                          color: active ? lv.color : T.muted,
+                        }}
+                      >
+                        {lv.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* أول كوب ماء + بوصلة النية */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="text-[11.5px]" style={{ color: T.muted }}>
+                  💧 شرب الماء اليوم:{" "}
+                  <strong dir="ltr" className="text-white">
+                    {waterCount} / {waterGoal}
+                  </strong>{" "}
+                  أكواب
+                </div>
+                <button
+                  type="button"
+                  onClick={addMorningCup}
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-all hover:scale-105"
+                  style={{
+                    borderColor: `${T.sky}55`,
+                    background: `${T.sky}1C`,
+                    color: T.sky,
+                  }}
+                >
+                  <Droplets size={13} /> +١ كوب ماء صباحي
+                </button>
+              </div>
+            </div>
+
+            {/* المربع الثاني: نية اليوم وتثبيت أهم 3 مهام */}
+            <div
+              className="rounded-2xl border p-4 space-y-3.5"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.22)",
+              }}
+            >
+              <div>
+                <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                  <Target size={14} style={{ color: T.primary }} /> ٣. بوصلة النية (ما الذي سيجعل اليوم ناجحًا؟)
+                </label>
+                <input
+                  type="text"
+                  value={intentionDraft}
+                  onChange={(e) => setIntentionDraft(e.target.value)}
+                  placeholder="مثال: إنجاز ساعتين عميقتين في المشروع دون فتح الجوال..."
+                  className="mt-1.5 w-full rounded-xl border bg-black/30 px-3 py-2 text-[12px] text-white placeholder-white/30 focus:outline-none"
+                  style={{ borderColor: T.border }}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[12px] font-extrabold" style={{ color: T.ink }}>
+                    <Flame size={14} style={{ color: T.warn }} /> أهم ٣ مهام حاسمة اليوم ({topTasks.length}/{TOP_TASK_CAP})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onGo && onGo("matrix")}
+                    className="text-[10.5px] font-bold hover:underline"
+                    style={{ color: T.cta }}
+                  >
+                    فتح المصفوفة ←
+                  </button>
+                </div>
+
+                <div className="mt-2 space-y-1.5">
+                  {topTasks.length > 0 ? (
+                    topTasks.map((t, idx) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[12px]"
+                        style={{
+                          borderColor: `${T.primary}40`,
+                          background: `${T.primary}10`,
+                        }}
+                      >
+                        <span className="truncate font-bold text-white">
+                          {idx + 1}. {t.text}
+                        </span>
+                        <Badge tint={T.primary}>أساسية</Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-dashed px-3 py-2 text-[11px]" style={{ borderColor: T.border, color: T.faint }}>
+                      لم تختر مهامك الثلاث الحاسمة لليوم بعد — اختر من القائمة أدناه أو أضف مهمة فورًا.
+                    </p>
+                  )}
+                </div>
+
+                {topTasks.length < TOP_TASK_CAP && candidatePool.length > 0 && (
+                  <div className="mt-2">
+                    <p className="mb-1 text-[10.5px]" style={{ color: T.faint }}>
+                      ترقية سريعة إلى أهم ٣ مهام بضغطة واحدة:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {candidatePool.slice(0, 3).map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => promoteTaskToTop(c.id)}
+                          className="inline-flex max-w-full items-center gap-1 truncate rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors hover:bg-white/10"
+                          style={{ borderColor: T.border, color: T.muted }}
+                        >
+                          <Plus size={11} style={{ color: T.warn }} />
+                          <span className="truncate">{c.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleQuickAddTopTask} className="mt-2.5 flex gap-1.5">
+                  <input
+                    type="text"
+                    value={quickTaskText}
+                    onChange={(e) => setQuickTaskText(e.target.value)}
+                    placeholder="أضف مهمة حاسمة لليوم مباشرة..."
+                    className="min-w-0 flex-1 rounded-xl border bg-black/30 px-3 py-1.5 text-[11.5px] text-white placeholder-white/30 focus:outline-none"
+                    style={{ borderColor: T.border }}
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-all hover:opacity-90"
+                    style={{
+                      borderColor: `${T.warn}55`,
+                      background: `${T.warn}20`,
+                      color: T.warn,
+                    }}
+                  >
+                    + تثبيت
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <p className="text-[11px]" style={{ color: T.faint }}>
+              💡 بيانات نومك وطاقتك تُغذّي تلقائيًا «محرك الارتباط الذكي» و«جدولة الإيقاع البيولوجي».
+            </p>
+            <button
+              type="button"
+              onClick={handleLaunchMorning}
+              className="inline-flex items-center gap-2 rounded-2xl px-6 py-2.5 text-[13px] font-extrabold text-slate-950 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${T.warn}, ${T.primary})`,
+                boxShadow: `0 10px 26px -10px ${T.warn}`,
+              }}
+            >
+              <Rocket size={16} /> اعتماد الإقلاع الصباحي وبدء اليوم
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 2) تفاصيل طقس إغلاق اليوم المسائي ==================== */}
+      {expanded && mode === "evening" && (
+        <div className="mt-5 space-y-4">
+          {/* شريط جرد الحصاد اليومي */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>انضباط اليوم</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.primary }}>
+                {discipline}%
+              </div>
+            </div>
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>العادات المنجزة</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.sky }}>
+                {doneCount} / {totalHabits}
+              </div>
+            </div>
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>مهام اليوم المكتملة</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.violet }}>
+                {completedTasksToday.length}
+              </div>
+            </div>
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>مهام مفتوحة متبقية</div>
+              <div
+                dir="ltr"
+                className="mt-1 text-[18px] font-extrabold tabular-nums"
+                style={{ color: openTodayTasks.length > 0 ? T.warn : T.primary }}
+              >
+                {openTodayTasks.length}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* المربع الأول: ترحيل المهام المتبقية للغد بلا تأنيب ضمير */}
+            <div
+              className="rounded-2xl border p-4 space-y-3"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.22)",
+              }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                  <CalendarClock size={15} style={{ color: T.warn }} /> ١. إخلاء المهام المفتوحة وترحيلها للغد
+                </h4>
+                {onOpenTomorrow && (
+                  <button
+                    type="button"
+                    onClick={onOpenTomorrow}
+                    className="text-[11px] font-bold hover:underline"
+                    style={{ color: T.cta }}
+                  >
+                    نافذة جهّز غدك ←
+                  </button>
+                )}
+              </div>
+
+              {openTodayTasks.length > 0 ? (
+                <>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {openTodayTasks.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[11.5px]"
+                        style={{
+                          borderColor: "rgba(255,255,255,0.07)",
+                          background: "rgba(255,255,255,0.02)",
+                        }}
+                      >
+                        <span className="truncate text-white">{t.text}</span>
+                        <Badge tint={t.today ? T.warn : T.muted}>
+                          {t.today ? "أهم ٣" : "إضافية"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRolloverOpenTasks}
+                    className="w-full rounded-xl border py-2 px-3 text-[12px] font-extrabold transition-all hover:bg-white/10"
+                    style={{
+                      borderColor: `${T.warn}55`,
+                      background: `${T.warn}18`,
+                      color: T.warn,
+                    }}
+                  >
+                    📦 ترحيل المهام المتبقية ({openTodayTasks.length}) إلى خطة الغد وإخلاء الذهن
+                  </button>
+                </>
+              ) : (
+                <div
+                  className="rounded-xl border px-3.5 py-4 text-center text-[12px] font-bold"
+                  style={{
+                    borderColor: `${T.primary}40`,
+                    background: `${T.primary}10`,
+                    color: T.primaryLift,
+                  }}
+                >
+                  ✨ أتممت جميع مهام اليوم المجدولة — لا توجد أي مهام عالقة الليلة!
+                </div>
+              )}
+            </div>
+
+            {/* المربع الثاني: مكسب اليوم + تفريغ العقل إلى صندوق الوارد */}
+            <div
+              className="rounded-2xl border p-4 space-y-3"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.22)",
+              }}
+            >
+              <div>
+                <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                  <Trophy size={14} style={{ color: T.primary }} /> ٢. أهم مكسب أو نعمة في يومي (تأمل المساء)
+                </label>
+                <input
+                  type="text"
+                  value={eveningWinDraft}
+                  onChange={(e) => setEveningWinDraft(e.target.value)}
+                  placeholder="مثال: التزمت بصلاتي وأنهيت الجزء الأصعب من مذاكرة اليوم..."
+                  className="mt-1.5 w-full rounded-xl border bg-black/30 px-3 py-2 text-[12px] text-white placeholder-white/30 focus:outline-none"
+                  style={{ borderColor: T.border }}
+                />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-1.5 text-[12px] font-extrabold" style={{ color: T.ink }}>
+                  <Brain size={14} style={{ color: T.violet }} /> ٣. تفريغ فكرة عالقة قبل النوم (إلى صندوق الوارد)
+                </label>
+                <form onSubmit={handleBrainDumpToInbox} className="mt-1.5 flex gap-1.5">
+                  <input
+                    type="text"
+                    value={brainDumpText}
+                    onChange={(e) => setBrainDumpText(e.target.value)}
+                    placeholder="أي فكرة أو تذكير يشغل بالك الآن أفرغه هنا..."
+                    className="min-w-0 flex-1 rounded-xl border bg-black/30 px-3 py-1.5 text-[11.5px] text-white placeholder-white/30 focus:outline-none"
+                    style={{ borderColor: T.border }}
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-all hover:opacity-90"
+                    style={{
+                      borderColor: `${T.violet}55`,
+                      background: `${T.violet}20`,
+                      color: T.violet,
+                    }}
+                  >
+                    <Inbox size={13} /> تفريغ
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <p className="text-[11px]" style={{ color: T.faint }}>
+              🌙 قاعدة كال نيوبورت: «حين تقول Shutdown Complete، يتوقف عقلك الباطن عن القلق ويبدأ الاستشفاء الحقيقي».
+            </p>
+            <button
+              type="button"
+              onClick={handleCompleteEveningShutdown}
+              className="inline-flex items-center gap-2 rounded-2xl px-6 py-2.5 text-[13px] font-extrabold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${T.indigo}, ${T.violet})`,
+                boxShadow: `0 10px 26px -10px ${T.indigo}`,
+              }}
+            >
+              <MoonStar size={16} /> ختم اليوم وإغلاق المكتب بسلام (Shutdown Complete)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 3) تفاصيل ورشة المراجعة والتخطيط الأسبوعي ==================== */}
+      {expanded && isWeekly && (
+        <div className="mt-5 space-y-4">
+          {/* شريط مرآة آخر 7 أيام (محسوب تلقائيًا) */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>متوسط آخر ٧ أيام</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.primary }}>
+                {weekStats.avgPct}%
+              </div>
+              <div className="mt-0.5 text-[9.5px]" style={{ color: T.faint }}>
+                ({weekStats.loggedDays} أيام مسجلة)
+              </div>
+            </div>
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>أعلى قمة انضباط</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.warn }}>
+                {weekStats.bestPct}%
+              </div>
+              <div className="mt-0.5 text-[9.5px]" style={{ color: T.faint }}>
+                {arDate(weekStats.bestDate)}
+              </div>
+            </div>
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>قراءة آخر ٧ أيام</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.sky }}>
+                {weekStats.pages} ص
+              </div>
+              <div className="mt-0.5 text-[9.5px]" style={{ color: T.faint }}>
+                حصاد المعرفة
+              </div>
+            </div>
+            <div
+              className="rounded-2xl border p-3 text-center"
+              style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.22)" }}
+            >
+              <div className="text-[10.5px]" style={{ color: T.muted }}>التركيز العميق (٧ أيام)</div>
+              <div dir="ltr" className="mt-1 text-[18px] font-extrabold tabular-nums" style={{ color: T.violet }}>
+                {weekStats.focusMins} د
+              </div>
+              <div className="mt-0.5 text-[9.5px]" style={{ color: T.faint }}>
+                جلسات بومودورو
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* المربع الأول: حصاد الأسبوع الماضي + العادة المحورية */}
+            <div
+              className="rounded-2xl border p-4 space-y-3"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.22)",
+              }}
+            >
+              <div>
+                <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                  <Trophy size={14} style={{ color: T.primary }} /> ١. أبرز انتصار أو تقدم في الأسبوع الماضي
+                </label>
+                <input
+                  type="text"
+                  value={weeklyWinDraft}
+                  onChange={(e) => setWeeklyWinDraft(e.target.value)}
+                  placeholder="مثال: حافظت على صلاة الفجر وأنهيت قراءة فصلين..."
+                  className="mt-1.5 w-full rounded-xl border bg-black/30 px-3 py-2 text-[12px] text-white placeholder-white/30 focus:outline-none"
+                  style={{ borderColor: T.border }}
+                />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                  <AlertTriangle size={14} style={{ color: T.warn }} /> ٢. العائق الأكبر وكيف أتجاوزه هذا الأسبوع
+                </label>
+                <input
+                  type="text"
+                  value={weeklyLessonDraft}
+                  onChange={(e) => setWeeklyLessonDraft(e.target.value)}
+                  placeholder="مثال: السهر بعد العشاء — سأغلق الشاشات الساعة ١٠:٣٠ مساءً..."
+                  className="mt-1.5 w-full rounded-xl border bg-black/30 px-3 py-2 text-[12px] text-white placeholder-white/30 focus:outline-none"
+                  style={{ borderColor: T.border }}
+                />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                  <Star size={14} style={{ color: T.accent }} /> ٣. العادة المحورية لهذا الأسبوع (Keystone Habit)
+                </label>
+                <select
+                  value={keystoneDraft}
+                  onChange={(e) => setKeystoneDraft(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border bg-black/30 px-3 py-2 text-[12px] text-white focus:outline-none"
+                  style={{ borderColor: T.border }}
+                >
+                  <option value="" style={{ background: T.cardSolid }}>
+                    — اختر العادة التي ترفع بقية عاداتك هذا الأسبوع —
+                  </option>
+                  {(state.habits || []).map((h) => (
+                    <option key={h.id} value={h.id} style={{ background: T.cardSolid }}>
+                      {h.core ? "⭐ " : ""}{h.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* المربع الثاني: ربط الأسبوع بإرث 2030 وتثبيت الأولويات */}
+            <div
+              className="rounded-2xl border p-4 space-y-3"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.22)",
+              }}
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-[12.5px] font-extrabold" style={{ color: T.ink }}>
+                    <Target size={14} style={{ color: T.primary }} /> ٤. أي هدف من «إرثي 2030» سيتحرك هذا الأسبوع؟
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onGo && onGo("goals")}
+                    className="text-[10.5px] font-bold hover:underline"
+                    style={{ color: T.primaryLift }}
+                  >
+                    إرثي 2030 ←
+                  </button>
+                </div>
+                <select
+                  value={focusGoalDraft}
+                  onChange={(e) => setFocusGoalDraft(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border bg-black/30 px-3 py-2 text-[12px] text-white focus:outline-none"
+                  style={{ borderColor: focusGoalDraft ? `${T.primary}66` : T.border }}
+                >
+                  <option value="" style={{ background: T.cardSolid }}>
+                    — اختر هدفًا استراتيجيًا من إرث 2030 للتركيز عليه —
+                  </option>
+                  {(state.goals || [])
+                    .filter((g) => !g.done)
+                    .map((g) => (
+                      <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>
+                        🎯 {g.text} ({g.current || 0}/{g.target || 100} {g.unit || ""})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-1.5 text-[12px] font-extrabold" style={{ color: T.ink }}>
+                  <Zap size={14} style={{ color: T.cta }} /> ٥. أضف خطوة تنفيذية للأسبوع (تُربط تلقائيًا بالهدف المختار أعلاه)
+                </label>
+                <form onSubmit={handleAddWeeklyPriorityTask} className="mt-1.5 flex gap-1.5">
+                  <input
+                    type="text"
+                    value={weeklyTaskText}
+                    onChange={(e) => setWeeklyTaskText(e.target.value)}
+                    placeholder="اكتب خطوة عملية تخدم هدفك هذا الأسبوع..."
+                    className="min-w-0 flex-1 rounded-xl border bg-black/30 px-3 py-1.5 text-[11.5px] text-white placeholder-white/30 focus:outline-none"
+                    style={{ borderColor: T.border }}
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-all hover:opacity-90"
+                    style={{
+                      borderColor: `${T.primary}55`,
+                      background: `${T.primary}20`,
+                      color: T.primaryLift,
+                    }}
+                  >
+                    <Plus size={13} /> إدراج
+                  </button>
+                </form>
+              </div>
+
+              <div
+                className="rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed"
+                style={{
+                  borderColor: "rgba(255,255,255,0.06)",
+                  background: "rgba(255,255,255,0.02)",
+                  color: T.muted,
+                }}
+              >
+                💡 <strong className="text-white">سر الوضوح المستقبلي:</strong> حين تختار هدفًا واحدًا من إرث 2030 وتضيف له خطوة أو خطوتين في مهام الأسبوع، فإن كل علامة (✓) تضعها اليوم تقرّبك فعليًا من رؤيتك الكبرى.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <p className="text-[11px]" style={{ color: T.faint }}>
+              🗓️ عشر دقائق من التخطيط الأسبوعي توفر عليك عشرات الساعات من التشتت والقرارات العشوائية.
+            </p>
+            <button
+              type="button"
+              onClick={handleSaveWeeklyReview}
+              className="inline-flex items-center gap-2 rounded-2xl px-6 py-2.5 text-[13px] font-extrabold text-slate-950 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${T.primary}, ${T.sky})`,
+                boxShadow: `0 10px 26px -10px ${T.primary}`,
+              }}
+            >
+              <CheckCircle2 size={16} /> اعتماد مراجعة وخطة الأسبوع
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}

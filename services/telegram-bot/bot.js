@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /* --- 2027 Life OS, from the phone -------------------------------------- */
+import "./dns-fallback.js";
 import { Bot, InlineKeyboard } from "grammy";
 import { CONFIG, configProblems } from "./config.js";
 import { withState, readLife, DiskError } from "./lifeos-client.js";
@@ -143,6 +144,56 @@ async function showWeek(ctx) {
   return ctx.reply(weekReview(got.state));
 }
 
+const weeklyDrafts = new Map();
+
+async function showEmergency(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(V.emergencyCard(got.state, got.day), {
+    reply_markup: V.emergencyKeys(got.state),
+  });
+}
+
+async function showPrayers(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(V.prayerCard(got.state));
+}
+
+async function startWeeklyPlan(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  const draft = weeklyDrafts.get(ctx.chat.id) || {};
+  weeklyDrafts.set(ctx.chat.id, draft);
+  return ctx.reply(V.weeklyPlanPrompt(got.state, draft), {
+    reply_markup: V.weeklyPlanKeys(got.state, draft),
+  });
+}
+
+async function showSchedule(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(V.scheduleCard(got.state));
+}
+
+async function startShutdown(ctx) {
+  const got = await dayOrTell(ctx);
+  if (!got) return;
+  return ctx.reply(V.shutdownCard(got.state, got.day, "rate"), {
+    reply_markup: V.shutdownRateKeys(),
+  });
+}
+
+async function startBrainDump(ctx) {
+  const text = ctx.match?.trim();
+  if (!text) {
+    return ctx.reply(
+      "🎙️ أرسل رسالة صوتية فيها كل ما تريد تفريغه (مصاريف، ماء، قراءة، مهام، تقييم)، أو اكتب نصاً حراً بعد الأمر:\nمثال: /dump صرفت 40 غداء وشربت 2 ماء وقرأت 15 صفحة وسجل لي مهمة تحضير العرض",
+    );
+  }
+  return askAgent(ctx, text);
+}
+
 /* --- المساعد الذكي ------------------------------------------------------ *
  *  مدخل صريح لا بديل صامت: `parse.js` يبقى أول من يرى كل رسالة، ويلتقط
  *  المعتاد مجانًا وفورًا وبلا إنترنت. هذا يُستدعى بالاسم وحده — لأن كل
@@ -255,6 +306,51 @@ const WORDS = new Map(
     ["الأهداف", (ctx) => showGoals(ctx, "quarter")],
     ["اهداف", (ctx) => showGoals(ctx, "quarter")],
     ["أهدافي", (ctx) => showGoals(ctx, "quarter")],
+    ["طوارئ", showEmergency],
+    ["طواري", showEmergency],
+    ["الطوارئ", showEmergency],
+    ["الطواري", showEmergency],
+    ["صلاتي", showPrayers],
+    ["الصلوات", showPrayers],
+    ["أوقات الصلاة", showPrayers],
+    ["اوقات الصلاة", showPrayers],
+    ["مواقيت الصلاة", showPrayers],
+    ["تخطيط الأسبوع", startWeeklyPlan],
+    ["تخطيط الاسبوع", startWeeklyPlan],
+    ["خطط الأسبوع", startWeeklyPlan],
+    ["خطط الاسبوع", startWeeklyPlan],
+    ["وش علي", showSchedule],
+    ["وش علي اليوم", showSchedule],
+    ["وش علي الفترة الجاية", showSchedule],
+    ["وش علي الفتره الجايه", showSchedule],
+    ["وش عندي", showSchedule],
+    ["وش عندي اليوم", showSchedule],
+    ["وش عندي الفترة الجاية", showSchedule],
+    ["وش عندي الفتره الجايه", showSchedule],
+    ["وش وراي", showSchedule],
+    ["وش وراي اليوم", showSchedule],
+    ["وش القادم", showSchedule],
+    ["وش الجاي", showSchedule],
+    ["الفترة الجاية", showSchedule],
+    ["الفتره الجايه", showSchedule],
+    ["الفترة القادمة", showSchedule],
+    ["الفتره القادمه", showSchedule],
+    ["جدول اليوم", showSchedule],
+    ["تقويمي", showSchedule],
+    ["التقويم", showSchedule],
+    ["مواعيدي", showSchedule],
+    ["مواعيد", showSchedule],
+    ["مواعيد اليوم", showSchedule],
+    ["جدولي", showSchedule],
+    ["محاضراتي", showSchedule],
+    ["محاضرات", showSchedule],
+    ["جامعتي", showSchedule],
+    ["إقفال اليوم", startShutdown],
+    ["اقفال اليوم", startShutdown],
+    ["إغلاق اليوم", startShutdown],
+    ["اقفال", startShutdown],
+    ["تفريغ", startBrainDump],
+    ["سجل لي", startBrainDump],
   ].map(([word, run]) => [fold(word), run]),
 );
 
@@ -262,6 +358,13 @@ bot.command(["start", "help"], (ctx) => ctx.reply(V.HELP, { reply_markup: V.menu
 bot.command("today", showToday);
 bot.command("now", showOpen);
 bot.command("coach", showCoach);
+bot.command(["schedule", "events", "calendar", "uni"], showSchedule);
+bot.command(["shutdown", "closing", "night"], startShutdown);
+bot.command(["dump", "braindump"], startBrainDump);
+bot.command("emergency", showEmergency);
+bot.command("core", showEmergency);
+bot.command(["prayers", "prayer"], showPrayers);
+bot.command(["plan_week", "planweek"], startWeeklyPlan);
 bot.command("ai", (ctx) => askAgent(ctx, ctx.match || ""));
 bot.command("week", showWeek);
 bot.command("focus", showFocus);
@@ -297,6 +400,24 @@ bot.on("callback_query:data", async (ctx) => {
   if (kind === "tick") return tickAndMaybeRead(ctx, arg, false);
   if (kind === "tiny") return tickAndMaybeRead(ctx, arg, true);
   if (kind === "task") return apply(ctx, (s) => act.finishTask(s, arg), V.savedTaskDone);
+  if (kind === "task_postpone") {
+    return apply(ctx, (s) => act.postponeTask(s, arg), V.savedTaskPostponed);
+  }
+  if (kind === "sched") {
+    return showSchedule(ctx);
+  }
+  if (kind === "morning") {
+    if (arg === "pick_tasks") {
+      const got = await dayOrTell(ctx);
+      if (!got) return;
+      return ctx.reply("🎯 اختر مهمة لرفعها إلى قائمة اليوم:", {
+        reply_markup: V.morningTaskPickerKeys(got.state),
+      });
+    }
+    if (arg === "add_task") {
+      return apply(ctx, (s) => act.promoteTaskToToday(s, extra), V.savedTaskPromoted);
+    }
+  }
   if (kind === "water") {
     return apply(ctx, (s) => act.drinkWater(s, Number(arg) || 1), V.savedWater);
   }
@@ -408,6 +529,100 @@ bot.on("callback_query:data", async (ctx) => {
     return apply(ctx, (s) => act.fallUrge(s, arg, { tag: extra || "" }), V.savedFall);
   }
 
+  if (kind === "emg") {
+    if (arg === "view") return showEmergency(ctx);
+    if (arg === "on") return apply(ctx, (s) => act.triggerEmergency(s, { active: true }), V.savedEmergency);
+    if (arg === "off") return apply(ctx, (s) => act.triggerEmergency(s, { active: false }), V.savedEmergency);
+    if (arg === "rescue") return apply(ctx, (s) => act.triggerEmergency(s, { active: true, completeTinyCore: true }), V.savedEmergency);
+  }
+
+  if (kind === "wp") {
+    const draft = weeklyDrafts.get(ctx.chat.id) || {};
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    if (arg === "pick_habit") {
+      return ctx.reply("⭐ اختر العادة المحورية لهذا الأسبوع:", {
+        reply_markup: V.weeklyHabitPickerKeys(got.state),
+      });
+    }
+    if (arg === "set_h") {
+      draft.keystoneHabitId = extra;
+      weeklyDrafts.set(ctx.chat.id, draft);
+      return ctx.reply("✅ تم اختيار العادة المحورية!\n\n" + V.weeklyPlanPrompt(got.state, draft), {
+        reply_markup: V.weeklyPlanKeys(got.state, draft),
+      });
+    }
+    if (arg === "pick_goal") {
+      return ctx.reply("🎯 اختر هدف 2030 للتركيز عليه هذا الأسبوع:", {
+        reply_markup: V.weeklyGoalPickerKeys(got.state),
+      });
+    }
+    if (arg === "set_g") {
+      draft.focusGoalId = extra;
+      weeklyDrafts.set(ctx.chat.id, draft);
+      return ctx.reply("✅ تم ربط الأسبوع بهدف 2030!\n\n" + V.weeklyPlanPrompt(got.state, draft), {
+        reply_markup: V.weeklyPlanKeys(got.state, draft),
+      });
+    }
+    if (arg === "back") {
+      return ctx.reply(V.weeklyPlanPrompt(got.state, draft), {
+        reply_markup: V.weeklyPlanKeys(got.state, draft),
+      });
+    }
+    if (arg === "commit") {
+      weeklyDrafts.delete(ctx.chat.id);
+      return apply(ctx, (s) => act.saveWeeklyReview(s, draft), V.savedWeeklyPlan);
+    }
+  }
+
+  if (kind === "focus" && arg === "refresh") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    return ctx
+      .editMessageText(V.focusStand(got.state), keysOr(V.focusKeys(got.state.focus?.run || null)))
+      .catch(() => {});
+  }
+
+  if (kind === "shut") {
+    if (arg === "start") return startShutdown(ctx);
+    if (arg === "rate") {
+      const stars = Number(extra) || 5;
+      const got = await dayOrTell(ctx);
+      if (!got) return;
+      return ctx.reply(
+        `⭐ تقييم اليوم: ${"★".repeat(stars)}\n\n` + V.shutdownCard(got.state, got.day, "distraction"),
+        { reply_markup: V.shutdownDistractionKeys() },
+      );
+    }
+    if (arg === "dist") {
+      const note = extra || "";
+      await withState((s) => act.reflect(s, { field: "distraction", note })).catch(() => {});
+      const got = await dayOrTell(ctx);
+      if (!got) return;
+      const inbox = rows(got.state.tasks).filter((t) => !t.today && !t.done);
+      return ctx.reply(
+        `📝 المشتت: «${note}»\n\n` + V.shutdownCard(got.state, got.day, "prep"),
+        { reply_markup: V.shutdownPrepKeys(inbox) },
+      );
+    }
+    if (arg === "prep") {
+      const res = await withState((s) => act.pickTomorrow(s, extra)).catch(() => null);
+      const got = await dayOrTell(ctx);
+      if (!got) return;
+      const inbox = rows(got.state.tasks).filter((t) => !t.today && !t.done);
+      const pickedName = res?.picked?.text ? `«${res.picked.text}»` : "";
+      return ctx.reply(
+        `🌙 تم رفع المهمة للغد: ${pickedName}\n\nاختر مهمة أخرى أو اضغط إنهاء الإقفال:`,
+        { reply_markup: V.shutdownPrepKeys(inbox) },
+      );
+    }
+    if (arg === "done") {
+      const got = await dayOrTell(ctx);
+      if (!got) return;
+      return ctx.reply(V.shutdownCard(got.state, got.day, "done"));
+    }
+  }
+
   if (kind === "menu") {
     if (arg === "today") return showToday(ctx);
     if (arg === "open") return showOpen(ctx);
@@ -415,6 +630,8 @@ bot.on("callback_query:data", async (ctx) => {
     if (arg === "week") return showWeek(ctx);
     if (arg === "focus") return showFocus(ctx);
     if (arg === "books") return showShelf(ctx);
+    if (arg === "prayers") return showPrayers(ctx);
+    if (arg === "schedule") return showSchedule(ctx);
     return ctx.reply(V.HELP);
   }
 });
@@ -578,7 +795,66 @@ async function handleText(ctx) {
   const toAgent = agentCall(raw);
   if (toAgent !== null) return askAgent(ctx, toAgent);
 
+  if (raw.startsWith("إنجاز:") || raw.startsWith("انجاز:")) {
+    const val = raw.replace(/^إ?نجاز:\s*/, "").trim();
+    const draft = weeklyDrafts.get(ctx.chat.id) || {};
+    draft.win = val;
+    weeklyDrafts.set(ctx.chat.id, draft);
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    return ctx.reply(`✨ تم تسجيل إنجاز الأسبوع: «${val}»\n\n` + V.weeklyPlanPrompt(got.state, draft), {
+      reply_markup: V.weeklyPlanKeys(got.state, draft),
+    });
+  }
+  if (raw.startsWith("درس:") || raw.startsWith("درس الأسبوع:") || raw.startsWith("درس الاسبوع:")) {
+    const val = raw.replace(/^درس(\s*الأ?سبوع)?:\s*/, "").trim();
+    const draft = weeklyDrafts.get(ctx.chat.id) || {};
+    draft.lesson = val;
+    weeklyDrafts.set(ctx.chat.id, draft);
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    return ctx.reply(`🪶 تم تسجيل درس الأسبوع: «${val}»\n\n` + V.weeklyPlanPrompt(got.state, draft), {
+      reply_markup: V.weeklyPlanKeys(got.state, draft),
+    });
+  }
+
   const said = parse(raw);
+
+  if (said.kind === "schedule") {
+    return showSchedule(ctx);
+  }
+
+  if (said.kind === "task_postpone") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const list = rows(got.state.tasks).filter((t) => t.today && !t.done);
+    const found = list.filter((t) => fold(t.text).includes(fold(said.query)));
+    if (!found.length) {
+      return ctx.reply(`⚠️ ما لقيت مهمة نشطة تشبه «${said.query}».`);
+    }
+    if (found.length > 1) {
+      const kb = new InlineKeyboard();
+      for (const t of found) kb.text(`⏱️ ${t.text}`, `task_postpone:${t.id}`).row();
+      return ctx.reply("أي مهمة تريد تأجيلها للغد؟", { reply_markup: kb });
+    }
+    return apply(ctx, (s) => act.postponeTask(s, found[0].id), V.savedTaskPostponed);
+  }
+
+  if (said.kind === "task_promote") {
+    const got = await dayOrTell(ctx);
+    if (!got) return;
+    const list = rows(got.state.tasks).filter((t) => !t.today && !t.done);
+    const found = list.filter((t) => fold(t.text).includes(fold(said.query)));
+    if (!found.length) {
+      return ctx.reply(`⚠️ ما لقيت مهمة في الوارد تشبه «${said.query}».`);
+    }
+    if (found.length > 1) {
+      const kb = new InlineKeyboard();
+      for (const t of found) kb.text(`🎯 ${t.text}`, `morning:add_task:${t.id}`).row();
+      return ctx.reply("أي مهمة تريد رفعها لليوم؟", { reply_markup: kb });
+    }
+    return apply(ctx, (s) => act.promoteTaskToToday(s, found[0].id), V.savedTaskPromoted);
+  }
 
   if (said.kind === "expense") {
     return apply(ctx, (s) => act.addExpense(s, said), (o) =>
@@ -592,6 +868,9 @@ async function handleText(ctx) {
   }
   if (said.kind === "water") {
     return apply(ctx, (s) => act.drinkWater(s, said.count), V.savedWater);
+  }
+  if (said.kind === "sleep") {
+    return apply(ctx, (s) => act.logSleep(s, said.hours, said.note), V.savedSleep);
   }
   if (said.kind === "habit") {
     const got = await dayOrTell(ctx);
@@ -774,12 +1053,13 @@ async function handleText(ctx) {
     return apply(ctx, (s) => act.addMark(s, found[0].id, said), V.savedMark);
   }
   if (said.kind === "ask") {
+    if (said.topic === "schedule") return showSchedule(ctx);
     const got = await dayOrTell(ctx);
     if (!got) return;
     const text = answer(got.state, said);
     if (text) return ctx.reply(text, keysOr(answerKeys(said.topic, got)));
     return ctx.reply(
-      "❓ ما فهمت السؤال. اسأل عن: المال، الانتظام، القراءة، الفوائد، التركيز، الصلاة، المهام، الجامعة، الأهداف.",
+      "❓ ما فهمت السؤال. اسأل عن: المواعيد، الماء، المال، الانتظام، القراءة، الفوائد، التركيز، الصلاة، المهام، الجامعة، الأهداف.",
       { reply_markup: V.menuKeys() },
     );
   }
@@ -821,7 +1101,7 @@ async function brief(chatId, build) {
 const sendMorning = (chatId) =>
   brief(chatId, (state, day) => ({
     text: V.morning(state, day, quoteFor(state.quotes, state.date)),
-    keys: V.taskKeys(day),
+    keys: V.morningKeys(state, day),
   }));
 
 const sendEvening = (chatId) =>
@@ -842,6 +1122,15 @@ bot.on(["message:voice", "message:audio"], async (ctx) => {
     return ctx.reply("⚠️ " + msg);
   }
   await ctx.reply(`🎙️ «${text}»`);
+  if (agentReady()) {
+    const words = text.split(/\s+/).length;
+    const isMultiIntent =
+      words >= 6 &&
+      (text.includes(" و") || text.includes("،") || text.includes("سجل") || text.includes("مع"));
+    if (isMultiIntent) {
+      return askAgent(ctx, text);
+    }
+  }
   ctx.message.text = text;
   return handleText(ctx);
 });

@@ -74,6 +74,11 @@ const scanned = [
   "features/life-desks.jsx",
   "features/life-tools.jsx",
   "layouts/life-styles.jsx",
+  "components/life-inbox.jsx",
+  "components/life-command.jsx",
+  "features/life-agent.jsx",
+  "features/life-wrapped.jsx",
+  "features/life-sleep.jsx",
 ];
 const shipped = [
   "life-config.js",
@@ -95,6 +100,13 @@ const shipped = [
   "features/life-desks.jsx",
   "features/life-tools.jsx",
   "layouts/life-styles.jsx",
+  "components/life-inbox.jsx",
+  "components/life-command.jsx",
+  "features/life-agent.jsx",
+  "features/life-wrapped.jsx",
+  "features/life-sleep.jsx",
+  "utils/life-agent.js",
+  "state/agent-tools.js",
   "utils/prayer-times.mjs",
   "state/life-state.mjs",
   "utils/life-storage.mjs",
@@ -268,8 +280,47 @@ async function runOnce() {
 `;
 
     const tail = `</script>
+<script>
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  });
+}
+</script>
 </body>
 </html>
+`;
+
+    const swCode = `const CACHE_NAME = "athar-life-os-v3";
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
+self.addEventListener("install", (e) => {
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS).catch(() => {})));
+});
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+self.addEventListener("fetch", (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== "GET" || url.pathname.startsWith("/state") || url.pathname.startsWith("/health") || url.pathname.startsWith("/ping")) {
+    return;
+  }
+  e.respondWith(
+    fetch(e.request)
+      .then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(e.request, copy)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
+  );
+});
 `;
 
     //    Joined, never String.replace: a bundle used as a replacement string
@@ -277,6 +328,7 @@ async function runOnce() {
     //    corrupted.
     mkdirSync(site, { recursive: true });
     writeFileSync(join(site, "index.html"), [head, css, mid, js, tail].join(""), "utf8");
+    writeFileSync(join(site, "sw.js"), swCode, "utf8");
     copyFileSync(src, join(site, "LifeOS.source.jsx"));
     /* The folders come with them: the published copy has to be a source that
        actually builds, and LifeOS.source.jsx imports "./features/…". */

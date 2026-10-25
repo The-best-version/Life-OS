@@ -1,8 +1,544 @@
-import { Btn, Modal, NumStep, T, cupWord } from "../components/life-shared.jsx";
-import { PLACES, PLACE_BY_ID, SCHEMA, WATER_GOAL_MAX, clampGoal, dayKey, migrate, placeShape, rollDay } from "../state/life-state.mjs";
+import { Badge, Btn, Modal, NumStep, T, cupWord } from "../components/life-shared.jsx";
+import {
+  PLACES,
+  PLACE_BY_ID,
+  SCHEMA,
+  WATER_GOAL_MAX,
+  clampGoal,
+  dayKey,
+  freshState,
+  migrate,
+  placeShape,
+  rollDay,
+} from "../state/life-state.mjs";
 import { DataHealth, RecoveryModal } from "./life-tools.jsx";
-import { Archive, Download, Droplets, MapPin, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import {
+  Archive,
+  CheckCheck,
+  Download,
+  Droplets,
+  Lock,
+  MapPin,
+  RefreshCw,
+  ShieldCheck,
+  Upload,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+const E2EE_CONFIG_KEY = "los_e2ee_cloud_config_v1";
+const DEFAULT_E2EE_ENDPOINT = "http://127.0.0.1:47615/state?project=lifeos_e2ee_vault";
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  for (let i = 0; i < arr.byteLength; i++) {
+    binary += String.fromCharCode(arr[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(b64) {
+  const binary = atob(String(b64 || "").trim());
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    out[i] = binary.charCodeAt(i);
+  }
+  return out;
+}
+
+async function deriveAesGcmKey(passphrase, saltBytes) {
+  const enc = new TextEncoder();
+  const baseKey = await window.crypto.subtle.importKey(
+    "raw",
+    enc.encode(passphrase),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return window.crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: saltBytes,
+      iterations: 100000,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptStateEnvelope(stateObj, passphrase) {
+  const enc = new TextEncoder();
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveAesGcmKey(passphrase, salt);
+  const plaintext = enc.encode(JSON.stringify(stateObj));
+  const cipherBuf = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    plaintext
+  );
+  const hashBuf = await window.crypto.subtle.digest("SHA-256", cipherBuf);
+  const fingerprint = Array.from(new Uint8Array(hashBuf).slice(0, 6))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join(":")
+    .toUpperCase();
+
+  return {
+    e2eeVersion: "1.0",
+    alg: "AES-256-GCM",
+    kdf: "PBKDF2-SHA256-100K",
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    cipher: bytesToBase64(cipherBuf),
+    fingerprint,
+    updatedAt: new Date().toISOString(),
+    day: dayKey(),
+  };
+}
+
+async function decryptStateEnvelope(envelope, passphrase) {
+  if (!envelope || !envelope.cipher || !envelope.salt || !envelope.iv) {
+    throw new Error("حزمة التشفير غير مكتملة أو غير صالحة.");
+  }
+  const salt = base64ToBytes(envelope.salt);
+  const iv = base64ToBytes(envelope.iv);
+  const cipher = base64ToBytes(envelope.cipher);
+  const key = await deriveAesGcmKey(passphrase, salt);
+  const plainBuf = await window.crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    key,
+    cipher
+  );
+  const dec = new TextDecoder();
+  return JSON.parse(dec.decode(plainBuf));
+}
+
+/* ==================================================================== *
+ *  الميزة #1: المزامنة السحابية المشفرة صفرية المعرفة (E2EE Cloud Sync)
+ * ==================================================================== */
+function CloudSyncVaultCard({ state, setState, onNotice }) {
+  const vaultFileRef = useRef(null);
+  const [config, setConfig] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(E2EE_CONFIG_KEY) || "{}");
+      return {
+        endpoint: saved.endpoint || DEFAULT_E2EE_ENDPOINT,
+        apiKey: saved.apiKey || "",
+        passphrase: saved.passphrase || "",
+        autoSync: Boolean(saved.autoSync),
+        lastSyncAt: saved.lastSyncAt || null,
+        lastFingerprint: saved.lastFingerprint || null,
+      };
+    } catch {
+      return {
+        endpoint: DEFAULT_E2EE_ENDPOINT,
+        apiKey: "",
+        passphrase: "",
+        autoSync: false,
+        lastSyncAt: null,
+        lastFingerprint: null,
+      };
+    }
+  });
+  const [busy, setBusy] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const saveConfig = (patch) => {
+    setConfig((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem(E2EE_CONFIG_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const applyDecryptedState = (parsed) => {
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.habits)) {
+      throw new Error("البيانات المسترجعة ليست نسخة صالحة من أثر Life OS.");
+    }
+    const ver = Number(parsed.schema);
+    const from = Number.isFinite(ver) && ver > 0 ? ver : 0;
+    setState(rollDay(migrate({ ...freshState(), ...parsed, schema: from })));
+  };
+
+  const handlePushCloud = async () => {
+    if (!config.passphrase || config.passphrase.trim().length < 4) {
+      onNotice?.({
+        ok: false,
+        text: "أدخل كلمة سر التشفير (4 أحرف على الأقل) لحماية بياناتك قبل الرفع.",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const envelope = await encryptStateEnvelope(state, config.passphrase.trim());
+      const headers = {
+        "content-type": "application/json",
+        "x-local-sync": "1",
+      };
+      if (config.apiKey.trim()) {
+        headers.Authorization = config.apiKey.trim().startsWith("Bearer ")
+          ? config.apiKey.trim()
+          : `Bearer ${config.apiKey.trim()}`;
+      }
+
+      const res = await fetch(config.endpoint.trim() || DEFAULT_E2EE_ENDPOINT, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ data: envelope, envelope }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const stampNow = new Date().toLocaleTimeString("ar-SA", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      saveConfig({
+        lastSyncAt: stampNow,
+        lastFingerprint: envelope.fingerprint,
+      });
+      onNotice?.({
+        ok: true,
+        text: `🔒 تم تشفير البيانات (AES-256-GCM) ورفعها للسحابة بنجاح! البصمة: ${envelope.fingerprint}`,
+      });
+    } catch (err) {
+      onNotice?.({
+        ok: false,
+        text: `تعذّر الرفع للسحابة (${err?.message || "تأكد من الرابط"}). يمكنك أيضاً تنزيل ملف خزنة مشفر (.losvault).`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePullCloud = async () => {
+    if (!config.passphrase || config.passphrase.trim().length < 4) {
+      onNotice?.({
+        ok: false,
+        text: "أدخل كلمة سر التشفير لفك قفل الخزنة السحابية.",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const headers = {};
+      if (config.apiKey.trim()) {
+        headers.Authorization = config.apiKey.trim().startsWith("Bearer ")
+          ? config.apiKey.trim()
+          : `Bearer ${config.apiKey.trim()}`;
+      }
+      const res = await fetch(config.endpoint.trim() || DEFAULT_E2EE_ENDPOINT, {
+        method: "GET",
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const raw = await res.json();
+      const envelope =
+        raw?.cipher
+          ? raw
+          : raw?.envelope?.cipher
+            ? raw.envelope
+            : raw?.data?.cipher
+              ? raw.data
+              : raw?.record?.envelope || raw?.record || null;
+
+      const decrypted = await decryptStateEnvelope(envelope, config.passphrase.trim());
+      applyDecryptedState(decrypted);
+      const stampNow = new Date().toLocaleTimeString("ar-SA", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      saveConfig({
+        lastSyncAt: stampNow,
+        lastFingerprint: envelope.fingerprint || "VERIFIED",
+      });
+      onNotice?.({
+        ok: true,
+        text: "🔓 تم جلب الخزنة السحابية وفك تشفيرها (Zero-Knowledge) وتحديث بياناتك بنجاح!",
+      });
+    } catch {
+      onNotice?.({
+        ok: false,
+        text: "تعذّر فك التشفير أو الجلب — تأكّد من مطابقة كلمة سر التشفير أو وجود نسخة مرفوعة.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleExportEncryptedVault = async () => {
+    if (!config.passphrase || config.passphrase.trim().length < 4) {
+      onNotice?.({
+        ok: false,
+        text: "أدخل كلمة سر التشفير أولاً لتصدير خزنة مشفرة (.losvault).",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const envelope = await encryptStateEnvelope(state, config.passphrase.trim());
+      const blob = new Blob([JSON.stringify(envelope, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `athar-vault-e2ee-${dayKey()}.losvault.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      saveConfig({
+        lastFingerprint: envelope.fingerprint,
+      });
+      onNotice?.({
+        ok: true,
+        text: `🔒 تم تنزيل ملف الخزنة المشفر (AES-256) ببصمة ${envelope.fingerprint}`,
+      });
+    } catch {
+      onNotice?.({ ok: false, text: "تعذّر إنشاء الخزنة المشفرة." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImportEncryptedVault = async (file) => {
+    if (!file) return;
+    if (!config.passphrase || config.passphrase.trim().length < 4) {
+      onNotice?.({
+        ok: false,
+        text: "أدخل كلمة سر التشفير أولاً قبل اختيار ملف الخزنة المشفر.",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const raw = JSON.parse(await file.text());
+      const envelope = raw?.cipher ? raw : raw?.envelope || raw?.data;
+      const decrypted = await decryptStateEnvelope(envelope, config.passphrase.trim());
+      applyDecryptedState(decrypted);
+      onNotice?.({
+        ok: true,
+        text: "🔓 تم فك تشفير ملف الخزنة (.losvault) واستعادة بياناتك بالكامل!",
+      });
+    } catch {
+      onNotice?.({
+        ok: false,
+        text: "فشل فك التشفير — كلمة السر غير صحيحة أو الملف تالف.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // مزامنة تلقائية عند تفعيل الخيار وتوفر كلمة السر
+  useEffect(() => {
+    if (!config.autoSync || !config.passphrase || config.passphrase.trim().length < 4) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      encryptStateEnvelope(state, config.passphrase.trim())
+        .then((envelope) =>
+          fetch(config.endpoint.trim() || DEFAULT_E2EE_ENDPOINT, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-local-sync": "1",
+            },
+            body: JSON.stringify({ data: envelope, envelope }),
+          }).then((res) => {
+            if (res.ok) {
+              saveConfig({
+                lastSyncAt: new Date().toLocaleTimeString("ar-SA", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                lastFingerprint: envelope.fingerprint,
+              });
+            }
+          })
+        )
+        .catch(() => {});
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [state, config.autoSync, config.passphrase, config.endpoint]);
+
+  return (
+    <div
+      className="space-y-3.5 rounded-2xl border p-4"
+      style={{
+        borderColor: `${T.primary}45`,
+        background:
+          "linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(15,23,42,0.5) 100%)",
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-xl border"
+            style={{
+              borderColor: `${T.primary}55`,
+              background: `${T.primary}20`,
+              color: T.primaryLift,
+            }}
+          >
+            <ShieldCheck size={16} />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-[13px] font-extrabold text-white">
+                المزامنة السحابية المشفرة (Zero-Knowledge E2EE)
+              </h4>
+              <Badge tint={T.primary}>AES-256-GCM</Badge>
+            </div>
+            <p className="text-[10.5px] text-white/50">
+              تُشفّر بياناتك داخل جهازك بكلمة سرك الخاصة قبل مغادرته لأي سحابة أو ملف
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10.5px] font-bold text-white/70 hover:bg-white/10"
+        >
+          {showAdvanced ? "إخفاء الخادم" : "إعدادات الخادم ⚙️"}
+        </button>
+      </div>
+
+      {/* كلمة سر التشفير */}
+      <div>
+        <label className="mb-1 flex items-center justify-between text-[11px] font-bold text-white/70">
+          <span className="flex items-center gap-1">
+            <Lock size={12} style={{ color: T.accent }} /> مفتاح التشفير السري (Passphrase)
+          </span>
+          {config.lastFingerprint && (
+            <span dir="ltr" className="font-mono text-[10px] text-emerald-300/80">
+              SHA-256: {config.lastFingerprint}
+            </span>
+          )}
+        </label>
+        <input
+          type="password"
+          value={config.passphrase}
+          onChange={(e) => saveConfig({ passphrase: e.target.value })}
+          placeholder="أدخل كلمة سر قوية لتشفير وفك تشفير خزنتك..."
+          className="w-full rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-[12.5px] text-white outline-none focus:border-emerald-400/60"
+        />
+      </div>
+
+      {showAdvanced && (
+        <div className="space-y-2.5 rounded-xl border border-white/10 bg-black/30 p-3">
+          <div>
+            <label className="mb-1 block text-[10.5px] font-bold text-white/60">
+              رابط خادم المزامنة السحابية (REST / Supabase / JSONBin / Local Relay)
+            </label>
+            <input
+              dir="ltr"
+              type="text"
+              value={config.endpoint}
+              onChange={(e) => saveConfig({ endpoint: e.target.value })}
+              placeholder={DEFAULT_E2EE_ENDPOINT}
+              className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11.5px] text-white/90 outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10.5px] font-bold text-white/60">
+              مفتاح المصادقة الاختياري (Bearer Token / API Key)
+            </label>
+            <input
+              dir="ltr"
+              type="password"
+              value={config.apiKey}
+              onChange={(e) => saveConfig({ apiKey: e.target.value })}
+              placeholder="Bearer eyJhbGci..."
+              className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11.5px] text-white/90 outline-none focus:border-white/30"
+            />
+          </div>
+          <label className="flex cursor-pointer items-center justify-between pt-1 text-[11.5px] font-bold text-white/75">
+            <span>مزامنة مشفرة تلقائية عند تعديل البيانات</span>
+            <input
+              type="checkbox"
+              checked={config.autoSync}
+              onChange={(e) => saveConfig({ autoSync: e.target.checked })}
+              className="h-4 w-4 accent-emerald-500"
+            />
+          </label>
+        </div>
+      )}
+
+      {/* أزرار الرفع والجلب المشفر */}
+      <div className="grid grid-cols-2 gap-2">
+        <Btn
+          variant="default"
+          size="sm"
+          disabled={busy}
+          onClick={handlePushCloud}
+          className="w-full justify-center"
+        >
+          {busy ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
+          تشفير ورفع للسحابة
+        </Btn>
+        <Btn
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={handlePullCloud}
+          className="w-full justify-center"
+        >
+          <RefreshCw size={14} />
+          جلب وفك التشفير
+        </Btn>
+      </div>
+
+      {/* أزرار ملفات الخزنة المشفرة المحمولة (.losvault) */}
+      <div className="grid grid-cols-2 gap-2 pt-1">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={handleExportEncryptedVault}
+          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold text-white/80 transition-colors hover:bg-white/10"
+        >
+          <Download size={13} /> تصدير خزنة مشفرة (.losvault)
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => vaultFileRef.current?.click()}
+          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold text-white/80 transition-colors hover:bg-white/10"
+        >
+          <Upload size={13} /> استيراد خزنة مشفرة
+        </button>
+        <input
+          ref={vaultFileRef}
+          type="file"
+          accept=".json,.losvault"
+          className="sr-only"
+          onChange={(e) => {
+            handleImportEncryptedVault(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {config.lastSyncAt && (
+        <div className="flex items-center justify-between border-t border-white/10 pt-2 text-[10.5px] text-emerald-300/80">
+          <span className="flex items-center gap-1">
+            <CheckCheck size={12} /> آخر مزامنة مشفرة: {config.lastSyncAt}
+          </span>
+          <span>PBKDF2 100K · صفرية المعرفة</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ==================================================================== *
  *  Backup — export / import the whole payload
@@ -48,21 +584,6 @@ export function SettingsModal({
         setNote({ ok: false, text: "الملف ليس نسخة صالحة من Life OS." });
         return;
       }
-      /* Through rollDay, exactly as the load path does it. A backup taken
-         yesterday carries yesterday's date and yesterday's ticks; without
-         this the app wears them as today until the minute poll catches up —
-         long enough for the archive effect to stamp today's history row with
-         a day the user did not live. */
-      /* An unversioned payload is an *old* payload, not a current one.
-         Spreading it over freshState left SCHEMA standing, so a hand-edited
-         or third-party file skipped every migration and arrived looking
-         modern while carrying shapes this build stopped understanding
-         versions ago. Unknown means oldest, and migrate stamps the current
-         version on the way out, so the walk happens once and never again.
-
-         A file from a *newer* build keeps its own number: no branch can run
-         for a version this build has not been taught, and pretending
-         otherwise would reshape data it does not understand. */
       const ver = Number(parsed.schema);
       const from = Number.isFinite(ver) && ver > 0 ? ver : 0;
       setState(rollDay(migrate({ ...freshState(), ...parsed, schema: from })));
@@ -212,6 +733,8 @@ export function SettingsModal({
           </div>
         </div>
 
+        {/* الميزة #1: المزامنة السحابية المشفرة صفرية المعرفة (E2EE Cloud Sync) */}
+        <CloudSyncVaultCard state={state} setState={setState} onNotice={setNote} />
 
         <DataHealth
           open={open}
@@ -287,4 +810,3 @@ export function SettingsModal({
     </Modal>
   );
 }
-

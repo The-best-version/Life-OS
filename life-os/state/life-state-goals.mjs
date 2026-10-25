@@ -66,7 +66,7 @@ export const parentHorizon = (id) =>
  *  `RUNWAY` هو المدرج: سنوات يُسمح للهدف أن يسكنها *قبل* أن يفتح القوس،
  *  بلا أي أثر على أفق الثلاث سنوات ولا على عدّاده. ٢٠٢٦ هنا لأن النظام
  *  يُستعمل الآن، وهدف لا تبدأ نافذته إلا في يناير ٢٠٢٧ هدف بلا إيقاع:
- *  `windowStand` يقرؤه «لم يبدأ»، فلا تأخّر ولا تقدّم ولا معدّل مطلوب —
+ *  `windowStand` يقرؤه «لم يبدأ»، فلا تأخّر ولا تقدّم ولا معدّل مطلوب — 
  *  أي بلا نبض يُقاس ولا شيء يحاسبك عليه اليوم.
  *
  *  لإلغاء المدرج لاحقًا (بعد أن يفتح ٢٠٢٧): اجعل `RUNWAY = []` ولا شيء
@@ -128,6 +128,9 @@ export const goalShape = (g) => {
       progress: typeof r.progress === "number" ? r.progress : 0
     })) : [],
     done: !!o.done,
+    // 👇 الحقول الجديدة للأولوية وهدف الشهر 👇
+    priority: ["critical", "high", "medium", "low"].includes(o.priority) ? o.priority : "medium",
+    isMonthlyFocus: !!o.isMonthlyFocus,
   };
 };
 

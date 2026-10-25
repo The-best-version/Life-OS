@@ -26,7 +26,9 @@ export function primaryOrigin() {
 }
 export function served() {
   try {
-    return location.origin === primaryOrigin();
+    if (location.origin === primaryOrigin()) return true;
+    if (location.origin === "http://localhost:47615") return true;
+    return false;
   } catch {
     return false;
   }

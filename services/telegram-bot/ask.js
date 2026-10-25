@@ -65,6 +65,7 @@ import {
 } from "../../src/state/life-state.mjs";
 import { PRAYER_ROWS, clockAt, prayerTimes } from "../../src/utils/prayer-times.mjs";
 import { fold } from "./parse.js";
+import { scheduleCard } from "./views.js";
 import {
   num,
   money,
@@ -514,6 +515,7 @@ export function answer(state, { topic, days = ASK_DAYS } = {}, now = new Date())
   if (topic === "tasks") return askTasks(s);
   if (topic === "habits") return askHabits(s);
   if (topic === "water") return askWater(s);
+  if (topic === "schedule") return scheduleCard(s, now);
   if (topic === "uni") return askUni(s, now);
   if (topic === "goals") return askGoals(s);
   if (topic === "breaker") return askBreaker(s);
@@ -748,6 +750,36 @@ export function weekReview(state, now = new Date()) {
       }`,
     ),
   );
+
+  /* --- sleep & recovery (مختبر النوم في التقرير الأسبوعي) --- */
+  const sleepList = Array.isArray(s.sleepLogs) ? s.sleepLogs : [];
+  const weekSleep = sleepList.filter((l) => l.date >= from && l.date <= today);
+  if (weekSleep.length) {
+    const totalSleep = weekSleep.reduce((acc, curr) => acc + Number(curr.hours || 0), 0);
+    const avgSleep = +(totalSleep / weekSleep.length).toFixed(1);
+    const ideal = weekSleep.length * 7.5;
+    const debt = +(ideal - totalSleep).toFixed(1);
+    out.push(
+      line(
+        `🌙 النوم: معدل ${num(avgSleep)} س/ليلة${
+          debt > 0 ? ` (عجز ${num(debt)} س ⚠️)` : " (نوم كافٍ ومتوازن ✅)"
+        }`,
+      ),
+    );
+  }
+
+  /* --- monthly goals commitment (أهداف الشهر والالتزام) --- */
+  const goalsList = Array.isArray(s.goals) ? s.goals : [];
+  const monthGoals = goalsList.filter((g) => !g.done && (g.horizon === "quarter" || g.horizon === "month" || g.target > 0));
+  if (monthGoals.length) {
+    const sumPct = monthGoals.reduce((acc, g) => {
+      if (g.target > 0) return acc + Math.min(100, Math.round(((g.current || 0) / g.target) * 100));
+      return acc + (g.done ? 100 : 0);
+    }, 0);
+    const avgCommitment = Math.round(sumPct / monthGoals.length);
+    out.push("");
+    out.push(line(`🎯 إنجاز أهداف الشهر: <b>${num(avgCommitment)}٪</b> (${num(monthGoals.length)} أهداف نشطة)`));
+  }
 
   /* --- open tasks, kept because they cross the week --- */
   const open = rows(s.tasks).filter((t) => !t.done).length;

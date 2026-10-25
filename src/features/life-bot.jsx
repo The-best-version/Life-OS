@@ -1,3 +1,4 @@
+// src/features/life-bot.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bot,
@@ -21,6 +22,10 @@ import {
   Lightbulb,
   BookOpen,
   X,
+  CheckCircle2,
+  Loader2,
+  Paperclip,
+  RotateCcw,
 } from "lucide-react";
 import {
   T,
@@ -79,32 +84,18 @@ import {
 } from "../state/life-state.mjs";
 import { prayerTimes, PRAYER_ROWS, blockTimes, BLOCK_ANCHORS } from "../utils/prayer-times.mjs";
 import { api } from "../utils/life-storage.mjs";
+import {
+  runLifeAgent,
+  getLocalBriefing,
+  TOOL_LABELS,
+  AGENT_PERSONAS,
+  undoAgentChanges,
+} from "../utils/life-agent.js";
 
 /* ==================================================================== *
  *  MODULE — the Telegram bot's control hub
- *
- *  The bot is a separate process. This screen is not a remote control for
- *  it and must not become one: everything it changes is `state.bot`, saved
- *  the way every other screen saves, and the bot reads that off the disk and
- *  re-arms itself. There is no command channel, no queue and no second copy
- *  of the schedule — which is why a schedule edited here while the bot is
- *  switched off is still the schedule when it comes back up.
- *
- *  The one thing that *is* live is the health strip, and it is live because
- *  it cannot be anything else: «هل البوت شغّال الآن؟» is a question about a
- *  process, and no amount of state on disk can answer it. So the bot opens a
- *  loopback listener of its own and this polls it — read-only, except for
- *  the test ping, which exists so the whole chain can be proved in one tap.
- *
- *  Every block below takes what it draws as props and keeps nothing, so
- *  reordering the screen is moving a line.
  * ==================================================================== */
 
-/* How often the health strip asks. Ten seconds is slow enough to be free and
-   fast enough that «شغّلته للتو» shows up before you go looking for why it
-   did not. It stops entirely while the tab is hidden: a background tab
-   polling a local server forever is the kind of thing that makes a laptop
-   warm for no reason. */
 const HEALTH_EVERY = 10000;
 
 /* --- the live strip ---------------------------------------------------- */
@@ -147,8 +138,6 @@ export function BotStatusCard({ health, checking, onPing, pinging, pinged }) {
         </Btn>
       </div>
 
-      {/* The facts, flat. Each one is the answer to a different «لماذا لا
-          يعمل؟», which is why they are listed rather than summarised. */}
       <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <Fact label="المنفذ" value={String(BOT_PORT)} ltr />
         <Fact label="الحساب المعتمد" value={up ? health.chat : "—"} ltr />
@@ -185,95 +174,215 @@ export function BotStatusCard({ health, checking, onPing, pinging, pinged }) {
   );
 }
 
-/* --- the second live thing --------------------------------------------- *
- *  The health strip above is "the one live thing" this screen was built
- *  with, because the question it answers — «هل البوت شغّال؟» — is about a
- *  process, and nothing on disk can answer it. A live conversation is a
- *  second question of the same shape: «ماذا سيفعل النموذج بهذه الجملة؟» is
- *  not a fact `state.bot` can hold either, and it still refuses to become a
- *  command channel for the schedule above — it goes through
- *  `local-sync-server.js`'s own `/ai`, which writes through `/sync` like
- *  every other change in this app, not through a wire to the bot process.
- *
- *  Nothing here is `state`. The transcript lives in this component's own
- *  memory — leaving the screen loses it, exactly like the data-health
- *  panel's own scratch state — because a dialogue is not a fact about the
- *  day the way a habit or a task is.
- * ------------------------------------------------------------------------ */
+/* ==================================================================== *
+ *  الميزة الجديدة: تأثير الكتابة الحية والرؤية
+ * ==================================================================== */
+const TypewriterText = ({ text, onComplete }) => {
+  const [displayed, setDisplayed] = useState("");
+  
+  useEffect(() => {
+    let i = 0;
+    setDisplayed("");
+    const interval = setInterval(() => {
+      setDisplayed((prev) => prev + text.charAt(i));
+      i++;
+      if (i >= text.length) {
+        clearInterval(interval);
+        if (onComplete) onComplete();
+      }
+    }, 15); // سرعة الكتابة
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return <span>{displayed}</span>;
+};
+
+/* --- the second live thing --------------------------------------------- */
 const AI_TRANSCRIPT_MAX = 60;
 
-export function AssistantChatCard() {
+export function AssistantChatCard({ state, setState }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [mode, setMode] = useState("executive");
+  const [activeStep, setActiveStep] = useState(null);
+
+  // حالات الصورة (ميزة الرؤية)
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
+
   const listRef = useRef(null);
 
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending]);
+  }, [messages, sending, activeStep, imagePreview]);
 
-  const send = async () => {
-    const text = draft.trim();
-    if (!text || sending) return;
+  // إدخال الإحاطة الذكية عند فتح الشات لأول مرة
+  useEffect(() => {
+    if (messages.length === 0) {
+      const brief = getLocalBriefing(state);
+      if (brief && brief.text) {
+        setMessages([
+          {
+            id: "fab-brief",
+            role: "assistant",
+            text: brief.text,
+            chips: brief.chips || [],
+            isBriefing: true,
+          },
+        ]);
+      }
+    }
+  }, []);
+
+  // معالجة رفع الصورة
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target.result.split(",")[1];
+      setSelectedImage({ base64, mimeType: file.type });
+      setImagePreview(event.target.result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const send = async (overrideText = null) => {
+    const text = (typeof overrideText === "string" ? overrideText : draft).trim();
+    if ((!text && !selectedImage) || sending) return;
+
+    const displayMessage = text || (selectedImage ? "📸 أرسلت صورة" : "");
+    const newHistory = [
+      ...messages,
+      { id: `u-${Date.now()}`, role: "user", text: displayMessage, image: imagePreview },
+    ];
+    setMessages(newHistory.slice(-AI_TRANSCRIPT_MAX));
+
+    const currentImageBase64 = selectedImage?.base64;
+    const currentImageMime = selectedImage?.mimeType;
+
     setDraft("");
-    setMessages((m) => [...m, { role: "user", text }].slice(-AI_TRANSCRIPT_MAX));
+    setSelectedImage(null);
+    setImagePreview(null);
     setSending(true);
+    setActiveStep(null);
+
     try {
-      const res = await fetch(api("/ai"), {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-local-sync": "1" },
-        body: JSON.stringify({ message: text }),
+      const historyForAgent = messages.map((m) => ({
+        role: m.role,
+        content: m.text,
+      }));
+
+      const reply = await runLifeAgent(text, historyForAgent, state, setState, {
+        mode,
+        imageBase64: currentImageBase64,
+        imageMimeType: currentImageMime,
+        onStep: (step) => {
+          if (step.type === "tool") setActiveStep(step.name);
+        },
       });
-      const body = await res.json().catch(() => null);
-      const reply =
-        body && typeof body.text === "string" && body.text
-          ? body.text
-          : "⚠️ جواب غير مفهوم من المساعد.";
-      setMessages((m) => [...m, { role: "assistant", text: reply }].slice(-AI_TRANSCRIPT_MAX));
-    } catch {
+
+      const botText =
+        typeof reply === "string" ? reply : reply?.text || "تم التنفيذ.";
+      const toolCalls = reply?.toolCalls || [];
+
+      setActiveStep(null);
       setMessages((m) =>
-        [...m, { role: "assistant", text: "⚠️ ما قدرت أصل للخادم المحلي." }].slice(
-          -AI_TRANSCRIPT_MAX,
-        ),
+        [
+          ...m,
+          {
+            id: `a-${Date.now()}`,
+            role: "assistant",
+            text: botText,
+            tools: toolCalls,
+            before: reply?.before || null,
+            undone: false,
+          },
+        ].slice(-AI_TRANSCRIPT_MAX)
+      );
+    } catch (error) {
+      console.error("Agent error:", error);
+      setActiveStep(null);
+      setMessages((m) =>
+        [
+          ...m,
+          {
+            id: `err-${Date.now()}`,
+            role: "assistant",
+            text: "⚠️ حدث خطأ في الاتصال بالوكيل.",
+          },
+        ].slice(-AI_TRANSCRIPT_MAX)
       );
     } finally {
       setSending(false);
     }
   };
 
-  const reset = () => {
-    setMessages([]);
-    fetch(api("/ai"), {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-local-sync": "1" },
-      body: JSON.stringify({ reset: true }),
-    }).catch(() => {});
+  const handleUndo = (msgId, beforeSnap) => {
+    if (!beforeSnap) return;
+    undoAgentChanges(beforeSnap, state, setState);
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, undone: true } : m))
+    );
   };
 
+  const reset = () => {
+    const brief = getLocalBriefing(state, true);
+    if (brief && brief.text) {
+      setMessages([
+        {
+          id: `b-${Date.now()}`,
+          role: "assistant",
+          text: brief.text,
+          chips: brief.chips || [],
+          isBriefing: true,
+        },
+      ]);
+    } else {
+      setMessages([]);
+    }
+    setImagePreview(null);
+    setSelectedImage(null);
+  };
+
+  const quickChips = [
+    "خطّط يومي بين الصلوات",
+    "إقفال المساء 🌙",
+    "شربت كوب ماء",
+    "حلّل أهداف 2030",
+  ];
+
   return (
-    <Card className="p-6 sm:p-7">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <Card className="flex flex-col h-full p-5 sm:p-6 bg-[#0a0a0f]/95 backdrop-blur-2xl border border-white/10 shadow-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 shrink-0 mb-2">
         <div className="flex items-center gap-3">
           <span
-            className="flex h-11 w-11 items-center justify-center rounded-2xl border"
-            style={{ borderColor: `${T.ctaLift}45`, background: `${T.ctaLift}16`, color: T.ctaLift }}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border"
+            style={{
+              borderColor: `${T.ctaLift}45`,
+              background: `${T.ctaLift}16`,
+              color: T.ctaLift,
+            }}
           >
-            <Sparkles size={19} strokeWidth={1.9} />
+            <Sparkles size={18} strokeWidth={1.9} />
           </span>
           <div>
-            <h3 className="text-[17px] font-extrabold" style={{ color: T.ctaLift }}>
-              تحدّث مع المساعد
+            <h3 className="text-[18px] font-extrabold" style={{ color: T.ctaLift }}>
+              الوكيل التنفيذي الذكي
             </h3>
-            <p className="mt-0.5 text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-              يقرأ حالتك ويقدر يسجّل عنك — بلا مغادرة هذه الشاشة
+            <p className="mt-0.5 text-[12px] leading-relaxed" style={{ color: T.faint }}>
+              متصل بالروتين والمهام والمالية والجامعة (Ctrl+K)
             </p>
           </div>
         </div>
         {messages.length > 0 && (
           <button
             onClick={reset}
-            className="shrink-0 text-[11px] font-bold"
+            className="shrink-0 text-[12px] font-bold rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 transition-colors"
             style={{ color: T.faint }}
           >
             محادثة جديدة
@@ -281,44 +390,181 @@ export function AssistantChatCard() {
         )}
       </div>
 
+      {/* أزرار الشخصيات */}
+      <div className="flex gap-2 mb-4 shrink-0 overflow-x-auto pb-2 custom-scrollbar">
+        {AGENT_PERSONAS.map((p) => {
+          const active = mode === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => setMode(p.id)}
+              className="shrink-0 px-3 py-1.5 rounded-full text-[11.5px] font-bold border transition-all"
+              style={{
+                backgroundColor: active ? `${p.color}20` : "rgba(255,255,255,0.05)",
+                color: active ? p.color : "rgba(255,255,255,0.5)",
+                borderColor: active ? `${p.color}60` : "transparent",
+                boxShadow: active ? `0 0 12px ${p.color}30` : "none",
+              }}
+            >
+              {p.icon} {p.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div
         ref={listRef}
-        className="los-scroll mt-4 max-h-72 space-y-2.5 overflow-y-auto rounded-xl border p-3"
-        style={{ borderColor: T.border, background: "rgba(0,0,0,0.15)" }}
+        className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar mb-4"
+        style={{ background: "transparent" }}
       >
         {messages.length === 0 ? (
-          <p className="py-7 text-center text-[11.5px] leading-relaxed" style={{ color: T.faint }}>
-            اكتب له أي شيء — «سجّل كوبين ماء» أو «وش باقي علي اليوم؟»
-          </p>
+          <div className="flex flex-col items-center justify-center h-full text-center opacity-60">
+            <Sparkles size={40} className="mb-3 text-violet-400" />
+            <p className="text-[15px] font-bold text-white/80">
+              أهلاً بك في مركز القيادة.
+            </p>
+            <p className="text-[13px] text-white/50 mt-1">
+              اختر شخصية الوكيل، ثم اكتب أي شيء أو أرسل صورة.
+            </p>
+          </div>
         ) : (
-          messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-start" : "justify-end"}`}>
+          messages.map((m, i) => {
+            const isUser = m.role === "user";
+            return (
               <div
-                className="max-w-[85%] whitespace-pre-wrap rounded-2xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed"
-                style={{
-                  color: T.fg,
-                  borderColor: m.role === "user" ? T.border : `${T.primary}33`,
-                  background: m.role === "user" ? "rgba(255,255,255,0.05)" : `${T.primary}14`,
-                }}
+                key={m.id || i}
+                className={`flex flex-col ${isUser ? "items-start" : "items-end"}`}
               >
-                {m.text}
+                {!isUser && m.isBriefing && (
+                  <span className="text-[10px] text-violet-400 mb-1 flex items-center gap-1">
+                    <Sparkles size={10} /> إحاطة استباقية (بدون استهلاك توكنز)
+                  </span>
+                )}
+
+                {isUser && m.image && (
+                  <img
+                    src={m.image}
+                    alt="Uploaded"
+                    className="max-w-[85%] rounded-2xl mb-1 border border-white/20"
+                    style={{ maxHeight: 200, objectFit: "cover" }}
+                  />
+                )}
+
+                <div
+                  className="max-w-[85%] whitespace-pre-wrap rounded-2xl border px-4 py-3 text-[14px] leading-relaxed shadow-sm"
+                  style={{
+                    color: T.fg,
+                    borderColor: isUser ? T.border : `${T.primary}40`,
+                    background: isUser
+                      ? "rgba(255,255,255,0.05)"
+                      : `${T.primary}15`,
+                  }}
+                >
+                  {isUser ? m.text : <TypewriterText text={m.text} />}
+                </div>
+
+                {!isUser && m.tools && m.tools.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5 max-w-[85%] justify-end">
+                    {m.tools.map((t, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      >
+                        <CheckCircle2 size={10} />{" "}
+                        {t.label || TOOL_LABELS[t.name] || t.name}
+                        {t.badge ? ` (${t.badge})` : ""}
+                      </span>
+                    ))}
+                    {m.before && !m.undone && (
+                      <button
+                        onClick={() => handleUndo(m.id, m.before)}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20"
+                      >
+                        <RotateCcw size={10} /> تراجع
+                      </button>
+                    )}
+                    {m.undone && (
+                      <span className="text-[10px] text-white/40">↩️ تم التراجع</span>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
+
         {sending && (
           <div className="flex justify-end">
             <div
-              className="rounded-2xl border px-3.5 py-2.5 text-[12px]"
-              style={{ color: T.faint, borderColor: T.border }}
+              className="rounded-2xl border px-4 py-3 text-[13px] flex items-center gap-2"
+              style={{
+                color: T.primary,
+                borderColor: `${T.primary}30`,
+                background: `${T.primary}05`,
+              }}
             >
-              يكتب…
+              <Loader2 size={14} className="animate-spin" />
+              {activeStep
+                ? `جاري ${TOOL_LABELS[activeStep] || "التنفيذ"}...`
+                : "يفكر…"}
             </div>
           </div>
         )}
       </div>
 
-      <div className="mt-3 flex gap-2">
+      {/* معاينة الصورة قبل الإرسال */}
+      {imagePreview && (
+        <div className="relative w-16 h-16 mb-2 rounded-lg overflow-hidden border border-white/20 shrink-0">
+          <img
+            src={imagePreview}
+            alt="Preview"
+            className="w-full h-full object-cover"
+          />
+          <button
+            onClick={() => {
+              setImagePreview(null);
+              setSelectedImage(null);
+            }}
+            className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* الأزرار السريعة */}
+      {messages.length > 0 && !sending && !imagePreview && (
+        <div className="flex gap-1.5 mb-2 overflow-x-auto shrink-0 custom-scrollbar pb-1">
+          {quickChips.map((chip) => (
+            <button
+              key={chip}
+              onClick={() => send(chip)}
+              className="shrink-0 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors hover:bg-white/10"
+              style={{ borderColor: T.border, color: T.muted }}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="shrink-0 flex gap-2 items-end">
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+        <Btn
+          variant="default"
+          onClick={() => fileInputRef.current?.click()}
+          className="shrink-0 h-[46px] px-3 bg-white/5 hover:bg-white/10"
+          title="إرفاق صورة"
+        >
+          <Paperclip size={18} strokeWidth={2.4} style={{ color: T.muted }} />
+        </Btn>
+
         <Field
           as="textarea"
           rows={1}
@@ -330,57 +576,70 @@ export function AssistantChatCard() {
               send();
             }
           }}
-          placeholder="اكتب رسالتك…"
-          className="flex-1 resize-none"
+          placeholder="اطلب من الوكيل شيئاً أو أرفق صورة..."
+          className="flex-1 resize-none text-[14px] py-3 min-h-[46px]"
         />
-        <Btn variant="default" onClick={send} disabled={sending || !draft.trim()} className="shrink-0">
-          <Send size={14} strokeWidth={2.4} />
+        <Btn
+          variant="default"
+          onClick={() => send()}
+          disabled={sending || (!draft.trim() && !selectedImage)}
+          className="shrink-0 h-[46px] px-5"
+        >
+          <Send size={18} strokeWidth={2.4} />
         </Btn>
       </div>
     </Card>
   );
 }
 
-/* --- the one door to it, on every screen -------------------------------- *
- *  The chat itself has one home (`AssistantChatCard`, above) and this is
- *  the only place that renders it — a floating button mounted once in the
- *  shell, because asking the assistant something is not a fact that
- *  belongs to «بوت تيليجرام» any more than to «الجامعة» or «اليوم». Left
- *  side, clear of the phone tab bar and the desktop sidebar both, which
- *  sits at the opposite edge. Closed by default: a panel that reopens over
- *  every screen you land on is the nagging «اليوم» already refuses to be. */
-export function AssistantFab() {
+/* --- the one door to it, on every screen -------------------------------- */
+export function AssistantFab({ state, setState }) {
   const [open, setOpen] = useState(false);
+
+  // اختصار لوحة المفاتيح العالمي Ctrl+J لفتح وإغلاق الوكيل العائم (بينما Ctrl+K يفتح لوحة الأوامر الخاطفة)
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setOpen((prev) => !prev);
+      } else if (e.key === "Escape" && open) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
     <>
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "أغلق المساعد" : "افتح المساعد"}
-        aria-expanded={open}
-        className="los-raise fixed left-4 z-[61] flex h-14 w-14 items-center justify-center rounded-full border transition-transform active:scale-95"
+        title="الوكيل الذكي (Ctrl + J)"
+        className="los-raise fixed left-6 z-[61] flex h-14 w-14 items-center justify-center rounded-full border transition-transform active:scale-95 shadow-[0_0_30px_rgba(139,92,246,0.5)]"
         style={{
           bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
           borderColor: `${T.cta}80`,
           backgroundImage: `linear-gradient(135deg, ${T.cta}, ${T.ctaLift})`,
-          boxShadow: `0 10px 30px -8px ${T.cta}99`,
         }}
       >
         {open ? (
-          <X size={22} color="#fff" strokeWidth={2.4} />
+          <X size={24} color="#fff" strokeWidth={2.4} />
         ) : (
-          <Sparkles size={22} color="#fff" strokeWidth={2.2} />
+          <Sparkles size={24} color="#fff" strokeWidth={2.2} />
         )}
       </button>
+
       {open && (
         <div
-          className="los-in fixed inset-x-3 z-[60] sm:inset-x-auto sm:left-4 sm:w-[380px]"
+          className="los-in fixed inset-x-4 z-[60] sm:inset-x-auto sm:left-6 sm:w-[520px]"
           style={{
             bottom: "calc(env(safe-area-inset-bottom, 0px) + 164px)",
-            maxHeight: "min(70vh, 560px)",
-            overflowY: "auto",
+            height: "min(85vh, 700px)",
+            overflowY: "hidden",
           }}
         >
-          <AssistantChatCard />
+          <AssistantChatCard state={state} setState={setState} />
         </div>
       )}
     </>
@@ -407,9 +666,6 @@ function Fact({ label, value, ltr }) {
   );
 }
 
-/* A moment as "HH:MM", so `prettyTime` can read it. Milliseconds or a
-   `Date` — `new Date()` takes either, which is why the next-fire line uses
-   this one instead of a second copy of the same two `padStart`s. */
 const clockOf = (ms) => {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
@@ -493,13 +749,7 @@ export function BriefTimesCard({ bot, onPatch }) {
   );
 }
 
-/* --- the three the app already knows how to answer --------------------- *
- *  Water, prayer and the task sweep are built in rather than three custom
- *  rows, because the bot writes their text from the state — «باقي ٤ أكواب»
- *  and «العصر بعد ١٥ دقيقة» are facts it looks up, not sentences the user
- *  has to keep accurate by hand. A custom reminder is a sentence; these are
- *  questions.
- * ---------------------------------------------------------------------- */
+/* --- the three the app already knows how to answer --------------------- */
 export function PresetRemindersCard({ bot, onPatch, books = [] }) {
   return (
     <Card className="p-6 sm:p-7">
@@ -559,9 +809,6 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
               />
             </label>
           </div>
-          {/* The window is a field and not a hidden rule. A reminder that
-              mysteriously stops at some hour is one you stop trusting the
-              rest of the day too. */}
           <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
             خارج هذه النافذة لا يُرسَل شيء — التذكير الذي يرنّ الثالثة فجرًا هو
             التذكير الذي تُطفئه كلّه.
@@ -623,7 +870,7 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
           </p>
         </Preset>
 
-        {/* عادات البلوك — anchored to the prayers, never to the clock */}
+        {/* عادات البلوك */}
         <Preset
           icon={Sunrise}
           tint={T.ember}
@@ -656,7 +903,7 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
           </p>
         </Preset>
 
-        {/* المواعيد — the hour half of a warning whose other half is in days */}
+        {/* المواعيد */}
         <Preset
           icon={CalendarClock}
           tint={T.indigo}
@@ -688,7 +935,7 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
           </p>
         </Preset>
 
-        {/* المدرّب — the one entry whose content is a judgement */}
+        {/* المدرّب */}
         <Preset
           icon={Sparkles}
           tint={T.rose}
@@ -706,8 +953,6 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
               className="max-w-[120px]"
             />
           </label>
-          {/* The silence is the feature, and it has to be said here or the
-              first quiet day reads as a broken reminder. */}
           <p className="mt-2 text-[10.5px]" style={{ color: T.faint }}>
             يقرأ اليوم كاملًا — السلسلة، ساعة السقوط، المستحقّ، الماء، القراءة —
             ويرسل أهم ثلاث ملاحظات <strong>مع أزرارها</strong>. وفي اليوم الذي
@@ -743,9 +988,6 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
               />
             </label>
           </div>
-          {/* One day, picked the same way a custom reminder's days are: seven
-              small buttons, because picking a weekday out of a select is
-              three interactions and this is one. */}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {DOW_AR.map((name, i) => {
               const picked = bot.weekly.dow === i;
@@ -774,7 +1016,7 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
           </p>
         </Preset>
 
-        {/* مراجعة الفوائد — the only reminder here that is not about today */}
+        {/* مراجعة الفوائد */}
         <Preset
           icon={BookOpen}
           tint={T.indigo}
@@ -809,10 +1051,6 @@ export function PresetRemindersCard({ bot, onPatch, books = [] }) {
         </Preset>
       </div>
 
-      {/* The one setting that belongs to all of them at once. A nudge that
-          cannot be deferred is a nudge you mute, and a muted reminder takes
-          the rest of the schedule down with it — so «لاحقًا» sits under every
-          unprompted message, and this is how long it means. */}
       <div
         className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3.5"
         style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}
@@ -866,16 +1104,7 @@ function Preset({ icon: Icon, tint, title, on, onToggle, note, children }) {
   );
 }
 
-/* --- the ones he writes ------------------------------------------------ *
- *  A row says three things now that it could not before: how often it comes
- *  back, on which day of the month when that is the answer, and the
- *  condition that buys its silence. The add form still asks for two.
- *
- *  That is deliberate: a reminder is written in one breath — a sentence and
- *  an hour — and the rest is refined on the row itself, where the day chips
- *  already lived. An add form that asks five questions is a form he abandons
- *  and a list that stays empty.
- * ---------------------------------------------------------------------- */
+/* --- the ones he writes ------------------------------------------------ */
 export function CustomRemindersCard({ bot, state, onAdd, onPatchOne, onRemove }) {
   const [text, setText] = useState("");
   const [at, setAt] = useState("09:00");
@@ -960,10 +1189,6 @@ export function CustomRemindersCard({ bot, state, onAdd, onPatchOne, onRemove })
 export function ReminderRow({ r, state, onPatch, onRemove }) {
   const gate = gateOf(state, r.only);
   const next = nextFireOf(r);
-  /* A condition already satisfied means this reminder would stay quiet if
-     its hour arrived this minute. Said out loud, because a reminder that is
-     silent for a good reason and one that is broken look identical from the
-     outside — and the whole value of a condition is trusting it. */
   const quiet = r.on && r.only !== "always" && !gate.pass;
 
   return (
@@ -997,9 +1222,6 @@ export function ReminderRow({ r, state, onPatch, onRemove }) {
         </button>
       </div>
 
-      {/* How often. Three buttons and not a select: this is the field that
-          decides what the line under it even asks, so it has to be readable
-          without opening anything. */}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5 ps-8">
         <Repeat size={12} strokeWidth={2} style={{ color: T.faint }} />
         {REMINDER_REPEATS.map((k) => {
@@ -1024,10 +1246,6 @@ export function ReminderRow({ r, state, onPatch, onRemove }) {
         })}
       </div>
 
-      {/* Seven small buttons rather than a dropdown: picking «الأحد
-          والثلاثاء» out of a select is three interactions, and this is one
-          each. Shown only for the repeat that reads them — a day chip beside
-          a monthly reminder is a control that does nothing. */}
       {r.repeat === "week" && (
         <div className="mt-2 flex flex-wrap gap-1.5 ps-8">
           {DOW_AR.map((name, i) => {
@@ -1045,10 +1263,6 @@ export function ReminderRow({ r, state, onPatch, onRemove }) {
                   color: picked ? T.violet : T.faint,
                 }}
               >
-                {/* The definite article dropped, not the word cut short:
-                    three characters of «الأحد» and three of «الأربعاء» are
-                    the same three, so the row carried two chips nobody
-                    could tell apart. */}
                 {name.replace(/^ال/, "")}
               </button>
             );
@@ -1079,13 +1293,8 @@ export function ReminderRow({ r, state, onPatch, onRemove }) {
         </div>
       )}
 
-      {/* The condition. A select here and buttons above because this one is
-          six answers and is read far less often than it is set. */}
       <div className="mt-2.5 flex flex-wrap items-center gap-2 ps-8">
         <Filter size={12} strokeWidth={2} style={{ color: T.faint }} />
-        {/* The options carry their own solid background: an option list
-            inherits the page's transparent one and renders white-on-white in
-            Chrome otherwise — the same note the focus desk's select keeps. */}
         <select
           value={r.only}
           onChange={(e) => onPatch({ only: e.target.value })}
@@ -1107,9 +1316,6 @@ export function ReminderRow({ r, state, onPatch, onRemove }) {
         </span>
       </div>
 
-      {/* When it actually comes back. A monthly reminder whose next firing
-          cannot be seen is one that cannot be trusted — «يوم ٣١» read in
-          February says nothing about whether February was understood. */}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 ps-8">
         <span className="text-[10.5px]" style={{ color: T.faint }}>
           {r.on
@@ -1131,10 +1337,6 @@ export function ReminderRow({ r, state, onPatch, onRemove }) {
   );
 }
 
-/* The near days in words and the far ones as a date. `whenWord` already owns
-   «اليوم» and «غدًا», so they are not written a second time here — what it
-   cannot do is the one thing a monthly reminder needs, which is to say
-   «٢٨ أكتوبر» instead of «بعد ١٦ يومًا». A bill is checked against a date. */
 export const nextWords = (when) => {
   const today = new Date();
   const days = Math.round(
@@ -1147,13 +1349,6 @@ export const nextWords = (when) => {
   return `${when.getDate()} ${AR_MONTHS[when.getMonth()]}`;
 };
 
-/* --- the ones worth having, offered rather than hidden ----------------- *
- *  An empty list with a text box above it tells nobody that a reminder can
- *  be monthly, or that it can be the kind that stays quiet when the thing is
- *  already done. One tap each, and an idea already taken drops out of the
- *  row — a suggestion still offered after it was accepted is a suggestion
- *  that duplicates itself.
- * ---------------------------------------------------------------------- */
 export function IdeaChips({ list, full, onAdd }) {
   const taken = new Set(rows(list).map((r) => r.text));
   const left = REMINDER_IDEAS.filter((i) => !taken.has(i.text));
@@ -1179,32 +1374,18 @@ export function IdeaChips({ list, full, onAdd }) {
   );
 }
 
-/* Flipping one day. An empty list means "every day", so the first click on a
-   full week has to become the six that are left rather than the one that was
-   pressed — and clearing the last one goes back to empty instead of leaving
-   a reminder with no day it ever fires on. */
 export function toggleDay(days, i) {
   const all = Array.isArray(days) && days.length ? days : [0, 1, 2, 3, 4, 5, 6];
   const next = all.includes(i) ? all.filter((d) => d !== i) : [...all, i].sort((a, b) => a - b);
   return next.length === 0 || next.length === 7 ? [] : next;
 }
 
-/* --- what the day will actually look like ------------------------------ *
- *  Every card above says what it set; this says what the sum of them does.
- *  It is the same `planDay` the bot arms from, which is the whole reason it
- *  lives in the state layer — a preview computed separately would eventually
- *  disagree with the evening it is previewing.
- * ---------------------------------------------------------------------- */
 export function TodayPlanCard({ bot, state }) {
   const now = new Date();
   const prayers = state.place && Number.isFinite(state.place.lat)
     ? prayerTimes(state.place, now)
     : null;
   const hasTasks = rows(state.tasks).some((t) => t.today && !t.done);
-  /* The blocks and today's timed entries, exactly as the bot computes them.
-     Two readings of one schedule would eventually disagree about the same
-     evening, which is the whole reason `planDay` lives in the state layer —
-     so anything new it takes has to be passed from both sides. */
   const blocks = state.place && Number.isFinite(state.place.lat)
     ? blockTimes(state.place, now).map((b) => ({
         id: b.id,
@@ -1219,10 +1400,6 @@ export function TodayPlanCard({ bot, state }) {
       if (at !== null) events.push({ id: ev.id, at: at / 60 });
     }
   }
-  /* The whole day, not its weekday alone — `planDay` reads the date and the
-     length of the month out of it for the monthly reminders, and a preview
-     that passed less than the bot does is a preview that disagrees with the
-     evening it is previewing. */
   const plan = planDay(bot, { date: now, prayers, hasTasks, blocks, events });
   const mins = now.getHours() * 60 + now.getMinutes();
   const next = nextInPlan(plan, mins);
@@ -1275,11 +1452,6 @@ export function TodayPlanCard({ bot, state }) {
 const minsToClock = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
-/* The numeral is dropped for one and two, the same rule `daysPhrase` and
-   `tasksPhrase` follow: Arabic's dual already carries the number, and
-   «٢ رسالتان» reads as a translation rather than as a sentence. */
-/* A book's points are «فوائد» and never «ملاحظات» — the bot's own wording,
-   kept the same on the screen that schedules them. */
 const POINT_FORMS = ["فائدة", "فائدتان", "فوائد", "فائدة"];
 export const pointPhrase = (n) =>
   n === 0
@@ -1299,13 +1471,8 @@ function kindName(p, state) {
   if (p.kind === "evening") return "إقفال المساء";
   if (p.kind === "water") return "الماء";
   if (p.kind === "tasks") return "جرد المهام";
-  /* Named «فحص» and not «رسالة»: the timer fires, the day is read, and on a
-     day with nothing wrong nothing is sent — so the plan below is a plan of
-     checks, one of which may turn out to be silent. */
   if (p.kind === "coach") return "فحص المدرّب";
   if (p.kind === "weekly") return "مراجعة الأسبوع";
-  /* «فحص» for the same reason the coach is: the timer fires, the shelf is
-     read, and on an evening with nothing due nothing is sent. */
   if (p.kind === "review") return "فحص الفوائد";
   if (p.kind === "block") {
     const anchor = BLOCK_ANCHORS.find((b) => b.id === p.block);
@@ -1321,18 +1488,9 @@ function kindName(p, state) {
   }
   const own = rows(state.bot?.customs).find((x) => x.id === p.id);
   if (!own) return "تذكير";
-  /* A conditional reminder is armed like any other and may still say
-     nothing, exactly as the coach's check may. The plan says so rather than
-     promising a message that the condition will cancel. */
   return `${own.text.slice(0, 24)}${own.only && own.only !== "always" ? " · بشرط" : ""}`;
 }
 
-/* --- the vocabulary, on the desk --------------------------------------- *
- *  The grammar the bot understands is written in parse.js and nowhere a
- *  human looks. Printing it here is the difference between a feature he uses
- *  for a week and one he keeps — nobody remembers «دخل ٣٠٠ توصيل ٤ ساعات»
- *  without having read it once.
- * ---------------------------------------------------------------------- */
 const PHRASES = [
   ["صرفت ٣٥ غداء", "مصروف، ويحدّث الرصيد"],
   ["دخل ١٥٠٠ استشارة", "دخل"],
@@ -1404,8 +1562,6 @@ export function BotModule({ state, setState }) {
   const [pinging, setPinging] = useState(false);
   const [pinged, setPinged] = useState(null);
 
-  /* One patch function for the whole screen, and it goes through `botShape`
-     so no card can write a field the shape would not. */
   const patch = useCallback(
     (part) => setState((s) => ({ ...s, bot: botShape({ ...botShape(s.bot), ...part }) })),
     [setState],
@@ -1430,11 +1586,6 @@ export function BotModule({ state, setState }) {
       };
     });
 
-  /* The whole list, never the row — a reminder put back at the end is one
-     that moved, which is its own small loss. And as a function of the state
-     rather than as a snapshot of `bot`: a reminder lives inside that object
-     beside the water window and the two brief times, so putting the whole
-     thing back would revert a toggle flipped in the same eight seconds. */
   const removeCustom = (id) => {
     const kept = botShape(state.bot).customs;
     arm("حُذف التذكير", (s) => ({ bot: botShape({ ...botShape(s.bot), customs: kept }) }));
@@ -1444,15 +1595,12 @@ export function BotModule({ state, setState }) {
     });
   };
 
-  /* --- the one live thing ---------------------------------------------- */
   const check = useCallback(async () => {
     try {
       const res = await fetch(`${BOT_API}/health`, { cache: "no-store" });
       const body = await res.json();
       setHealth(body && body.ok ? body : null);
     } catch {
-      /* The bot is not running, or not reachable. Both read the same from
-         here and both have the same answer on screen. */
       setHealth(null);
     } finally {
       setChecking(false);
@@ -1493,7 +1641,6 @@ export function BotModule({ state, setState }) {
     }
   };
 
-  /* The order of this screen is this list. Moving a card is moving a line. */
   return (
     <div className="space-y-8">
       <Card className="p-6 sm:p-7">
@@ -1508,9 +1655,6 @@ export function BotModule({ state, setState }) {
               تسليح نفسه.
             </p>
           </div>
-          {/* The master switch. Off is mute, not uninstall: he still messages
-              it and it still answers — it simply stops starting
-              conversations. */}
           <button
             onClick={() => patch({ on: !bot.on })}
             aria-pressed={bot.on}
@@ -1537,9 +1681,6 @@ export function BotModule({ state, setState }) {
       <TodayPlanCard bot={bot} state={state} />
       <BriefTimesCard bot={bot} onPatch={patch} />
       <PresetRemindersCard bot={bot} onPatch={patch} books={state.books} />
-      {/* `state` and not `bot`: a condition is read against the whole day —
-          the habits, the three tasks, the cups, the pages, the minutes — and
-          the row says whether it would be silent right now. */}
       <CustomRemindersCard
         bot={bot}
         state={state}
@@ -1548,6 +1689,9 @@ export function BotModule({ state, setState }) {
         onRemove={removeCustom}
       />
       <BotGrammarCard />
+      
+      {/* تحدث مع المساعد - تم تمرير الحالة هنا أيضاً لكي يعمل البوت من هذه الشاشة */}
+      <AssistantChatCard state={state} setState={setState} />
     </div>
   );
 }

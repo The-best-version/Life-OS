@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "name": "Life OS",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "window.title": "${dirty}${activeEditorShort} — Life OS",
+    "files.exclude": {
+      "**/.git": false,
+      "**/.next": true,
+      "**/.next-verify": true,
+      "**/node_modules": true,
+      "iron-log": true
+    },
+    "editor.tabSize": 2
+  }
+}

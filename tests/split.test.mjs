@@ -105,6 +105,13 @@ const MODULES = [
   "state/life-state-finance.mjs",
   "state/life-state-bot.mjs",
   "state/life-state-focus.mjs",
+  "components/life-inbox.jsx",
+  "components/life-command.jsx",
+  "features/life-agent.jsx",
+  "features/life-wrapped.jsx",
+  "features/life-sleep.jsx",
+  "utils/life-agent.js",
+  "state/agent-tools.js",
 ];
 const CONSUMERS = [
   "life-config.js",
@@ -139,6 +146,13 @@ const CONSUMERS = [
   "state/life-state-finance.mjs",
   "state/life-state-bot.mjs",
   "state/life-state-focus.mjs",
+  "components/life-inbox.jsx",
+  "components/life-command.jsx",
+  "features/life-agent.jsx",
+  "features/life-wrapped.jsx",
+  "features/life-sleep.jsx",
+  "utils/life-agent.js",
+  "state/agent-tools.js",
 ];
 
 function exportsOf(src) {

@@ -254,6 +254,56 @@ export const TOOLS = [
       required: ["field", "note"],
     },
   },
+  {
+    name: "trigger_emergency_mode",
+    description:
+      "تفعيل أو إيقاف وضع الطوارئ والحد الأدنى (للأيام الصعبة والمرض لتخفيف التوقعات وحماية السلسلة). " +
+      "إذا كان complete_tiny_core=true فسيقوم بإنقاذ كل العادات الأساسية المتبقية اليوم بنسختها الخفيفة فوراً.",
+    input_schema: {
+      type: "object",
+      properties: {
+        active: { type: "boolean", description: "true للتفعيل، false للإلغاء" },
+        complete_tiny_core: {
+          type: "boolean",
+          description: "إنقاذ العادات الأساسية المفتوحة بالحد الأدنى فوراً",
+        },
+      },
+      required: ["active"],
+    },
+  },
+  {
+    name: "save_weekly_review",
+    description:
+      "اعتماد التخطيط والمراجعة الأسبوعية وتثبيت العادة المحورية وربطها بهدف استراتيجي.",
+    input_schema: {
+      type: "object",
+      properties: {
+        win: { type: "string", description: "أكبر إنجاز أو فوز هذا الأسبوع" },
+        lesson: { type: "string", description: "الدرس المستفاد" },
+        keystone_habit_id: { type: "string", description: "معرّف العادة المحورية للتركيز عليها" },
+        focus_goal_id: { type: "string", description: "معرّف هدف 2030 المرتبط بهذا الأسبوع" },
+        priority_tasks: {
+          type: "array",
+          items: { type: "string" },
+          description: "أهم مهام الأسبوع ذات الأولوية القصوى (اختياري)",
+        },
+      },
+    },
+  },
+  {
+    name: "breakdown_task",
+    description:
+      "تفكيك مهمة كبيرة أو عالقة يعاني المستخدم من تسويفها، وتثبيت الخطوة الأولى الصغيرة للبدء الفوري.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "اسم المهمة أو جزء منه" },
+        step: { type: "string", description: "الخطوة الأولى المادية الصغيرة جداً (أقل من 10 دقائق)" },
+        today: { type: "boolean", description: "هل نجعلها من مهام اليوم الثلاث؟" },
+      },
+      required: ["query", "step"],
+    },
+  },
 ];
 
 /* المقابل الفعلي لكل أداة. لا منطق هنا — توجيه فقط، فالمنطق كله في
@@ -277,6 +327,18 @@ const RUN = {
   add_mark: (s, a) =>
     act.addMark(s, a.courseId, { label: a.label || "", score: a.score, max: a.max }),
   reflect: (s, a) => act.reflect(s, { field: a.field, note: a.note }),
+  trigger_emergency_mode: (s, a) =>
+    act.triggerEmergency(s, { active: !!a.active, completeTinyCore: !!a.complete_tiny_core }),
+  save_weekly_review: (s, a) =>
+    act.saveWeeklyReview(s, {
+      win: a.win || "",
+      lesson: a.lesson || "",
+      keystoneHabitId: a.keystone_habit_id || "",
+      focusGoalId: a.focus_goal_id || "",
+      priorityTasks: a.priority_tasks || [],
+    }),
+  breakdown_task: (s, a) =>
+    act.breakdownTask(s, { query: a.query, step: a.step, today: a.today !== false }),
 };
 
 /* تنفيذ أداة واحدة على حالة. يُرجع ما تُرجعه الدالة نفسها بالضبط — بما
@@ -315,6 +377,9 @@ export function stateBrief(state) {
   const put = (s) => L.push(s);
 
   put(`اليوم: ${day.date}`);
+  if (state.emergencyMode) {
+    put("وضع الطوارئ: مُفعّل (التركيز على الأساسيات وحماية المسار)");
+  }
   put(`الانضباط: ${day.pct}٪ (${day.habitsDone} من ${day.habitsAll} عادة)`);
   put(`الماء: ${day.water} من ${day.waterGoal} أكواب`);
 
@@ -338,7 +403,7 @@ export function stateBrief(state) {
   put(
     day.tasks.length
       ? `مهام اليوم — العدد ${day.tasks.length}:\n${tasks
-          .map((t) => `  - ${t.id} · ${t.text}${t.done ? " [منجزة]" : ""}`)
+          .map((t) => `  - ${t.id} · ${t.text}${t.step ? ` [خطوة البدء: ${t.step}]` : ""}${t.goalTitle ? ` [هدف: ${t.goalTitle}]` : ""}${t.done ? " [منجزة]" : ""}`)
           .join("\n")}${tail(day.tasks, tasks.length)}`
       : "ما فيه مهام مختارة لليوم.",
   );

@@ -102,6 +102,12 @@ export const todayBlocks = [
     visible: true,
   },
   {
+    key: "ritualLaunchpad",
+    label: "طقس الإقلاع الصباحي وإغلاق المساء",
+    desc: "إقلاع الصباح في ٣٠ ثانية + طقس إغلاق المكتب المسائي وترحيل المهام",
+    visible: true,
+  },
+  {
     key: "readingCue",
     label: "عبارة اليوم",
     desc: "عبارة تحفيزية مقتبسة من كتبك",
@@ -111,6 +117,12 @@ export const todayBlocks = [
     key: "prayerWaterGrid",
     label: "الصلاة والماء",
     desc: "أوقات الصلاة + متتبّع شرب الماء — جنبًا إلى جنب",
+    visible: true,
+  },
+  {
+    key: "gymBridge",
+    label: "جسر النادي (Iron-Log)",
+    desc: "ربط تلقائي مع جلسات الحديد ووزن الجسم وعادة التمرين",
     visible: true,
   },
   {

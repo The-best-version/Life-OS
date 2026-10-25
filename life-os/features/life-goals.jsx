@@ -1,7 +1,32 @@
 import { Badge, Btn, Card, Checkbox, DateField, Field, Modal, ProgressRing, T, dayWord, useBurst, useUndo, useHoverDelete } from "../components/life-shared.jsx";
 import { GOAL_YEARS, HORIZONS, PILLARS, QUARTERS, VISION_MAX, WORD_MAX, YEAR_MIN, currentQuarter, daysTo, goalEnd, goalPct, goalPace, goalShape, horizonOf, nextOrder, streakRunFrom, treeGrowth, GROWTH_STAGES, openingWindow, parentHorizon, pillarOf, quarterOf, rows, taskShape, uid, windowOf, windowStand, yearQuarters } from "../state/life-state.mjs";
-import { AlertTriangle, Calendar, Check, ChevronDown, ChevronUp, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, History, Target, Sparkles, PieChart, Activity, Network, PartyPopper, Sprout, GripVertical } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Calendar, Check, ChevronDown, ChevronUp, Compass, Flag, Gauge, Hourglass, Layers, Lightbulb, Link2, ListChecks, Minus, Plus, Search, Settings, SquarePen, Trash2, TrendingDown, TrendingUp, X, XCircle, History, Target, Sparkles, PieChart, Activity, Network, PartyPopper, Sprout, GripVertical, Star, Edit3, Command, CheckCircle2, Keyboard, Brain, Clock, Zap, ArrowLeft, Rocket, Timer } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+// 👇 دالة حساب زخم العادات (آخر 7 أيام) 👇
+function calculateHabitMomentum(goal, history) {
+  const linked = goal.linkedHabits || [];
+  if (linked.length === 0) return null;
+  
+  let completedCount = 0;
+  const totalPossible = linked.length * 7;
+  
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    
+    const dayRow = (history || []).find(h => h.date === dateStr);
+    if (dayRow && Array.isArray(dayRow.done)) {
+      linked.forEach(hid => {
+        if (dayRow.done.includes(hid)) completedCount++;
+      });
+    }
+  }
+  
+  return Math.round((completedCount / totalPossible) * 100);
+}
 
 // 👇 مكون السحب والإفلات مع أزرار احتياطية 👇
 function DraggableWidget({ id, order, setOrder, children, className = "" }) {
@@ -59,7 +84,6 @@ function DraggableWidget({ id, order, setOrder, children, className = "" }) {
       onDrop={handleDrop}
       className={`relative group transition-all duration-300 ${className} ${isDragging ? "opacity-50 scale-95" : ""}`}
     >
-      {/* 👇 شريط التحكم الواضح (يظهر عند التمرير بالماوس) 👇 */}
       <div className="absolute top-3 left-3 z-50 flex items-center gap-1 rounded-xl bg-black/60 p-1.5 border border-white/20 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity">
         <div 
           draggable 
@@ -96,18 +120,72 @@ export function GoalsModule({ state, setState }) {
   const [query, setQuery] = useState("");
   const [view, setView] = useState("list");
   const [celebrateId, setCelebrateId] = useState(null);
+  
+  const [showAllMonthly, setShowAllMonthly] = useState(false);
+  const [isReviewOpen, setIsReviewOpen] = useState(false); 
+  const [pendingDeskId, setPendingDeskId] = useState(null);
+  const [draggedMonthlyId, setDraggedMonthlyId] = useState(null);
 
-  // 👇 حالة ترتيب الكروت (غيرنا اسم الذاكرة إلى v3 عشان ينمسح الترتيب القديم) 👇
-  // العد التنازلي لم يعد ضمن القابل للسحب: هو وقائمة الأهداف تحته طرفا سؤال واحد
-  // («أين أنا من الربع المختار؟») ويجب أن يبقيا متجاورين دائمًا، لا أن يفصل بينهما
-  // سحب بطاقة أخرى إلى مكانه.
+  const [monthlyTitle, setMonthlyTitle] = useState(() => {
+    return localStorage.getItem("life_monthly_title") || "أهداف الشهر الحالي";
+  });
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [tempTitle, setTempTitle] = useState(monthlyTitle);
+
+  const hoveredGoalIdRef = useRef(null);
+  const [toastMsg, setToastMsg] = useState(null);
+  const [calibrationOpen, setCalibrationOpen] = useState(false);
+
+  // سجل الالتزام السلوكي للأهداف (WIG Spotlight, Cost of Failure, Identity, Confidence, Paused)
+  const [commitStore, setCommitStore] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("los_goals_commitment_engine_v1") || "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  const updateCommitStore = useCallback((patchObj) => {
+    setCommitStore((prev) => {
+      const next = { ...prev, ...patchObj };
+      try {
+        localStorage.setItem("los_goals_commitment_engine_v1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const updateGoalCommitMeta = useCallback((goalId, fields) => {
+    if (!goalId) return;
+    setCommitStore((prev) => {
+      const prevGoal = prev[goalId] || {};
+      const next = {
+        ...prev,
+        [goalId]: {
+          ...prevGoal,
+          ...fields,
+          lastTouchedAt: new Date().toISOString().slice(0, 10),
+        },
+      };
+      try {
+        localStorage.setItem("los_goals_commitment_engine_v1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const flashGoalToast = useCallback((msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3200);
+  }, []);
+
+  const saveTitle = () => {
+    setMonthlyTitle(tempTitle);
+    localStorage.setItem("life_monthly_title", tempTitle);
+    setIsEditingTitle(false);
+  };
+
   const DEFAULT_ORDER = ["searchBar", "yearInPixels", "analysis", "wheel", "upcoming"];
-  // ترتيب محفوظ يفقد بطاقة أُضيفت لاحقًا إلى DEFAULT_ORDER (كـ countdownBlock) هو ترتيب
-  // قديم انتهت صلاحيته، لا تفضيل تعمّده المستخدم — إقحام الناقص في مقدّمة الترتيب
-  // القديم كان يُبقي بقية البطاقات على تسلسلها القديم هي الأخرى (كـ "التحليل" قبل
-  // "سنة في بكسل")، وهذا تسلسل لا يطابق لا القديم ولا الجديد. فالقاعدة الآن: ترتيب
-  // محفوظ لا يحوي بالضبط كل مفاتيح DEFAULT_ORDER يُستبدل بها كاملة؛ ترتيب يحويها
-  // جميعًا (حتى لو بتبديل المستخدم اليدوي) يُحترم كما هو.
   const [dashboardOrder, setDashboardOrder] = useState(() => {
     try {
       const saved = localStorage.getItem("life_goals_widget_order_v3");
@@ -188,13 +266,13 @@ export function GoalsModule({ state, setState }) {
         : `${GOAL_YEARS[GOAL_YEARS.length - 1]}-12-31`;
   const daysLeft = daysTo(windowEnd);
 
-  const patch = (id, fields) =>
+  const patch = useCallback((id, fields) =>
     setState((s) => ({
       ...s,
       goals: (s.goals || []).map((g) =>
         g.id === id ? goalShape({ ...goalShape(g), ...fields }) : g,
       ),
-    }));
+    })), [setState]);
 
   const remove = (id) => {
     arm("حُذف الهدف", { goals: state.goals || [] });
@@ -226,6 +304,60 @@ export function GoalsModule({ state, setState }) {
     }
   };
 
+  const toggleTask = useCallback((taskId) => {
+    setState((s) => ({
+      ...s,
+      tasks: (s.tasks || []).map((t) =>
+        t.id === taskId ? { ...t, done: !t.done } : t
+      ),
+    }));
+  }, [setState]);
+
+  const addTaskToGoal = useCallback((goalId, text) => {
+    if (!text.trim()) return;
+    setState((s) => ({
+      ...s,
+      tasks: [
+        ...(s.tasks || []),
+        taskShape({
+          text: text.trim(),
+          quadrant: "q2",
+          linkedGoalId: goalId,
+          order: nextOrder(s.tasks, "q2"),
+        }),
+      ],
+    }));
+  }, [setState]);
+
+  // إرسال الخطوة الفيزيائية القادمة مباشرة إلى أهم الثلاث مهام في شاشة «اليوم»
+  const dispatchNextActionToToday = useCallback((goal, customText) => {
+    if (!goal) return;
+    const actionText = (customText ?? goal.nextAction ?? "").trim();
+    if (!actionText) {
+      flashGoalToast("اكتب الخطوة الفيزيائية القادمة أولاً لتثبيتها في يومك ⚡");
+      return;
+    }
+    setState((s) => ({
+      ...s,
+      goals: (s.goals || []).map((g) =>
+        g.id === goal.id ? goalShape({ ...goalShape(g), nextAction: actionText }) : g
+      ),
+      tasks: [
+        taskShape({
+          text: `🎯 [${goal.text.slice(0, 28)}] — ${actionText}`,
+          quadrant: "q1",
+          top: true,
+          done: false,
+          linkedGoalId: goal.id,
+          order: nextOrder(s.tasks, "q1"),
+        }),
+        ...(s.tasks || []),
+      ],
+    }));
+    updateGoalCommitMeta(goal.id, { lastDispatchedAction: actionText });
+    flashGoalToast("🚀 تم إرسال الخطوة إلى «الثلاث الأهم» في شاشة اليوم!");
+  }, [setState, updateGoalCommitMeta, flashGoalToast]);
+
   const desk = deskId ? byId.get(deskId) : null;
   const celebrateGoal = celebrateId ? byId.get(celebrateId) : null;
 
@@ -237,7 +369,92 @@ export function GoalsModule({ state, setState }) {
     if (!qs.some((q) => q.id === quarter)) setQuarter(qs[0].id);
   };
 
-  // 👇 المكونات القابلة للسحب 👇
+  const handleHover = useCallback((id) => {
+    hoveredGoalIdRef.current = id;
+  }, []);
+
+  useEffect(() => {
+    if (pendingDeskId) {
+      setDeskId(pendingDeskId);
+      setPendingDeskId(null);
+    }
+  }, [pendingDeskId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.altKey && e.code === 'KeyS') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const targetId = deskId ? deskId : hoveredGoalIdRef.current;
+        
+        if (targetId) {
+          patch(targetId, { isMonthlyFocus: true });
+          setToastMsg("تم إضافة الهدف إلى قائمة الشهر! ⭐");
+          setTimeout(() => setToastMsg(null), 3000);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deskId, patch]);
+
+  const monthlyGoalsRaw = all.filter(g => g.isMonthlyFocus && !g.done);
+  const priorityWeight = { critical: 4, high: 3, medium: 2, low: 1 };
+  const monthlyGoals = [...monthlyGoalsRaw].sort((a, b) => {
+    if (a.monthlyOrder !== undefined && b.monthlyOrder !== undefined) {
+      return a.monthlyOrder - b.monthlyOrder;
+    }
+    if (a.monthlyOrder !== undefined) return -1;
+    if (b.monthlyOrder !== undefined) return 1;
+    return (priorityWeight[b.priority] || 2) - (priorityWeight[a.priority] || 2);
+  });
+
+  const handleMonthlyDragStart = (e, id) => {
+    setDraggedMonthlyId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleMonthlyDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleMonthlyDragEnd = () => {
+    setDraggedMonthlyId(null);
+  };
+
+  const handleMonthlyDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedMonthlyId || draggedMonthlyId === targetId) return;
+
+    const currentGoals = [...monthlyGoals];
+    const fromIdx = currentGoals.findIndex(g => g.id === draggedMonthlyId);
+    const toIdx = currentGoals.findIndex(g => g.id === targetId);
+
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const [moved] = currentGoals.splice(fromIdx, 1);
+      currentGoals.splice(toIdx, 0, moved);
+
+      const orderMap = {};
+      currentGoals.forEach((g, index) => {
+        orderMap[g.id] = index;
+      });
+
+      setState(s => ({
+        ...s,
+        goals: s.goals.map(g => {
+          if (orderMap[g.id] !== undefined) {
+            return { ...g, monthlyOrder: orderMap[g.id] };
+          }
+          return g;
+        })
+      }));
+    }
+    setDraggedMonthlyId(null);
+  };
+
   const WIDGETS = {
     countdownBlock: {
       title: "الأفق الزمني",
@@ -346,7 +563,7 @@ export function GoalsModule({ state, setState }) {
       element: <LifeWheel goals={all} />,
       colSpan: "lg:col-span-1",
     },
-    upcoming: {
+    "upcoming": {
       title: "الأقرب أجلًا",
       element: <UpcomingDeadlinesCard goals={all} />,
       colSpan: "lg:col-span-1",
@@ -355,6 +572,13 @@ export function GoalsModule({ state, setState }) {
 
   return (
     <div className="space-y-8 pb-20">
+      {toastMsg && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-white shadow-2xl animate-in fade-in slide-in-from-bottom-5">
+          <CheckCircle2 size={20} />
+          <span className="font-bold">{toastMsg}</span>
+        </div>
+      )}
+
       <Card className="relative overflow-hidden p-6 sm:p-8 bg-gradient-to-br from-white/[0.03] to-transparent border-white/5">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -393,6 +617,14 @@ export function GoalsModule({ state, setState }) {
                 <Target size={14} className="text-emerald-400" />
                 <span className="text-[12px] font-bold text-white/80">{done} من {scoped.length} محقق</span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setCalibrationOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/15 px-3.5 py-1.5 text-[11.5px] font-extrabold text-amber-300 transition-all hover:bg-amber-500/25 shadow-lg"
+              >
+                <Timer size={14} /> معايرة الأسبوع (60 ثانية) ⚡
+              </button>
             </div>
           </div>
           <div className="shrink-0 flex flex-col items-center justify-center bg-black/20 p-4 rounded-3xl border border-white/5">
@@ -401,13 +633,211 @@ export function GoalsModule({ state, setState }) {
         </div>
       </Card>
 
+      {/* 1️⃣ بؤرة الهدف القائد الشمالي (The North Star / WIG Spotlight) */}
+      <WigSpotlightCard
+        all={all}
+        habits={state.habits || []}
+        history={state.history || []}
+        commitStore={commitStore}
+        onSelectWig={(goalId) => updateCommitStore({ activeWigId: goalId })}
+        onUpdateGoalMeta={updateGoalCommitMeta}
+        onPatchGoal={patch}
+        onSendToToday={dispatchNextActionToToday}
+        onOpenGoal={(id) => setDeskId(id)}
+        onOpenCalibration={() => setCalibrationOpen(true)}
+      />
+
+      {/* 3️⃣ رادار إنقاذ الأهداف الراكدة وتفكيك المقاومة (Goal CPR & Friction Buster) */}
+      <GoalCprBanner
+        all={all}
+        scoped={scoped}
+        habits={state.habits || []}
+        history={state.history || []}
+        commitStore={commitStore}
+        onUpdateGoalMeta={updateGoalCommitMeta}
+        onPatchGoal={patch}
+        onSendToToday={dispatchNextActionToToday}
+        onOpenGoal={(id) => setDeskId(id)}
+        onToast={flashGoalToast}
+      />
+
       <NorthStarCard
         value={state.northStar}
         onSave={(northStar) => setState((s) => ({ ...s, northStar }))}
       />
 
-      {/* العد التنازلي وقائمة الأهداف تحته سؤال واحد — «أين أنا من الربع
-          المختار؟» — فيُعرضان متجاورين دائمًا، قبل أي بطاقة قابلة للسحب. */}
+      <WhatIfSimulatorCard state={state} all={all} />
+
+      <Card className="p-0 border-amber-500/20 bg-[#111] relative overflow-hidden shadow-2xl">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 p-5 border-b border-white/5 bg-gradient-to-l from-white/[0.02] to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/30">
+              <Star size={20} className="text-amber-400 fill-amber-400" />
+            </div>
+            <div>
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    value={tempTitle}
+                    onChange={(e) => setTempTitle(e.target.value)}
+                    onBlur={saveTitle}
+                    onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
+                    autoFocus
+                    className="bg-black/50 border border-amber-500/50 rounded-lg px-2 py-1 text-[16px] font-bold text-white outline-none"
+                  />
+                  <button onClick={saveTitle} className="text-emerald-400 hover:text-emerald-300"><Check size={16} /></button>
+                </div>
+              ) : (
+                <h3 
+                  className="text-[18px] font-extrabold text-white flex items-center gap-2 cursor-pointer group/title"
+                  onClick={() => { setTempTitle(monthlyTitle); setIsEditingTitle(true); }}
+                  title="اضغط لتعديل الاسم"
+                >
+                  {monthlyTitle}
+                  <Edit3 size={14} className="text-white/20 group-hover/title:text-amber-400 transition-colors" />
+                </h3>
+              )}
+              <p className="text-[12px] text-white/50 mt-0.5 font-bold">أهدافك المركزية لهذا الشهر — اضغط على أي هدف لفتح تفاصيله.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsReviewOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 text-indigo-300 font-bold text-[11px] transition-colors shadow-lg shadow-indigo-900/20"
+            >
+              <Brain size={14} /> تحليل شامل
+            </button>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 shadow-inner">
+              <Keyboard size={14} className="text-amber-400" />
+              <span className="text-[11px] font-bold text-white">Alt + <span className="text-amber-400">S</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 p-5">
+          {monthlyGoals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 rounded-xl border border-dashed border-white/10 bg-white/[0.01]">
+              <Star size={32} className="mb-3 text-amber-500/20" />
+              <p className="text-[14px] font-bold text-white/60">لا توجد أهداف شهرية بعد.</p>
+              <p className="text-[12px] text-white/40 mt-1">حط الماوس على أي هدف في الأسفل واضغط <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-bold border border-white/20">Alt + S</kbd>، أو اضغط النجمة ⭐ بجانبه.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {(showAllMonthly ? monthlyGoals : monthlyGoals.slice(0, 4)).map(g => {
+                const p = pillarOf(g.pillar);
+                const Icon = p.icon;
+                
+                const priorityStyles = {
+                  critical: { cardBg: "bg-red-500/[0.08] border-red-500/30 shadow-[0_4px_20px_-10px_rgba(239,68,68,0.3)] hover:bg-red-500/[0.12] hover:border-red-500/50", text: '#ef4444' },
+                  high: { cardBg: "bg-orange-500/[0.08] border-orange-500/30 shadow-[0_4px_20px_-10px_rgba(249,115,22,0.3)] hover:bg-orange-500/[0.12] hover:border-orange-500/50", text: '#f97316' },
+                  medium: { cardBg: "bg-yellow-500/[0.08] border-yellow-500/30 shadow-[0_4px_20px_-10px_rgba(234,179,8,0.3)] hover:bg-yellow-500/[0.12] hover:border-yellow-500/50", text: '#eab308' },
+                  low: { cardBg: "bg-emerald-500/[0.08] border-emerald-500/30 shadow-[0_4px_20px_-10px_rgba(16,185,129,0.3)] hover:bg-emerald-500/[0.12] hover:border-emerald-500/50", text: '#10b981' }
+                };
+                const pStyle = priorityStyles[g.priority || 'medium'];
+                const pct = goalPct(g, all, state.habits || []);
+                const momentum = calculateHabitMomentum(g, state.history || []);
+                
+                return (
+                  <div 
+                    key={g.id} 
+                    onDragOver={handleMonthlyDragOver}
+                    onDrop={(e) => handleMonthlyDrop(e, g.id)}
+                    onClick={() => setDeskId(g.id)}
+                    className={`group relative flex flex-col sm:flex-row sm:items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all duration-300 ${
+                      pStyle.cardBg
+                    } ${draggedMonthlyId === g.id ? 'opacity-40 border-amber-500/50 scale-[0.99]' : ''}`}
+                  >
+                    <div className="absolute right-0 top-3 bottom-3 w-1 rounded-l-full" style={{ backgroundColor: pStyle.text }} />
+                    
+                    <div 
+                      draggable
+                      onDragStart={(e) => { e.stopPropagation(); handleMonthlyDragStart(e, g.id); }}
+                      onDragEnd={(e) => { e.stopPropagation(); handleMonthlyDragEnd(); }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="hidden sm:flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing text-white/20 hover:text-white/60 transition-colors px-1"
+                    >
+                      <GripVertical size={16} />
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 sm:w-[160px]">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-sm" style={{ backgroundColor: `${p.tint}20`, color: p.tint, border: `1px solid ${p.tint}30` }}>
+                        <Icon size={14} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-extrabold" style={{ color: p.tint }}>{p.label}</span>
+                        <select
+                          onClick={(e) => e.stopPropagation()}
+                          value={g.priority || 'medium'}
+                          onChange={(e) => patch(g.id, { priority: e.target.value })}
+                          className="bg-transparent text-[10px] font-bold outline-none cursor-pointer border-none p-0 mt-0.5 appearance-none hover:text-white transition-colors"
+                          style={{ color: pStyle.text }}
+                        >
+                          <option value="critical" style={{ color: '#ef4444', background: '#1a1a1a' }}>أولوية قصوى</option>
+                          <option value="high" style={{ color: '#f97316', background: '#1a1a1a' }}>أولوية عالية</option>
+                          <option value="medium" style={{ color: '#eab308', background: '#1a1a1a' }}>أولوية متوسطة</option>
+                          <option value="low" style={{ color: '#10b981', background: '#1a1a1a' }}>أولوية منخفضة</option>
+                        </select>
+                        
+                        {momentum !== null && (
+                          <div 
+                            className="flex items-center gap-1 mt-1 text-[9px] font-bold cursor-help" 
+                            title="نسبة التزامك بالعادات المرتبطة بهذا الهدف في آخر 7 أيام"
+                            style={{ color: momentum >= 70 ? '#10b981' : momentum >= 40 ? '#eab308' : '#ef4444' }}
+                          >
+                            <Activity size={9} /> 
+                            <span>زخم {momentum}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <h4 className="flex-1 text-[13px] font-bold text-white/90 leading-relaxed break-words pr-2">
+                      {g.text}
+                    </h4>
+
+                    <div className="flex items-center gap-3 shrink-0 mt-2 sm:mt-0">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-black/40 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: p.tint }} />
+                        </div>
+                        <span className="text-[10px] font-bold tabular-nums text-white/50 w-6">{pct}%</span>
+                      </div>
+
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); patch(g.id, { isMonthlyFocus: false }); }}
+                        className="flex h-6 w-6 items-center justify-center rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/20 transition-colors opacity-0 group-hover:opacity-100"
+                        title="إزالة"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {monthlyGoals.length > 4 && (
+                <button
+                  onClick={() => setShowAllMonthly(!showAllMonthly)}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-amber-500/30 bg-amber-500/5 py-2.5 text-[11px] font-bold text-amber-400 hover:bg-amber-500/10 transition-colors"
+                >
+                  {showAllMonthly ? (
+                    <>
+                      <ChevronUp size={14} /> عرض أقل
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown size={14} /> عرض بقية الأهداف ({monthlyGoals.length - 4})
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+
       {WIDGETS.countdownBlock.element}
 
       {orphans.length > 0 && view === "list" && (
@@ -500,10 +930,14 @@ export function GoalsModule({ state, setState }) {
                         key={g.id}
                         goal={g}
                         all={all}
+                        tasks={state.tasks || []}
                         habits={state.habits || []}
                         history={state.history || []}
                         parent={g.parent ? byId.get(g.parent) : null}
                         kids={kidsOf.get(g.id) || []}
+                        commitMeta={commitStore[g.id]}
+                        onPatchGoal={(fields) => patch(g.id, fields)}
+                        onSendToToday={(txt) => dispatchNextActionToToday(g, txt)}
                         onToggle={() => toggleGoal(g)}
                         onStep={
                           g.target > 0
@@ -515,6 +949,8 @@ export function GoalsModule({ state, setState }) {
                         }
                         onOpen={() => setDeskId(g.id)}
                         onDelete={() => remove(g.id)}
+                        onHover={handleHover} 
+                        onToggleMonthly={() => patch(g.id, { isMonthlyFocus: !g.isMonthlyFocus })}
                       />
                     ))
                   )}
@@ -525,7 +961,6 @@ export function GoalsModule({ state, setState }) {
         </div>
       )}
 
-      {/* 👇 لوحة التحكم القابلة للسحب والإفلات 👇 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {dashboardOrder.map((id) => {
           const widget = WIDGETS[id];
@@ -552,29 +987,47 @@ export function GoalsModule({ state, setState }) {
         tasks={state.tasks || []}
         habits={state.habits || []}
         history={state.history || []}
+        commitMeta={desk ? commitStore[desk.id] : null}
+        onUpdateCommitMeta={(fields) => updateGoalCommitMeta(deskId, fields)}
+        onSendToToday={(txt) => dispatchNextActionToToday(desk, txt)}
         onClose={() => {
           setDeskId(null);
           setNewGoalId(null);
         }}
         onPatch={(fields) => patch(deskId, fields)}
-        onAddTask={(text) =>
-          setState((s) => ({
-            ...s,
-            tasks: [
-              ...(s.tasks || []),
-              taskShape({
-                text,
-                quadrant: "q2",
-                linkedGoalId: deskId,
-                order: nextOrder(s.tasks, "q2"),
-              }),
-            ],
-          }))
-        }
+        onAddTask={(text) => addTaskToGoal(deskId, text)}
+        onToggleTask={toggleTask}
         onDelete={() => {
           remove(deskId);
           setDeskId(null);
         }}
+      />
+
+      <MonthlyReviewModal 
+        isOpen={isReviewOpen} 
+        onClose={() => setIsReviewOpen(false)} 
+        goals={monthlyGoals} 
+        all={all}
+        tasks={state.tasks || []}
+        history={state.history || []}
+        title={monthlyTitle}
+        onOpenGoal={(id) => {
+          setIsReviewOpen(false); 
+          setPendingDeskId(id);
+        }}
+      />
+
+      <WeeklyCalibrationModal
+        open={calibrationOpen}
+        onClose={() => setCalibrationOpen(false)}
+        all={all}
+        monthlyGoals={monthlyGoals}
+        habits={state.habits || []}
+        commitStore={commitStore}
+        onUpdateGoalMeta={updateGoalCommitMeta}
+        onPatchGoal={patch}
+        onSendToToday={dispatchNextActionToToday}
+        onToast={flashGoalToast}
       />
 
       <CelebrationModal
@@ -584,6 +1037,225 @@ export function GoalsModule({ state, setState }) {
         onSave={(lesson) => patch(celebrateId, { lesson })}
       />
     </div>
+  );
+}
+
+function MonthlyReviewModal({ isOpen, onClose, goals, all, tasks, history, title, onOpenGoal }) {
+  if (!isOpen) return null;
+
+  const totalGoals = goals.length;
+  if (totalGoals === 0) return null;
+
+  const totalProgress = goals.reduce((sum, g) => sum + goalPct(g, all, []), 0);
+  const avgProgress = Math.round(totalProgress / totalGoals);
+
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const currentDay = today.getDate();
+  const timeProgress = Math.round((currentDay / daysInMonth) * 100);
+  const isTimeAhead = timeProgress > avgProgress;
+
+  let totalMomentum = 0;
+  let momentumCount = 0;
+  
+  const goalsWithStats = goals.map(g => {
+    const pct = goalPct(g, all, []);
+    const momentum = calculateHabitMomentum(g, history);
+    if (momentum !== null) {
+      totalMomentum += momentum;
+      momentumCount++;
+    }
+    return { goal: g, pct, momentum };
+  });
+
+  const avgMomentum = momentumCount > 0 ? Math.round(totalMomentum / momentumCount) : 0;
+
+  let healthScore = avgProgress * 0.4;
+  healthScore += (timeProgress === 0 ? 100 : Math.min(100, (avgProgress / timeProgress) * 100)) * 0.3;
+  healthScore += avgMomentum * 0.3;
+  healthScore = Math.round(healthScore);
+
+  const pillarsStats = PILLARS.map(p => {
+    const pillarGoals = goals.filter(g => g.pillar === p.id);
+    if (pillarGoals.length === 0) return { ...p, pct: 0, count: 0 };
+    const sum = pillarGoals.reduce((acc, g) => acc + goalPct(g, all, []), 0);
+    return { ...p, pct: Math.round(sum / pillarGoals.length), count: pillarGoals.length };
+  }).filter(p => p.count > 0);
+
+  const needsAttention = goalsWithStats
+    .filter(g => g.pct < timeProgress || (g.momentum !== null && g.momentum < 40))
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 3);
+
+  const doingGreat = goalsWithStats
+    .filter(g => !needsAttention.find(n => n.goal.id === g.goal.id))
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 3);
+
+  const weakestPillar = [...pillarsStats].sort((a, b) => a.pct - b.pct)[0];
+  let smartInsight = "";
+  if (needsAttention.length > 0) {
+    smartInsight = `ركيزة "${weakestPillar.label}" هي الأضعف حالياً (${weakestPillar.pct}%). هدفك "${needsAttention[0].goal.text.slice(0, 20)}..." يحتاجك اليوم. ابدأ بخطوتك القادمة فوراً.`;
+  } else {
+    smartInsight = "أداءك ممتاز جداً! أنت متوازن في جميع الركائز. حافظ على هذا الزخم ولا تضف أهدافاً جديدة حتى تُنهي الحالية.";
+  }
+
+  return (
+    <Modal open={isOpen} onClose={onClose} title={`مركز القيادة: ${title}`} wide>
+      <div className="space-y-6 py-2">
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          
+          <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-indigo-500/5 border border-indigo-500/30 flex flex-col items-center justify-center text-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/30 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+            <h3 className="text-[13px] font-bold text-indigo-200 mb-2 flex items-center gap-1"><Activity size={14} /> درجة الصحة العامة</h3>
+            <div className="flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold text-white">{healthScore}</span>
+              <span className="text-sm font-bold text-indigo-400">/ 100</span>
+            </div>
+            <p className="text-[11px] font-bold text-white/50 mt-1">
+              {healthScore >= 80 ? "أداء أسطوري 🔥" : healthScore >= 50 ? "أداء جيد، يحتاج تركيز ⚡" : "تحتاج إعادة ترتيب أولوياتك ⚠️"}
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-black/20 border border-white/5 flex flex-col justify-center">
+            <p className="text-[12px] font-bold text-white/70 mb-3 flex items-center gap-1.5"><Clock size={14}/> إيقاع الشهر (الوقت مقابل الإنجاز)</p>
+            <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+              <span className="text-white/50">مضى: {timeProgress}%</span>
+              <span className={isTimeAhead ? "text-amber-400" : "text-emerald-400"}>أنجزت: {avgProgress}%</span>
+            </div>
+            <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+              <div style={{ width: `${timeProgress}%` }} className="h-full bg-white/30 relative">
+                 <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-white/80" />
+              </div>
+            </div>
+            <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden mt-1.5">
+              <div style={{ width: `${avgProgress}%` }} className={`h-full ${isTimeAhead ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+            </div>
+            <p className="text-[10px] mt-2 font-bold" style={{ color: isTimeAhead ? '#f59e0b' : '#10b981' }}>
+              {isTimeAhead ? "أنت متأخر عن الوقت، تحتاج تسريع الوتيرة." : "خطواتك تواكب أيام الشهر، استمر!"}
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-black/20 border border-white/5 flex flex-col items-center justify-center text-center">
+            <p className="text-[12px] font-bold text-white/70 mb-2 flex items-center gap-1.5"><Zap size={14} className="text-amber-400"/> متوسط الزخم (7 أيام)</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-extrabold text-white">{avgMomentum}</span>
+              <span className="text-sm font-bold text-amber-400">%</span>
+            </div>
+            <p className="text-[10px] text-white/40 mt-2 leading-relaxed">يعتمد على التزامك بالعادات المرتبطة بأهدافك هذا الأسبوع.</p>
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5">
+          <h4 className="flex items-center gap-2 text-[14px] font-extrabold text-white/90 mb-4">
+            <PieChart size={16} className="text-sky-400" /> توزيع الجهد حسب الركائز
+          </h4>
+          <div className="space-y-3">
+            {pillarsStats.map(p => (
+              <div key={p.id} className="flex items-center gap-3">
+                <div className="w-24 flex items-center gap-1.5 text-[11px] font-bold shrink-0" style={{ color: p.tint }}>
+                  <p.icon size={12} /> {p.label}
+                </div>
+                <div className="flex-1 h-2 bg-black/40 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${p.pct}%`, backgroundColor: p.tint }} />
+                </div>
+                <div className="w-8 text-left text-[11px] font-extrabold tabular-nums text-white/70 shrink-0">
+                  {p.pct}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <div className="p-5 rounded-2xl border border-red-500/20 bg-red-500/5 relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="flex items-center gap-2 text-[14px] font-extrabold text-red-400">
+                <AlertTriangle size={16} /> أهم 3 أهداف تحتاج تركيزك
+              </h4>
+            </div>
+            {needsAttention.length > 0 ? (
+              <div className="space-y-3 relative z-10">
+                {needsAttention.map(({ goal, pct, momentum }) => (
+                  <div 
+                    key={goal.id} 
+                    className="w-full text-right p-3.5 rounded-xl bg-black/40 border border-white/5 hover:border-red-500/40 transition-colors block"
+                  >
+                    <p className="text-[13px] font-bold text-white/90 leading-snug mb-3">{goal.text}</p>
+                    
+                    <div className="flex items-center gap-2 mb-4">
+                       <span className="text-[10px] font-bold text-red-300 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">إنجاز: {pct}%</span>
+                       {momentum !== null && (
+                         <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 flex items-center gap-1"><Activity size={10}/> زخم: {momentum}%</span>
+                       )}
+                    </div>
+
+                    <button
+                      onClick={() => onOpenGoal(goal.id)}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-[11px] font-bold text-white transition-colors"
+                    >
+                      تحليل الهدف والخطوات <ArrowLeft size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 bg-black/20 rounded-xl">
+                <CheckCircle2 size={28} className="text-emerald-500 mb-2 opacity-80" />
+                <p className="text-[12px] font-bold text-white/60">كل أهدافك تحت السيطرة!</p>
+              </div>
+            )}
+          </div>
+
+          <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -ml-10 -mt-10 pointer-events-none" />
+            <h4 className="flex items-center gap-2 text-[14px] font-extrabold text-emerald-400 mb-4">
+              <TrendingUp size={16} /> نقاط قوتك (ماشي صح)
+            </h4>
+            {doingGreat.length > 0 ? (
+              <div className="space-y-3 relative z-10">
+                {doingGreat.map(({ goal, pct, momentum }) => (
+                  <div 
+                    key={goal.id} 
+                    className="w-full text-right p-3.5 rounded-xl bg-black/40 border border-white/5 hover:border-emerald-500/40 transition-colors block"
+                  >
+                    <p className="text-[13px] font-bold text-white/90 leading-snug mb-3">{goal.text}</p>
+                    
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">إنجاز: {pct}%</span>
+                      {momentum !== null && (
+                         <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1"><Activity size={10}/> زخم: {momentum}%</span>
+                       )}
+                    </div>
+
+                    <button
+                      onClick={() => onOpenGoal(goal.id)}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-[11px] font-bold text-white transition-colors"
+                    >
+                      تحليل الهدف والخطوات <ArrowLeft size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 bg-black/20 rounded-xl">
+                <p className="text-[12px] font-bold text-white/60">لم تصنع زخماً كافياً بعد!</p>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-100 text-[12.5px] font-bold leading-relaxed flex items-start gap-3">
+          <Brain size={18} className="shrink-0 mt-0.5 text-indigo-400" />
+          <p>{smartInsight}</p>
+        </div>
+
+      </div>
+    </Modal>
   );
 }
 
@@ -1656,74 +2328,283 @@ function GoalAnalysisDashboard({ goals, habits }) {
   );
 }
 
-function GoalHeatmap({ goal, history }) {
+/* ==================================================================== *
+ *  👇 التعديل الجديد: خريطة الالتزام التفاعلية (أسبوع / شهر) 👇
+ * ==================================================================== */
+function GoalHeatmap({ goal, history, allHabits = [] }) {
+  const [viewMode, setViewMode] = useState("month"); 
+  const [selectedDay, setSelectedDay] = useState(null);
   const linked = goal.linkedHabits || [];
+
   if (linked.length === 0) return null;
 
-  const days = [];
   const today = new Date();
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay() - 84);
-
   const formatDate = (d) => {
-    const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   };
-
   const todayStr = formatDate(today);
 
-  for (let i = 0; i < 91; i++) {
-    const d = new Date(startOfWeek);
-    d.setDate(startOfWeek.getDate() + i);
+  // --- Logic for Week View ---
+  const weekDays = [];
+  const currentDayOfWeek = today.getDay();
+  const diffToSaturday = (currentDayOfWeek + 1) % 7;
+  
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - diffToSaturday + i);
     const dateStr = formatDate(d);
     const row = (history || []).find((h) => h.date === dateStr);
+    const isFuture = d > today;
     let doneCount = 0;
-    if (row && Array.isArray(row.done)) doneCount = linked.filter(id => row.done.includes(id)).length;
-    days.push({ date: dateStr, done: doneCount, total: linked.length, isToday: dateStr === todayStr });
+    if (row && Array.isArray(row.done)) {
+      doneCount = linked.filter(id => row.done.includes(id)).length;
+    }
+    weekDays.push({ date: dateStr, done: doneCount, total: linked.length, isFuture, isToday: dateStr === todayStr });
+  }
+
+  // --- Logic for Month View ---
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const lead = (firstDay + 1) % 7;
+  
+  const monthCells = Array.from({ length: lead }, () => null);
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(year, month, i);
+    const dateStr = formatDate(d);
+    const row = (history || []).find((h) => h.date === dateStr);
+    const isFuture = d > today;
+    let doneCount = 0;
+    if (row && Array.isArray(row.done)) {
+      doneCount = linked.filter(id => row.done.includes(id)).length;
+    }
+    monthCells.push({ day: i, dateStr, done: doneCount, total: linked.length, isFuture, isToday: dateStr === todayStr });
+  }
+
+  // --- Calculate Best Habit ---
+  let bestHabit = null;
+  let bestHabitPct = -1;
+  if (linked.length > 0 && history) {
+    const habitCounts = {};
+    linked.forEach(id => habitCounts[id] = { done: 0, total: 0 });
+
+    history.forEach(row => {
+      linked.forEach(id => {
+        if (row.all && row.all.includes(id)) {
+          habitCounts[id].total++;
+          if (row.done && row.done.includes(id)) habitCounts[id].done++;
+        }
+      });
+    });
+
+    linked.forEach(id => {
+      const c = habitCounts[id];
+      if (c.total > 0) {
+        const pct = Math.round((c.done / c.total) * 100);
+        if (pct > bestHabitPct) {
+          bestHabitPct = pct;
+          bestHabit = allHabits.find(h => h.id === id);
+        }
+      }
+    });
   }
 
   return (
     <div className="mt-4 p-3 rounded-xl bg-black/20 border border-white/5">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">خريطة الالتزام</span>
-        <div className="flex gap-1">
-          <div className="h-2 w-2 rounded-sm bg-white/10"></div><div className="h-2 w-2 rounded-sm bg-emerald-500/40"></div><div className="h-2 w-2 rounded-sm bg-emerald-500"></div>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider flex items-center gap-1.5">
+          <Activity size={12} /> نبض الالتزام
+        </span>
+        <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">
+          <button 
+            onClick={() => setViewMode("week")}
+            className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-colors ${viewMode === "week" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}
+          >
+            أسبوع
+          </button>
+          <button 
+            onClick={() => setViewMode("month")}
+            className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-colors ${viewMode === "month" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}
+          >
+            شهر
+          </button>
         </div>
       </div>
-      <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(13, 1fr)", gridTemplateRows: "repeat(7, 1fr)", gridAutoFlow: "column" }}>
-        {days.map((day) => {
-          let color = "bg-white/5";
-          if (day.done > 0) {
-            const ratio = day.done / day.total;
-            color = ratio === 1 ? "bg-emerald-500" : "bg-emerald-500/40";
-          }
-          return <div key={day.date} title={`${day.date}: ${day.done} من ${day.total}`} className={`aspect-square w-full rounded-[3px] transition-all hover:scale-125 hover:z-10 ${color} ${day.isToday ? "ring-1 ring-white" : ""}`} />;
-        })}
-      </div>
+
+      {viewMode === "week" ? (
+        <div className="flex justify-between gap-1">
+          {weekDays.map((day, i) => {
+            const ratio = day.total > 0 ? day.done / day.total : 0;
+            const isDone = ratio === 1;
+            const isPartial = ratio > 0 && ratio < 1;
+            
+            return (
+              <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                <button 
+                     onClick={() => setSelectedDay(day)}
+                     className={`w-full aspect-square max-w-[28px] rounded-md border flex items-center justify-center transition-all hover:scale-110 ${day.isToday ? 'ring-1 ring-white/50 scale-110 z-10' : ''}`}
+                     style={{
+                       backgroundColor: isDone ? T.primary : isPartial ? `${T.primary}50` : day.isFuture ? 'transparent' : 'rgba(255,255,255,0.03)',
+                       borderColor: day.isToday ? '#fff' : isDone ? T.primary : 'rgba(255,255,255,0.1)',
+                     }}
+                     title={`${day.date}: ${day.done}/${day.total}`}
+                >
+                  {isDone ? <Check size={14} className="text-black" strokeWidth={3} /> : 
+                   isPartial ? <span className="text-[9px] font-bold text-white">{Math.round(ratio*100)}%</span> : 
+                   <span className="text-[10px] font-bold text-white/30">{Number(day.date.slice(-2))}</span>}
+                </button>
+                <span className="text-[8px] font-bold text-white/40">{["سبت","أحد","اثن","ثلا","أرب","خمي","جمع"][i]}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div>
+          <div className="grid grid-cols-7 gap-1 text-center mb-1">
+            {["س","ح","ن","ث","ر","خ","ج"].map(d => <span key={d} className="text-[8px] font-bold text-white/30">{d}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthCells.map((cell, i) => {
+              if (!cell) return <div key={`e${i}`} />;
+              const ratio = cell.total > 0 ? cell.done / cell.total : 0;
+              const isDone = ratio === 1;
+              const isPartial = ratio > 0 && ratio < 1;
+              
+              return (
+                <button key={cell.dateStr} 
+                     onClick={() => setSelectedDay(cell)}
+                     className={`aspect-square rounded-[3px] border flex items-center justify-center transition-all hover:scale-110 hover:z-10 ${cell.isToday ? 'ring-1 ring-white scale-110 z-10' : ''}`}
+                     style={{
+                       backgroundColor: isDone ? T.primary : isPartial ? `${T.primary}50` : cell.isFuture ? 'transparent' : 'rgba(255,255,255,0.03)',
+                       borderColor: cell.isToday ? '#fff' : isDone ? T.primary : 'rgba(255,255,255,0.05)',
+                     }}
+                     title={`${cell.dateStr}: ${cell.done}/${cell.total}`}
+                >
+                   {isDone ? <Check size={12} className="text-black" strokeWidth={3}/> : 
+                    isPartial ? <span className="text-[8px] font-bold text-white">{Math.round(ratio*100)}</span> : 
+                    <span className="text-[10px] font-bold text-white/30">{cell.day}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 👇 ملخص أكثر عادة التزمت بها 👇 */}
+      {bestHabit && (
+        <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px]">
+          <span className="text-white/50 font-bold flex items-center gap-1"><Star size={10} className="text-amber-400"/> أكثر عادة التزمت بها:</span>
+          <span className="text-emerald-400 font-bold truncate max-w-[150px]" title={bestHabit.label}>{bestHabit.label} ({bestHabitPct}%)</span>
+        </div>
+      )}
+
+      {/* 👇 نافذة التفاصيل (Modal) 👇 */}
+      <DayDetailsModal day={selectedDay} onClose={() => setSelectedDay(null)} goal={goal} history={history} allHabits={allHabits} />
     </div>
   );
 }
 
-function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, onOpen, onDelete }) {
+// 👇 مكون نافذة تفاصيل اليوم 👇
+function DayDetailsModal({ day, onClose, goal, history, allHabits }) {
+  if (!day) return null;
+  const row = (history || []).find((h) => h.date === day.dateStr);
+  const linked = goal.linkedHabits || [];
+  const doneIds = row?.done || [];
+
+  const habitDetails = linked.map(id => {
+    const h = allHabits.find(x => x.id === id);
+    return { id, label: h ? h.label : "عادة محذوفة", done: doneIds.includes(id) };
+  });
+
+  const doneCount = habitDetails.filter(h => h.done).length;
+  const totalCount = habitDetails.length;
+  const pct = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
+
+  return (
+    <Modal open={!!day} onClose={onClose} title={`تفاصيل يوم ${day.dateStr}`}>
+       <div className="space-y-4">
+         <div className="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-white/5">
+           <div>
+             <p className="text-white/50 text-xs font-bold mb-1">معدل الالتزام بهدف "{goal.text}"</p>
+             <p className="text-2xl font-black text-emerald-400">{pct}%</p>
+           </div>
+           <ProgressRing value={pct} size={50} stroke={5} />
+         </div>
+
+         <div>
+           <p className="text-xs font-bold text-white/50 mb-2">العادات المرتبطة:</p>
+           <div className="space-y-2">
+             {habitDetails.map(h => (
+               <div key={h.id} className={`flex items-center gap-2 p-2.5 rounded-lg border ${h.done ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                 {h.done ? <CheckCircle2 size={14} className="text-emerald-400"/> : <XCircle size={14} className="text-red-400"/>}
+                 <span className={`text-[12px] font-bold ${h.done ? 'text-emerald-100' : 'text-red-100'}`}>{h.label}</span>
+               </div>
+             ))}
+             {habitDetails.length === 0 && <p className="text-xs text-white/40">لا توجد عادات مرتبطة بهذا الهدف.</p>}
+           </div>
+         </div>
+       </div>
+    </Modal>
+  );
+}
+
+function GoalCard({ goal, all, tasks = [], habits, history, parent, kids, commitMeta, onPatchGoal, onSendToToday, onToggle, onStep, onOpen, onDelete, onHover, onToggleMonthly }) {
   const [burst, fireBurst] = useBurst(700);
+  const [quickNextAction, setQuickNextAction] = useState("");
   const p = pillarOf(goal.pillar);
   const pct = goalPct(goal, all, habits);
   const pace = goalPace(goal, all);
   const ripe = pct >= 100 && !goal.done;
   const Icon = p.icon;
+  const hoverDelete = useHoverDelete(onDelete);
+
+  const linkedTasks = useMemo(
+    () => (tasks || []).filter((t) => t.linkedGoalId === goal.id),
+    [tasks, goal.id],
+  );
+  const activeTodayTasks = useMemo(
+    () => linkedTasks.filter((t) => !t.done && (t.today || t.scheduled)),
+    [linkedTasks],
+  );
+  const doneTasksCount = useMemo(
+    () => linkedTasks.filter((t) => t.done).length,
+    [linkedTasks],
+  );
+
+  const priorityMeta = {
+    critical: { label: 'أولوية قصوى', color: '#ef4444', bg: 'bg-red-500/5', border: 'border-red-500/30', hover: 'hover:border-red-500/50' },
+    high: { label: 'أولوية عالية', color: '#f97316', bg: 'bg-orange-500/5', border: 'border-orange-500/30', hover: 'hover:border-orange-500/50' },
+    medium: { label: 'أولوية متوسطة', color: '#eab308', bg: 'bg-yellow-500/5', border: 'border-yellow-500/20', hover: 'hover:border-yellow-500/40' },
+    low: { label: 'أولوية منخفضة', color: '#10b981', bg: 'bg-emerald-500/5', border: 'border-emerald-500/20', hover: 'hover:border-emerald-500/40' },
+  }[goal.priority || 'medium'];
 
   const edgeTint = !goal.done && pace.pace?.state === "behind" ? T.danger : !goal.done && pace.pace?.state === "ahead" ? T.primary : null;
 
   const handle = () => { if (!goal.done) fireBurst(); onToggle(); };
-  const hoverDelete = useHoverDelete(onDelete);
+
+  const handleSaveQuickAction = () => {
+    const clean = quickNextAction.trim();
+    if (!clean || !onPatchGoal) return;
+    onPatchGoal({ nextAction: clean });
+    setQuickNextAction("");
+  };
 
   return (
     <div
       {...hoverDelete}
+      onMouseEnter={() => onHover && onHover(goal.id)}
+      onMouseLeave={() => onHover && onHover(null)}
       className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 ${
-        goal.done ? "bg-white/[0.02] border-white/5 opacity-70" : "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]"
+        goal.done ? "bg-white/[0.02] border-white/5 opacity-70" : `${priorityMeta.bg} ${priorityMeta.border} ${priorityMeta.hover}`
       } ${burst ? "ring-2 ring-emerald-500" : ""}`}
-      style={edgeTint ? { borderInlineStart: `3px solid ${edgeTint}`, boxShadow: `0 0 22px -12px ${edgeTint}` } : undefined}
+      style={{ 
+        borderInlineStart: `3px solid ${priorityMeta.color}`, 
+        boxShadow: edgeTint ? `0 0 22px -12px ${edgeTint}` : `0 0 22px -12px ${priorityMeta.color}` 
+      }}
     >
       {ripe && <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-transparent pointer-events-none" />}
       <div className="p-4">
@@ -1734,8 +2615,34 @@ function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, 
           
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h4 className={`text-[14px] font-bold leading-tight ${goal.done ? 'line-through text-white/40' : 'text-white/90'}`}>{goal.text}</h4>
-              <button onClick={onOpen} className="shrink-0 text-white/20 hover:text-white/80 transition-colors"><SquarePen size={14} /></button>
+              <div>
+                <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                  <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold" style={{ color: priorityMeta.color, backgroundColor: `${priorityMeta.color}20` }}>
+                    {priorityMeta.label}
+                  </span>
+                  {goal.isMonthlyFocus && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-400">
+                      <Star size={9} className="fill-amber-400" /> هدف الشهر
+                    </span>
+                  )}
+                  {commitMeta?.confidence && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold bg-indigo-500/20 text-indigo-300">
+                      ثقة {commitMeta.confidence}/10
+                    </span>
+                  )}
+                </div>
+                <h4 className={`text-[14px] font-bold leading-tight ${goal.done ? 'line-through text-white/40' : 'text-white/90'}`}>{goal.text}</h4>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onToggleMonthly(); }} 
+                  className={`p-1 rounded transition-colors ${goal.isMonthlyFocus ? 'text-amber-400' : 'text-white/20 hover:text-amber-400'}`}
+                  title={goal.isMonthlyFocus ? "إزالة من أهداف الشهر" : "إضافة لأهداف الشهر"}
+                >
+                  <Star size={14} className={goal.isMonthlyFocus ? "fill-amber-400" : ""} />
+                </button>
+                <button onClick={onOpen} className="p-1 text-white/20 hover:text-white/80 transition-colors"><SquarePen size={14} /></button>
+              </div>
             </div>
             <div className="mt-3 flex items-center gap-3">
               <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
@@ -1746,19 +2653,89 @@ function GoalCard({ goal, all, habits, history, parent, kids, onToggle, onStep, 
           </div>
         </div>
 
-        {!goal.done && goal.nextAction && (
-          <div className="mb-4 flex items-center gap-2 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
-            <Flag size={14} className="text-orange-400 shrink-0" />
-            <span className="text-[12px] font-bold text-orange-200 leading-tight">{goal.nextAction}</span>
+        {/* 5️⃣ مرساة الدافع العميق (The Deep Why) على البطاقة */}
+        {!goal.done && goal.why && (
+          <div className="mb-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-[11px] font-bold text-amber-200/90 leading-relaxed">
+            🔥 <span className="text-amber-400">لماذا ألتزم؟</span> {goal.why}
           </div>
         )}
 
-        {!goal.done && <GoalHeatmap goal={goal} history={history} />}
+        {/* 2️⃣ محرك الفعل الفيزيائي التالي (Next Physical Action Engine) */}
+        {!goal.done && (
+          goal.nextAction ? (
+            <div className="mb-4 flex items-center justify-between gap-2 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/25">
+              <div className="flex items-center gap-2 min-w-0">
+                <Flag size={14} className="text-orange-400 shrink-0" />
+                <span className="text-[12px] font-bold text-orange-200 leading-tight truncate">{goal.nextAction}</span>
+              </div>
+              {onSendToToday && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onSendToToday(goal.nextAction); }}
+                  className="shrink-0 flex items-center gap-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-[10.5px] font-extrabold text-emerald-300 hover:bg-emerald-500/30 transition-all"
+                  title="إرسال هذه الخطوة فوراً إلى أهم مهام اليوم"
+                >
+                  <Zap size={11} /> نفّذها اليوم
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="mb-4 flex items-center gap-1.5 rounded-xl border border-dashed border-white/15 bg-black/25 p-2">
+              <input
+                value={quickNextAction}
+                onChange={(e) => setQuickNextAction(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveQuickAction()}
+                placeholder="⚡ حدد خطوة صغيرة (5 دقائق) لتحريك هذا الهدف..."
+                className="flex-1 bg-transparent px-2 py-1 text-[11.5px] font-bold text-white placeholder-white/35 outline-none"
+              />
+              {quickNextAction.trim() && (
+                <button
+                  type="button"
+                  onClick={handleSaveQuickAction}
+                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10.5px] font-extrabold text-white hover:bg-emerald-500"
+                >
+                  حفظ
+                </button>
+              )}
+            </div>
+          )
+        )}
+
+        {!goal.done && <GoalHeatmap goal={goal} history={history} allHabits={habits} />}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="px-2 py-1 rounded-md bg-white/5 text-[10px] font-bold text-white/50">{p.label}</span>
           {goal.target > 0 && <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-[10px] font-bold text-emerald-400 flex items-center gap-1">{goal.current} / {goal.target} {goal.unit}</span>}
           {goal.steps.length > 0 && <span className="px-2 py-1 rounded-md bg-blue-500/10 text-[10px] font-bold text-blue-400 flex items-center gap-1"><ListChecks size={10} /> {goal.steps.filter(s => s.done).length} خطوات</span>}
+          {linkedTasks.length > 0 && (
+            <span
+              className="px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1.5 border transition-all"
+              style={{
+                borderColor: activeTodayTasks.length > 0 ? `${T.primary}60` : "rgba(255,255,255,0.08)",
+                backgroundColor: activeTodayTasks.length > 0 ? `${T.primary}1A` : "rgba(255,255,255,0.04)",
+                color: activeTodayTasks.length > 0 ? T.primaryLift : "rgba(255,255,255,0.65)",
+              }}
+              title={
+                activeTodayTasks.length > 0
+                  ? `هذا الهدف يتحرك اليوم! (${activeTodayTasks.length} مهام جارية اليوم)`
+                  : `إجمالي المهام التنفيذية المرتبطة بهذا الهدف: ${linkedTasks.length}`
+              }
+            >
+              <Target size={11} style={{ color: activeTodayTasks.length > 0 ? T.primary : T.muted }} />
+              <span>
+                {linkedTasks.length} {linkedTasks.length === 1 ? "مهمة" : "مهام"}
+                {doneTasksCount > 0 ? ` (${doneTasksCount}✓)` : ""}
+              </span>
+              {activeTodayTasks.length > 0 && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-[9px] font-extrabold"
+                  style={{ backgroundColor: `${T.primary}33`, color: T.primaryLift }}
+                >
+                  ⚡ جارية اليوم
+                </span>
+              )}
+            </span>
+          )}
           {goal.linkedHabits && goal.linkedHabits.length > 0 && <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-[10px] font-bold text-emerald-400 flex items-center gap-1"><Link2 size={10} /> {goal.linkedHabits.length} عادات</span>}
           {pace.pace && (
             <span className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 ${pace.pace.state === 'behind' ? 'bg-red-500/10 text-red-400' : pace.pace.state === 'ahead' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-white/50'}`}>
@@ -1905,12 +2882,14 @@ function CollapsibleSection({ icon: Icon, tint, title, count, defaultOpen, child
   );
 }
 
-function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, onAddTask, onDelete }) {
+function GoalDesk({ goal, isNew, all, tasks, habits, history, commitMeta, onUpdateCommitMeta, onSendToToday, onClose, onPatch, onAddTask, onToggleTask, onDelete }) {
   const [step, setStep] = useState("");
   const [obstacleDraft, setObstacleDraft] = useState("");
   const [reviewNote, setReviewNote] = useState("");
   const [taskDraft, setTaskDraft] = useState("");
-  const [linkTab, setLinkTab] = useState("habits");
+  const [linkTab, setLinkTab] = useState("tasks");
+  
+  const [activeTab, setActiveTab] = useState("overview");
 
   const below = useMemo(() => {
     const out = new Set();
@@ -1936,6 +2915,7 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
   const options = want ? all.filter((g) => g.horizon === want && g.id !== goal.id && !below.has(g.id)) : [];
 
   const linkedTasks = (tasks || []).filter(t => t.linkedGoalId === goal.id);
+  const momentum = calculateHabitMomentum(goal, history);
 
   const addStep = () => { const text = step.trim(); if (!text) return; onPatch({ steps: [...goal.steps, { id: uid(), text, done: false }] }); setStep(""); };
   const addObstacle = () => { const text = obstacleDraft.trim(); if (!text) return; onPatch({ obstacles: [...(goal.obstacles || []), text] }); setObstacleDraft(""); };
@@ -1945,274 +2925,371 @@ function GoalDesk({ goal, isNew, all, tasks, habits, history, onClose, onPatch, 
   };
   const addLinkedTask = () => { const text = taskDraft.trim(); if (!text) return; onAddTask(text); setTaskDraft(""); };
 
-  const label = "mb-1.5 block text-xs";
+  const label = "mb-1.5 block text-xs font-bold";
+  const priorityColors = {
+    critical: { label: 'أولوية قصوى', tint: '#ef4444' },
+    high: { label: 'عالية', tint: '#f97316' },
+    medium: { label: 'متوسطة', tint: '#eab308' },
+    low: { label: 'منخفضة', tint: '#10b981' },
+  };
+
+  const TabBtn = ({ id, icon: Icon, label }) => {
+    const active = activeTab === id;
+    return (
+      <button
+        onClick={() => setActiveTab(id)}
+        className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-bold transition-all border-b-2 ${
+          active ? "border-amber-500 text-amber-400 bg-white/[0.02]" : "border-transparent text-white/40 hover:text-white/80 hover:bg-white/[0.01]"
+        }`}
+      >
+        <Icon size={16} />
+        {label}
+      </button>
+    );
+  };
 
   return (
-    <Modal open={!!goal} onClose={onClose} title="مكتب الهدف" wide onDelete={goal ? onDelete : undefined}>
-      <div className="space-y-5">
-        <div>
-          <label htmlFor="los-gd-text" className={label} style={{ color: T.muted }}>الهدف</label>
-          <Field id="los-gd-text" value={goal.text} onChange={(e) => onPatch({ text: e.target.value })} placeholder="مثال: ختم القرآن تدبّرًا مرّتين" />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span dir="ltr" className="rounded-lg px-2 py-1 text-[12px] font-extrabold tabular-nums" style={{ background: pct >= 100 ? `${T.primary}1A` : "rgba(255,255,255,0.05)", color: pct >= 100 ? T.primary : T.muted }}>{pct}%</span>
-          <Btn variant={goal.done ? "default" : "outline"} size="sm" className="mr-auto" onClick={() => onPatch({ done: !goal.done })}><Check size={13} strokeWidth={3} />{goal.done ? "مُحقَّق" : "علّمه مُحقَّقًا"}</Btn>
-        </div>
-
-        {goal.done && goal.lesson && (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-            <p className="text-[12px] font-bold text-emerald-400 mb-1 flex items-center gap-1.5"><Sparkles size={14} /> الدرس المستفاد من هذا الهدف:</p>
-            <p className="text-[13px] text-white/80 leading-relaxed italic">"{goal.lesson}"</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="los-gd-why" className={label} style={{ color: T.muted }}>لماذا هذا الهدف؟</label>
-            <Field as="textarea" id="los-gd-why" rows={2} value={goal.why} onChange={(e) => onPatch({ why: e.target.value.slice(0, 400) })} placeholder="السبب الذي يحملك عليه." className="resize-none leading-relaxed" />
-          </div>
-          <div>
-            <label htmlFor="los-gd-next" className={label} style={{ color: T.ctaLift }}>الخطوة القادمة (تظهر في البطاقة)</label>
-            <Field as="textarea" id="los-gd-next" rows={2} value={goal.nextAction} onChange={(e) => onPatch({ nextAction: e.target.value })} placeholder="مثال: اقرأ 20 صفحة اليوم" className="resize-none leading-relaxed" />
-          </div>
-        </div>
-
-        <div className="rounded-2xl border p-4" style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}>
-          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}><Gauge size={14} /> القياس</p>
-          {goal.target > 0 ? (
-            <p className="mt-1 text-[11px] leading-relaxed" style={{ color: T.muted }}>🎯 خط النهاية: <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: p.tint }}>{goal.target} {goal.unit || "—"}</span> — كل إنجاز يضيف <span dir="ltr" className="font-extrabold tabular-nums" style={{ color: p.tint }}>{goal.step}</span>.</p>
-          ) : (
-            <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>هدف بلا رقم لا يُقاس. اتركه صفرًا إن كان هدفًا بنعم أو لا — حينها تقيسه خطواته أو الأهداف التي تخدمه.</p>
-          )}
-
-          <div className="mt-3">
-            <label htmlFor="los-gd-target" className="mb-1 block text-[10px] font-bold" style={{ color: T.faint }}>خط النهاية — كم الرقم الذي تصل إليه؟</label>
-            <div className="flex items-stretch overflow-hidden rounded-xl border" style={{ borderColor: T.border }}>
-              <Field id="los-gd-target" type="number" min="0" dir="ltr" value={goal.target || ""} onChange={(e) => { const target = Math.max(0, Math.round(+e.target.value) || 0); onPatch({ target, current: target > 0 ? Math.min(target, goal.current) : goal.current }); }} placeholder="0" className="flex-1 text-center tabular-nums" style={{ borderWidth: 0, borderRadius: 0 }} />
-              <div className="w-px shrink-0" style={{ background: T.border }} />
-              <Field id="los-gd-unit" maxLength={16} value={goal.unit} onChange={(e) => onPatch({ unit: e.target.value })} placeholder="كتاب" className="w-28 shrink-0" style={{ borderWidth: 0, borderRadius: 0 }} />
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {UNIT_SUGGESTIONS.map((u) => (
-                <button key={u} type="button" onClick={() => onPatch({ unit: u })} aria-pressed={goal.unit === u} className="rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all" style={{ borderColor: goal.unit === u ? `${p.tint}80` : T.border, background: goal.unit === u ? `${p.tint}1F` : "transparent", color: goal.unit === u ? p.tint : T.faint }}>{u}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-3">
-            <label htmlFor="los-gd-current" className="mb-1 block text-[10px] font-bold" style={{ color: T.faint }}>أين أنت الآن؟</label>
-            <div className="flex items-stretch overflow-hidden rounded-xl border" style={{ borderColor: T.border }}>
-              <Field id="los-gd-current" type="number" min="0" dir="ltr" value={goal.current || ""} onChange={(e) => { const n = Math.max(0, Math.round(+e.target.value) || 0); onPatch({ current: goal.target > 0 ? Math.min(goal.target, n) : n }); }} placeholder="0" className="flex-1 text-center tabular-nums" style={{ borderWidth: 0, borderRadius: 0 }} />
-              <div className="w-px shrink-0" style={{ background: T.border }} />
-              <label htmlFor="los-gd-step" className="flex shrink-0 items-center gap-1.5 px-2 text-[10px] font-bold whitespace-nowrap" style={{ color: T.faint }}>بخطوة <Field id="los-gd-step" type="number" min="1" dir="ltr" value={goal.step} onChange={(e) => onPatch({ step: Math.max(1, Math.round(+e.target.value) || 1) })} className="w-14 shrink-0 text-center tabular-nums" style={{ borderWidth: 0, borderRadius: 0 }} /></label>
-            </div>
-          </div>
-          {goal.target > 0 && <div className="mt-3.5"><GoalMeter goal={goal} pct={pct} tint={p.tint} onStep={(n) => onPatch({ current: Math.max(0, Math.min(goal.target, goal.current + n)) })} /></div>}
-
-          {pace.pace && goal.target > 0 && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5" style={{ borderColor: T.border, background: "rgba(255,255,255,0.02)" }}>
-              <div className="flex items-center gap-2 text-[11px]">
-                <span className="font-bold" style={{ color: paceTint }}>{pace.pace.label}</span>
-                <span style={{ color: T.faint }}>· مضى {pace.pct}% · أنجزت {pct}%</span>
+    <Modal open={!!goal} onClose={onClose} title="" wide onDelete={goal ? onDelete : undefined}>
+      <div className="-mt-6">
+        
+        <div className="relative overflow-hidden rounded-2xl border p-5 mb-6" style={{ borderColor: `${p.tint}30`, background: `linear-gradient(135deg, ${p.tint}15, rgba(0,0,0,0))` }}>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-lg" style={{ backgroundColor: p.tint, color: '#000' }}>
+                <p.icon size={24} />
               </div>
-              <div className="text-[10.5px] font-bold" style={{ color: paceTint }}>
-                {pace.pace.state === "behind" ? <span>⚠️ متأخر بـ {pace.behindBy} {goal.unit} — تحتاج {Math.round(pace.rate.amount)} {goal.unit} {pace.rate.per}</span> : pace.rate ? <span>تحتاج {Math.round(pace.rate.amount)} {goal.unit} {pace.rate.per}</span> : null}
+              <div>
+                <h2 className="text-xl font-extrabold text-white leading-tight mb-1">{goal.text}</h2>
+                <div className="flex items-center gap-2 text-[11px] font-bold">
+                  <span className="px-2 py-0.5 rounded bg-black/30 text-white/70 border border-white/10">{p.label}</span>
+                  <span className="px-2 py-0.5 rounded bg-black/30 text-white/70 border border-white/10">أفق {h.short}</span>
+                  <span className="px-2 py-0.5 rounded" style={{ backgroundColor: `${priorityColors[goal.priority || 'medium'].tint}20`, color: priorityColors[goal.priority || 'medium'].tint }}>
+                    {priorityColors[goal.priority || 'medium'].label}
+                  </span>
+                </div>
               </div>
             </div>
-          )}
+            
+            <div className="flex items-center gap-4 shrink-0 bg-black/20 p-3 rounded-xl border border-white/5">
+              <div className="text-center">
+                <span className="block text-2xl font-extrabold text-white">{pct}%</span>
+                <span className="text-[10px] font-bold text-white/50">إنجاز</span>
+              </div>
+              <div className="w-px h-8 bg-white/10" />
+              <div className="text-center">
+                <span className="block text-2xl font-extrabold" style={{ color: momentum >= 70 ? '#10b981' : momentum >= 40 ? '#eab308' : '#ef4444' }}>
+                  {momentum !== null ? `${momentum}%` : '-'}
+                </span>
+                <span className="text-[10px] font-bold text-white/50">زخم</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-2xl border p-4" style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}>
-          <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.primary }}><Link2 size={14} /> ما يغذّي هذا الهدف</p>
-          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>عادة أو مهمة تُنجَز تزيد تقدّم هذا الهدف تلقائيًا بمقدار «الخطوة».</p>
+        <div className="flex items-center gap-2 mb-6 border-b border-white/10 overflow-x-auto">
+          {goal.isMonthlyFocus && (
+            <TabBtn id="monthlyPlan" icon={Rocket} label="تركيز الشهر" />
+          )}
+          <TabBtn id="overview" icon={Target} label="نظرة عامة" />
+          <TabBtn id="tasks" icon={CheckCircle2} label="المهام التنفيذية" />
+          <TabBtn id="analytics" icon={PieChart} label="التحليل والالتزام" />
+          <TabBtn id="settings" icon={Settings} label="الإعدادات" />
+        </div>
 
-          <div className="mb-3 flex gap-1.5">
-            <button type="button" onClick={() => setLinkTab("habits")} aria-pressed={linkTab === "habits"} className="flex-1 rounded-xl border py-2 text-[11px] font-bold transition-all" style={{ borderColor: linkTab === "habits" ? `${T.primary}80` : T.border, background: linkTab === "habits" ? `${T.primary}1F` : "rgba(255,255,255,0.03)", color: linkTab === "habits" ? T.primary : T.muted }}>عادات{(goal.linkedHabits || []).length > 0 && <span dir="ltr"> ({(goal.linkedHabits || []).length})</span>}</button>
-            <button type="button" onClick={() => setLinkTab("tasks")} aria-pressed={linkTab === "tasks"} className="flex-1 rounded-xl border py-2 text-[11px] font-bold transition-all" style={{ borderColor: linkTab === "tasks" ? `${T.sky}80` : T.border, background: linkTab === "tasks" ? `${T.sky}1F` : "rgba(255,255,255,0.03)", color: linkTab === "tasks" ? T.sky : T.muted }}>مهام{linkedTasks.length > 0 && <span dir="ltr"> ({linkedTasks.length})</span>}</button>
-          </div>
-
-          {linkTab === "habits" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-              {habits.map((h) => {
-                const isLinked = (goal.linkedHabits || []).includes(h.id);
-                return (
-                  <button key={h.id} type="button" onClick={() => { const linked = goal.linkedHabits || []; const next = isLinked ? linked.filter(id => id !== h.id) : [...linked, h.id]; onPatch({ linkedHabits: next }); }} className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold transition-all text-right" style={{ borderColor: isLinked ? `${T.primary}80` : T.border, background: isLinked ? `${T.primary}1F` : "rgba(255,255,255,0.03)", color: isLinked ? T.primary : T.muted }}>
-                    <div className={`h-3.5 w-3.5 rounded-sm border flex shrink-0 items-center justify-center ${isLinked ? 'bg-emerald-500 border-emerald-500' : 'border-white/30'}`}>{isLinked && <Check size={10} className="text-black" />}</div>
-                    <span className="truncate">{h.label}</span>
-                  </button>
-                );
-              })}
-              {habits.length === 0 && <p className="text-[10.5px] text-white/30 col-span-2">لا توجد عادات مضافة بعد.</p>}
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2 mb-3">
-                {linkedTasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 text-[11.5px] border border-white/5">
-                    <span className={t.done ? "line-through text-white/40" : "text-white/80"}>{t.text}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] ${t.done ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/50"}`}>{t.done ? "منجزة" : "قيد الانتظار"}</span>
+        <div className="space-y-5 min-h-[40vh]">
+          
+          {activeTab === "monthlyPlan" && (
+            <div className="animate-fade-in-up space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-transparent border border-indigo-500/30 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+                  <Timer size={24} className="text-indigo-400 mb-2" />
+                  <p className="text-[12px] font-bold text-indigo-200 mb-1">الوقت المتبقي من الشهر</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-extrabold text-white">
+                      {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate()}
+                    </span>
+                    <span className="text-sm font-bold text-indigo-400">يوم</span>
                   </div>
-                ))}
-                {linkedTasks.length === 0 && <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مهام مرتبطة بهذا الهدف بعد.</p>}
-              </div>
-              <div className="flex gap-2">
-                <Field value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLinkedTask()} placeholder="مهمة جديدة لهذا الهدف..." className="flex-1 text-xs" />
-                <Btn variant="outline" size="sm" onClick={addLinkedTask} className="shrink-0" style={{ borderColor: `${T.sky}80`, color: T.sky }}><Plus size={13} /> أضف</Btn>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div>
-          <span className={label} style={{ color: T.muted }}>الخطوات — ما الذي يجعله يتحرّك؟</span>
-          <div className="space-y-1">
-            {goal.steps.length === 0 ? (
-              <p className="py-2 text-[11px]" style={{ color: T.faint }}>لا خطوات بعد. أول خطوة صغيرة تكفي لبدء الحركة.</p>
-            ) : (
-              goal.steps.map((s, i) => (
-                <div key={s.id} className="group flex items-center gap-1 rounded-lg border transition-all" style={{ borderColor: "transparent", background: s.done ? `${T.primary}0F` : "transparent" }}>
-                  <Checkbox checked={s.done} onToggle={() => onPatch({ steps: goal.steps.map((x) => x.id === s.id ? { ...x, done: !x.done } : x) })} label={s.text} tint={T.primary} size="sm" />
-                  <button onClick={() => onPatch({ steps: goal.steps.filter((x) => x.id !== s.id) })} aria-label={`حذف ${s.text}`} className="shrink-0 rounded p-1.5 text-white/25 opacity-40 transition-all hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={12} /></button>
-                  <span className="sr-only">خطوة {i + 1}</span>
                 </div>
-              ))
-            )}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <Field value={step} onChange={(e) => setStep(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStep()} placeholder="خطوة جديدة" className="flex-1" />
-            <Btn variant="default" size="sm" onClick={addStep} className="shrink-0"><Plus size={13} strokeWidth={3} /> أضف</Btn>
-          </div>
-        </div>
 
-        <CollapsibleSection icon={AlertTriangle} tint={T.danger} title="العقبات المتوقعة (Pre-mortem)" count={(goal.obstacles || []).length}>
-          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>تخيل أنك فشلت في هذا الهدف. ما هو السبب الأكبر؟ سجله هنا وضع خطة لتجاوزه قبل أن يحدث.</p>
-          <div className="space-y-2 mb-3">
-            {(goal.obstacles || []).map((obs, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/5 text-[11.5px]">
-                <span className="text-white/80">{obs}</span>
-                <button onClick={() => onPatch({ obstacles: goal.obstacles.filter((_, idx) => idx !== i) })} className="text-white/30 hover:text-red-400"><X size={12} /></button>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Field value={obstacleDraft} onChange={(e) => setObstacleDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addObstacle()} placeholder="مثال: الانشغال بالعمل، أو التعب بعد الظهر..." className="flex-1 text-xs" />
-            <Btn variant="danger" size="sm" onClick={addObstacle} className="shrink-0"><Plus size={13} /> أضف</Btn>
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection icon={History} tint={T.sky} title="المراجعة الأسبوعية" count={(goal.reviews || []).length}>
-          <p className="mt-1 mb-3 text-[10.5px] leading-relaxed" style={{ color: T.faint }}>سجل هنا ما تعلمته هذا الأسبوع. كيف كان أداؤك؟ وما الذي ستفعله بشكل مختلف الأسبوع القادم؟</p>
-          <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
-            {(goal.reviews || []).slice().reverse().map((rev) => (
-              <div key={rev.id} className="p-3 rounded-xl bg-black/20 border border-white/5 text-[11.5px]">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-bold text-sky-400">{rev.date}</span>
-                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/60">كان التقدم: {rev.progress}%</span>
+                <div className="p-5 rounded-2xl bg-black/20 border border-white/5 flex flex-col items-center justify-center text-center">
+                  <p className="text-[12px] font-bold text-white/50 mb-2 flex items-center gap-1"><Activity size={14}/> مؤشر الصحة (Health)</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-extrabold text-white">
+                      {Math.round(((linkedTasks.filter(t => t.done).length / (linkedTasks.length || 1)) * 30) + 
+                                   ((goal.steps.filter(s => s.done).length / (goal.steps.length || 1)) * 30) + 
+                                   (momentum || 0) * 0.4)}
+                    </span>
+                    <span className="text-sm font-bold text-emerald-400">%</span>
+                  </div>
+                  <p className="text-[10px] text-white/40 mt-1">يعتمد على المهام، الخطوات، والعادات</p>
                 </div>
-                <p className="text-white/80 leading-relaxed">{rev.note}</p>
-              </div>
-            ))}
-            {(goal.reviews || []).length === 0 && <p className="text-center text-[10.5px] text-white/30 py-2">لا توجد مراجعات بعد.</p>}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Field as="textarea" rows={2} value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="أضف مراجعة لهذا الأسبوع..." className="text-xs resize-none" />
-            <Btn variant="default" size="sm" onClick={commitReview} className="self-end">حفظ المراجعة</Btn>
-          </div>
-        </CollapsibleSection>
 
-        <CollapsibleSection icon={Settings} tint={T.muted} title="الإعدادات" defaultOpen={isNew}>
-          <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <span className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>الأفق <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${h.tint}1A`, color: h.tint }}><h.icon size={10} /> {h.label}</span></span>
-              <div className="grid grid-cols-3 gap-1.5">
-                {HORIZONS.map((x) => {
-                  const on = x.id === goal.horizon;
-                  return <button key={x.id} type="button" onClick={() => on ? undefined : onPatch({ horizon: x.id, parent: null })} aria-pressed={on} className="rounded-xl border px-2 py-2 text-[10.5px] font-bold transition-all" style={{ borderColor: on ? `${x.tint}80` : T.border, background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)", color: on ? x.tint : T.muted }}>{x.short}</button>;
-                })}
+                <div className="p-5 rounded-2xl bg-black/20 border border-white/5 flex flex-col items-center justify-center text-center">
+                  <p className="text-[12px] font-bold text-white/70 mb-2 flex items-center gap-1.5"><Zap size={14} className="text-amber-400"/> الزخم الحالي</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-extrabold text-white">{momentum !== null ? momentum : 0}</span>
+                    <span className="text-sm font-bold text-amber-400">%</span>
+                  </div>
+                  <p className="text-[10px] text-white/40 mt-1">التزامك بالعادات المرتبطة</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.02]">
+                  <h4 className="text-[13px] font-bold text-white/80 mb-4 flex items-center gap-2"><CheckCircle2 size={14} className="text-sky-400" /> المهام المرتبطة (أنجزت {linkedTasks.filter(t => t.done).length} من {linkedTasks.length})</h4>
+                  <div className="space-y-2 mb-4">
+                    {linkedTasks.slice(0, 4).map((t) => (
+                      <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 border border-white/5 text-[11.5px] cursor-pointer" onClick={() => onToggleTask(t.id)}>
+                        <div className="flex items-center gap-2 flex-1">
+                          <div className={`h-3.5 w-3.5 rounded border flex shrink-0 items-center justify-center ${t.done ? 'bg-emerald-500 border-emerald-500' : 'border-white/30'}`}>{t.done && <Check size={10} className="text-black" />}</div>
+                          <span className={t.done ? "line-through text-white/40" : "text-white/80 truncate"}>{t.text}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {linkedTasks.length === 0 && <p className="text-[11px] text-white/40 text-center">لا توجد مهام. أضف من تبويب المهام التنفيذية.</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Field value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLinkedTask()} placeholder="أضف مهمة..." className="flex-1 text-[11px] bg-black/20 h-8" />
+                    <Btn variant="default" size="sm" onClick={addLinkedTask} className="h-8 px-3 text-[11px]"><Plus size={12} /></Btn>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.02]">
+                  <h4 className="text-[13px] font-bold text-white/80 mb-4 flex items-center gap-2"><Flag size={14} className="text-amber-400" /> الخطوات (أنجزت {goal.steps.filter(s => s.done).length} من {goal.steps.length})</h4>
+                  <div className="space-y-2 mb-4">
+                    {goal.steps.slice(0, 4).map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 p-2 rounded-lg bg-black/20 border border-white/5 text-[11.5px]">
+                        <Checkbox checked={s.done} onToggle={() => onPatch({ steps: goal.steps.map((x) => x.id === s.id ? { ...x, done: !x.done } : x) })} label={s.text} tint={T.primary} size="sm" />
+                      </div>
+                    ))}
+                    {goal.steps.length === 0 && <p className="text-[11px] text-white/40 text-center">لا توجد خطوات استراتيجية.</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Field value={step} onChange={(e) => setStep(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStep()} placeholder="أضف خطوة..." className="flex-1 text-[11px] bg-black/20 h-8" />
+                    <Btn variant="default" size="sm" onClick={addStep} className="h-8 px-3 text-[11px]"><Plus size={12} /></Btn>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.02]">
+                <h4 className="text-[13px] font-bold text-white/80 mb-2 flex items-center gap-2"><History size={14} className="text-sky-400" /> نبض الالتزام</h4>
+                <GoalHeatmap goal={goal} history={history} allHabits={habits} />
               </div>
             </div>
+          )}
 
-            <div>
-              <span className={label} style={{ color: T.muted }}>{goal.horizon === "quarter" ? "الربع والسنة" : "السنة"}</span>
-              <div className="flex items-center gap-1.5">
-                {goal.horizon === "quarter" && (
-                  <div className="flex flex-1 gap-1.5">
-                    {QUARTERS.map((q) => {
-                      const on = q.id === goal.quarter;
-                      return <button key={q.id} type="button" onClick={() => onPatch({ quarter: q.id })} aria-pressed={on} className="flex-1 rounded-xl border py-2 text-[10.5px] font-bold transition-all" style={{ borderColor: on ? `${q.tint}80` : T.border, background: on ? `${q.tint}1F` : "rgba(255,255,255,0.03)", color: on ? q.tint : T.muted }} title={q.months}>{q.id.toUpperCase()}</button>;
+          {activeTab === "overview" && (
+            <div className="animate-fade-in-up space-y-5">
+              {/* 5️⃣ مرساة الدافع العميق وعقد الالتزام الشخصي */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/25">
+                  <label htmlFor="los-gd-why" className={`${label} text-amber-400`}>
+                    🔥 لماذا هذا الهدف خط أحمر بالنسبة لي؟ (The Deep Why)
+                  </label>
+                  <Field
+                    as="textarea"
+                    id="los-gd-why"
+                    rows={3}
+                    value={goal.why}
+                    onChange={(e) => onPatch({ why: e.target.value.slice(0, 400) })}
+                    placeholder="اكتب السبب العاطفي الحقيقي الذي يشعل حماسك حين تتعب..."
+                    className="resize-none leading-relaxed bg-black/30 border-amber-500/20"
+                  />
+                </div>
+                <div className="p-4 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/25">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="los-gd-next" className="text-xs font-bold text-emerald-400">
+                      ⚡ الخطوة الفيزيائية القادمة (5-15 دقيقة)
+                    </label>
+                    {onSendToToday && goal.nextAction && (
+                      <button
+                        type="button"
+                        onClick={() => onSendToToday(goal.nextAction)}
+                        className="flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[10.5px] font-black text-black hover:bg-emerald-400 transition-all"
+                      >
+                        <Zap size={11} /> أرسل لشاشة اليوم
+                      </button>
+                    )}
+                  </div>
+                  <Field
+                    as="textarea"
+                    id="los-gd-next"
+                    rows={3}
+                    value={goal.nextAction}
+                    onChange={(e) => onPatch({ nextAction: e.target.value })}
+                    placeholder="مثال: قراءة 10 صفحات الآن أو الاتصال بـ..."
+                    className="resize-none leading-relaxed bg-black/30 border-emerald-500/20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-rose-500/[0.05] border border-rose-500/20">
+                  <label className={`${label} text-rose-400`}>
+                    ⚠️ ما هي كلفة التقاعس إذا لم أنجزه؟ (Cost of Inaction)
+                  </label>
+                  <Field
+                    as="textarea"
+                    rows={2}
+                    value={commitMeta?.costOfFailure || ""}
+                    onChange={(e) =>
+                      onUpdateCommitMeta &&
+                      onUpdateCommitMeta({ costOfFailure: e.target.value.slice(0, 300) })
+                    }
+                    placeholder="مثال: سيمضي هذا العام وأنا في نفس المكان دون تقدم حقيقي..."
+                    className="resize-none leading-relaxed bg-black/30 border-rose-500/20 text-xs"
+                  />
+                </div>
+
+                <div className="p-4 rounded-xl bg-indigo-500/[0.05] border border-indigo-500/20">
+                  <label className={`${label} text-indigo-300`}>
+                    🧬 هويتي الجديدة بهذا الهدف (Identity Statement)
+                  </label>
+                  <Field
+                    as="textarea"
+                    rows={2}
+                    value={commitMeta?.identityStatement || ""}
+                    onChange={(e) =>
+                      onUpdateCommitMeta &&
+                      onUpdateCommitMeta({ identityStatement: e.target.value.slice(0, 300) })
+                    }
+                    placeholder="مثال: أنا شخص ينهي ما يبدأ ويبني إرثه يومياً بانضباط..."
+                    className="resize-none leading-relaxed bg-black/30 border-indigo-500/20 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-white/[0.02] border border-white/5 p-4">
+                <p className="text-[12.5px] font-bold mb-3" style={{ color: T.primary }}>الخطوات الاستراتيجية (Steps)</p>
+                <div className="space-y-1 mb-3">
+                  {goal.steps.map((s, i) => (
+                    <div key={s.id} className="group flex items-center gap-1 rounded-lg border transition-all p-1" style={{ borderColor: "transparent", background: s.done ? `${T.primary}0F` : "transparent" }}>
+                      <Checkbox checked={s.done} onToggle={() => onPatch({ steps: goal.steps.map((x) => x.id === s.id ? { ...x, done: !x.done } : x) })} label={s.text} tint={T.primary} size="sm" />
+                      <button onClick={() => onPatch({ steps: goal.steps.filter((x) => x.id !== s.id) })} className="shrink-0 rounded p-1.5 text-white/25 opacity-40 hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Field value={step} onChange={(e) => setStep(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStep()} placeholder="أضف خطوة استراتيجية..." className="flex-1 text-xs bg-black/20" />
+                  <Btn variant="default" size="sm" onClick={addStep} className="shrink-0"><Plus size={13} /> أضف</Btn>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "tasks" && (
+            <div className="animate-fade-in-up space-y-5">
+              <div className="rounded-2xl border p-4" style={{ borderColor: T.border, background: "rgba(255,255,255,0.03)" }}>
+                <p className="flex items-center gap-2 text-[12.5px] font-bold mb-4" style={{ color: T.primary }}><CheckCircle2 size={14} /> المهام اليومية المرتبطة بالهدف</p>
+                
+                <div className="space-y-2 mb-4">
+                  {linkedTasks.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between gap-2 p-3 rounded-xl bg-black/40 text-[12px] border border-white/5 hover:border-white/20 transition-colors">
+                      <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => onToggleTask(t.id)}>
+                         <div className={`h-4 w-4 rounded border flex shrink-0 items-center justify-center ${t.done ? 'bg-emerald-500 border-emerald-500' : 'border-white/40'}`}>{t.done && <Check size={12} className="text-black" />}</div>
+                         <span className={t.done ? "line-through text-white/40" : "text-white/90 font-bold"}>{t.text}</span>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-[10px] font-bold shrink-0 ${t.done ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/50"}`}>{t.done ? "منجزة" : "قيد الانتظار"}</span>
+                    </div>
+                  ))}
+                  {linkedTasks.length === 0 && (
+                    <p className="text-[12px] text-white/40 text-center py-4 bg-black/20 rounded-xl">لا توجد مهام مرتبطة بعد. أضف مهمتك الأولى أدناه!</p>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Field value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLinkedTask()} placeholder="اكتب مهمة جديدة..." className="flex-1 text-sm bg-black/20" />
+                  <Btn variant="default" size="sm" onClick={addLinkedTask} className="shrink-0"><Plus size={14} /> إضافة المهمة</Btn>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "analytics" && (
+            <div className="animate-fade-in-up space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                  <h4 className="text-[13px] font-bold text-white/80 mb-3 flex items-center gap-2"><Activity size={14} className="text-sky-400" /> العادات المرتبطة (الأساس)</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {habits.map((h) => {
+                      const isLinked = (goal.linkedHabits || []).includes(h.id);
+                      return (
+                        <button key={h.id} type="button" onClick={() => { const linked = goal.linkedHabits || []; const next = isLinked ? linked.filter(id => id !== h.id) : [...linked, h.id]; onPatch({ linkedHabits: next }); }} className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold transition-all text-right" style={{ borderColor: isLinked ? `${T.primary}80` : T.border, background: isLinked ? `${T.primary}1F` : "rgba(255,255,255,0.03)", color: isLinked ? T.primary : T.muted }}>
+                          <div className={`h-3.5 w-3.5 rounded-sm border flex shrink-0 items-center justify-center ${isLinked ? 'bg-emerald-500 border-emerald-500' : 'border-white/30'}`}>{isLinked && <Check size={10} className="text-black" />}</div>
+                          <span className="truncate">{h.label}</span>
+                        </button>
+                      );
                     })}
                   </div>
-                )}
-                {goal.horizon !== "h3" && (
-                  <select value={goal.year} onChange={(e) => onPatch({ year: +e.target.value })} dir="ltr" aria-label="السنة" className={`rounded-xl border py-2 text-[12px] font-extrabold tabular-nums outline-none transition-colors focus:border-white/30 ${goal.horizon === "quarter" ? "w-20 shrink-0 px-2 text-center" : "flex-1 px-3"}`} style={{ borderColor: `${T.accent}80`, background: T.cardSolid, color: T.accent }}>
-                    {deskYears.map((y) => <option key={y} value={y} style={{ background: T.cardSolid }}>{y}</option>)}
-                  </select>
-                )}
-                {goal.horizon === "h3" && <p className="flex-1 rounded-xl border px-3 py-2 text-center text-[10.5px] font-bold" style={{ borderColor: T.border, color: T.faint }}>{ARC_LABEL}</p>}
+                </div>
+
+                <div className="p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                  <h4 className="text-[13px] font-bold text-white/80 mb-3 flex items-center gap-2"><History size={14} className="text-amber-400" /> خريطة الالتزام</h4>
+                  <GoalHeatmap goal={goal} history={history} allHabits={habits} />
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <span className={label} style={{ color: T.muted }}>الركيزة</span>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {PILLARS.map((x) => {
-                const on = x.id === goal.pillar;
-                const XIcon = x.icon;
-                return <button key={x.id} type="button" onClick={() => onPatch({ pillar: x.id })} aria-pressed={on} className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all" style={{ borderColor: on ? `${x.tint}80` : T.border, background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)", color: on ? x.tint : T.muted }}><XIcon size={14} strokeWidth={2} />{x.label}</button>;
-              })}
-            </div>
-          </div>
-
-          {want && (
-            <div className="mt-4">
-              <label htmlFor="los-gd-parent" className={label} style={{ color: T.muted }}>يخدم هدف «{horizonOf(want).label}»</label>
-              <select id="los-gd-parent" value={goal.parent || ""} onChange={(e) => onPatch({ parent: e.target.value || null })} className="w-full rounded-xl border bg-transparent px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-white/30" style={{ borderColor: T.border, color: T.muted }}>
-                <option value="" style={{ background: T.cardSolid }}>— لا يخدم شيئًا بعد —</option>
-                {options.map((g) => <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>{g.text}</option>)}
-              </select>
-              {options.length === 0 && <p className="mt-1.5 text-[10.5px]" style={{ color: T.accent }}>لا أهداف في أفق «{horizonOf(want).label}» بعد — أضف واحدًا أولًا ليصبح لهذا الهدف ما يخدمه.</p>}
             </div>
           )}
 
-          <div className="mt-4">
-            <label htmlFor="los-gd-deadline" className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span><DeadlineChip day={goalEnd(goal)} done={goal.done} /></label>
-            <div className="flex items-center gap-2">
-              <DateField id="los-gd-deadline" value={goal.deadline} onChange={(v) => onPatch({ deadline: v })} />
-              {goal.deadline && <Btn variant="ghost" size="sm" onClick={() => onPatch({ deadline: "" })} style={{ borderColor: T.border }}><X size={13} /> امسح</Btn>}
-            </div>
-            <p className="mt-1.5 text-[10.5px]" style={{ color: T.faint }}>بلا موعد، ينتهي الهدف مع نهاية نافذته: <span dir="ltr">{goalEnd(goal)}</span>.</p>
-          </div>
-        </CollapsibleSection>
-
-        {kids.length > 0 && (
-          <div className="rounded-2xl border p-4" style={{ borderColor: `${T.sky}3D`, background: `${T.sky}0F` }}>
-            <p className="flex items-center gap-2 text-[12.5px] font-bold" style={{ color: T.sky }}><Layers size={14} /> ما يخدم هذا الهدف</p>
-            <div className="mt-2.5 space-y-1.5">
-              {kids.map((k) => {
-                const kp = goalPct(k, all, habits);
-                return (
-                  <div key={k.id} className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: k.done ? T.primary : pillarOf(k.pillar).tint }} />
-                    <span className="min-w-0 flex-1 truncate text-[11.5px]" style={{ color: k.done ? T.muted : T.fg, textDecorationLine: k.done ? "line-through" : "none" }}>{k.text}</span>
-                    <span dir="ltr" className="shrink-0 text-[10.5px] font-bold tabular-nums" style={{ color: kp >= 100 ? T.primary : T.faint }}>{kp}%</span>
+          {activeTab === "settings" && (
+            <div className="animate-fade-in-up space-y-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <span className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>الأفق <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${h.tint}1A`, color: h.tint }}><h.icon size={10} /> {h.label}</span></span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {HORIZONS.map((x) => {
+                      const on = x.id === goal.horizon;
+                      return <button key={x.id} type="button" onClick={() => on ? undefined : onPatch({ horizon: x.id, parent: null })} aria-pressed={on} className="rounded-xl border px-2 py-2 text-[10.5px] font-bold transition-all" style={{ borderColor: on ? `${x.tint}80` : T.border, background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)", color: on ? x.tint : T.muted }}>{x.short}</button>;
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                </div>
 
-        <Btn variant="danger" size="sm" className="w-full" onClick={() => { if (window.confirm(kids.length ? `حذف «${goal.text}»؟ ${kids.length} هدفًا يخدمه ستبقى لكن بلا ارتباط.` : `حذف «${goal.text}»؟`)) onDelete(); }}><Trash2 size={13} /> احذف الهدف</Btn>
+                <div>
+                  <span className={label} style={{ color: T.muted }}>الركيزة</span>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {PILLARS.map((x) => {
+                      const on = x.id === goal.pillar;
+                      const XIcon = x.icon;
+                      return <button key={x.id} type="button" onClick={() => onPatch({ pillar: x.id })} aria-pressed={on} className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all" style={{ borderColor: on ? `${x.tint}80` : T.border, background: on ? `${x.tint}1F` : "rgba(255,255,255,0.03)", color: on ? x.tint : T.muted }}><XIcon size={14} strokeWidth={2} />{x.label}</button>;
+                    })}
+                  </div>
+                </div>
+              </div>
+              
+               <div className="mt-4">
+                  <label htmlFor="los-gd-target" className="mb-1 block text-[10px] font-bold" style={{ color: T.faint }}>القياس (خط النهاية)</label>
+                  <div className="flex items-stretch overflow-hidden rounded-xl border" style={{ borderColor: T.border }}>
+                    <Field id="los-gd-target" type="number" min="0" dir="ltr" value={goal.target || ""} onChange={(e) => { const target = Math.max(0, Math.round(+e.target.value) || 0); onPatch({ target, current: target > 0 ? Math.min(target, goal.current) : goal.current }); }} placeholder="0" className="flex-1 text-center tabular-nums bg-black/20" style={{ borderWidth: 0, borderRadius: 0 }} />
+                    <div className="w-px shrink-0" style={{ background: T.border }} />
+                    <Field id="los-gd-unit" maxLength={16} value={goal.unit} onChange={(e) => onPatch({ unit: e.target.value })} placeholder="كتاب" className="w-24 shrink-0 text-center bg-black/20" style={{ borderWidth: 0, borderRadius: 0 }} />
+                  </div>
+              </div>
+              
+              <div className="mt-4">
+                <label htmlFor="los-gd-deadline" className={`${label} flex items-center gap-1.5`} style={{ color: T.muted }}>موعد نهائي <span style={{ color: T.faint }}>(اختياري)</span><DeadlineChip day={goalEnd(goal)} done={goal.done} /></label>
+                <div className="flex items-center gap-2">
+                  <DateField id="los-gd-deadline" value={goal.deadline} onChange={(v) => onPatch({ deadline: v })} />
+                  {goal.deadline && <Btn variant="ghost" size="sm" onClick={() => onPatch({ deadline: "" })} style={{ borderColor: T.border }}><X size={13} /> امسح</Btn>}
+                </div>
+              </div>
+
+              <div className="mt-8 flex items-center justify-between border-t border-white/10 pt-5">
+                <Btn variant="danger" size="sm" onClick={() => { if (window.confirm(`حذف «${goal.text}»؟`)) onDelete(); }}><Trash2 size={13} /> حذف الهدف نهائياً</Btn>
+                <Btn variant={goal.done ? "default" : "outline"} size="sm" onClick={() => onPatch({ done: !goal.done })}>
+                  <Check size={13} strokeWidth={3} />{goal.done ? "مُحقَّق" : "تحديد كمنجز"}
+                </Btn>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </Modal>
   );
 }
 
 const ARC_LABEL = "٢٠٢٧ — ٢٠٣٠";
-
-const UNIT_SUGGESTIONS = ["كتاب", "صفحة", "ساعة", "مرة", "ريال", "كيلومتر"];
 
 function DeadlineChip({ day, done }) {
   const left = daysTo(day);
@@ -2248,3 +3325,1103 @@ export const clockLabel = (id, year, quarter) =>
     : id === "year"
       ? String(year)
       : `${quarterOf(quarter).label} · ${year}`;
+
+/* ============================================================================
+ * الميزة #5: المحاكي المستقبلي لأهداف 2030 (What-If Trajectory Simulator)
+ * ============================================================================ */
+function WhatIfSimulatorCard({ state, all }) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  // استخراج المعدلات الحقيقية الحالية من بيانات المستخدم
+  const baseline = useMemo(() => {
+    const history = state.history || [];
+    const recent14 = history.slice(-14);
+    const avgDisc = recent14.length
+      ? Math.round(
+          recent14.reduce((sum, h) => sum + (Number(h.pct) || 0), 0) / recent14.length
+        )
+      : 75;
+
+    // متوسط القراءة اليومي من سجل القراءة أو الكتب
+    const readingLogs = Array.isArray(state.reading) ? state.reading : [];
+    const totalLoggedPages = readingLogs.slice(-14).reduce((s, r) => s + (Number(r.pages) || 0), 0);
+    const basePagesDay = Math.max(5, Math.round(totalLoggedPages / 14) || 12);
+
+    // ساعات العمل العميق أسبوعياً من الجلسات
+    const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+    const recentMins = sessions
+      .slice(0, 30)
+      .reduce((s, x) => s + (Number(x.minutes) || 0), 0);
+    const baseDeepHoursWeek = Math.max(3, Math.min(35, Math.round(recentMins / 60) || 6));
+
+    // الادخار الشهري التقريبي
+    const incTotal = (state.income || [])
+      .slice(0, 30)
+      .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const expTotal = (state.expenses || [])
+      .slice(0, 30)
+      .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const baseMonthlySave = Math.max(300, Math.round(incTotal - expTotal) || 1000);
+
+    return {
+      avgDisc: Math.max(30, Math.min(100, avgDisc)),
+      basePagesDay,
+      baseDeepHoursWeek,
+      baseMonthlySave,
+    };
+  }, [state.history, state.reading, state.sessions, state.income, state.expenses]);
+
+  const [pagesPerDay, setPagesPerDay] = useState(() => baseline.basePagesDay);
+  const [deepHoursWeek, setDeepHoursWeek] = useState(() => baseline.baseDeepHoursWeek);
+  const [disciplineSim, setDisciplineSim] = useState(() => baseline.avgDisc);
+  const [monthlySave, setMonthlySave] = useState(() => baseline.baseMonthlySave);
+
+  // الأهداف الرقمية القابلة للمحاكاة
+  const measurableGoals = useMemo(
+    () => (all || []).filter((g) => !g.done && Number(g.target) > 0),
+    [all]
+  );
+  const [selectedGoalId, setSelectedGoalId] = useState(
+    () => measurableGoals[0]?.id || ""
+  );
+
+  // حسابات المحاكاة حتى نهاية 2030
+  const projections = useMemo(() => {
+    const daysTo2030 = Math.max(30, daysTo("2030-12-31") || 1500);
+    const monthsTo2030 = Math.max(1, Math.round(daysTo2030 / 30.4));
+    const weeksTo2030 = Math.max(1, Math.round(daysTo2030 / 7));
+
+    // عامل التسارع بناءً على نسبة الانضباط المحاكاة مقارنة بالحالية
+    const consistencyFactor = Math.max(0.4, disciplineSim / 85);
+
+    // 1. الكتب المتوقع إنهاؤها (متوسط الكتاب 260 صفحة)
+    const effectivePagesPerDay = Math.round(pagesPerDay * consistencyFactor);
+    const booksPerYear = Math.round(((effectivePagesPerDay * 365) / 260) * 10) / 10;
+    const totalBooksBy2030 = Math.round((effectivePagesPerDay * daysTo2030) / 260);
+
+    // 2. ساعات الإتقان والعمل العميق حتى 2030
+    const effectiveDeepWeek = Math.round(deepHoursWeek * consistencyFactor * 10) / 10;
+    const totalDeepHours2030 = Math.round(effectiveDeepWeek * weeksTo2030);
+
+    // 3. التراكم المالي والاستثماري حتى 2030
+    const capitalByEndOfYear = Math.round(monthlySave * 12);
+    const capitalBy2030 = Math.round(monthlySave * monthsTo2030);
+
+    // 4. كم يوماً ستوفّر على أهدافك الحالية؟
+    const speedMultiplier =
+      ((pagesPerDay / Math.max(1, baseline.basePagesDay)) * 0.3 +
+        (deepHoursWeek / Math.max(1, baseline.baseDeepHoursWeek)) * 0.4 +
+        (disciplineSim / Math.max(1, baseline.avgDisc)) * 0.3);
+    const savedDaysPerQuarter = Math.round((speedMultiplier - 1) * 90);
+
+    return {
+      daysTo2030,
+      monthsTo2030,
+      booksPerYear,
+      totalBooksBy2030,
+      totalDeepHours2030,
+      capitalByEndOfYear,
+      capitalBy2030,
+      speedMultiplier: Math.round(speedMultiplier * 100) / 100,
+      savedDaysPerQuarter,
+    };
+  }, [pagesPerDay, deepHoursWeek, disciplineSim, monthlySave, baseline]);
+
+  const pickedGoal = useMemo(
+    () =>
+      measurableGoals.find((g) => g.id === selectedGoalId) ||
+      measurableGoals[0] ||
+      null,
+    [measurableGoals, selectedGoalId]
+  );
+
+  const pickedGoalSim = useMemo(() => {
+    if (!pickedGoal) return null;
+    const rem = Math.max(0, (Number(pickedGoal.target) || 0) - (Number(pickedGoal.current) || 0));
+    const endDay = goalEnd(pickedGoal);
+    const leftDays = Math.max(1, daysTo(endDay) || 90);
+    const simDays = Math.max(
+      1,
+      Math.round(leftDays / Math.max(0.35, projections.speedMultiplier))
+    );
+    const finishDate = new Date();
+    finishDate.setDate(finishDate.getDate() + simDays);
+    const finishStr = finishDate.toLocaleDateString("ar-SA", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    const requiredPerWeek = Math.round((rem / Math.max(1, leftDays / 7)) * 10) / 10;
+    return {
+      rem,
+      leftDays,
+      simDays,
+      finishStr,
+      requiredPerWeek,
+      aheadDays: leftDays - simDays,
+    };
+  }, [pickedGoal, projections.speedMultiplier]);
+
+  const applyPreset = (mode) => {
+    if (mode === "current") {
+      setPagesPerDay(baseline.basePagesDay);
+      setDeepHoursWeek(baseline.baseDeepHoursWeek);
+      setDisciplineSim(baseline.avgDisc);
+      setMonthlySave(baseline.baseMonthlySave);
+    } else if (mode === "balanced") {
+      setPagesPerDay(20);
+      setDeepHoursWeek(12);
+      setDisciplineSim(85);
+      setMonthlySave(Math.max(1500, baseline.baseMonthlySave + 500));
+    } else if (mode === "beast") {
+      setPagesPerDay(35);
+      setDeepHoursWeek(20);
+      setDisciplineSim(95);
+      setMonthlySave(Math.max(3000, baseline.baseMonthlySave * 2));
+    }
+  };
+
+  return (
+    <Card className="p-6 sm:p-7 border-indigo-500/25 bg-gradient-to-br from-indigo-500/[0.06] via-transparent to-emerald-500/[0.04]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-indigo-500/35 bg-indigo-500/15 text-indigo-300">
+            <Rocket size={20} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[18px] font-extrabold text-white">
+                المحاكي المستقبلي لأهداف 2030 (What-If Simulator)
+              </h3>
+              <Badge tint={T.primary}>سرعة المسار: {projections.speedMultiplier}x</Badge>
+            </div>
+            <p className="mt-0.5 text-[12px] text-white/50">
+              حرّك المؤشرات لترى كيف تغيّر عاداتك اليومية موعد وصولك لأهداف ٢٠٢٧-٢٠٣٠
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => applyPreset("current")}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            سرعتي الحالية
+          </button>
+          <button
+            onClick={() => applyPreset("balanced")}
+            className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/25"
+          >
+            توازن ذكي ⚖️
+          </button>
+          <button
+            onClick={() => applyPreset("beast")}
+            className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-500/25"
+          >
+            وضع القصوى 🔥
+          </button>
+          <button
+            onClick={() => setIsOpen((v) => !v)}
+            className="rounded-xl border border-white/10 bg-white/5 p-1.5 text-white/60 hover:text-white"
+            title={isOpen ? "طي المحاكي" : "توسيع المحاكي"}
+          >
+            {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="mt-6 space-y-6">
+          {/* أشرطة التحريك التفاعلية الأربعة */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between text-[12px] font-bold">
+                <span className="text-white/75">📖 القراءة اليومية</span>
+                <span className="text-amber-300">{pagesPerDay} صفحة/يوم</span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="60"
+                value={pagesPerDay}
+                onChange={(e) => setPagesPerDay(Number(e.target.value))}
+                className="mt-3 w-full accent-amber-400 cursor-pointer"
+              />
+              <p className="mt-1.5 text-[10.5px] text-white/45">
+                تعادل <strong className="text-white/80">{projections.booksPerYear} كتاب</strong> سنوياً
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between text-[12px] font-bold">
+                <span className="text-white/75">🧠 العمل العميق</span>
+                <span className="text-sky-300">{deepHoursWeek} س/أسبوع</span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="35"
+                value={deepHoursWeek}
+                onChange={(e) => setDeepHoursWeek(Number(e.target.value))}
+                className="mt-3 w-full accent-sky-400 cursor-pointer"
+              />
+              <p className="mt-1.5 text-[10.5px] text-white/45">
+                تعادل <strong className="text-white/80">{Math.round((deepHoursWeek / 7) * 10) / 10} ساعة</strong> يومياً
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between text-[12px] font-bold">
+                <span className="text-white/75">🔥 نسبة الانضباط</span>
+                <span className="text-emerald-300">{disciplineSim}%</span>
+              </div>
+              <input
+                type="range"
+                min="40"
+                max="100"
+                value={disciplineSim}
+                onChange={(e) => setDisciplineSim(Number(e.target.value))}
+                className="mt-3 w-full accent-emerald-400 cursor-pointer"
+              />
+              <p className="mt-1.5 text-[10.5px] text-white/45">
+                متوسطك الفعلي الحالي: <strong className="text-white/80">{baseline.avgDisc}%</strong>
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between text-[12px] font-bold">
+                <span className="text-white/75">💰 الادخار والاستثمار</span>
+                <span dir="ltr" className="text-indigo-300">
+                  {monthlySave.toLocaleString("en-US")} SAR
+                </span>
+              </div>
+              <input
+                type="range"
+                min="200"
+                max="10000"
+                step="100"
+                value={monthlySave}
+                onChange={(e) => setMonthlySave(Number(e.target.value))}
+                className="mt-3 w-full accent-indigo-400 cursor-pointer"
+              />
+              <p className="mt-1.5 text-[10.5px] text-white/45">
+                تراكم سنوي:{" "}
+                <strong dir="ltr" className="text-white/80">
+                  {projections.capitalByEndOfYear.toLocaleString("en-US")} SAR
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          {/* نتائج المحاكاة الكبرى لعام 2030 */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4 text-center">
+              <p className="text-[11px] font-bold text-amber-200/70">حصيلة الكتب حتى 2030</p>
+              <p className="mt-1 text-2xl font-black text-amber-300 tabular-nums">
+                {projections.totalBooksBy2030} كتاب
+              </p>
+              <p className="mt-0.5 text-[10px] text-white/45">بمعدل 260 صفحة للكتاب</p>
+            </div>
+
+            <div className="rounded-2xl border border-sky-500/25 bg-sky-500/[0.07] p-4 text-center">
+              <p className="text-[11px] font-bold text-sky-200/70">ساعات الإتقان حتى 2030</p>
+              <p
+                dir="ltr"
+                className="mt-1 text-2xl font-black text-sky-300 tabular-nums"
+              >
+                {projections.totalDeepHours2030.toLocaleString("en-US")} h
+              </p>
+              <p className="mt-0.5 text-[10px] text-white/45">
+                {projections.totalDeepHours2030 >= 2500
+                  ? "تجاوزت عتبة الاحتراف العالمي 🌟"
+                  : "نحو عتبة الـ 2,500 ساعة إتقان"}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-indigo-500/25 bg-indigo-500/[0.07] p-4 text-center">
+              <p className="text-[11px] font-bold text-indigo-200/70">رأس المال التراكمي 2030</p>
+              <p
+                dir="ltr"
+                className="mt-1 text-2xl font-black text-indigo-300 tabular-nums"
+              >
+                {projections.capitalBy2030.toLocaleString("en-US")}
+              </p>
+              <p className="mt-0.5 text-[10px] text-white/45">ريال سعودي (بدون العائد المركب)</p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4 text-center">
+              <p className="text-[11px] font-bold text-emerald-200/70">اختصار الوقت في كل ربع</p>
+              <p className="mt-1 text-2xl font-black text-emerald-300 tabular-nums">
+                {projections.savedDaysPerQuarter >= 0
+                  ? `+${projections.savedDaysPerQuarter} يوم أبكر`
+                  : `${projections.savedDaysPerQuarter} يوم تأخير`}
+              </p>
+              <p className="mt-0.5 text-[10px] text-white/45">مقارنة بوتيرتك الحالية</p>
+            </div>
+          </div>
+
+          {/* محاكي هدف رقمي محدد */}
+          {measurableGoals.length > 0 && pickedGoal && pickedGoalSim && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11.5px] font-bold text-white/50">
+                    محاكاة هدف محدد:
+                  </span>
+                  <select
+                    value={pickedGoal.id}
+                    onChange={(e) => setSelectedGoalId(e.target.value)}
+                    className="rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-[12px] font-extrabold text-white outline-none"
+                  >
+                    {measurableGoals.map((g) => (
+                      <option key={g.id} value={g.id} style={{ background: "#111" }}>
+                        {g.text} ({g.current}/{g.target} {g.unit || ""})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="mt-2 text-[12px] text-white/65">
+                  المتبقي:{" "}
+                  <strong className="text-white">
+                    {pickedGoalSim.rem} {pickedGoal.unit || "وحدة"}
+                  </strong>{" "}
+                  · المطلوب أسبوعياً:{" "}
+                  <strong className="text-emerald-300">
+                    {pickedGoalSim.requiredPerWeek} {pickedGoal.unit || "وحدة"}/أسبوع
+                  </strong>
+                </p>
+              </div>
+
+              <div className="shrink-0 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-center">
+                <p className="text-[10.5px] text-emerald-200/70">موعد الإنجاز المتوقع</p>
+                <p className="mt-0.5 text-[14px] font-black text-emerald-300">
+                  {pickedGoalSim.finishStr}
+                </p>
+                {pickedGoalSim.aheadDays > 0 && (
+                  <p className="text-[10px] font-bold text-emerald-400">
+                    أبكر بـ {pickedGoalSim.aheadDays} يوم من الموعد النهائي!
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ============================================================================
+ * 1️⃣ بؤرة «الهدف القائد الشمالي» (The North Star / WIG Spotlight Card)
+ * يطبق قاعدة التركيز التنفيذي (4DX): هدف مركزي واحد يقود يومك ويرتبط بخطوة فيزيائية فورية
+ * ============================================================================ */
+function WigSpotlightCard({
+  all,
+  habits,
+  history,
+  commitStore,
+  onSelectWig,
+  onUpdateGoalMeta,
+  onPatchGoal,
+  onSendToToday,
+  onOpenGoal,
+  onOpenCalibration,
+}) {
+  const openGoals = useMemo(
+    () => (all || []).filter((g) => !g.done),
+    [all]
+  );
+
+  const wigGoal = useMemo(() => {
+    if (!openGoals.length) return null;
+    const savedId = commitStore?.activeWigId;
+    if (savedId) {
+      const found = openGoals.find((g) => g.id === savedId);
+      if (found) return found;
+    }
+    return (
+      openGoals.find((g) => g.isMonthlyFocus && g.priority === "critical") ||
+      openGoals.find((g) => g.isMonthlyFocus) ||
+      openGoals.find((g) => g.priority === "critical") ||
+      openGoals[0]
+    );
+  }, [openGoals, commitStore]);
+
+  const [editingContract, setEditingContract] = useState(false);
+  const [actionDraft, setActionDraft] = useState("");
+  const [whyDraft, setWhyDraft] = useState("");
+  const [costDraft, setCostDraft] = useState("");
+
+  useEffect(() => {
+    if (wigGoal) {
+      setActionDraft(wigGoal.nextAction || "");
+      setWhyDraft(wigGoal.why || "");
+      setCostDraft(commitStore?.[wigGoal.id]?.costOfFailure || "");
+    }
+  }, [wigGoal?.id, wigGoal?.nextAction, wigGoal?.why, commitStore]);
+
+  if (!wigGoal) return null;
+
+  const p = pillarOf(wigGoal.pillar);
+  const pct = goalPct(wigGoal, all, habits);
+  const momentum = calculateHabitMomentum(wigGoal, history);
+  const endDay = goalEnd(wigGoal);
+  const leftDays = daysTo(endDay);
+  const meta = commitStore?.[wigGoal.id] || {};
+
+  const handleSaveContract = () => {
+    onPatchGoal(wigGoal.id, {
+      why: whyDraft.trim(),
+      nextAction: actionDraft.trim(),
+    });
+    onUpdateGoalMeta(wigGoal.id, {
+      costOfFailure: costDraft.trim(),
+    });
+    setEditingContract(false);
+  };
+
+  return (
+    <Card
+      className="relative overflow-hidden p-6 sm:p-7 border-2 shadow-2xl"
+      style={{
+        borderColor: `${T.accent}55`,
+        background:
+          "linear-gradient(135deg, rgba(245,158,11,0.11) 0%, rgba(16,185,129,0.06) 50%, rgba(10,14,24,0.95) 100%)",
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-400/50 bg-amber-400/20 text-amber-300 shadow-lg">
+            <Target size={22} />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
+                🎯 بؤرة الهدف القائد الوحيد (The WIG Spotlight)
+              </span>
+              <Badge tint={T.primary}>قاعدة عدم التشتت</Badge>
+              {meta.confidence && (
+                <Badge tint={T.accent}>مؤشر الثقة: {meta.confidence}/10</Badge>
+              )}
+            </div>
+            <p className="text-[11.5px] text-white/55 mt-0.5">
+              ركز 80% من طاقتك اليومية على هذا الهدف القائد حتى يُحسم، قبل أن تتشتت في غيره
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={wigGoal.id}
+            onChange={(e) => onSelectWig(e.target.value)}
+            className="max-w-[230px] truncate rounded-xl border border-amber-400/30 bg-black/60 px-3 py-1.5 text-[11.5px] font-extrabold text-amber-200 outline-none"
+            title="اختر الهدف القائد لهذه المرحلة"
+          >
+            {openGoals.map((g) => (
+              <option key={g.id} value={g.id} style={{ background: "#111" }}>
+                🎯 {g.text}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setEditingContract((v) => !v)}
+            className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white/80 hover:bg-white/10"
+          >
+            {editingContract ? "إغلاق المحرر" : "تعديل الدافع والخطوة ✍️"}
+          </button>
+        </div>
+      </div>
+
+      {/* تفاصيل الهدف القائد */}
+      <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-12 items-center">
+        <div className="lg:col-span-7 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded-lg px-2.5 py-1 text-[11px] font-extrabold"
+              style={{ backgroundColor: `${p.tint}25`, color: p.tint }}
+            >
+              {p.label}
+            </span>
+            {leftDays !== null && (
+              <span className="rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-bold text-white/75">
+                ⏳ متبقي {Math.max(0, leftDays)} {dayWord(Math.max(0, leftDays))}
+              </span>
+            )}
+            {momentum !== null && (
+              <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-extrabold text-emerald-300">
+                ⚡ زخم العادات: {momentum}%
+              </span>
+            )}
+          </div>
+
+          <h3
+            onClick={() => onOpenGoal(wigGoal.id)}
+            className="cursor-pointer text-2xl sm:text-3xl font-black text-white leading-snug hover:text-amber-300 transition-colors"
+          >
+            «{wigGoal.text}»
+          </h3>
+
+          {/* شريط التقدم الكبير */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-extrabold">
+              <span className="text-white/70">نسبة الحسم والإنجاز</span>
+              <span className="text-amber-300 tabular-nums">{pct}%</span>
+            </div>
+            <div className="h-3 w-full overflow-hidden rounded-full bg-black/50 p-0.5 border border-white/10">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${Math.min(100, pct)}%`,
+                  background: "linear-gradient(90deg, #f59e0b, #10b981)",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* مرساة الدافع العميق (Emotional Why) وكلفة الفشل */}
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <div className="rounded-2xl border border-amber-400/25 bg-black/35 p-3.5">
+              <p className="text-[10.5px] font-extrabold text-amber-400 mb-1">
+                🔥 لماذا هذا الهدف خط أحمر؟ (The Deep Why)
+              </p>
+              <p className="text-xs font-bold text-white/85 leading-relaxed">
+                {wigGoal.why || "اضغط «تعديل الدافع والخطوة» لكتابة سببك الحقيقي الذي يمنعك من التراجع."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-rose-500/25 bg-black/35 p-3.5">
+              <p className="text-[10.5px] font-extrabold text-rose-400 mb-1">
+                ⚠️ كلفة التقاعس (Cost of Inaction)
+              </p>
+              <p className="text-xs font-bold text-white/85 leading-relaxed">
+                {meta.costOfFailure || "ما الذي ستخسره إن مرّ هذا الشهر دون حسم هذا الهدف؟"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* محرك الفعل الفيزيائي التالي (Next Physical Action Engine) */}
+        <div className="lg:col-span-5 rounded-3xl border border-emerald-400/35 bg-black/45 p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-black text-emerald-400">
+              <Zap size={15} /> الفعل الفيزيائي التالي (Next Action)
+            </span>
+            <span className="text-[10.5px] text-white/45">5 إلى 15 دقيقة</span>
+          </div>
+
+          <div className="space-y-2">
+            <input
+              value={actionDraft}
+              onChange={(e) => setActionDraft(e.target.value)}
+              onBlur={() => {
+                if (actionDraft.trim() !== (wigGoal.nextAction || "")) {
+                  onPatchGoal(wigGoal.id, { nextAction: actionDraft.trim() });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onPatchGoal(wigGoal.id, { nextAction: actionDraft.trim() });
+                }
+              }}
+              placeholder="اكتب خطوة صغيرة محددة جداً تفعلها اليوم..."
+              className="w-full rounded-2xl border border-white/15 bg-black/60 px-4 py-3 text-[13px] font-extrabold text-white placeholder-white/35 outline-none focus:border-emerald-400"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onSendToToday(wigGoal, actionDraft)}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[13px] font-black text-black shadow-lg transition-transform hover:scale-[1.01] active:scale-95"
+          >
+            <Zap size={16} strokeWidth={3} />
+            أرسل هذه الخطوة لشاشة «اليوم» الآن
+          </button>
+
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => onOpenGoal(wigGoal.id)}
+              className="text-[11px] font-bold text-white/60 hover:text-white"
+            >
+              فتح غرفة عمليات الهدف ←
+            </button>
+            <button
+              type="button"
+              onClick={onOpenCalibration}
+              className="text-[11px] font-extrabold text-amber-300 hover:text-amber-200"
+            >
+              ⏱️ معايرة الأسبوع (60ث)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* نافذة التحرير السريع لعقد الالتزام */}
+      {editingContract && (
+        <div className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-white/15 bg-black/60 p-4 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-amber-300">
+              🔥 لماذا هذا الهدف خط أحمر بالنسبة لي؟
+            </label>
+            <input
+              value={whyDraft}
+              onChange={(e) => setWhyDraft(e.target.value)}
+              placeholder="لأني أريد الوصول إلى..."
+              className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-rose-300">
+              ⚠️ ما هي كلفة التقاعس إن تكاسلت؟
+            </label>
+            <input
+              value={costDraft}
+              onChange={(e) => setCostDraft(e.target.value)}
+              placeholder="سأخسر فرصة..."
+              className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-white outline-none focus:border-rose-400"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleSaveContract}
+              className="w-full rounded-xl bg-amber-400 py-2 text-xs font-black text-black hover:bg-amber-300"
+            >
+              حفظ عقد الالتزام ✓
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ============================================================================
+ * 3️⃣ رادار إنقاذ الأهداف الراكدة وتفكيك المقاومة (Goal CPR & Friction Buster)
+ * يتدخل بلطف عندما يتعثر هدف ليمنع شعور الذنب ويقدم 3 مخارج نفسية عملية
+ * ============================================================================ */
+function GoalCprBanner({
+  all,
+  scoped,
+  habits,
+  history,
+  commitStore,
+  onUpdateGoalMeta,
+  onPatchGoal,
+  onSendToToday,
+  onOpenGoal,
+  onToast,
+}) {
+  const [microStepText, setMicroStepText] = useState("");
+  const [selectedStalledId, setSelectedStalledId] = useState(null);
+  const [showPaused, setShowPaused] = useState(false);
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const pausedGoals = useMemo(
+    () =>
+      (scoped || []).filter((g) => {
+        const pausedUntil = commitStore?.[g.id]?.pausedUntil;
+        return !g.done && pausedUntil && pausedUntil > todayIso;
+      }),
+    [scoped, commitStore, todayIso]
+  );
+
+  const stalledGoals = useMemo(() => {
+    return (scoped || []).filter((g) => {
+      if (g.done) return false;
+      const pausedUntil = commitStore?.[g.id]?.pausedUntil;
+      if (pausedUntil && pausedUntil > todayIso) return false;
+
+      const pace = goalPace(g, all);
+      const momentum = calculateHabitMomentum(g, history);
+      const isBehind = pace.pace?.state === "behind";
+      const lowMomentum = momentum !== null && momentum < 40;
+      const missingNextAction = !g.nextAction || !g.nextAction.trim();
+
+      return isBehind || lowMomentum || missingNextAction;
+    });
+  }, [scoped, all, history, commitStore, todayIso]);
+
+  if (stalledGoals.length === 0 && pausedGoals.length === 0) return null;
+
+  const targetGoal =
+    stalledGoals.find((g) => g.id === selectedStalledId) || stalledGoals[0] || null;
+
+  const handleMicroStepRescue = () => {
+    if (!targetGoal) return;
+    const stepText =
+      microStepText.trim() ||
+      `بدء 5 دقائق فقط في «${targetGoal.text.slice(0, 25)}» لكسر الحاجز`;
+    onPatchGoal(targetGoal.id, { nextAction: stepText });
+    onSendToToday(targetGoal, stepText);
+    setMicroStepText("");
+  };
+
+  const handleDeferQuarter = () => {
+    if (!targetGoal) return;
+    const qOrder = ["q1", "q2", "q3", "q4"];
+    const idx = qOrder.indexOf(targetGoal.quarter);
+    const nextQ = idx >= 0 && idx < 3 ? qOrder[idx + 1] : "q1";
+    const nextY = idx === 3 ? targetGoal.year + 1 : targetGoal.year;
+    onPatchGoal(targetGoal.id, { quarter: nextQ, year: nextY });
+    onToast?.("📅 تم ترحيل الهدف للربع القادم بسلام وبدون أي تأنيب ضمير!");
+  };
+
+  const handlePause14Days = () => {
+    if (!targetGoal) return;
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    const untilIso = d.toISOString().slice(0, 10);
+    onUpdateGoalMeta(targetGoal.id, { pausedUntil: untilIso });
+    onToast?.("❄️ تم تجميد الهدف مؤقتاً لمدة 14 يوماً لتتفرغ لهدفك القائد!");
+  };
+
+  return (
+    <Card className="p-5 sm:p-6 border-rose-500/25 bg-gradient-to-r from-rose-500/[0.07] via-amber-500/[0.04] to-transparent">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-rose-500/35 bg-rose-500/15 text-rose-300">
+            <Activity size={19} />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[15px] font-black text-white">
+                عيادة إنعاش الأهداف وتفكيك المقاومة (Goal CPR ❤️‍🩹)
+              </h3>
+              {stalledGoals.length > 0 && (
+                <Badge tint={T.danger}>{stalledGoals.length} بحاجة لإنعاش</Badge>
+              )}
+            </div>
+            <p className="text-[11.5px] text-white/55 mt-0.5">
+              لا تشعر بالذنب تجاه الأهداف المتأخرة — إما أن تصغّر خطوتها لـ 5 دقائق الآن، أو ترحّلها وتجمّدها بشرف!
+            </p>
+          </div>
+        </div>
+
+        {pausedGoals.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowPaused((v) => !v)}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white/70 hover:bg-white/10"
+          >
+            ❄️ الأهداف المجمّدة مؤقتاً ({pausedGoals.length})
+          </button>
+        )}
+      </div>
+
+      {targetGoal && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-white/50">الهدف المختار للإنعاش:</span>
+              <select
+                value={targetGoal.id}
+                onChange={(e) => setSelectedStalledId(e.target.value)}
+                className="rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-extrabold text-white outline-none"
+              >
+                {stalledGoals.map((g) => (
+                  <option key={g.id} value={g.id} style={{ background: "#111" }}>
+                    {g.text}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenGoal(targetGoal.id)}
+              className="text-[11px] font-bold text-amber-300 hover:underline"
+            >
+              فتح التفاصيل الكاملة ←
+            </button>
+          </div>
+
+          {/* الخيارات النفسية الثلاثة لتفكيك المقاومة */}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {/* الخيار 1: تفكيك لخطوة من 5 دقائق */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] p-3.5 space-y-2">
+              <p className="text-xs font-black text-emerald-300">
+                1. 🔨 صغّر الخطوة لـ 5 دقائق فقط
+              </p>
+              <input
+                value={microStepText}
+                onChange={(e) => setMicroStepText(e.target.value)}
+                placeholder="مثال: فتح الملف وكتابة 3 أسطر..."
+                className="w-full rounded-lg border border-white/15 bg-black/50 px-2.5 py-1.5 text-[11.5px] text-white outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                onClick={handleMicroStepRescue}
+                className="w-full rounded-lg bg-emerald-500 py-1.5 text-[11px] font-black text-black hover:bg-emerald-400"
+              >
+                اعتمدها وأرسلها ليومي ⚡
+              </button>
+            </div>
+
+            {/* الخيار 2: ترحيل للربع القادم بدون ذنب */}
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/[0.07] p-3.5 flex flex-col justify-between space-y-2">
+              <div>
+                <p className="text-xs font-black text-sky-300">
+                  2. 📅 رحّله للربع القادم بسلام
+                </p>
+                <p className="text-[11px] text-white/60 mt-1 leading-relaxed">
+                  إذا كان وقتك مزدحماً هذا الربع، انقله للربع التالي لتخفيف الضغط الذهني.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDeferQuarter}
+                className="w-full rounded-lg border border-sky-400/40 bg-sky-500/20 py-1.5 text-[11px] font-extrabold text-sky-200 hover:bg-sky-500/30"
+              >
+                ترحيل للربع القادم →
+              </button>
+            </div>
+
+            {/* الخيار 3: تجميد مؤقت بشرف */}
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/[0.07] p-3.5 flex flex-col justify-between space-y-2">
+              <div>
+                <p className="text-xs font-black text-indigo-300">
+                  3. ❄️ تجميد مؤقت بشرف (14 يوماً)
+                </p>
+                <p className="text-[11px] text-white/60 mt-1 leading-relaxed">
+                  أخفِه من رادار القلق أسبوعين ريثما تنتهي من هدفك القائد الأهم.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handlePause14Days}
+                className="w-full rounded-lg border border-indigo-400/40 bg-indigo-500/20 py-1.5 text-[11px] font-extrabold text-indigo-200 hover:bg-indigo-500/30"
+              >
+                تجميد 14 يوماً ❄️
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPaused && pausedGoals.length > 0 && (
+        <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-black/40 p-3.5">
+          <p className="text-[11px] font-bold text-white/60">
+            الأهداف المجمّدة مؤقتاً (اضغط «استئناف» لإعادتها للنشاط):
+          </p>
+          {pausedGoals.map((pg) => (
+            <div
+              key={pg.id}
+              className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs"
+            >
+              <span className="font-bold text-white/80">{pg.text}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onUpdateGoalMeta(pg.id, { pausedUntil: null });
+                  onToast?.("🔥 تم تنشيط الهدف وإعادته للميدان!");
+                }}
+                className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-[11px] font-extrabold text-emerald-300 hover:bg-emerald-500/30"
+              >
+                استئناف النشاط
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ============================================================================
+ * 4️⃣ طقس «معايرة الأهداف الأسبوعية» في 60 ثانية (Weekly 60s Goal Ritual Modal)
+ * مستوحى من نظام OKRs في وادي السيليكون: مراجعة الثقة، الانتصار، والخطوة القادمة
+ * ============================================================================ */
+function WeeklyCalibrationModal({
+  open,
+  onClose,
+  all,
+  monthlyGoals,
+  habits,
+  commitStore,
+  onUpdateGoalMeta,
+  onPatchGoal,
+  onSendToToday,
+  onToast,
+}) {
+  const focusList = useMemo(() => {
+    if (monthlyGoals && monthlyGoals.length > 0) return monthlyGoals;
+    return (all || []).filter((g) => !g.done).slice(0, 5);
+  }, [monthlyGoals, all]);
+
+  const [idx, setIdx] = useState(0);
+  const currentGoal = focusList[idx] || focusList[0] || null;
+
+  const [confidence, setConfidence] = useState(8);
+  const [winNote, setWinNote] = useState("");
+  const [blockerText, setBlockerText] = useState("");
+  const [nextStepText, setNextStepText] = useState("");
+
+  useEffect(() => {
+    if (currentGoal) {
+      setConfidence(commitStore?.[currentGoal.id]?.confidence || 8);
+      setWinNote("");
+      setBlockerText("");
+      setNextStepText(currentGoal.nextAction || "");
+    }
+  }, [currentGoal?.id, open, commitStore]);
+
+  if (!open || !currentGoal) return null;
+
+  const pct = goalPct(currentGoal, all, habits);
+
+  const handleSaveAndNext = (alsoSendToday = false) => {
+    const nextReviews = winNote.trim()
+      ? [
+          ...(currentGoal.reviews || []),
+          {
+            id: uid(),
+            date: new Date().toISOString().slice(0, 10),
+            note: `🏆 انتصار الأسبوع: ${winNote.trim()} (ثقة ${confidence}/10)`,
+            progress: pct,
+          },
+        ]
+      : currentGoal.reviews || [];
+
+    const nextObstacles = blockerText.trim()
+      ? [...(currentGoal.obstacles || []), blockerText.trim()]
+      : currentGoal.obstacles || [];
+
+    onPatchGoal(currentGoal.id, {
+      nextAction: nextStepText.trim() || currentGoal.nextAction,
+      reviews: nextReviews,
+      obstacles: nextObstacles,
+    });
+
+    onUpdateGoalMeta(currentGoal.id, {
+      confidence,
+      lastCalibratedAt: new Date().toISOString().slice(0, 10),
+    });
+
+    if (alsoSendToday && nextStepText.trim()) {
+      onSendToToday(currentGoal, nextStepText.trim());
+    }
+
+    if (idx < focusList.length - 1) {
+      setIdx(idx + 1);
+    } else {
+      onToast?.("🎯 اكتملت معايرة أهداف الأسبوع بنجاح! أنت جاهز للانطلاق.");
+      onClose();
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`⏱️ طقس معايرة الأهداف الأسبوعية (${idx + 1} من ${focusList.length})`}
+      wide
+    >
+      <div className="space-y-5 py-2">
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <span className="text-[11px] font-extrabold text-amber-300">
+              الهدف قيد المعايرة ({pct}% منجز)
+            </span>
+            <h4 className="text-lg font-black text-white mt-0.5">
+              «{currentGoal.text}»
+            </h4>
+          </div>
+          <div className="flex gap-1.5">
+            {focusList.map((g, i) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setIdx(i)}
+                className={`h-2.5 w-7 rounded-full transition-all ${
+                  i === idx ? "bg-amber-400" : "bg-white/20"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* السؤال 1: مؤشر الثقة */}
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+          <div className="flex items-center justify-between text-xs font-extrabold mb-2">
+            <span className="text-white/85">
+              1️⃣ ما مدى ثقتك في حسم هذا الهدف في موعده؟
+            </span>
+            <span className="rounded-lg bg-amber-400/20 px-2.5 py-1 text-amber-300 font-black">
+              {confidence} / 10
+            </span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={confidence}
+            onChange={(e) => setConfidence(Number(e.target.value))}
+            className="w-full accent-amber-400 cursor-pointer"
+          />
+        </div>
+
+        {/* السؤال 2: انتصار الأسبوع */}
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-2">
+          <label className="block text-xs font-extrabold text-emerald-300">
+            2️⃣ ما هو أهم تقدم أو انتصار حققته لهذا الهدف هذا الأسبوع؟
+          </label>
+          <input
+            value={winNote}
+            onChange={(e) => setWinNote(e.target.value)}
+            placeholder="مثال: أنهيت الفصل الأول / التزمت بـ 4 أيام تمرين..."
+            className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-400"
+          />
+        </div>
+
+        {/* السؤال 3: العقبة والخطوة القادمة */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-2">
+            <label className="block text-xs font-extrabold text-rose-300">
+              3️⃣ هل هناك عقبة تعطلك؟ (اختياري)
+            </label>
+            <input
+              value={blockerText}
+              onChange={(e) => setBlockerText(e.target.value)}
+              placeholder="مثال: ضيق الوقت بعد العصر..."
+              className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-xs text-white outline-none focus:border-rose-400"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/[0.07] p-4 space-y-2">
+            <label className="block text-xs font-extrabold text-emerald-300">
+              4️⃣ ما هي خطوتك الفيزيائية القادمة هذا الأسبوع؟
+            </label>
+            <input
+              value={nextStepText}
+              onChange={(e) => setNextStepText(e.target.value)}
+              placeholder="مثال: تخصيص 25 دقيقة صباح الغد لـ..."
+              className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+          <button
+            type="button"
+            onClick={() => handleSaveAndNext(true)}
+            className="flex items-center gap-2 rounded-2xl bg-emerald-500 px-5 py-2.5 text-xs font-black text-black hover:bg-emerald-400 shadow-lg"
+          >
+            <Zap size={14} /> حفظ + إرسال الخطوة لشاشة «اليوم»
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSaveAndNext(false)}
+            className="rounded-2xl border border-white/20 bg-white/10 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-white/20"
+          >
+            {idx < focusList.length - 1 ? "حفظ والهدف التالي ←" : "إنهاء المعايرة ✓"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

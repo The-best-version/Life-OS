@@ -23,7 +23,7 @@ import {
   dueNotes,
   botShape,
 } from "../../src/state/life-state.mjs";
-import { PRAYER_ROWS, clockAt, prayerTimes } from "../../src/utils/prayer-times.mjs";
+import { PRAYER_ROWS, clockAt, prayerTimes, blockAt, fixHour } from "../../src/utils/prayer-times.mjs";
 import {
   num,
   money,
@@ -35,6 +35,8 @@ import {
   pointsWord,
   barRow,
 } from "./fmt.js";
+
+import { daySchedule } from "./actions.js";
 
 export { num, money, time } from "./fmt.js";
 
@@ -76,6 +78,15 @@ export const savedTask = (out) => {
 export const savedWater = (out) =>
   line(`💧 ${num(out.count)} من ${num(out.goal)} أكواب اليوم`);
 
+export const savedSleep = (out) => {
+  const qualityText = out.hours >= 7 && out.hours <= 9 ? "نوم مثالي وكافٍ 🌟" : out.hours < 6 ? "نوم قليل، انتبه لطاقتك ⚠️" : "تعافٍ عميق 🔋";
+  return [
+    line(`🌙 تم تسجيل نومك: <b>${num(out.hours)} ساعات</b> (${num(out.cycles)} دورات نوم كاملة)`),
+    line(`💡 التقييم: ${qualityText}`),
+    line(`تم تحديث مختبر النوم وطقوس الصباح تلقائياً في Life OS.`),
+  ].join("\n");
+};
+
 export const savedHabit = (out) =>
   [
     line(`✅ ${out.habit.label}${out.tiny ? " (الحد الأدنى — ويُحتسب كاملًا)" : ""}`),
@@ -83,6 +94,8 @@ export const savedHabit = (out) =>
   ].join("\n");
 
 export const savedTaskDone = (out) => line(`✅ أنجزت: ${out.row.text}`);
+export const savedTaskPostponed = (out) => line(`⏱️ تم تأجيل «${out.row.text}» إلى الغد.`);
+export const savedTaskPromoted = (out) => line(`🎯 رُفعت مهمة «${out.row.text}» لقائمة اليوم!`);
 
 export const undone = () => line("↩︎ رجّعتها.");
 
@@ -99,7 +112,7 @@ export function openKeys(state, max = 5) {
     if (h.min) kb.text(`◔ ${h.min}`.slice(0, 40), `tiny:${h.id}`);
     kb.row();
   }
-  kb.text("💧 + كاس ماء", "water:1");
+  kb.text("💧 + كاس ماء", "water:1").text(state?.emergencyMode ? "🛡️ وضع الطوارئ (شغال)" : "🛡️ طوارئ", "emg:view");
   return kb;
 }
 
@@ -126,9 +139,15 @@ export function focusKeys(run, now = Date.now()) {
   if (runRunning(run)) {
     return kb
       .text("⏸️ وقفة", "focus:pause")
-      .text("⏹️ أوقفها واحسبها", "focus:stop");
+      .text("⏹️ أوقفها واحسبها", "focus:stop")
+      .row()
+      .text("🔄 تحديث العداد", "focus:refresh");
   }
-  return kb.text("▶️ أكمل", "focus:resume").text("⏹️ أوقفها واحسبها", "focus:stop");
+  return kb
+    .text("▶️ أكمل", "focus:resume")
+    .text("⏹️ أوقفها واحسبها", "focus:stop")
+    .row()
+    .text("🔄 تحديث العداد", "focus:refresh");
 }
 
 export function focusStand(state, now = Date.now()) {
@@ -181,6 +200,12 @@ export const menuKeys = () =>
     .text("🎧 التركيز", "menu:focus")
     .text("📚 المكتبة", "menu:books")
     .row()
+    .text("🕌 الصلوات", "menu:prayers")
+    .text("📅 المواعيد والجدول", "menu:schedule")
+    .row()
+    .text("🛡️ الطوارئ", "emg:view")
+    .text("🌙 إقفال اليوم", "shut:start")
+    .row()
     .text("🔁 راجع فائدة", "rev:now")
     .text("📝 الشرح", "menu:help");
 
@@ -188,7 +213,13 @@ export const COMMANDS = [
   { command: "today", description: "حالة اليوم الآن" },
   { command: "now", description: "ما زال مفتوحًا، بأزرار" },
   { command: "coach", description: "ما يستحق انتباهك الآن" },
+  { command: "schedule", description: "مواعيدك والتقويم وجدول الجامعة" },
+  { command: "shutdown", description: "طقس إقفال اليوم والتجهيز للغد" },
+  { command: "dump", description: "تفريغ صوتي أو نصي ذكي لعدة مهام" },
   { command: "week", description: "مراجعة الأسبوع" },
+  { command: "plan_week", description: "التخطيط والمراجعة الأسبوعية" },
+  { command: "emergency", description: "وضع الطوارئ والحد الأدنى للأيام الصعبة" },
+  { command: "prayers", description: "مواقيت الصلاة والبلوكات الزمنية" },
   { command: "focus", description: "جولة تركيز — ابدأ أو أوقف" },
   { command: "books", description: "المكتبة — وأين وصل كل كتاب" },
   { command: "review", description: "راجع فائدة من كتاب قرأته" },
@@ -412,7 +443,9 @@ export function noteList(book) {
 export const savedFocusStart = (out) =>
   [
     line(`▶️ ${phaseOf(out.run.phase).label} — ${spanOf(out.run.planned)}${out.run.label ? ` · ${out.run.label}` : ""}`),
-    line("أرسل «أوقف» أو «وقفة» في أي لحظة، والجرس عندي."),
+    out.clash
+      ? line(`⚠️ تنبيه ذكي: يتزامن مع هذه الجلسة ${out.clash}!`)
+      : line("أرسل «أوقف» أو «وقفة» في أي لحظة، والجرس عندي."),
   ].join("\n");
 
 export const savedFocusBreak = (out) =>
@@ -486,8 +519,10 @@ export const savedAbsence = (out) =>
     out.cap
       ? line(
           out.count >= out.cap
-            ? `وبلغت الحدّ المسموح (${num(out.cap)}). ⚠️`
-            : `الحدّ ${num(out.cap)} — باقي ${num(out.cap - out.count)}.`,
+            ? `🚨 بلغت سقف الغياب (${num(out.cap)}). حرمان!`
+            : out.cap - out.count <= 1
+              ? `🔴 تحذير حرج: بقي غياب واحد فقط وتصل للحرمان! (سقفك ${num(out.cap)})`
+              : `الحدّ ${num(out.cap)} — باقي ${num(out.cap - out.count)}.`,
         )
       : null,
   ]
@@ -570,6 +605,11 @@ export const savedReflect = (out) =>
 export function morning(state, day, quote) {
   const out = [line("☀️ صباح الخير — هذا يومك:"), ""];
 
+  if (day.emergencyMode) {
+    out.push(line("🛡️ [وضع الطوارئ مُفعّل — التركيز على الأساسيات وحماية المسار]"));
+    out.push("");
+  }
+
   const goal = Number.isFinite(state.goal) ? state.goal : DAILY_GOAL_DEFAULT;
   out.push(line(`🎯 هدف اليوم: ${num(goal)}٪.`));
   out.push("");
@@ -585,6 +625,20 @@ export function morning(state, day, quote) {
     out.push("");
   }
 
+  const sched = daySchedule(state, new Date());
+  if (sched.todayEvents.length || sched.lectures.length) {
+    out.push(line("📅 مواعيد اليوم والجامعة:"));
+    sched.todayEvents.forEach((ev) => {
+      out.push(line(`• 📍 ${ev.title}${ev.time ? ` — ${time(ev.time)}` : ""}${ev.place ? ` (${ev.place})` : ""}`));
+    });
+    sched.lectures.forEach((lec) => {
+      const room = lec.room ? ` · قاعة ${lec.room}` : "";
+      const cap = lec.absenceCap ? ` [غياب ${num(lec.absences)}/${num(lec.absenceCap)}]` : "";
+      out.push(line(`• 🎓 ${lec.courseName}${lec.from ? ` — ${time(lec.from)}` : ""}${room}${cap}`));
+    });
+    out.push("");
+  }
+
   out.push(line(`🎯 أهم ${num(TOP_TASK_CAP)} مهام:`));
   if (!day.tasksOpen.length) {
     out.push(
@@ -596,9 +650,39 @@ export function morning(state, day, quote) {
     );
   } else {
     day.tasksOpen.forEach((t, i) => {
-      out.push(line(`${num(i + 1)}. ${t.text}`));
-      if (t.step) out.push(line(`    ↳ ${t.step}`));
+      const gTag = t.goalTitle ? ` 🎯 (تخدم: ${t.goalTitle})` : "";
+      out.push(line(`${num(i + 1)}. ${t.text}${gTag}`));
+      if (t.step) out.push(line(`    ↳ خطوة البدء: ${t.step}`));
     });
+  }
+
+  /* --- تذكير أهداف الشهر والالتزام الذكي --- */
+  const goalsList = Array.isArray(state.goals) ? state.goals : [];
+  const currentMonthGoals = goalsList.filter((g) => !g.done && (g.horizon === "quarter" || g.horizon === "month" || g.target > 0));
+  if (currentMonthGoals.length) {
+    out.push("");
+    out.push(line("🎯 أهداف الشهر ونسبة التزامك:"));
+    const totalGoals = currentMonthGoals.length;
+    const progressSum = currentMonthGoals.reduce((acc, g) => {
+      if (g.target > 0) return acc + Math.min(100, Math.round(((g.current || 0) / g.target) * 100));
+      return acc + (g.done ? 100 : 0);
+    }, 0);
+    const commitmentRate = Math.round(progressSum / totalGoals);
+
+    out.push(line(`📊 نسبة التزامك بأهداف الشهر: <b>${num(commitmentRate)}٪</b>`));
+    
+    // إبراز الهدف الأكثر تقدماً كتعزيز
+    const topGoal = [...currentMonthGoals].sort((a, b) => ((b.current || 0) / (b.target || 1)) - ((a.current || 0) / (a.target || 1)))[0];
+    if (topGoal && topGoal.target > 0) {
+      const pct = Math.round(((topGoal.current || 0) / topGoal.target) * 100);
+      out.push(line(`🔥 أنت متقدم جداً في: «${topGoal.text}» (${num(pct)}٪). استمر!`));
+    }
+
+    // لفت انتباه لهدف متأخر للمساعدة
+    const stuckGoal = currentMonthGoals.find((g) => (g.current || 0) === 0);
+    if (stuckGoal) {
+      out.push(line(`💡 ما الذي يعطلك في: «${stuckGoal.text}»؟ ابدأ اليوم بـ ٥ دقائق فقط.`));
+    }
   }
 
   if (day.book) {
@@ -669,13 +753,20 @@ export function evening(state, day) {
 
 export function today(state, day) {
   const out = [line(`📅 ${day.date}`), ""];
+  if (day.emergencyMode) {
+    out.push(line("🛡️ [وضع الطوارئ مُفعّل — الأولوية للأساسيات فقط]"));
+  }
   out.push(line(`الانتظام: ${num(day.pct)}٪`));
   out.push(line(`الماء: ${num(day.water)} من ${num(day.waterGoal)}`));
   out.push(line(`الرصيد: ${money(day.balance)}`));
   out.push("");
   if (day.tasksOpen.length) {
     out.push(line("المهام المفتوحة:"));
-    day.tasksOpen.forEach((t) => out.push(line(`• ${t.text}`)));
+    day.tasksOpen.forEach((t) => {
+      const gTag = t.goalTitle ? ` 🎯 (تخدم: ${t.goalTitle})` : "";
+      out.push(line(`• ${t.text}${gTag}`));
+      if (t.step) out.push(line(`  ↳ خطوة البدء: ${t.step}`));
+    });
   } else {
     out.push(line("لا مهام مفتوحة اليوم."));
   }
@@ -691,7 +782,38 @@ export function today(state, day) {
 
 export function taskKeys(day) {
   const kb = new InlineKeyboard();
-  for (const t of day.tasksOpen) kb.text(`✓ ${t.text}`.slice(0, 40), `task:${t.id}`).row();
+  for (const t of day.tasksOpen) {
+    kb.text(`✓ ${t.text}`.slice(0, 32), `task:${t.id}`)
+      .text("⏱️ للغد", `task_postpone:${t.id}`)
+      .row();
+  }
+  kb.row().text("💧 + كاس ماء", "water:1").text(day.emergencyMode ? "🛡️ الطوارئ (شغال)" : "🛡️ طوارئ", "emg:view");
+  return kb;
+}
+
+export function morningKeys(state, day) {
+  const kb = new InlineKeyboard();
+  for (const t of day.tasksOpen.slice(0, 4)) {
+    kb.text(`✓ ${t.text}`.slice(0, 32), `task:${t.id}`)
+      .text("⏱️ للغد", `task_postpone:${t.id}`)
+      .row();
+  }
+  kb.row()
+    .text("🎯 تحديد أولويات اليوم", "morning:pick_tasks")
+    .text("📅 جدول ومواعيد اليوم", "sched:view");
+  kb.row()
+    .text("💧 + كاس ماء", "water:1")
+    .text("⚡ جلسة تركيز", "focus:start");
+  return kb;
+}
+
+export function morningTaskPickerKeys(state) {
+  const kb = new InlineKeyboard();
+  const inbox = rows(state.tasks).filter((t) => !t.today && !t.done).slice(0, 6);
+  for (const t of inbox) {
+    kb.text(`+ ${t.text}`.slice(0, 36), `morning:add_task:${t.id}`).row();
+  }
+  kb.row().text("⬅️ عودة", "morning:back");
   return kb;
 }
 
@@ -842,6 +964,9 @@ export const HELP = [
   line("«يومي» أو /today — حالة اليوم الآن"),
   line("«باقي» أو /now — ما زال مفتوحًا، بأزرار"),
   line("«المدرّب» أو /coach — ما يستحق انتباهك الآن"),
+  line("«طوارئ» أو /emergency — حماية السلسلة بالأيام الصعبة"),
+  line("«صلاتي» أو /prayers — مواقيت الصلاة وبلوكات التركيز"),
+  line("«تخطيط الأسبوع» أو /plan_week — التخطيط الأسبوعي"),
   line("«مكتبتي» أو /books — الرف وأين وصل كل كتاب"),
   line("«راجع» أو /review — فائدة ترجع لتبقى"),
   line("«الأسبوع» أو /week — مراجعة الأسبوع"),
@@ -849,3 +974,277 @@ export const HELP = [
   line("«مساء» أو /evening — إقفال اليوم"),
   line("«القائمة» أو /menu — أزرار"),
 ].join("\n");
+
+/* --- وضع الطوارئ والصلوات وتخطيط الأسبوع -------------------------------- */
+
+export const savedEmergency = (out) =>
+  [
+    out.active
+      ? line("🛡️ تم تفعيل وضع الطوارئ والحد الأدنى بنجاح.")
+      : line("↩️ تم إيقاف وضع الطوارئ والعودة للوضع الطبيعي."),
+    out.rescuedCount
+      ? line(`🪶 تم إنقاذ ${num(out.rescuedCount)} من العادات الأساسية بنسختها الخفيفة لحماية السلسلة!`)
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+export function emergencyCard(state, day) {
+  const isEmg = !!state.emergencyMode;
+  const habits = rows(state.habits);
+  const coreHabits = habits.filter((h) => h.core);
+  const openCore = coreHabits.filter((h) => !h.done);
+  const out = [
+    line(isEmg ? "🛡️ وضع الطوارئ والحد الأدنى [مُفعّل]" : "🛡️ وضع الطوارئ والحد الأدنى"),
+    "",
+    line(
+      isEmg
+        ? "أنت الآن في وضع الطوارئ. التوقعات مخففة بالكامل لحمايتك من الاحتراق ومواصلة المسار."
+        : "هل تشعر بإنهاك أو وعكة صحية؟ وضع الطوارئ يحميك من الاحتراق ويخفف التوقعات ليحميك من كسر السلسلة.",
+    ),
+    "",
+    line(`📌 العادات الأساسية الجوهرية (${num(coreHabits.length)}):`),
+  ];
+  coreHabits.forEach((h) => {
+    out.push(line(`• ${h.done ? "✅" : "⏳"} ${h.label}${h.min ? ` (الخفيف: ${h.min})` : ""}`));
+  });
+  if (openCore.length > 0) {
+    out.push("");
+    out.push(line(`لديك ${num(openCore.length)} عادات أساسية لم تُسجل بعد.`));
+    out.push(line("يمكنك بضغطة واحدة «إنقاذ الأساسيات بالنسخة الخفيفة» لحماية استمرارية الأيام."));
+  }
+  return out.join("\n");
+}
+
+export function emergencyKeys(state) {
+  const kb = new InlineKeyboard();
+  const isEmg = !!state.emergencyMode;
+  const coreOpen = rows(state.habits).some((h) => h.core && !h.done);
+  if (coreOpen) {
+    kb.text("🪶 إنقاذ الأساسيات بالنسخة الخفيفة", "emg:rescue").row();
+  }
+  if (!isEmg) {
+    kb.text("🛡️ تفعيل وضع الطوارئ", "emg:on");
+  } else {
+    kb.text("↩️ إلغاء وضع الطوارئ", "emg:off");
+  }
+  return kb;
+}
+
+export function prayerCard(state, now = new Date()) {
+  const place = state.place && Number.isFinite(state.place.lat)
+    ? state.place
+    : { lat: 24.7136, lng: 46.6753, tz: 3, label: "الرياض" };
+
+  const t = prayerTimes(place, now);
+  const out = [line(`🕌 أوقات الصلاة وبلوكات التركيز (${place.label || "الموقع الحسابي"}):`), ""];
+
+  const prayers = PRAYER_ROWS.filter((p) => !p.mark);
+  let nextPrayer = null;
+  let nextPrayerDiffMin = Infinity;
+  const nowHours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+
+  for (const p of prayers) {
+    const pHours = fixHour(t[p.id]);
+    let diff = (pHours - nowHours) * 60;
+    if (diff < 0) diff += 24 * 60;
+    if (diff < nextPrayerDiffMin) {
+      nextPrayerDiffMin = diff;
+      nextPrayer = { ...p, clock: clockAt(t[p.id]), diffMin: Math.round(diff) };
+    }
+  }
+
+  prayers.forEach((p) => {
+    const isNext = nextPrayer && nextPrayer.id === p.id;
+    out.push(
+      line(
+        `${isNext ? "▶️" : "•"} ${p.label}: ${time(clockAt(t[p.id]))}${
+          isNext ? ` (القادمة بعد ${spanOf(nextPrayer.diffMin)})` : ""
+        }`,
+      ),
+    );
+  });
+
+  out.push("");
+  const currBlock = blockAt(place, now);
+  if (currBlock) {
+    out.push(line(`⚡ البلوك الزمني الحالي: «${currBlock.label}»`));
+  }
+  out.push(line("💡 استثمر البلوكات الذهبية بين الصلوات لجلسات التركيز العميق."));
+  return out.join("\n");
+}
+
+export function weeklyPlanPrompt(state, currentDraft = {}) {
+  const habits = rows(state.habits);
+  const goals = rows(state.goals).filter((g) => !g.done);
+  const selectedHabit = habits.find((h) => h.id === currentDraft.keystoneHabitId);
+  const selectedGoal = goals.find((g) => g.id === currentDraft.focusGoalId);
+
+  const out = [
+    line("🗓️ التخطيط والمراجعة الأسبوعية الذكية:"),
+    "",
+    line(`✨ إنجاز الأسبوع: ${currentDraft.win ? `«${currentDraft.win}»` : "(لم يُسجّل — أرسل «إنجاز: ...»)"}`),
+    line(`🪶 درس الأسبوع: ${currentDraft.lesson ? `«${currentDraft.lesson}»` : "(لم يُسجّل — أرسل «درس: ...»)"}`),
+    line(`⭐ العادة المحورية: ${selectedHabit ? selectedHabit.label : "(اضغط الزر للاختيار)"}`),
+    line(`🎯 هدف 2030 للتركيز: ${selectedGoal ? selectedGoal.text : "(اضغط الزر للاختيار)"}`),
+    "",
+    line("اضغط الأزرار بالأسفل لتثبيت العادة والهدف، ثم اضغط «اعتماد الخطة»."),
+  ];
+  return out.join("\n");
+}
+
+export function weeklyPlanKeys(state, currentDraft = {}) {
+  const kb = new InlineKeyboard();
+  kb.text("⭐ اختر العادة المحورية", "wp:pick_habit").row();
+  kb.text("🎯 اربط بهدف 2030", "wp:pick_goal").row();
+  kb.text("✅ اعتماد خطة الأسبوع", "wp:commit");
+  return kb;
+}
+
+export function weeklyHabitPickerKeys(state) {
+  const kb = new InlineKeyboard();
+  const scored = scoredOf(rows(state.habits));
+  for (const h of scored.slice(0, 8)) {
+    kb.text(`⭐ ${h.label}`.slice(0, 40), `wp:set_h:${h.id}`).row();
+  }
+  kb.text("↩️ رجوع", "wp:back");
+  return kb;
+}
+
+export function weeklyGoalPickerKeys(state) {
+  const kb = new InlineKeyboard();
+  const goals = rows(state.goals).filter((g) => !g.done && (g.horizon === "quarter" || g.horizon === "year"));
+  for (const g of goals.slice(0, 8)) {
+    kb.text(`🎯 ${g.text}`.slice(0, 40), `wp:set_g:${g.id}`).row();
+  }
+  kb.text("↩️ رجوع", "wp:back");
+  return kb;
+}
+
+export const savedWeeklyPlan = (out) =>
+  [
+    line("🗓️ تم اعتماد خطة الأسبوع وتثبيتها بنجاح!"),
+    out.entry?.weeklyWin ? line(`✨ إنجاز الأسبوع: «${out.entry.weeklyWin}»`) : null,
+    out.entry?.weeklyLesson ? line(`🪶 درس الأسبوع: «${out.entry.weeklyLesson}»`) : null,
+    line("أسبوع مبارك ومنضبط بإذن الله. تم توجيه البوصلة 🚀"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+/* --- بطاقة المواعيد والتقويم وجدول الجامعة ----------------------------- */
+
+export function scheduleCard(state, now = new Date()) {
+  const sched = daySchedule(state, now);
+  const out = [line("📅 مواعيدك وجدولك الأكاديمي:"), ""];
+
+  let hasContent = false;
+
+  if (sched.todayEvents.length) {
+    hasContent = true;
+    out.push(line("📍 مواعيد اليوم:"));
+    sched.todayEvents.forEach((ev) => {
+      out.push(line(`• ${ev.title}${ev.time ? ` — ${time(ev.time)}` : ""}${ev.place ? ` · ${ev.place}` : ""}`));
+    });
+    out.push("");
+  }
+
+  if (sched.lectures.length) {
+    hasContent = true;
+    out.push(line("🎓 محاضرات اليوم الجامعية:"));
+    sched.lectures.forEach((lec) => {
+      const room = lec.room ? ` · قاعة ${lec.room}` : "";
+      const cap = lec.absenceCap ? ` [غيابك: ${num(lec.absences)}/${num(lec.absenceCap)}]` : "";
+      out.push(line(`• ${lec.courseName}${lec.from ? ` — ${time(lec.from)}` : ""}${room}${cap}`));
+    });
+    out.push("");
+  }
+
+  if (sched.pendingUni.length) {
+    hasContent = true;
+    out.push(line("📝 تسليمات واختبارات جامعية قادمة:"));
+    sched.pendingUni.forEach((t) => {
+      const isToday = t.due === sched.today;
+      out.push(line(`• ${t.title} — ${isToday ? "اليوم!" : t.due}${t.time ? ` (${time(t.time)})` : ""}`));
+    });
+    out.push("");
+  }
+
+  if (sched.upcomingEvents.length) {
+    hasContent = true;
+    out.push(line("⏳ مواعيد قادمة (خلال ٣ أيام):"));
+    sched.upcomingEvents.forEach((ev) => {
+      out.push(line(`• ${ev.title} — ${ev.onDate}${ev.time ? ` (${time(ev.time)})` : ""}${ev.place ? ` · ${ev.place}` : ""}`));
+    });
+    out.push("");
+  }
+
+  if (!hasContent) {
+    out.push(line("✅ ما عندك مواعيد أو محاضرات مسجلة اليوم أو في الأيام القريبة. يومك هادئ ومنظم."));
+  }
+
+  return out.join("\n");
+}
+
+/* --- طقس إقفال اليوم التفاعلي ----------------------------------------- */
+
+export function shutdownCard(state, day, step = "rate") {
+  if (step === "rate") {
+    return [
+      line("🌙 إقفال اليوم الذكي والتحضير للغد"),
+      "",
+      line(`الانتظام: ${num(day.pct)}٪ · العادات: ${num(day.habitsDone)}/${num(day.habitsAll)}`),
+      line(
+        `المهام المنجزة: ${num(day.tasks.filter((t) => t.done).length)}/${num(day.tasks.length)} · الماء: ${num(day.water)}/${num(day.waterGoal)}`,
+      ),
+      "",
+      line("كم تعطي رضاك عن إنجاز وانضباط اليوم؟ (اختر تقييمك بنقرة واحدة):"),
+    ].join("\n");
+  }
+
+  if (step === "distraction") {
+    return [
+      line("🎯 ما هو المشتت أو التحدي الأكبر الذي واجهته اليوم؟"),
+      line("التشخيص الصادق هو نصف الحل:"),
+    ].join("\n");
+  }
+
+  if (step === "prep") {
+    return [
+      line("🌙 جهّز غدك لتنام ببال مرتاح 😴"),
+      line(`اختر حتى ${num(TOP_TASK_CAP)} مهام من صندوق الوارد لتكون أهم مهام الغد:`),
+    ].join("\n");
+  }
+
+  return line("🌙 تم إقفال اليوم بنجاح وتوثيق ملاحظاتك. تصبح على خير ويوم غد أفضل بإذن الله 🌟");
+}
+
+export function shutdownRateKeys() {
+  const kb = new InlineKeyboard();
+  kb.text("★", "shut:rate:1")
+    .text("★★", "shut:rate:2")
+    .text("★★★", "shut:rate:3")
+    .text("★★★★", "shut:rate:4")
+    .text("★★★★★", "shut:rate:5");
+  return kb;
+}
+
+export function shutdownDistractionKeys() {
+  return new InlineKeyboard()
+    .text("📱 الجوال والتواصل", "shut:dist:الجوال والتواصل")
+    .text("⏳ التسويف والتأجيل", "shut:dist:التسويف والتأجيل")
+    .row()
+    .text("😴 إرهاق ونوم غير منتظم", "shut:dist:الإرهاق وقلة النوم")
+    .text("👥 مقاطعات مفاجئة", "shut:dist:المقاطعات المفاجئة")
+    .row()
+    .text("✨ كان يوماً مركزاً بدون تشتت", "shut:dist:لا يوجد مشتت كبير الحمد لله");
+}
+
+export function shutdownPrepKeys(inboxTasks) {
+  const kb = new InlineKeyboard();
+  const open = (inboxTasks || []).slice(0, 6);
+  for (const t of open) {
+    kb.text(`🌙 ${t.text}`.slice(0, 40), `shut:prep:${t.id}`).row();
+  }
+  kb.text("✅ إنهاء الإقفال وتصبح على خير", "shut:done");
+  return kb;
+}

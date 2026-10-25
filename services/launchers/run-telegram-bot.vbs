@@ -12,9 +12,9 @@
 '
 ' The bot is one folder up and one across: this launcher lives in
 ' services/launchers/.
-Dim sh, cmd
+Dim sh, dir, cmd
 Set sh = CreateObject("WScript.Shell")
-cmd = """C:\Program Files\nodejs\node.exe"" """ & _
-      Left(WScript.ScriptFullName, InStrRev(WScript.ScriptFullName, "\")) & _
-      "..\telegram-bot\bot.js"""
+dir = Left(WScript.ScriptFullName, InStrRev(WScript.ScriptFullName, "\")) & "..\.."
+sh.CurrentDirectory = dir
+cmd = """C:\Program Files\nodejs\node.exe"" """ & dir & "\services\telegram-bot\bot.js"""
 sh.Run cmd, 0, False

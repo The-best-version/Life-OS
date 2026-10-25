@@ -101,6 +101,9 @@ export function TopThree({ state, setState }) {
   const slots = [...Array(TOP_TASK_CAP)].map((_, i) => picked[i] || null);
   const full = picked.length >= TOP_TASK_CAP;
   const est = estOf(picked);
+  const linkedGoalsCount = picked.filter(
+    (t) => t.linkedGoalId && (state.goals || []).some((g) => g.id === t.linkedGoalId),
+  ).length;
 
   // 👇 التعديل الجوهري: تحديث الهدف المرتبط عند إنجاز المهمة
   const patch = (id, next) =>
@@ -169,7 +172,21 @@ export function TopThree({ state, setState }) {
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {linkedGoalsCount > 0 && (
+            <span
+              className="flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-extrabold"
+              style={{
+                borderColor: `${T.primary}45`,
+                background: `${T.primary}14`,
+                color: T.primaryLift,
+              }}
+              title="عدد المهام الثلاث المرتبطة مباشرة بأهداف إرثي 2030"
+            >
+              <Target size={11} />
+              <span>تخدم {linkedGoalsCount} من إرث 2030</span>
+            </span>
+          )}
           {est > 0 && (
             <span
               className="flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold tabular-nums"
@@ -322,11 +339,15 @@ export function TodayExtras({ state, setState }) {
   const arm = useUndo();
   const [draft, setDraft] = useState("");
   const [draftQ, setDraftQ] = useState("q2");
+  const [draftGoalId, setDraftGoalId] = useState("");
   const list = scheduledTasks(state.tasks);
   const doneCount = list.filter((t) => t.done).length;
   const todayCount = state.tasks.filter((t) => t.today).length;
   const canPromote = todayCount < TOP_TASK_CAP;
   const est = estOf(list);
+  const linkedGoalsCount = list.filter(
+    (t) => t.linkedGoalId && (state.goals || []).some((g) => g.id === t.linkedGoalId),
+  ).length;
 
   // 👇 التعديل الجوهري: تحديث الهدف المرتبط عند إنجاز المهمة
   const patch = (id, next) =>
@@ -359,12 +380,14 @@ export function TodayExtras({ state, setState }) {
           text,
           quadrant: draftQ,
           scheduled: true,
+          linkedGoalId: draftGoalId || null,
           createdAt: dayKey(),
           order: nextOrder(s.tasks, draftQ),
         }),
       ],
     }));
     setDraft("");
+    setDraftGoalId("");
   };
 
   /* The broom. Lifts `scheduled` off every finished row; the task keeps
@@ -413,7 +436,21 @@ export function TodayExtras({ state, setState }) {
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {linkedGoalsCount > 0 && (
+            <span
+              className="flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-extrabold"
+              style={{
+                borderColor: `${T.primary}45`,
+                background: `${T.primary}14`,
+                color: T.primaryLift,
+              }}
+              title="عدد المهام الثلاث المرتبطة مباشرة بأهداف إرثي 2030"
+            >
+              <Target size={11} />
+              <span>تخدم {linkedGoalsCount} من إرث 2030</span>
+            </span>
+          )}
           {est > 0 && (
             <span
               className="flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold tabular-nums"
@@ -502,7 +539,25 @@ export function TodayExtras({ state, setState }) {
           }}
           placeholder="أضف مهمة لليوم…"
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={draftGoalId}
+            onChange={(e) => setDraftGoalId(e.target.value)}
+            aria-label="ربط بهدف 2030"
+            className="max-w-[165px] truncate rounded-xl border bg-transparent px-2.5 py-2.5 text-xs outline-none"
+            style={{ borderColor: draftGoalId ? `${T.primary}66` : T.border, color: draftGoalId ? T.primaryLift : T.muted }}
+          >
+            <option value="" style={{ background: T.cardSolid }}>
+              🎯 ربط بهدف (اختياري)
+            </option>
+            {(state.goals || [])
+              .filter((g) => !g.done)
+              .map((g) => (
+                <option key={g.id} value={g.id} style={{ background: T.cardSolid }}>
+                  {g.text}
+                </option>
+              ))}
+          </select>
           <select
             value={draftQ}
             onChange={(e) => setDraftQ(e.target.value)}
@@ -1053,12 +1108,26 @@ export function TaskChip({
               </span>
             )}
 
-            {/* 👇 أيقونة الهدف المرتبط 👇 */}
-            {task.linkedGoalId && (
-              <span className="inline-flex items-center gap-0.5" style={{ color: T.primary }} title="مرتبطة بهدف">
-                <Target size={10} /> مرتبطة
-              </span>
-            )}
+            {/* 👇 أيقونة واسم الهدف المرتبط 👇 */}
+            {task.linkedGoalId && (() => {
+              const linkedGoal = (goals || []).find((g) => g.id === task.linkedGoalId);
+              return (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-extrabold"
+                  style={{
+                    borderColor: `${T.primary}45`,
+                    background: `${T.primary}15`,
+                    color: T.primaryLift,
+                  }}
+                  title={linkedGoal ? `تخدم هدف 2030: ${linkedGoal.text}` : "مرتبطة بهدف"}
+                >
+                  <Target size={10} />
+                  <span className="max-w-[11rem] truncate">
+                    {linkedGoal ? linkedGoal.text : "هدف مرتبط"}
+                  </span>
+                </span>
+              );
+            })()}
 
             {aged && <span style={{ color: T.faint }}>· قديمة</span>}
           </div>

@@ -34,13 +34,22 @@
     "**/.next": true,
     "**/.next-verify": true,
     "**/node_modules": true,
-    "**/tsconfig.tsbuildinfo": true
+    "**/tsconfig.tsbuildinfo": true,
+    "**/*.lnk": true
   },
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {
     "package.json": "package-lock.json, tsconfig.json, tsconfig.*.json, tsconfig.tsbuildinfo, tailwind.config.ts, postcss.config.mjs, next.config.mjs, next-env.d.ts, components.json, .gitignore",
-    "README.md": "HOW-TO-EDIT.md, CLAUDE.md"
+    "README.md": "HOW-TO-EDIT.md, CLAUDE.md, DEVELOPER-MAP.md"
+  },
+  "workbench.editor.customLabels.patterns": {
+    "iron-log/src/**": "${filename} [Iron Log 🏋️]",
+    "src/features/**": "${filename} [Life OS Screen 🌱]",
+    "src/components/**": "${filename} [Life OS Component 🌱]",
+    "src/state/**": "${filename} [Life OS State 💾]",
+    "services/**": "${filename} [Service 🤖]",
+    "apps/**": "${filename} [App 📦]"
   },
   "files.associations": {
     "*.mjs": "javascript"

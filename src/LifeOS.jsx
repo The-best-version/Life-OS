@@ -18,8 +18,20 @@ import { DeepWorkModule } from "./features/life-desks.jsx";
 import { DataHealth, RecoveryModal } from "./features/life-tools.jsx";
 import { SkyBackdrop, useSkyPhase, AppStyles, SecondWindow } from "./layouts/life-styles.jsx";
 
+// 👇 استيراد صفحة صندوق الوارد الكاملة 👇
+import { InboxModule } from "./components/life-inbox.jsx";
+
+// 👇 استيراد مختبر النوم الذكي 👇
+import { SleepLabModule } from "./features/life-sleep.jsx";
+
+// 👇 1. استيراد صفحة الوكيل الذكي 👇
+import { AgentModule } from "./features/life-agent.jsx";
+
 // 👇 استيراد ملف حصاد السنة 👇
 import LifeWrapped from "./features/life-wrapped.jsx";
+
+// 👇 استيراد لوحة الأوامر الخاطفة وشريط التركيز والصلاة العائم 👇
+import { CommandPalette, DynamicIslandBar } from "./components/life-command.jsx";
 
 import React, {
   useState,
@@ -326,8 +338,17 @@ const SCREENS = {
   bot: (c) => <BotModule state={c.state} setState={c.setState} />,
   graph: () => <GraphModule />,
   
+  // 👇 إضافة شاشة صندوق الوارد 👇
+  inbox: (c) => <InboxModule state={c.state} setState={c.setState} />,
+
+  // 👇 إضافة شاشة مختبر النوم الذكي 👇
+  sleep: (c) => <SleepLabModule state={c.state} setState={c.setState} />,
+
+  // 👇 2. إضافة شاشة الوكيل الذكي 👇
+  agent: (c) => <AgentModule state={c.state} setState={c.setState} />,
+  
   // 👇 إضافة شاشة حصاد السنة 👇
-  wrapped: (c) => <LifeWrapped state={c.state} />,
+  wrapped: (c) => <LifeWrapped state={c.state} setState={c.setState} />,
 };
 
 const fastenIcons = (list, icons) => {
@@ -769,6 +790,19 @@ export default function LifeOS() {
   }, []);
   const [mirror, setMirror] = useState(false);
   const [fixing, setFixing] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  // اختصار عالمي Ctrl + K أو Cmd + K لفتح لوحة الأوامر الخاطفة
+  useEffect(() => {
+    const onGlobalKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onGlobalKey);
+    return () => window.removeEventListener("keydown", onGlobalKey);
+  }, []);
 
   const [undo, setUndo] = useState(null);
   const arm = useCallback((label, before) => {
@@ -858,6 +892,50 @@ export default function LifeOS() {
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  /* التزامن التلقائي الحي مع تغييرات البوت وخادم المزامنة المحلي */
+  useEffect(() => {
+    if (!leading) return;
+    let cancelled = false;
+
+    const checkDisk = async () => {
+      if (conflict || resolving) return;
+      try {
+        const res = await fetch(api("/state?project=lifeos"), { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const disk = await res.json();
+        if (!disk || typeof disk !== "object" || !Array.isArray(disk.habits)) return;
+        const diskRev = Number.isFinite(disk.rev) ? disk.rev : 0;
+        if (diskRev > myRevRef.current) {
+          const { rev, ...rest } = disk;
+          const fresh = migrate(rest);
+          const nextState =
+            fresh.date === dayKey() ? { ...freshState(carryOf(fresh)), ...fresh } : rollDay(fresh);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+          writeRev(diskRev);
+          myRevRef.current = diskRev;
+          setState(nextState);
+          setSavedAt(Date.now());
+          setDiskAt(Date.now());
+        }
+      } catch {}
+    };
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === "visible") checkDisk();
+    };
+
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+    const timer = setInterval(checkDisk, 4000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
+      clearInterval(timer);
+    };
+  }, [leading, conflict, resolving]);
 
   const [stray] = useState(() => strayCopy());
 
@@ -1337,10 +1415,23 @@ export default function LifeOS() {
           )}
 
           <div
-            className={`mx-auto w-full max-w-6xl px-5 pt-8 sm:px-7 lg:px-12 lg:pt-12 ${
+            className={`mx-auto w-full max-w-6xl px-5 pt-4 sm:px-7 lg:px-12 lg:pt-6 ${
               hyperFocus ? " pb-10" : " pb-36 lg:pb-24"
             }`}
           >
+            {!hyperFocus && (
+              <div className="mb-5">
+                <DynamicIslandBar
+                  state={state}
+                  setState={setState}
+                  discipline={discipline}
+                  streak={streak}
+                  onGo={go}
+                  onOpenCommand={() => setCommandOpen(true)}
+                />
+              </div>
+            )}
+
             <DangerBanner
               list={state.badHabits || []}
               here={tab === "breaker"}
@@ -1367,7 +1458,17 @@ export default function LifeOS() {
         />
       )}
 
-      {!hyperFocus && <AssistantFab />}
+      {/* 👇 3. تمرير الحالة للزر العائم 👇 */}
+      {!hyperFocus && <AssistantFab state={state} setState={setState} />}
+
+      {/* 👇 لوحة الأوامر الخاطفة Ctrl + K 👇 */}
+      <CommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        state={state}
+        setState={setState}
+        onGo={go}
+      />
 
       {hyperFocus && (
         <button
@@ -1592,11 +1693,6 @@ function cacheShell() {
 }
 
 async function pullDisk() {
-  try {
-    if (window.localStorage.getItem(STORAGE_KEY)) return;
-  } catch {
-    return;
-  }
   if (!syncLocal()) return;
   try {
     const stop = new AbortController();
@@ -1606,9 +1702,17 @@ async function pullDisk() {
     if (!res.ok) return;
     const saved = await res.json();
     if (!saved || typeof saved !== "object" || !Array.isArray(saved.habits)) return;
-    const { rev, ...rest } = saved;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
-    writeRev(Number.isFinite(rev) ? rev : 0);
+    const diskRev = Number.isFinite(saved.rev) ? saved.rev : 0;
+    const localRev = readRev();
+    let hasLocal = false;
+    try {
+      hasLocal = !!window.localStorage.getItem(STORAGE_KEY);
+    } catch {}
+    if (!hasLocal || diskRev > localRev) {
+      const { rev, ...rest } = saved;
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+      writeRev(diskRev);
+    }
   } catch {}
 }
 

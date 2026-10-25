@@ -72,7 +72,34 @@ export function planToday(state, now = new Date()) {
      the date and the length of the month, and `whenOf` inside `planDay` is
      the one place all three are read. */
   const plan = planDay(state.bot, { date: now, prayers, hasTasks, blocks, events });
-  return plan.map((p) => {
+
+  /* محاضرات الجامعة لليوم: تنبيه قبل المحاضرة بـ 30 دقيقة */
+  const lectureReminders = [];
+  const uni = state.uni;
+  if (uni && Array.isArray(uni.courses)) {
+    const dow = now.getDay();
+    for (const c of uni.courses) {
+      for (const s of (c.slots || [])) {
+        if (Number(s.day) === dow && s.from) {
+          const atMins = minsIn(s.from);
+          if (atMins !== null && atMins >= 30) {
+            lectureReminders.push({
+              kind: "lecture",
+              at: atMins - 30,
+              courseName: c.name || c.code,
+              from: s.from,
+              room: s.room || s.place || "",
+              absences: c.absences || 0,
+              absenceCap: c.absenceCap || 0,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const allPlan = [...plan, ...lectureReminders].sort((a, b) => a.at - b.at);
+  return allPlan.map((p) => {
     const when = new Date(now);
     when.setHours(0, Math.round(p.at), 0, 0);
     return { ...p, when };
@@ -196,6 +223,14 @@ export function textFor(entry, state, now = new Date()) {
       text: `📅 ${ev.title} بعد ${mins} دقيقة${ev.time ? ` — ${ev.time}` : ""}${
         ev.place ? ` · ${ev.place}` : ""
       }`,
+    };
+  }
+
+  if (entry.kind === "lecture") {
+    const room = entry.room ? ` · قاعة ${entry.room}` : "";
+    const cap = entry.absenceCap ? ` [غيابك: ${F.num(entry.absences)}/${F.num(entry.absenceCap)}]` : "";
+    return {
+      text: `🎓 تذكير: محاضرة «${entry.courseName}» بعد ٣٠ دقيقة (الساعة ${F.time(entry.from)})${room}${cap}`,
     };
   }
 

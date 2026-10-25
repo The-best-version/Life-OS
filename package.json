@@ -20,5 +20,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^2.1.0"
   }
 }

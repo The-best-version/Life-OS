@@ -1,17 +1,35 @@
 {
-  "name": "2027 Life OS — وقت حصاد الثمار",
-  "short_name": "حصاد 2027",
-  "description": "نظام الانضباط اليومي: روتين، مصفوفة مهام، مكتبة كتب، وتتبع شهري.",
+  "name": "أثر 2030 — 2027 Life OS",
+  "short_name": "أثر 2030",
+  "description": "نظام إدارة الحياة المتكامل: روتين، صلوات، مصفوفة مهام، عمل عميق، أهداف 2030، ووكيل ذكي.",
   "lang": "ar",
   "dir": "rtl",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "any",
   "background_color": "#0B1026",
   "theme_color": "#0B1026",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "شاشة اليوم والروتين",
+      "short_name": "اليوم",
+      "url": "./#today"
+    },
+    {
+      "name": "جلسة عمل عميق",
+      "short_name": "التركيز",
+      "url": "./#deep"
+    },
+    {
+      "name": "الوكيل التنفيذي الذكي",
+      "short_name": "الوكيل",
+      "url": "./#agent"
+    }
   ]
 }
