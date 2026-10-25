@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* --- 2027 Life OS, from the phone -------------------------------------- */
 import "./dns-fallback.js";
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, InputFile } from "grammy";
 import { CONFIG, configProblems } from "./config.js";
 import { withState, readLife, DiskError } from "./lifeos-client.js";
 import { parse, fold } from "./parse.js";
@@ -374,6 +374,25 @@ bot.command(["app", "open", "site"], (ctx) => {
     `4. سيفتح معك التطبيق بملء الشاشة وبدون شريط المتصفح كأنه تطبيق أصلي! ⚡`,
     { parse_mode: "Markdown", reply_markup: kb }
   );
+});
+bot.command(["backup", "export"], async (ctx) => {
+  try {
+    const raw = await readLife();
+    const str = JSON.stringify(raw, null, 2);
+    const buf = Buffer.from(str, "utf8");
+    const filename = `life-os-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    await ctx.replyWithDocument(new InputFile(buf, filename), {
+      caption: `📦 *نسخة احتياطية كاملة من بياناتك (${raw.habits?.length || 0} عادة، ${raw.tasks?.length || 0} مهمة)*\n\n` +
+        `💡 *طريقة النقل للآيباد / الجوال:*\n` +
+        `1. احفظ هذا الملف على جهازك.\n` +
+        `2. افتح التطبيق في الآيباد واضغط على *الإعدادات ⚙️* (أعلى الشاشة).\n` +
+        `3. اضغط زر *استيراد نسخة احتياطية* واختر هذا الملف.\n` +
+        `✨ فوراً ستنتقل كل مهامك وعاداتك وتفاصيل يومك كاملة!`,
+      parse_mode: "Markdown",
+    });
+  } catch (e) {
+    ctx.reply("❌ تعذّر تصدير النسخة الاحتياطية: " + (e?.message || e));
+  }
 });
 bot.command("today", showToday);
 bot.command("now", showOpen);

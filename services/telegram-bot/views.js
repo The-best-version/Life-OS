@@ -220,6 +220,7 @@ export const menuKeys = (webUrl) => {
 
 export const COMMANDS = [
   { command: "app", description: "رابط فتح التطبيق على الجوال والآيباد" },
+  { command: "backup", description: "تصدير نسخة احتياطية كاملة لنقلها للآيباد" },
   { command: "today", description: "حالة اليوم الآن" },
   { command: "now", description: "ما زال مفتوحًا، بأزرار" },
   { command: "coach", description: "ما يستحق انتباهك الآن" },
