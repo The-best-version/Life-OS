@@ -50,44 +50,44 @@ export default function DashboardPage() {
     <div className="space-y-5 pt-2 animate-fade-in">
       {/* Week overview: one accent ring for the number that drives the week,
           two plain rows beside it — not three competing colours. */}
-      <Card className="p-5">
-        <div className="flex items-center gap-5">
+      <Card className="p-6">
+        <div className="flex items-center gap-6">
           <div className="relative flex shrink-0 items-center justify-center">
-            <svg className="size-24 -rotate-90" viewBox="0 0 96 96">
-              <circle cx="48" cy="48" r="40" fill="none" stroke="hsl(var(--line-strong))" strokeWidth="8" />
+            <svg className="size-32 -rotate-90" viewBox="0 0 128 128">
+              <circle cx="64" cy="64" r="56" fill="none" stroke="hsl(var(--line-strong))" strokeWidth="9" />
               <circle
-                cx="48"
-                cy="48"
-                r="40"
+                cx="64"
+                cy="64"
+                r="56"
                 fill="none"
                 stroke="hsl(var(--accent))"
-                strokeWidth="8"
+                strokeWidth="9"
                 strokeLinecap="round"
-                strokeDasharray={2 * Math.PI * 40}
-                strokeDashoffset={2 * Math.PI * 40 * (1 - attendanceRatio)}
+                strokeDasharray={2 * Math.PI * 56}
+                strokeDashoffset={2 * Math.PI * 56 * (1 - attendanceRatio)}
                 style={{ transition: "stroke-dashoffset 700ms cubic-bezier(0.2,0.8,0.2,1)" }}
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="num text-[22px] font-semibold leading-none text-fg">
+              <span className="num text-[32px] font-semibold leading-none text-fg">
                 {summary.weekAttended}/{summary.weeklyGoal}
               </span>
-              <span className="mt-1 text-[9px] font-semibold text-fg-3">أيام</span>
+              <span className="mt-1 text-[10px] font-semibold text-fg-3">أيام هذا الأسبوع</span>
             </div>
           </div>
 
-          <div className="flex-1 space-y-2.5">
-            <Row label="حجم الأسبوع" value={`${formatCompact(summary.weekVolumeKg)} كجم`} />
-            <Row label="سلسلة الالتزام" value={`${summary.streak} يوم`} />
+          <div className="min-w-0 flex-1 space-y-4">
+            <Row label="حجم الأسبوع" value={`${formatCompact(summary.weekVolumeKg)}`} unit="كجم" />
+            <Row label="سلسلة الالتزام" value={`${summary.streak}`} unit="يوم" />
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-between gap-1.5 border-t border-line pt-4">
+        <div className="mt-6 flex items-center justify-between gap-1.5 border-t border-line pt-5">
           {weekDays.map((d) => (
             <div
               key={d.date}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 rounded-lg py-2 text-[11px] font-semibold",
+                "flex flex-1 flex-col items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-semibold",
                 d.trained
                   ? "bg-accent/15 text-accent-glow"
                   : d.isToday
@@ -305,11 +305,14 @@ export default function DashboardPage() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
-      <span className="text-[12.5px] font-semibold text-fg-2">{label}</span>
-      <span className="num text-[14px] font-semibold text-fg">{value}</span>
+    <div className="flex items-baseline justify-between border-b border-line pb-2.5 last:border-0 last:pb-0">
+      <span className="text-[13px] font-semibold text-fg-2">{label}</span>
+      <span className="flex items-baseline gap-1">
+        <span className="num text-[20px] font-semibold leading-none text-fg">{value}</span>
+        <span className="text-[11px] font-bold text-fg-3">{unit}</span>
+      </span>
     </div>
   );
 }
@@ -328,14 +331,14 @@ function StatTile({
   foot: string;
 }) {
   return (
-    <Card className="flex flex-col justify-between p-4">
+    <Card className="flex flex-col justify-between p-5">
       <div className="flex items-center justify-between text-fg-3">
         <span className="text-[12px] font-bold">{label}</span>
         <Icon className="size-4" />
       </div>
-      <div className="mt-3">
+      <div className="mt-4">
         <div className="flex items-baseline gap-1.5">
-          <span className="num text-[26px] font-semibold text-fg">{value}</span>
+          <span className="num text-[32px] font-semibold text-fg">{value}</span>
           <span className="text-[11px] font-bold text-fg-3">{unit}</span>
         </div>
         <p className="mt-1 text-[11px] font-medium text-fg-3">{foot}</p>

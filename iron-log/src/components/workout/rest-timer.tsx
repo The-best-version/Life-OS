@@ -293,8 +293,8 @@ export function RestTimerBar() {
         role="timer"
         aria-live="off"
         className={cn(
-          "steel relative mx-auto flex max-w-[560px] items-center gap-3 overflow-hidden rounded-lg border bg-surface-2/95 p-3 backdrop-blur",
-          over && "border-accent/50",
+          "plate relative mx-auto flex max-w-[560px] items-center gap-3 overflow-hidden p-3",
+          over && "border-accent/60",
         )}
       >
         {/* The fill runs behind the content: the bar itself is the progress. */}
@@ -302,7 +302,7 @@ export function RestTimerBar() {
           aria-hidden
           className={cn(
             "pointer-events-none absolute inset-y-0 start-0 transition-[width] duration-300",
-            over ? "bg-accent/20" : "bg-accent/10",
+            over ? "bg-accent/25" : "bg-accent/12",
           )}
           style={{ width: `${progress}%` }}
         />
@@ -310,15 +310,13 @@ export function RestTimerBar() {
         <div
           className={cn(
             "relative flex size-12 shrink-0 items-center justify-center rounded-full border",
-            over
-              ? "border-accent/60 bg-accent/15"
-              : "border-line-strong bg-background",
-            nearlyDone && "animate-ember-pulse border-accent/60",
+            over ? "border-accent bg-accent/20" : "border-line-strong bg-surface",
+            nearlyDone && "animate-pulse border-accent",
           )}
         >
           <span
             className={cn(
-              "figure text-[15px]",
+              "num text-[15px]",
               over ? "text-accent-glow" : "text-fg",
             )}
             dir="ltr"

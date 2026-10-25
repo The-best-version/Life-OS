@@ -222,7 +222,7 @@ export function HealthPanel() {
           <CardContent>
             <p className="flex items-baseline gap-2">
               <span
-                className="figure text-[30px]"
+                className="num text-[30px]"
                 style={{
                   color:
                     ratio.band === "good"
