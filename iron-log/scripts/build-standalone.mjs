@@ -72,9 +72,12 @@ try {
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">',
-    '<meta name="theme-color" content="#E9E4D8">',
-    '<meta name="description" content="متتبع تمارين محلي بالكامل: سجّل المجموعات والأوزان وشاهد تقدّمك في رسوم واضحة.">',
-    "<title>Iron Log — متتبع التمرين</title>",
+    // Kept in step with `app/layout.tsx` by hand — the two builds are one app,
+    // and a theme colour left on the old pale ground paints a white bar above
+    // a pitch-black screen on Android.
+    '<meta name="theme-color" content="#08090C">',
+    '<meta name="description" content="نظام رياضي متعدد التخصصات، محلي بالكامل: حديد وملاكمة وفروسية وجري — جولات ومجموعات ومسافات ومؤقتات في مكان واحد.">',
+    "<title>Iron Log — نظام رياضي متعدد التخصصات</title>",
     '<link rel="preconnect" href="https://fonts.googleapis.com">',
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
     // The one network request in the file, and an optional one: the CSS stack in
