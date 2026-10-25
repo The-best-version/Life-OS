@@ -2,9 +2,9 @@ import { ReadLogModal, TodayExtras, TopThree, useHabitTick } from "../components
 import { GymBridgeCard } from "../components/life-command.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { todayBlocks } from "../life-config.js";
-import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows } from "../state/life-state.mjs";
+import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows, IDENTITIES, HABIT_LEVEL_POINTS, identityScores, freezeShape, contextualBlock, chainedHabits } from "../state/life-state.mjs";
 import { blockAt, clockAt, fixHour, prayerTimes } from "../utils/prayer-times.mjs";
-import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, BatteryCharging, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ClipboardList, Coffee, Droplets, Eye, EyeOff, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Library, ListChecks, MapPin, Moon, MoonStar, Plus, Rocket, RotateCcw, School, Settings2, Sparkles, Star, Sun, Sunrise, Target, Trophy, X, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, ArrowDown, ArrowLeft, ArrowUp, BatteryCharging, Brain, CalendarClock, CalendarDays, Check, CheckCircle2, ClipboardList, Coffee, Droplets, Eye, EyeOff, FastForward, Feather, Flame, Footprints, GraduationCap, GripVertical, Inbox, Layers, Library, Link2, ListChecks, MapPin, Moon, MoonStar, Pause, Play, Plus, Rocket, RotateCcw, School, Settings2, Shield, ShieldCheck, Sparkles, Star, Sun, Sunrise, Target, TrendingUp, Trophy, Volume2, VolumeX, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const LAYOUT_KEY = "los-today-layout";
@@ -154,7 +154,7 @@ export function TodayModule({
   const [fading, setFading] = useState(() => new Set());
   const timers = useRef([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  const tick = (id, tiny = false) => {
+  const tick = (id, tiny = false, level = null) => {
     const h = (state.habits || []).find((x) => x.id === id);
     if (h && !h.done) {
       setFading((prev) => new Set(prev).add(id));
@@ -170,7 +170,7 @@ export function TodayModule({
         ),
       );
     }
-    toggle(id, tiny);
+    toggle(id, tiny, level);
   };
 
   // 👇 دوال السحب والإفلات 👇
@@ -364,6 +364,9 @@ export function TodayModule({
         open={open}
         missed={missed}
         books={state.books}
+        habits={habits}
+        state={state}
+        setState={setState}
         remaining={habits.length - doneCount}
         allDone={allDone}
         onTick={tick}
@@ -647,10 +650,11 @@ function TodayLayoutModal({ open, onClose, layout, onSave, onReset }) {
 
 const REWARD_HOLD = 1100;
 
-function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
+function TodayHabit({ habit, book, onToggle, onToggleTiny, onToggleLevel, late = false }) {
   const [burst, fireBurst] = useBurst(700);
   const g = groupOf(habit.group);
   const Icon = g.icon;
+  const identity = habit.identity && IDENTITIES ? IDENTITIES[habit.identity] : null;
 
   const handle = () => {
     if (!habit.done) fireBurst();
@@ -660,10 +664,18 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
     if (!habit.done) fireBurst();
     onToggleTiny();
   };
+  const handleLevel = (lvl) => {
+    if (onToggleLevel) {
+      if (!habit.done || habit.levelDone !== lvl) fireBurst();
+      onToggleLevel(lvl);
+    }
+  };
+
+  const currentLevel = habit.levelDone || (habit.tiny ? "micro" : habit.done ? "standard" : null);
 
   return (
     <div
-      className={`group flex items-center gap-2 rounded-xl border px-2 py-1 transition-all duration-200${
+      className={`group flex flex-wrap items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 transition-all duration-200${
         burst ? " los-reward" : ""
       }`}
       style={{
@@ -679,71 +691,140 @@ function TodayHabit({ habit, book, onToggle, onToggleTiny, late = false }) {
             : "rgba(255,255,255,0.025)",
       }}
     >
-      <span
-        aria-hidden="true"
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
-        style={{
-          borderColor: `${g.tint}33`,
-          backgroundColor: `${g.tint}14`,
-          color: g.tint,
-        }}
-        title={g.label}
-      >
-        <Icon size={13} />
-      </span>
-      <Checkbox
-        checked={habit.done}
-        onToggle={handle}
-        label={habit.label}
-        tint={T.primary}
-        size="sm"
-      />
-      {!!habit.min && (habit.tiny || !habit.done) && (
-        <button
-          onClick={handleTiny}
-          title={`نسخة خفيفة للطوارئ: ${habit.min}`}
-          aria-label={`إنجاز النسخة الصغيرة من ${habit.label}`}
-          className="shrink-0 inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-bold transition-all duration-200 hover:scale-105"
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          aria-hidden="true"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
           style={{
-            borderColor: habit.tiny ? `${T.sky}80` : `${T.sky}38`,
-            background: habit.tiny ? `${T.sky}24` : `${T.sky}10`,
-            color: T.sky,
+            borderColor: `${g.tint}33`,
+            backgroundColor: `${g.tint}14`,
+            color: g.tint,
           }}
+          title={g.label}
         >
-          <Feather
-            size={11}
-            style={habit.tiny ? { filter: `drop-shadow(0 0 5px ${T.sky}AA)` } : undefined}
+          <Icon size={13} />
+        </span>
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <Checkbox
+            checked={habit.done}
+            onToggle={handle}
+            label={habit.label}
+            tint={T.primary}
+            size="sm"
           />
-          <span className="hidden sm:inline">{habit.tiny ? "خفيفة ✓" : "خفيفة"}</span>
-        </button>
-      )}
-      {habit.core && (
-        <Star
-          size={12}
-          aria-label="عادة أساسية"
-          className="shrink-0"
-          fill={T.accent}
-          style={{ color: T.accent, filter: `drop-shadow(0 0 5px ${T.accent}AA)` }}
-        />
-      )}
-      {late && (
-        <span
-          className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold"
-          style={{ backgroundColor: `${T.accent}1F`, color: T.accent }}
-        >
-          {g.label}
-        </span>
-      )}
-      {book && (
-        <span
-          title={`مربوطة بـ«${book.title}»`}
-          className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] sm:inline-flex"
-          style={{ backgroundColor: `${T.accent}1A`, color: T.accent }}
-        >
-          <Library size={10} />
-          <span className="max-w-[7rem] truncate">{book.title}</span>
-        </span>
-      )}
+          {identity && (
+            <span
+              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold"
+              style={{
+                backgroundColor: `${identity.tint}1A`,
+                color: identity.tint,
+                borderColor: `${identity.tint}33`,
+              }}
+              title={`عمود الهوية: ${identity.label}`}
+            >
+              {identity.icon} {identity.label}
+            </span>
+          )}
+          {habit.afterHabit && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[9.5px]"
+              style={{ color: T.faint }}
+              title="سلسلة تكديس تالية"
+            >
+              <Link2 size={9} /> ↳ يتبع: {habit.afterHabit}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        {onToggleLevel ? (
+          <div className="inline-flex items-center rounded-lg border p-0.5" style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.2)" }}>
+            <button
+              type="button"
+              onClick={() => handleLevel("micro")}
+              title="بذرة (قاعدة الدقيقتين) 🌱"
+              className={`rounded px-1.5 py-0.5 text-[9.5px] font-extrabold transition-all ${
+                habit.done && currentLevel === "micro"
+                  ? "bg-amber-500/25 text-amber-300 font-black shadow-sm"
+                  : "text-white/40 hover:text-white/80"
+              }`}
+            >
+              🌱 دقيقتان
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLevel("standard")}
+              title="المستوى المستهدف 🎯"
+              className={`rounded px-1.5 py-0.5 text-[9.5px] font-extrabold transition-all ${
+                habit.done && currentLevel === "standard"
+                  ? "bg-emerald-500/25 text-emerald-300 font-black shadow-sm"
+                  : "text-white/40 hover:text-white/80"
+              }`}
+            >
+              🎯 مستهدف
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLevel("mastery")}
+              title="مستوى الإتقان ⚡"
+              className={`rounded px-1.5 py-0.5 text-[9.5px] font-extrabold transition-all ${
+                habit.done && currentLevel === "mastery"
+                  ? "bg-indigo-500/30 text-indigo-300 font-black shadow-sm"
+                  : "text-white/40 hover:text-white/80"
+              }`}
+            >
+              ⚡ إتقان
+            </button>
+          </div>
+        ) : !!habit.min && (habit.tiny || !habit.done) ? (
+          <button
+            onClick={handleTiny}
+            title={`نسخة خفيفة للطوارئ: ${habit.min}`}
+            aria-label={`إنجاز النسخة الصغيرة من ${habit.label}`}
+            className="shrink-0 inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-bold transition-all duration-200 hover:scale-105"
+            style={{
+              borderColor: habit.tiny ? `${T.sky}80` : `${T.sky}38`,
+              background: habit.tiny ? `${T.sky}24` : `${T.sky}10`,
+              color: T.sky,
+            }}
+          >
+            <Feather
+              size={11}
+              style={habit.tiny ? { filter: `drop-shadow(0 0 5px ${T.sky}AA)` } : undefined}
+            />
+            <span className="hidden sm:inline">{habit.tiny ? "خفيفة ✓" : "خفيفة"}</span>
+          </button>
+        ) : null}
+
+        {habit.core && (
+          <Star
+            size={12}
+            aria-label="عادة أساسية"
+            className="shrink-0"
+            fill={T.accent}
+            style={{ color: T.accent, filter: `drop-shadow(0 0 5px ${T.accent}AA)` }}
+          />
+        )}
+        {late && (
+          <span
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold"
+            style={{ backgroundColor: `${T.accent}1F`, color: T.accent }}
+          >
+            {g.label}
+          </span>
+        )}
+        {book && (
+          <span
+            title={`مربوطة بـ«${book.title}»`}
+            className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] sm:inline-flex"
+            style={{ backgroundColor: `${T.accent}1A`, color: T.accent }}
+          >
+            <Library size={10} />
+            <span className="max-w-[7rem] truncate">{book.title}</span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1248,16 +1329,479 @@ export function TomorrowPrepCard({ prepared, on, onOpen }) {
   );
 }
 
+/* ==========================================================================
+ * ترقيات نظام العادات والروتين:
+ * 1. وضع التدفق الموجه للروتين (Routine Flow Runner)
+ * 2. درع تجميد السلسلة (Streak Freeze Shield)
+ * 3. أعمدة الهوية الشخصية (Identity Pillars)
+ * 4. سلاسل التكديس التلقائي (Habit Stacking Chains)
+ * ========================================================================== */
+
+export function RoutineFlowModal({ open, onClose, habits = [], books = [], onTick, onTickLevel }) {
+  const pending = useMemo(() => habits.filter((h) => !h.done), [habits]);
+  const [currIdx, setCurrIdx] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(120);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const curr = pending[currIdx] || null;
+
+  useEffect(() => {
+    setTimeLeft(120);
+    setIsRunning(false);
+  }, [currIdx, curr?.id]);
+
+  useEffect(() => {
+    let t = null;
+    if (isRunning && timeLeft > 0) {
+      t = setInterval(() => setTimeLeft((s) => s - 1), 1000);
+    }
+    return () => clearInterval(t);
+  }, [isRunning, timeLeft]);
+
+  if (!open) return null;
+
+  const handleLevel = (lvl) => {
+    if (!curr) return;
+    if (onTickLevel) onTickLevel(curr.id, lvl);
+    else if (onTick) onTick(curr.id, lvl === "micro");
+  };
+
+  const g = curr ? groupOf(curr.group) : null;
+  const Icon = g?.icon;
+  const book = curr ? bookForHabit(curr, books) : null;
+  const identity = curr?.identity && IDENTITIES ? IDENTITIES[curr.identity] : null;
+
+  const mins = Math.floor(timeLeft / 60);
+  const secs = timeLeft % 60;
+  const timeFormatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+
+  return (
+    <Modal open={open} onClose={onClose} title="🚀 تدفق الروتين الموجه (Routine Flow)">
+      {pending.length === 0 ? (
+        <div className="py-8 text-center space-y-3">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400">
+            <Trophy size={36} />
+          </div>
+          <h4 className="text-[17px] font-black text-white">أنت بطل اليوم! 🎉</h4>
+          <p className="text-[13px] text-white/70">
+            أنجزت جميع العادات اليومية. لم يتبقَّ شيء في قائمة الانتظار.
+          </p>
+          <Btn variant="primary" onClick={onClose} className="mt-4">
+            إغلاق
+          </Btn>
+        </div>
+      ) : curr ? (
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11.5px] font-bold text-white/70">
+              <span>
+                العادة {currIdx + 1} من {pending.length}
+              </span>
+              <span dir="ltr" className="tabular-nums">
+                {Math.round(((currIdx + 1) / pending.length) * 100)}%
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-sky-400 transition-all duration-300"
+                style={{ width: `${((currIdx + 1) / pending.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <div
+            className="rounded-2xl border p-5 text-center space-y-4"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.03)",
+              borderColor: curr.core ? `${T.accent}40` : "rgba(255,255,255,0.1)",
+            }}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <span
+                className="flex h-10 w-10 items-center justify-center rounded-xl border text-[18px]"
+                style={{
+                  borderColor: `${g?.tint}40`,
+                  backgroundColor: `${g?.tint}1A`,
+                  color: g?.tint,
+                }}
+              >
+                {Icon && <Icon size={20} />}
+              </span>
+              {identity && (
+                <span
+                  className="rounded-lg px-2 py-0.5 text-[10.5px] font-extrabold"
+                  style={{
+                    backgroundColor: `${identity.tint}20`,
+                    color: identity.tint,
+                  }}
+                >
+                  {identity.icon} {identity.label}
+                </span>
+              )}
+              {curr.core && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-extrabold"
+                  style={{ backgroundColor: `${T.accent}20`, color: T.accent }}
+                >
+                  <Star size={12} fill={T.accent} /> أساسية
+                </span>
+              )}
+            </div>
+
+            <h3 className="text-[20px] font-black text-white">{curr.label}</h3>
+
+            {book && (
+              <p className="text-[12px] text-amber-300/90 font-bold">
+                📖 مرتبطة بكتاب: {book.title} (صفحة {book.progress || 0})
+              </p>
+            )}
+
+            {curr.min && (
+              <p className="text-[11.5px] text-sky-300/80">
+                🌱 بذرة الـ 2 دقيقة: {curr.min}
+              </p>
+            )}
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <div
+                className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 font-mono text-[16px] font-bold"
+                style={{
+                  borderColor: isRunning ? `${T.cta}60` : "rgba(255,255,255,0.1)",
+                  background: isRunning ? `${T.cta}15` : "rgba(0,0,0,0.2)",
+                  color: isRunning ? T.cta : "white",
+                }}
+              >
+                <Clock size={16} />
+                <span>{timeFormatted}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRunning(!isRunning)}
+                className="rounded-xl border p-2 text-white/80 hover:text-white transition-all hover:bg-white/10"
+                style={{ borderColor: "rgba(255,255,255,0.15)" }}
+                title={isRunning ? "إيقاف مؤقت" : "بدء المؤقت"}
+              >
+                {isRunning ? <Pause size={16} /> : <Play size={16} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTimeLeft(120);
+                  setIsRunning(false);
+                }}
+                className="rounded-xl border p-2 text-white/80 hover:text-white transition-all hover:bg-white/10"
+                style={{ borderColor: "rgba(255,255,255,0.15)" }}
+                title="إعادة ضبط"
+              >
+                <RotateCcw size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-center text-[11px] font-bold text-white/50">
+              اختر مستوى الإنجاز لإنهاء العادة والانتقال للتالية:
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleLevel("micro")}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  borderColor: "rgba(245,158,11,0.4)",
+                  backgroundColor: "rgba(245,158,11,0.1)",
+                }}
+              >
+                <span className="text-[14px]">🌱</span>
+                <span className="text-[11.5px] font-extrabold text-amber-300">
+                  بذرة (دقيقتان)
+                </span>
+                <span className="text-[9.5px] text-white/50">حماية السلسلة</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLevel("standard")}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  borderColor: "rgba(16,185,129,0.5)",
+                  backgroundColor: "rgba(16,185,129,0.12)",
+                }}
+              >
+                <span className="text-[14px]">🎯</span>
+                <span className="text-[11.5px] font-extrabold text-emerald-300">
+                  مستهدف كامل
+                </span>
+                <span className="text-[9.5px] text-white/50">الهدف المعتاد</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLevel("mastery")}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  borderColor: "rgba(99,102,241,0.5)",
+                  backgroundColor: "rgba(99,102,241,0.15)",
+                }}
+              >
+                <span className="text-[14px]">⚡</span>
+                <span className="text-[11.5px] font-extrabold text-indigo-300">
+                  إتقان بطل
+                </span>
+                <span className="text-[9.5px] text-white/50">جهد مضاعف</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-white/10">
+            <button
+              type="button"
+              disabled={currIdx === 0}
+              onClick={() => setCurrIdx((i) => Math.max(0, i - 1))}
+              className="inline-flex items-center gap-1 text-[11.5px] font-bold text-white/60 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ArrowRight size={13} /> العادة السابقة
+            </button>
+            <button
+              type="button"
+              disabled={currIdx >= pending.length - 1}
+              onClick={() => setCurrIdx((i) => Math.min(pending.length - 1, i + 1))}
+              className="inline-flex items-center gap-1 text-[11.5px] font-bold text-white/60 hover:text-white disabled:opacity-30 disabled:pointer-events-none"
+            >
+              تخطي إلى التالية <ArrowLeft size={13} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
+export function StreakShieldModal({ open, onClose, state, setState }) {
+  if (!open || !state) return null;
+  const freezes = freezeShape(state.freezes);
+  const today = dayKey();
+  const isFrozenToday = (freezes.dates || []).includes(today);
+
+  const toggleFreeze = () => {
+    setState((s) => {
+      const f = freezeShape(s.freezes);
+      const dates = f.dates || [];
+      const already = dates.includes(today);
+      if (already) {
+        return {
+          ...s,
+          freezes: {
+            ...f,
+            dates: dates.filter((d) => d !== today),
+          },
+        };
+      }
+      if (f.available <= 0) return s;
+      return {
+        ...s,
+        freezes: {
+          ...f,
+          available: Math.max(0, f.available - 1),
+          used: (f.used || 0) + 1,
+          dates: [...dates, today],
+        },
+      };
+    });
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="🛡️ درع تجميد السلسلة (Streak Freeze Shield)">
+      <div className="space-y-4">
+        <div
+          className="rounded-2xl border p-4 text-center space-y-2"
+          style={{
+            borderColor: isFrozenToday ? `${T.sky}60` : `${T.border}`,
+            background: isFrozenToday ? `${T.sky}15` : "rgba(255,255,255,0.02)",
+          }}
+        >
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500/20 text-sky-400">
+            {isFrozenToday ? <ShieldCheck size={28} /> : <Shield size={28} />}
+          </div>
+          <h4 className="text-[16px] font-black text-white">
+            {isFrozenToday ? "الدرع نشط اليوم! 🛡️" : "الدرع غير مفعّل لليوم"}
+          </h4>
+          <p className="text-[12px] text-white/70 leading-relaxed">
+            {isFrozenToday
+              ? "سلسلتك محمية اليوم من الانقطاع في حال انشغالك أو سفرك أو مرضك."
+              : "يمكنك تجميد اليوم لحماية سلسلتك إذا كنت متعباً أو مسافراً."}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl border px-3.5 py-2.5" style={{ borderColor: T.border, background: "rgba(0,0,0,0.2)" }}>
+          <div className="text-right">
+            <span className="text-[12.5px] font-bold text-white">رصيد الدروع المتاح:</span>
+            <span className="block text-[10.5px] text-white/50">درعان لكل شهر تجدد تلقائياً</span>
+          </div>
+          <Badge tint={freezes.available > 0 ? T.sky : T.faint}>
+            <span dir="ltr" className="font-mono text-[14px] font-black">
+              {freezes.available}
+            </span>{" "}
+            درع
+          </Badge>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleFreeze}
+          disabled={!isFrozenToday && freezes.available <= 0}
+          className="w-full rounded-2xl py-3 text-[13px] font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:pointer-events-none"
+          style={{
+            background: isFrozenToday
+              ? "rgba(239,68,68,0.25)"
+              : "linear-gradient(135deg, rgba(14,165,233,0.8), rgba(99,102,241,0.8))",
+            border: `1px solid ${isFrozenToday ? "rgba(239,68,68,0.4)" : "rgba(14,165,233,0.5)"}`,
+          }}
+        >
+          {isFrozenToday ? "إلغاء تجميد اليوم واسترجاع الدرع" : "🛡️ تفعيل الدرع لليوم (استهلاك درع واحد)"}
+        </button>
+
+        <p className="text-[11px] text-white/40 leading-relaxed text-center">
+          💡 درع التجميد فكرة مثبتة علمياً لبناء الاستمرارية: حماية السلسلة في الأيام الاستثنائية تحميك من الإحباط النفسي للانقطاع.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+export function IdentityPillarsWidget({ habits = [] }) {
+  const scores = useMemo(() => identityScores(habits), [habits]);
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-extrabold text-white/80">
+          🏛️ أعمدة الهوية الشخصية (Identity Pillars)
+        </span>
+        <span className="text-[10.5px] text-white/40">ارتباط العادات بذاتك المستقبلية</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {Object.entries(IDENTITIES).map(([key, def]) => {
+          const sc = scores[key] || { total: 0, done: 0, pct: 0 };
+          return (
+            <div
+              key={key}
+              className="rounded-xl border p-2.5 text-center transition-all"
+              style={{
+                borderColor: `${def.tint}26`,
+                backgroundColor: `${def.tint}0D`,
+              }}
+            >
+              <span className="text-[18px]">{def.icon}</span>
+              <p className="mt-1 text-[12px] font-extrabold" style={{ color: def.tint }}>
+                {def.label}
+              </p>
+              <div className="mt-1 flex items-center justify-center gap-1 text-[10.5px] text-white/60">
+                <span dir="ltr" className="font-mono font-bold">
+                  {sc.done}/{sc.total}
+                </span>
+                <span>({sc.pct}%)</span>
+              </div>
+              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${sc.pct}%`,
+                    backgroundColor: def.tint,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function ChainedHabitsView({ habits = [], onTick }) {
+  const chains = useMemo(() => chainedHabits(habits), [habits]);
+
+  if (chains.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-4 text-center text-[11.5px] text-white/50" style={{ borderColor: T.border }}>
+        لا توجد سلاسل تكديس مفعّلة حالياً. يمكنك ربط عادة بأخرى عبر اختيار العادة التابعة.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5 pt-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-extrabold text-white/80">
+          🔗 سلاسل التكديس التلقائي (Habit Stacking)
+        </span>
+        <span className="text-[10.5px] text-white/40">قاعدة جيمس كلير: بعد [س] أفعل [ص]</span>
+      </div>
+      <div className="space-y-2">
+        {chains.map((chain, idx) => (
+          <div
+            key={idx}
+            className="flex flex-wrap items-center gap-2 rounded-xl border p-2.5 text-[12px]"
+            style={{
+              borderColor: "rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.02)",
+            }}
+          >
+            <span
+              className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${
+                chain.lead.done ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-white/80"
+              }`}
+            >
+              {chain.lead.done ? "✓ " : ""}
+              {chain.lead.label}
+            </span>
+            <span className="text-white/40 font-bold">➔ يتبعه:</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {chain.followers.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => onTick && onTick(f.id)}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-bold transition-all hover:scale-105 ${
+                    f.done
+                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                      : "border-white/15 bg-white/5 text-white/80"
+                  }`}
+                >
+                  <span className={`inline-block h-2 w-2 rounded-full ${f.done ? "bg-emerald-400" : "border border-white/40"}`} />
+                  <span>{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function RemainingHabitsCard({
   block,
   open,
   missed,
   books,
+  habits = [],
+  state,
+  setState,
   remaining,
   allDone,
   onTick,
   onGo,
 }) {
+  const [flowOpen, setFlowOpen] = useState(false);
+  const [shieldOpen, setShieldOpen] = useState(false);
+  const [subTab, setSubTab] = useState("habits");
+
+  const today = dayKey();
+  const freezes = state ? freezeShape(state.freezes) : null;
+  const isFrozen = freezes ? (freezes.dates || []).includes(today) : false;
+
+  const currentHabits = habits.length > 0 ? habits : [...open.here, ...missed, ...(open.later || [])];
+
   return (
     <Card className="p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -1265,9 +1809,36 @@ export function RemainingHabitsCard({
           className="flex items-center gap-2 text-[15px] font-extrabold"
           style={{ color: T.primaryLift }}
         >
-          <ListChecks size={16} /> العادات المتبقية
+          <ListChecks size={16} /> العادات والروتين اليومي
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFlowOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1 text-[11.5px] font-black text-white shadow-sm transition-all hover:scale-105 active:scale-95"
+            style={{
+              borderColor: `${T.cta}66`,
+              background: `linear-gradient(135deg, ${T.cta}40, ${T.primary}40)`,
+            }}
+          >
+            <Rocket size={13} style={{ color: T.cta }} /> بدء الروتين الآن
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShieldOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-extrabold transition-all hover:bg-white/10"
+            style={{
+              borderColor: isFrozen ? `${T.sky}60` : "rgba(255,255,255,0.12)",
+              backgroundColor: isFrozen ? `${T.sky}20` : "rgba(255,255,255,0.03)",
+              color: isFrozen ? T.sky : "white",
+            }}
+            title="درع تجميد السلسلة"
+          >
+            {isFrozen ? <ShieldCheck size={13} /> : <Shield size={13} />}
+            <span>{isFrozen ? "الدرع نشط" : "درع السلسلة"}</span>
+          </button>
+
           <Badge tint={allDone ? T.primary : T.cta}>
             <span dir="ltr" className="tabular-nums">
               {remaining}
@@ -1280,91 +1851,161 @@ export function RemainingHabitsCard({
         </div>
       </div>
 
-      {allDone ? (
-        <p
-          className="mt-4 rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
-          style={{
-            borderColor: `${T.primary}3D`,
-            backgroundColor: `${T.primary}12`,
-            color: T.primaryLift,
-          }}
+      {/* تبويبات سريعة: العادات | أعمدة الهوية | سلاسل التكديس */}
+      <div className="mt-3 flex items-center gap-1.5 border-b border-white/10 pb-2">
+        <button
+          type="button"
+          onClick={() => setSubTab("habits")}
+          className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition-all ${
+            subTab === "habits"
+              ? "bg-white/15 text-white"
+              : "text-white/40 hover:text-white/70"
+          }`}
         >
-          كل عادات اليوم تمّت. أغلق الشاشة واذهب — لا شيء ينتظرك هنا.
-        </p>
-      ) : (
-        <div className="mt-4 space-y-4">
-          <div>
-            <p className="mb-2 text-[11px] font-bold" style={{ color: block.tint }}>
-              {block.label} — الآن
-            </p>
-            {open.here.length ? (
-              <div className="space-y-1.5">
-                {open.here.map((h) => (
-                  <TodayHabit
-                    key={h.id}
-                    habit={h}
-                    book={bookForHabit(h, books)}
-                    onToggle={() => onTick(h.id)}
-                    onToggleTiny={() => onTick(h.id, true)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p
-                className="rounded-xl border border-dashed px-3 py-3 text-center text-[11.5px]"
-                style={{ borderColor: T.border, color: T.faint }}
-              >
-                لا شيء متبقٍّ في هذا البلوك.
-              </p>
-            )}
-          </div>
+          قائمة العادات
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab("identities")}
+          className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition-all ${
+            subTab === "identities"
+              ? "bg-white/15 text-white"
+              : "text-white/40 hover:text-white/70"
+          }`}
+        >
+          🏛️ أعمدة الهوية
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab("chains")}
+          className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition-all ${
+            subTab === "chains"
+              ? "bg-white/15 text-white"
+              : "text-white/40 hover:text-white/70"
+          }`}
+        >
+          🔗 سلاسل التكديس
+        </button>
+      </div>
 
-          {missed.length > 0 && (
-            <div>
-              <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
-                فاتك في بلوكات مضت —{" "}
-                <span dir="ltr" className="tabular-nums">
-                  {missed.length}
-                </span>
-              </p>
-              <div className="space-y-1.5">
-                {missed.slice(0, 5).map((h) => (
-                  <TodayHabit
-                    key={h.id}
-                    habit={h}
-                    book={bookForHabit(h, books)}
-                    onToggle={() => onTick(h.id)}
-                    onToggleTiny={() => onTick(h.id, true)}
-                    late
-                  />
-                ))}
+      {subTab === "identities" && (
+        <IdentityPillarsWidget habits={currentHabits} />
+      )}
+
+      {subTab === "chains" && (
+        <ChainedHabitsView habits={currentHabits} onTick={onTick} />
+      )}
+
+      {subTab === "habits" && (
+        <>
+          {allDone ? (
+            <p
+              className="mt-4 rounded-xl border px-3.5 py-6 text-center text-[13px] font-bold leading-relaxed"
+              style={{
+                borderColor: `${T.primary}3D`,
+                backgroundColor: `${T.primary}12`,
+                color: T.primaryLift,
+              }}
+            >
+              كل عادات اليوم تمّت. أغلق الشاشة واذهب — لا شيء ينتظرك هنا.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="mb-2 text-[11px] font-bold" style={{ color: block.tint }}>
+                  {block.label} — الآن
+                </p>
+                {open.here.length ? (
+                  <div className="space-y-1.5">
+                    {open.here.map((h) => (
+                      <TodayHabit
+                        key={h.id}
+                        habit={h}
+                        book={bookForHabit(h, books)}
+                        onToggle={() => onTick(h.id)}
+                        onToggleTiny={() => onTick(h.id, true)}
+                        onToggleLevel={(lvl) => onTick(h.id, lvl === "micro", lvl)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p
+                    className="rounded-xl border border-dashed px-3 py-3 text-center text-[11.5px]"
+                    style={{ borderColor: T.border, color: T.faint }}
+                  >
+                    لا شيء متبقٍّ في هذا البلوك.
+                  </p>
+                )}
               </div>
-              {missed.length > 5 && (
-                <button
-                  onClick={() => onGo("routine")}
-                  className="mt-2 w-full rounded-xl border border-dashed py-2 text-[11.5px] transition-colors hover:bg-white/[0.06]"
-                  style={{ borderColor: T.border, color: T.muted }}
-                >
-                  وبقي{" "}
+
+              {missed.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[11px] font-bold" style={{ color: T.accent }}>
+                    فاتك في بلوكات مضت —{" "}
+                    <span dir="ltr" className="tabular-nums">
+                      {missed.length}
+                    </span>
+                  </p>
+                  <div className="space-y-1.5">
+                    {missed.slice(0, 5).map((h) => (
+                      <TodayHabit
+                        key={h.id}
+                        habit={h}
+                        book={bookForHabit(h, books)}
+                        onToggle={() => onTick(h.id)}
+                        onToggleTiny={() => onTick(h.id, true)}
+                        onToggleLevel={(lvl) => onTick(h.id, lvl === "micro", lvl)}
+                        late
+                      />
+                    ))}
+                  </div>
+                  {missed.length > 5 && (
+                    <button
+                      onClick={() => onGo("routine")}
+                      className="mt-2 w-full rounded-xl border border-dashed py-2 text-[11.5px] transition-colors hover:bg-white/[0.06]"
+                      style={{ borderColor: T.border, color: T.muted }}
+                    >
+                      وبقي{" "}
+                      <span dir="ltr" className="tabular-nums">
+                        {missed.length - 5}
+                      </span>{" "}
+                      — افتح الروتين
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {open.later.length > 0 && (
+                <p className="text-[11px]" style={{ color: T.faint }}>
+                  وأمامك{" "}
                   <span dir="ltr" className="tabular-nums">
-                    {missed.length - 5}
+                    {open.later.length}
                   </span>{" "}
-                  — افتح الروتين
-                </button>
+                  عادة في بلوكات لم تبدأ بعد.
+                </p>
               )}
             </div>
           )}
+        </>
+      )}
 
-          {open.later.length > 0 && (
-            <p className="text-[11px]" style={{ color: T.faint }}>
-              وأمامك{" "}
-              <span dir="ltr" className="tabular-nums">
-                {open.later.length}
-              </span>{" "}
-              عادة في بلوكات لم تبدأ بعد.
-            </p>
-          )}
-        </div>
+      {/* نوافذ تدفق الروتين ودرع السلسلة */}
+      <RoutineFlowModal
+        open={flowOpen}
+        onClose={() => setFlowOpen(false)}
+        habits={currentHabits}
+        books={books}
+        onTick={onTick}
+        onTickLevel={(id, lvl) => onTick(id, lvl === "micro", lvl)}
+      />
+
+      {state && setState && (
+        <StreakShieldModal
+          open={shieldOpen}
+          onClose={() => setShieldOpen(false)}
+          state={state}
+          setState={setState}
+        />
       )}
     </Card>
   );
