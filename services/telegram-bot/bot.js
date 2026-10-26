@@ -349,6 +349,10 @@ const WORDS = new Map(
     ["اقفال اليوم", startShutdown],
     ["إغلاق اليوم", startShutdown],
     ["اقفال", startShutdown],
+    ["تقييم اليوم", startShutdown],
+    ["تقييم", startShutdown],
+    ["روتين العشاء", startShutdown],
+    ["تقييم الروتين", startShutdown],
     ["تفريغ", startBrainDump],
     ["سجل لي", startBrainDump],
   ].map(([word, run]) => [fold(word), run]),
@@ -1302,7 +1306,10 @@ const health = startHealth({
   },
 });
 
+let isStopping = false;
 const bye = async () => {
+  if (isStopping) return;
+  isStopping = true;
   clearInterval(ticker);
   scheduler.clear();
   bell.clear();
@@ -1321,29 +1328,34 @@ console.log("  الحالة من  " + CONFIG.origin);
 console.log("  يردّ على   " + CONFIG.chatId);
 console.log("  الحالة على " + BOT_API);
 
-bot.start({
-  drop_pending_updates: true,
-  onStart: () => {
-    console.log("  ✓ يستقبل");
-    bot.api
-      .setMyCommands(V.COMMANDS)
-      .catch((e) => console.warn("القائمة ما سُجّلت: " + (e?.message || e)));
-  },
-}).catch((e) => {
-  const cause = String(e?.cause?.code || e?.message || e);
-  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|ETIMEDOUT/.test(cause)) {
-    console.error(
-      `\nتعذّر حلّ اسم ${new URL(CONFIG.apiRoot).hostname} — الشبكة تحجب تيليجرام.`,
-    );
-    console.error("البوت سليم؛ المشكلة بين هذا الجهاز وتيليجرام.");
-    console.error("جرّب شبكة أخرى، أو ضع عنوان وسيط في TELEGRAM_API_ROOT داخل .env.\n");
-  } else if (/401/.test(cause)) {
-    console.error("\nتيليجرام رفض التوكن. خُذ واحدًا جديدًا من @BotFather.\n");
-  } else if (/409/.test(cause)) {
-    console.error("\nنسخة أخرى من البوت تعمل على نفس التوكن. هذه النسخة توقّفت.");
-    console.error("نسخة واحدة فقط — أوقف الباقي ثم شغّل واحدة.\n");
-  } else {
-    console.error("\nالبوت توقّف: " + (e?.message || e) + "\n");
+async function runBotWithAutoRetry() {
+  while (!isStopping) {
+    try {
+      await bot.start({
+        drop_pending_updates: true,
+        onStart: () => {
+          console.log("  ✓ يستقبل");
+          bot.api
+            .setMyCommands(V.COMMANDS)
+            .catch((e) => console.warn("القائمة ما سُجّلت: " + (e?.message || e)));
+        },
+      });
+      break;
+    } catch (e) {
+      if (isStopping) break;
+      const cause = String(e?.cause?.code || e?.message || e);
+      if (/401/.test(cause)) {
+        console.error("\nتيليجرام رفض التوكن. خُذ واحدًا جديدًا من @BotFather.\n");
+        process.exit(1);
+      }
+      if (/409/.test(cause)) {
+        console.error("\nنسخة أخرى من البوت تعمل على نفس التوكن. هذه النسخة توقّفت.");
+        process.exit(1);
+      }
+      console.warn(`[Bot Watcher] انقطع الاتصال أو أفاق الجهاز من النوم (${cause}) — إعادة المحاولة خلال 5 ثوانٍ...`);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
   }
-  process.exit(1);
-});
+}
+
+runBotWithAutoRetry();
