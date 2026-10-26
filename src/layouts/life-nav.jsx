@@ -84,7 +84,7 @@ export function applyNavCustomization(baseItems, customConfig) {
   const seen = new Set();
 
   for (const id of order) {
-    if (itemMap.has(id)) {
+    if (itemMap.has(id) && !seen.has(id)) {
       seen.add(id);
       const original = itemMap.get(id);
       const conf = customConfig.items?.[id] || {};
@@ -180,14 +180,16 @@ function NavList({ items, tab, onGo, showLabels }) {
   );
 }
 
-export const getContextSections = (sectionNames = {}) => [
+const EMPTY_SECTION_NAMES = {};
+
+export const getContextSections = (sectionNames = EMPTY_SECTION_NAMES) => [
   { id: "daily", label: sectionNames.dailyPill || "اليومي", icon: "⚡", groupIds: ["daily"] },
   { id: "growth", label: sectionNames.growthPill || "المستقبلي", icon: "🎯", groupIds: ["growth"] },
   { id: "tools", label: sectionNames.toolsPill || "الأدوات", icon: "🧰", groupIds: ["tools", "ai_assist"] },
   { id: "all", label: sectionNames.allPill || "الكل", icon: "🌐", groupIds: ["daily", "growth", "tools", "ai_assist"] },
 ];
 
-export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
+export function NavGroups({ items, tab, onGo, showLabels, sectionNames = EMPTY_SECTION_NAMES }) {
   const [activeSection, setActiveSection] = useState(() => {
     try {
       return localStorage.getItem("los-nav-section") || "daily";
@@ -196,7 +198,15 @@ export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
     }
   });
 
-  const contextSections = useMemo(() => getContextSections(sectionNames), [sectionNames]);
+  const contextSections = useMemo(
+    () => getContextSections(sectionNames || EMPTY_SECTION_NAMES),
+    [
+      sectionNames?.dailyPill,
+      sectionNames?.growthPill,
+      sectionNames?.toolsPill,
+      sectionNames?.allPill,
+    ]
+  );
 
   const selectSection = (secId) => {
     setActiveSection(secId);
@@ -216,8 +226,12 @@ export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
 
   const getTabGroup = (n) => n.customGroupId || GROUP_OF_TAB.get(n.id) || "ai_assist";
 
-  // Automatically ensure active tab's section is shown if not in 'all'
+  // Automatically align section ONLY when active `tab` changes from external navigation (e.g. command palette, links)
+  const prevTabRef = React.useRef(tab);
   useEffect(() => {
+    if (prevTabRef.current === tab) return;
+    prevTabRef.current = tab;
+
     if (activeSection === "all") return;
     const secDef = contextSections.find((s) => s.id === activeSection);
     const activeItem = items.find((n) => n.id === tab);
@@ -228,7 +242,7 @@ export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
         selectSection(match.id);
       }
     }
-  }, [tab, contextSections, items]);
+  }, [tab, activeSection, contextSections, items]);
 
   const toggleGroup = (groupId) => {
     setCollapsedMap((prev) => {
@@ -260,7 +274,7 @@ export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
       {/* 🧭 محوّل السياق السريع (Segmented Context Switcher) */}
       <div className="mb-1">
         {showLabels ? (
-          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/[0.03] p-1 border border-white/5 backdrop-blur-sm">
+          <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-white/[0.03] p-1.5 border border-white/5 backdrop-blur-sm shadow-inner">
             {contextSections.map((sec) => {
               const active = activeSection === sec.id;
               return (
@@ -268,14 +282,14 @@ export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
                   key={sec.id}
                   type="button"
                   onClick={() => selectSection(sec.id)}
-                  className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[11px] transition-all duration-200 select-none ${
+                  className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-[11.5px] transition-all duration-200 select-none ${
                     active
-                      ? "bg-gradient-to-r from-orange-500/80 to-amber-600/80 text-white font-black shadow-md shadow-orange-500/20 scale-[1.02]"
-                      : "text-white/45 hover:text-white/80 hover:bg-white/5 font-bold"
+                      ? "bg-gradient-to-r from-orange-500/90 to-amber-600/90 text-white font-extrabold shadow-md shadow-orange-500/25 scale-[1.02] border border-orange-400/30"
+                      : "text-white/55 hover:text-white hover:bg-white/[0.06] font-bold border border-transparent"
                   }`}
-                  title={`تصفية: ${sec.label}`}
+                  title={`تصفية القائمة: ${sec.label}`}
                 >
-                  <span className="text-xs">{sec.icon}</span>
+                  <span className="text-xs shrink-0">{sec.icon}</span>
                   <span className="truncate">{sec.label}</span>
                 </button>
               );
@@ -292,7 +306,7 @@ export function NavGroups({ items, tab, onGo, showLabels, sectionNames = {} }) {
                   onClick={() => selectSection(sec.id)}
                   className={`h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs transition-all duration-200 ${
                     active
-                      ? "bg-gradient-to-r from-orange-500/80 to-amber-600/80 text-white shadow-md shadow-orange-500/20 scale-105"
+                      ? "bg-gradient-to-r from-orange-500/90 to-amber-600/90 text-white shadow-md shadow-orange-500/20 scale-105 border border-orange-400/30"
                       : "text-white/40 hover:text-white hover:bg-white/5"
                   }`}
                   title={`سياق: ${sec.label}`}
@@ -605,9 +619,10 @@ export function NavCustomizerModal({ open, onClose, baseItems, currentConfig, on
             </div>
 
             <div className="space-y-2 max-h-[380px] overflow-y-auto los-scroll pr-1 pl-1">
-              {filteredItems.map((item, idx) => {
-                const isFirst = idx === 0;
-                const isLast = idx === itemsList.length - 1;
+              {filteredItems.map((item) => {
+                const realIdx = itemsList.findIndex((n) => n.id === item.id);
+                const isFirst = realIdx === 0;
+                const isLast = realIdx === itemsList.length - 1;
                 const Icon = item.icon;
                 const isHidden = item.visible === false;
 
@@ -712,20 +727,20 @@ export function NavCustomizerModal({ open, onClose, baseItems, currentConfig, on
         {activeTab === "sections" && (
           <div className="space-y-3.5 max-h-[380px] overflow-y-auto los-scroll pr-1">
             <p className="text-xs text-white/50">
-              يمكنك هنا تغيير أسماء الأقسام الرئيسية في القائمة (وكذلك التسميات التي تظهر على أزرار التبديل):
+              يمكنك هنا تغيير أسماء الأقسام الرئيسية في القائمة الجانبية وتسميات أزرار التبديل السريع:
             </p>
             {[
               { key: "daily", def: "التركيز اليومي", pillKey: "dailyPill", pillDef: "اليومي", icon: "⚡" },
               { key: "growth", def: "النمو والتطوير", pillKey: "growthPill", pillDef: "المستقبلي", icon: "🎯" },
               { key: "tools", def: "الأدوات", pillKey: "toolsPill", pillDef: "الأدوات", icon: "🧰" },
-              { key: "ai_assist", def: "الذكاء والمساعد", pillKey: "allPill", pillDef: "الكل", icon: "🤖" },
+              { key: "ai_assist", def: "الذكاء والمساعد", pillKey: null, pillDef: null, icon: "🤖" },
             ].map((sec) => (
               <div key={sec.key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-base">{sec.icon}</span>
                   <span className="text-xs font-bold text-white">{sec.def}</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className={`grid grid-cols-1 ${sec.pillKey ? "sm:grid-cols-2" : ""} gap-2`}>
                   <div>
                     <span className="block text-[10px] text-white/40 mb-0.5">اسم عنوان القسم</span>
                     <input
@@ -736,19 +751,38 @@ export function NavCustomizerModal({ open, onClose, baseItems, currentConfig, on
                       placeholder={sec.def}
                     />
                   </div>
-                  <div>
-                    <span className="block text-[10px] text-white/40 mb-0.5">اسم زر التبديل السريع</span>
-                    <input
-                      type="text"
-                      value={draftConfig.sectionNames?.[sec.pillKey] ?? sec.pillDef}
-                      onChange={(e) => updateSectionName(sec.pillKey, e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white outline-none focus:border-orange-500/50"
-                      placeholder={sec.pillDef}
-                    />
-                  </div>
+                  {sec.pillKey && (
+                    <div>
+                      <span className="block text-[10px] text-white/40 mb-0.5">اسم زر التبديل السريع ({sec.pillDef})</span>
+                      <input
+                        type="text"
+                        value={draftConfig.sectionNames?.[sec.pillKey] ?? sec.pillDef}
+                        onChange={(e) => updateSectionName(sec.pillKey, e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white outline-none focus:border-orange-500/50"
+                        placeholder={sec.pillDef}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🌐</span>
+                <span className="text-xs font-bold text-white">زر تصفية عرض الكل</span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-white/40 mb-0.5">اسم زر التبديل لـ (الكل)</span>
+                <input
+                  type="text"
+                  value={draftConfig.sectionNames?.allPill ?? "الكل"}
+                  onChange={(e) => updateSectionName("allPill", e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white outline-none focus:border-orange-500/50"
+                  placeholder="الكل"
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>
