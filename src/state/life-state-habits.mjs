@@ -344,6 +344,12 @@ export const IDENTITIES = {
     tagline: "صلوات، أذكار، صفاء الذهن",
     tint: "#818cf8",
   },
+  investor: {
+    id: "investor",
+    label: "المستثمر المالي",
+    tagline: "ثروة، ادخار، استثمار، ذكاء مالي",
+    tint: "#34d399",
+  },
   general: {
     id: "general",
     label: "تطوير الذات",

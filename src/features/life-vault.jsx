@@ -2003,7 +2003,7 @@ function SmartBookImporterModal({ open, onClose, state, setState }) {
   "title": "اسم الكتاب بالعربية كاملاً وواضحاً",
   "author": "اسم المؤلف",
   "category": "self" أو "faith" أو "business" أو "knowledge" أو "health",
-  "identity": "scholar" أو "executor" أو "athlete" أو "mindful",
+  "identity": "scholar" أو "executor" أو "athlete" أو "mindful" أو "investor",
   "pages": 280,
   "lesson": "أهم درس يغيّر الحياة يخرج به القارئ من هذا الكتاب في سطرين بليغين",
   "summary": "ملخص مكثف وعميق من 4-6 أسطر لأفكار الكتاب الجوهرية وفصوله",

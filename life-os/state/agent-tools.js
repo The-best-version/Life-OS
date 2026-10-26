@@ -215,8 +215,8 @@ export const AGENT_TOOLS = [
         },
         identity: {
           type: "string",
-          enum: ["scholar", "athlete", "executor", "mindful", "general"],
-          description: "هوية الكتاب (scholar: المفكر والباحث, executor: المنجز, athlete: الرياضي, mindful: الروحاني, general: عام)",
+          enum: ["scholar", "athlete", "executor", "mindful", "investor", "general"],
+          description: "هوية الكتاب (scholar: المفكر والباحث, executor: المنجز, athlete: الرياضي, mindful: الروحاني, investor: المستثمر المالي, general: عام)",
         },
         pages: { type: "number", description: "إجمالي عدد صفحات الكتاب التقريبي" },
         lesson: { type: "string", description: "أهم درس يغيّر الحياة من هذا الكتاب" },
