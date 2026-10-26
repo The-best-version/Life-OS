@@ -70,6 +70,8 @@ import {
   rows,
   syncHabitToGoals,
   syncTaskToGoal,
+  PRIORITIES,
+  sortTasks,
 } from "../state/life-state.mjs";
 
 /* The one colour the theme doesn't carry. Sky-400 from Tailwind — the
@@ -248,8 +250,8 @@ export function TopThree({ state, setState }) {
                   }
                   onToggleDone={() => patch(task.id, { done: !task.done })}
                   onToggleToday={() => patch(task.id, { today: false })}
-                  onEdit={({ text, due, estimate, linkedGoalId }) =>
-                    patch(task.id, { text, due, estimate, linkedGoalId }) // <--- تحديث لتمرير linkedGoalId
+                  onEdit={({ text, due, estimate, linkedGoalId, priority }) =>
+                    patch(task.id, { text, due, estimate, linkedGoalId, priority })
                   }
                   onDelete={() => {
                     arm("حُذفت المهمة", { tasks: state.tasks });
@@ -340,7 +342,20 @@ export function TodayExtras({ state, setState }) {
   const [draft, setDraft] = useState("");
   const [draftQ, setDraftQ] = useState("q2");
   const [draftGoalId, setDraftGoalId] = useState("");
+  const [draftPriority, setDraftPriority] = useState("p2");
+  const [filterMode, setFilterMode] = useState("priority"); // "priority" | "all"
+  const [showCompleted, setShowCompleted] = useState(false);
   const list = scheduledTasks(state.tasks);
+
+  const openTasks = useMemo(() => {
+    const pending = list.filter((t) => !t.done);
+    if (filterMode === "priority") {
+      return sortTasks(pending, "priority");
+    }
+    return pending;
+  }, [list, filterMode]);
+
+  const completedTasks = useMemo(() => list.filter((t) => t.done), [list]);
   const doneCount = list.filter((t) => t.done).length;
   const todayCount = state.tasks.filter((t) => t.today).length;
   const canPromote = todayCount < TOP_TASK_CAP;
@@ -379,6 +394,7 @@ export function TodayExtras({ state, setState }) {
         taskShape({
           text,
           quadrant: draftQ,
+          priority: draftPriority,
           scheduled: true,
           linkedGoalId: draftGoalId || null,
           createdAt: dayKey(),
@@ -388,6 +404,7 @@ export function TodayExtras({ state, setState }) {
     }));
     setDraft("");
     setDraftGoalId("");
+    setDraftPriority("p2");
   };
 
   /* The broom. Lifts `scheduled` off every finished row; the task keeps
@@ -490,8 +507,42 @@ export function TodayExtras({ state, setState }) {
         </div>
       </div>
 
-      <div className="mt-5 space-y-2">
-        {list.length === 0 ? (
+      {list.length > 0 && (
+        <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-white/40">الترتيب:</span>
+            {[
+              { id: "priority", label: "🔥 حسب الأولوية" },
+              { id: "all", label: "الترتيب اليدوي" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilterMode(f.id)}
+                className={`rounded-lg px-2 py-0.5 text-[10.5px] font-bold border transition-all ${
+                  filterMode === f.id
+                    ? "border-sky-500/60 bg-sky-500/20 text-sky-300"
+                    : "border-white/10 bg-transparent text-white/40 hover:text-white/70"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {completedTasks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCompleted((s) => !s)}
+              className="text-[10.5px] font-bold text-white/45 hover:text-white/80 transition-colors"
+            >
+              {showCompleted ? "إخفاء المنجزة ▲" : `المنجزة (${completedTasks.length}) ▼`}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4 space-y-2">
+        {openTasks.length === 0 && completedTasks.length === 0 ? (
           <p
             className="rounded-xl border border-dashed py-4 text-center text-[11.5px] leading-relaxed"
             style={{ borderColor: T.border, color: T.faint }}
@@ -501,28 +552,60 @@ export function TodayExtras({ state, setState }) {
             على أي مهمة.
           </p>
         ) : (
-          list.map((task) => (
-            <TaskChip
-              key={task.id}
-              task={task}
-              goals={state.goals} // <--- تم تمرير الأهداف
-              onToggleDone={() => patch(task.id, { done: !task.done })}
-              onToggleScheduled={() =>
-                patch(task.id, { scheduled: !task.scheduled })
-              }
-              onToggleToday={() => promote(task)}
-              onEdit={({ text, due, estimate, linkedGoalId }) =>
-                patch(task.id, { text, due, estimate, linkedGoalId }) // <--- تحديث لتمرير linkedGoalId
-              }
-              onDelete={() => {
-                arm("حُذفت المهمة", { tasks: state.tasks });
-                setState((s) => ({
-                  ...s,
-                  tasks: s.tasks.filter((t) => t.id !== task.id),
-                }));
-              }}
-            />
-          ))
+          <>
+            {openTasks.map((task) => (
+              <TaskChip
+                key={task.id}
+                task={task}
+                goals={state.goals}
+                onToggleDone={() => patch(task.id, { done: !task.done })}
+                onToggleScheduled={() =>
+                  patch(task.id, { scheduled: !task.scheduled })
+                }
+                onToggleToday={() => promote(task)}
+                onEdit={({ text, due, estimate, linkedGoalId, priority }) =>
+                  patch(task.id, { text, due, estimate, linkedGoalId, priority })
+                }
+                onDelete={() => {
+                  arm("حُذفت المهمة", { tasks: state.tasks });
+                  setState((s) => ({
+                    ...s,
+                    tasks: s.tasks.filter((t) => t.id !== task.id),
+                  }));
+                }}
+              />
+            ))}
+
+            {completedTasks.length > 0 && showCompleted && (
+              <div className="mt-4 pt-3 border-t border-white/10 space-y-2 opacity-75">
+                <span className="text-[10px] font-bold text-emerald-400 block mb-1">
+                  ✓ المهام المنجزة مؤخرًا:
+                </span>
+                {completedTasks.map((task) => (
+                  <TaskChip
+                    key={task.id}
+                    task={task}
+                    goals={state.goals}
+                    onToggleDone={() => patch(task.id, { done: !task.done })}
+                    onToggleScheduled={() =>
+                      patch(task.id, { scheduled: !task.scheduled })
+                    }
+                    onToggleToday={() => promote(task)}
+                    onEdit={({ text, due, estimate, linkedGoalId, priority }) =>
+                      patch(task.id, { text, due, estimate, linkedGoalId, priority })
+                    }
+                    onDelete={() => {
+                      arm("حُذفت المهمة", { tasks: state.tasks });
+                      setState((s) => ({
+                        ...s,
+                        tasks: s.tasks.filter((t) => t.id !== task.id),
+                      }));
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -557,6 +640,22 @@ export function TodayExtras({ state, setState }) {
                   {g.text}
                 </option>
               ))}
+          </select>
+          <select
+            value={draftPriority}
+            onChange={(e) => setDraftPriority(e.target.value)}
+            aria-label="درجة الأولوية"
+            className="rounded-xl border bg-transparent px-2.5 py-2.5 text-xs outline-none"
+            style={{
+              borderColor: PRIORITIES[draftPriority]?.tint ? `${PRIORITIES[draftPriority].tint}66` : T.border,
+              color: PRIORITIES[draftPriority]?.tint || T.muted,
+            }}
+          >
+            {Object.values(PRIORITIES).map((p) => (
+              <option key={p.id} value={p.id} style={{ background: T.cardSolid }}>
+                {p.icon} {p.short}
+              </option>
+            ))}
           </select>
           <select
             value={draftQ}
@@ -847,6 +946,15 @@ export function TaskChip({
     setEditing(true);
   };
 
+  const prio = PRIORITIES[task.priority] || PRIORITIES.p2;
+
+  const cyclePriority = (e) => {
+    e.stopPropagation();
+    if (!onEdit) return;
+    const next = task.priority === "p1" ? "p2" : task.priority === "p2" ? "p3" : "p1";
+    onEdit({ priority: next });
+  };
+
   const commitEdit = () => {
     const text = draft.text.trim();
     if (!text) return;
@@ -854,7 +962,8 @@ export function TaskChip({
       text, 
       due: draft.due, 
       estimate: draft.estimate, 
-      linkedGoalId: draft.linkedGoalId // <--- تمرير الهدف المعدل
+      linkedGoalId: draft.linkedGoalId,
+      priority: draft.priority || "p2",
     });
     setEditing(false);
   };
@@ -892,6 +1001,32 @@ export function TaskChip({
               <option key={g.id} value={g.id}>{g.text}</option>
             ))}
           </select>
+        </div>
+
+        {/* 👇 اختيار درجة الأولوية 👇 */}
+        <div className="mt-2">
+          <label className="mb-1 block text-[10px] text-white/45">درجة الأولوية</label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {Object.values(PRIORITIES).map((p) => {
+              const active = (draft.priority || "p2") === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setDraft((d) => ({ ...d, priority: p.id }))}
+                  className="flex items-center justify-center gap-1 rounded-lg border py-1 text-xs font-bold transition-all"
+                  style={{
+                    borderColor: active ? `${p.tint}80` : T.border,
+                    background: active ? `${p.tint}20` : "transparent",
+                    color: active ? p.tint : T.muted,
+                  }}
+                >
+                  <span>{p.icon}</span>
+                  <span>{p.short}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1081,6 +1216,21 @@ export function TaskChip({
 
         {hasMeta && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 pr-1.5 text-[10px] leading-tight">
+            {/* زر تبديل الأولوية السريع */}
+            <button
+              type="button"
+              onClick={cyclePriority}
+              title={`الأولوية: ${prio.label} (انقر للتبديل)`}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold border transition-all hover:scale-105"
+              style={{
+                borderColor: `${prio.tint}40`,
+                background: `${prio.tint}18`,
+                color: prio.tint,
+              }}
+            >
+              <span>{prio.icon}</span>
+              <span>{prio.short}</span>
+            </button>
             {overdue && (
               <span
                 className="inline-flex items-center gap-0.5 font-bold"

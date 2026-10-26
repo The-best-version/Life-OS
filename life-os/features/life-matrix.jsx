@@ -34,6 +34,8 @@ import {
   tomorrowKey,
   wipOf,
   syncTaskToGoal,
+  PRIORITIES,
+  sortTasks,
 } from "../state/life-state.mjs";
 import {
   AlertTriangle,
@@ -70,7 +72,8 @@ const SKY = "#38bdf8";
 export function MatrixModule({ state, setState }) {
   const [draft, setDraft] = useState("");
   const [draftQ, setDraftQ] = useState("q2");
-  const [draftGoal, setDraftGoal] = useState(""); // <--- حالة جديدة لاختيار الهدف
+  const [draftGoal, setDraftGoal] = useState("");
+  const [draftPriority, setDraftPriority] = useState("p2");
   const [over, setOver] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const [capHit, fireCapHit] = useBurst(2800);
@@ -93,7 +96,8 @@ export function MatrixModule({ state, setState }) {
         taskShape({
           text,
           quadrant: draftQ,
-          linkedGoalId: draftGoal || null, // <--- حفظ الهدف المرتبط
+          priority: draftPriority,
+          linkedGoalId: draftGoal || null,
           createdAt: dayKey(),
           order: nextOrder(s.tasks, draftQ),
         }),
@@ -310,6 +314,19 @@ export function MatrixModule({ state, setState }) {
               ))}
             </select>
             <select
+              value={draftPriority}
+              onChange={(e) => setDraftPriority(e.target.value)}
+              aria-label="درجة الأولوية"
+              className="rounded-xl border bg-black/50 px-3 py-3 text-xs font-bold text-white outline-none focus:border-indigo-400"
+              style={{ borderColor: "rgba(255,255,255,0.15)" }}
+            >
+              {Object.values(PRIORITIES).map((p) => (
+                <option key={p.id} value={p.id} style={{ background: "#111" }}>
+                  {p.icon} {p.short}
+                </option>
+              ))}
+            </select>
+            <select
               value={draftGoal}
               onChange={(e) => setDraftGoal(e.target.value)}
               aria-label="الهدف المرتبط"
@@ -489,7 +506,7 @@ function QuadrantCard({
   isBreakingId,
 }) {
   const [showDone, setShowDone] = useState(false);
-  const open = useMemo(() => orderedOpen(tasks, q.id), [tasks, q.id]);
+  const open = useMemo(() => sortTasks(orderedOpen(tasks, q.id), "priority"), [tasks, q.id]);
   const done = useMemo(() => orderedDone(tasks, q.id), [tasks, q.id]);
   const est = estimateTotal(tasks, q.id);
   const wip = wipOf(tasks, q.id);

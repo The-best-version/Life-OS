@@ -87,6 +87,24 @@ export const SEED_TASKS = [
  *  field existed was written is not recoverable — and a date invented here
  *  would then be shown as fact by the aging rule below.
  * ---------------------------------------------------------------------- */
+export const PRIORITIES = {
+  p1: { id: "p1", label: "أولوية قصوى", short: "قصوى", tint: "#ef4444", icon: "🔴", rank: 1 },
+  p2: { id: "p2", label: "أولوية متوسطة", short: "متوسطة", tint: "#f59e0b", icon: "🟡", rank: 2 },
+  p3: { id: "p3", label: "أولوية عادية", short: "عادية", tint: "#10b981", icon: "🟢", rank: 3 },
+};
+
+export function sortTasks(tasks, mode = "default") {
+  const list = rows(tasks).slice();
+  if (mode === "priority") {
+    const rankOf = (p) => PRIORITIES[p]?.rank || 2;
+    return list.sort((a, b) => rankOf(a.priority) - rankOf(b.priority) || (a.order || 0) - (b.order || 0));
+  }
+  if (mode === "due") {
+    return list.sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+  }
+  return list.sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
 export const QUADRANT_IDS = new Set(["q1", "q2", "q3", "q4"]);
 /* One line, not a paragraph — long enough to name an action and short
    enough that the row under a task stays a row. */
@@ -124,6 +142,8 @@ export const taskShape = (t) => {
        honest reading of a task from before this field existed. */
     createdAt: isKey(t.createdAt) ? t.createdAt : "",
     linkedGoalId: typeof t.linkedGoalId === "string" ? t.linkedGoalId : null,
+    priority: (t.priority && PRIORITIES[t.priority]) ? t.priority : "p2",
+    bookId: typeof t.bookId === "string" ? t.bookId : null,
   };
 };
 

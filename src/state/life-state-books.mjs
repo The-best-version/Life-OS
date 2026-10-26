@@ -74,6 +74,14 @@ export const noteShape = (n) => {
  *  untouched is a list of points with no schedule on them, and the review
  *  rotation would then hold only the notes written since the day it shipped.
  */
+export const BOOK_CATEGORIES = [
+  { id: "self", label: "تطوير الذات والإنتاجية", tint: "#f59e0b" },
+  { id: "faith", label: "الدين والشريعة والروح", tint: "#818cf8" },
+  { id: "business", label: "المال والأعمال والمشاريع", tint: "#10b981" },
+  { id: "knowledge", label: "الفكر والعلوم والتقنية", tint: "#38bdf8" },
+  { id: "health", label: "الصحة واللياقة والبدن", tint: "#ef4444" },
+];
+
 export const bookShape = (b) => {
   b = obj(b);
   const out = {
@@ -88,6 +96,9 @@ export const bookShape = (b) => {
     pages: "",
     page: "",
     finishedAt: null,
+    identity: typeof b.identity === "string" ? b.identity : "scholar",
+    category: typeof b.category === "string" ? b.category : "",
+    yearTarget: Number.isFinite(+b.yearTarget) ? +b.yearTarget : 2026,
     ...b,
   };
   out.notes = rows(b.notes).map(noteShape).slice(0, NOTE_CAP);

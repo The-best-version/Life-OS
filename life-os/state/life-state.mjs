@@ -60,6 +60,8 @@ import {
   capToday,
   applyPrep,
   prepCarry,
+  PRIORITIES,
+  sortTasks,
   prepShape,
   SEED_TASKS,
 } from "./life-state-tasks.mjs";
@@ -872,6 +874,8 @@ export {
   prepReady,
   applyPrep,
   prepCarry,
+  PRIORITIES,
+  sortTasks,
 } from "./life-state-tasks.mjs";
 
 export {
@@ -926,6 +930,7 @@ export {
   READ_ACTIVE,
   READ_GOAL_DEFAULT,
   bookShape,
+  BOOK_CATEGORIES,
   SEED_BOOKS,
   READING_QUOTES,
   SEED_READS,

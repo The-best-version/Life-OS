@@ -1,7 +1,7 @@
-import { Btn, Card, Field, Modal, StarRating, T, countedWord, shrinkImage, useUndo } from "../components/life-shared.jsx";
-import { addDays, bookShape, dayKey, goalPct, noteDue, noteShape, pctOf, readStreak, rows, sumPages, uid } from "../state/life-state.mjs";
-import { CheckCheck, ChevronDown, ChevronUp, Copy, ImagePlus, NotebookPen, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Btn, Card, Field, Modal, StarRating, T, countedWord, shrinkImage, useUndo, COVER_STEPS } from "../components/life-shared.jsx";
+import { addDays, bookShape, dayKey, goalPct, noteDue, noteShape, pctOf, readStreak, rows, sumPages, uid, dueNotes, reviewedNote, readPace, pagesLeft, BOOK_CATEGORIES, IDENTITIES, taskShape, habitShape } from "../state/life-state.mjs";
+import { CheckCheck, ChevronDown, ChevronUp, Copy, ImagePlus, NotebookPen, Pencil, Plus, Trash2, Brain, Zap, Trophy, Clock, Sparkles, BookOpen, Tag } from "lucide-react";
+import { useState, useMemo } from "react";
 
 /* ==================================================================== *
  * THE SHELF AND THE DESK — مكتبة الإنجازات
@@ -17,7 +17,44 @@ export function VaultModule({ state, setState }) {
   const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState("all");
   const [deskId, setDeskId] = useState(null);
+  const [flashcardsOpen, setFlashcardsOpen] = useState(false);
   const arm = useUndo();
+
+  const waitingNotesList = useMemo(() => dueNotes(state.books), [state.books]);
+
+  const handleReviewNote = (bookId, noteId, kept) => {
+    setState((s) => ({
+      ...s,
+      books: s.books.map((b) => {
+        if (b.id !== bookId) return b;
+        return {
+          ...b,
+          notes: (b.notes || []).map((n) => (n.id === noteId ? reviewedNote(n, kept) : n)),
+        };
+      }),
+    }));
+  };
+
+  const handleTurnIntoTask = (text, bookTitle) => {
+    const newTask = taskShape({
+      id: uid(),
+      text: `تطبيق من [${bookTitle}]: ${text.slice(0, 90)}`,
+      priority: "p1",
+      scheduled: true,
+      createdAt: dayKey(),
+    });
+    setState((s) => ({ ...s, tasks: [newTask, ...s.tasks] }));
+  };
+
+  const handleTurnIntoHabit = (text, bookTitle) => {
+    const newHabit = habitShape({
+      id: uid(),
+      name: `عادة [${bookTitle}]: ${text.slice(0, 45)}`,
+      identity: "scholar",
+      freq: "daily",
+    });
+    setState((s) => ({ ...s, habits: [...s.habits, newHabit] }));
+  };
 
   const save = () => {
     const title = editing.title.trim();
@@ -80,6 +117,12 @@ export function VaultModule({ state, setState }) {
   const streak = readStreak(log, goal);
   const goalPct = goal > 0 ? Math.min(100, Math.round((todayPages / goal) * 100)) : 0;
 
+  const currentYear = today.slice(0, 4);
+  const yearFinished = state.books.filter(
+    (b) => b.status === "finished" && (b.finishedAt || "").startsWith(currentYear),
+  ).length;
+  const yearTarget = state.readYearGoal || 12;
+
   return (
     <div className="space-y-8">
       <Card className="p-6 sm:p-7">
@@ -91,20 +134,42 @@ export function VaultModule({ state, setState }) {
               مكتوب لم يُقرأ.
             </p>
           </div>
-          <Btn
-            variant="default"
-            onClick={() => setEditing(bookShape())}
-          >
-            <Plus size={15} strokeWidth={3} /> أضف كتابًا
-          </Btn>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFlashcardsOpen(true)}
+              className="relative flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all"
+              style={{
+                borderColor: waitingNotesList.length > 0 ? `${T.accent}80` : T.border,
+                background: waitingNotesList.length > 0 ? `${T.accent}1F` : "rgba(255,255,255,0.03)",
+                color: waitingNotesList.length > 0 ? T.accent : T.muted,
+                boxShadow: waitingNotesList.length > 0 ? `0 0 16px ${T.accent}33` : "none",
+              }}
+            >
+              <Brain size={15} />
+              <span>استذكار الفوائد</span>
+              {waitingNotesList.length > 0 && (
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-black text-black tabular-nums">
+                  {waitingNotesList.length}
+                </span>
+              )}
+            </button>
+            <Btn
+              variant="default"
+              onClick={() => setEditing(bookShape())}
+            >
+              <Plus size={15} strokeWidth={3} /> أضف كتابًا
+            </Btn>
+          </div>
         </div>
 
         {/* what the shelf has cost you so far */}
-        <div className="mt-5 grid grid-cols-3 gap-2">
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
             { n: finished, k: "كتابًا مُنهًى", tint: T.primary },
             { n: noteCount, k: "نقطة محفوظة", tint: T.accent },
             { n: pagesRead, k: "صفحة مقروءة", tint: T.sky },
+            { n: `${yearFinished}/${yearTarget}`, k: `تحدي ${currentYear}`, tint: "#a855f7" },
           ].map((c) => (
             <div
               key={c.k}
@@ -232,6 +297,9 @@ export function VaultModule({ state, setState }) {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {shown.map((b) => {
             const meta = BOOK_STATUS[b.status] || BOOK_STATUS.planned;
+            const categoryObj = BOOK_CATEGORIES.find((c) => c.id === b.category);
+            const identityObj = IDENTITIES[b.identity] || IDENTITIES.scholar;
+            const pace = b.status === "reading" ? readPace(b, log) : null;
             return (
               <Card
                 key={b.id}
@@ -296,6 +364,32 @@ export function VaultModule({ state, setState }) {
                       <p className="truncate text-[11px] text-white/35">
                         {b.author || "—"}
                       </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {categoryObj && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold border"
+                            style={{
+                              borderColor: `${categoryObj.tint}33`,
+                              background: `${categoryObj.tint}12`,
+                              color: categoryObj.tint,
+                            }}
+                          >
+                            <Tag size={8} /> {categoryObj.label}
+                          </span>
+                        )}
+                        {identityObj && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold border"
+                            style={{
+                              borderColor: `${identityObj.tint}33`,
+                              background: `${identityObj.tint}12`,
+                              color: identityObj.tint,
+                            }}
+                          >
+                            {identityObj.label}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex shrink-0 gap-0.5">
                       <button
@@ -348,6 +442,15 @@ export function VaultModule({ state, setState }) {
                     )}
                   </div>
 
+                  {pace && pace.days !== null && (
+                    <div
+                      className="mt-2 flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-bold"
+                      style={{ borderColor: `${T.sky}33`, background: `${T.sky}0D`, color: T.sky }}
+                    >
+                      <Zap size={10} />
+                      <span>معدل {pace.perDay.toFixed(1)} ص/يوم · ختم متوقع خلال {pace.days} يوم</span>
+                    </div>
+                  )}
                   {pctOf(b) !== null && (
                     <div className="mt-2">
                       <div
@@ -428,6 +531,17 @@ export function VaultModule({ state, setState }) {
               }
             : undefined
         }
+        onTurnIntoTask={(text) => handleTurnIntoTask(text, desk?.title || "")}
+        onTurnIntoHabit={(text) => handleTurnIntoHabit(text, desk?.title || "")}
+      />
+
+      <BookFlashcardsModal
+        open={flashcardsOpen}
+        onClose={() => setFlashcardsOpen(false)}
+        books={state.books}
+        onReview={handleReviewNote}
+        onTurnIntoTask={handleTurnIntoTask}
+        onTurnIntoHabit={handleTurnIntoHabit}
       />
 
       <Modal
@@ -564,6 +678,65 @@ export function VaultModule({ state, setState }) {
                 })}
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1.5 block text-xs text-white/45">التصنيف</label>
+                <select
+                  value={editing.category || ""}
+                  onChange={(e) => setEditing((s) => ({ ...s, category: e.target.value }))}
+                  className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs font-bold text-white outline-none"
+                  style={{ borderColor: T.border }}
+                >
+                  <option value="">— اختر تصنيفًا —</option>
+                  {BOOK_CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.id} style={{ background: "#111" }}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs text-white/45">الهوية / الركيزة</label>
+                <select
+                  value={editing.identity || "scholar"}
+                  onChange={(e) => setEditing((s) => ({ ...s, identity: e.target.value }))}
+                  className="w-full rounded-xl border bg-black/40 px-3 py-2 text-xs font-bold text-white outline-none"
+                  style={{ borderColor: T.border }}
+                >
+                  {Object.values(IDENTITIES).map((id) => (
+                    <option key={id.id} value={id.id} style={{ background: "#111" }}>
+                      {id.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="los-b-pages" className="mb-1.5 block text-xs text-white/45">إجمالي الصفحات</label>
+                <Field
+                  id="los-b-pages"
+                  type="number"
+                  min="1"
+                  dir="ltr"
+                  value={editing.pages}
+                  onChange={(e) => setEditing((s) => ({ ...s, pages: e.target.value }))}
+                  placeholder="300"
+                />
+              </div>
+              <div>
+                <label htmlFor="los-b-page" className="mb-1.5 block text-xs text-white/45">الصفحة الحالية</label>
+                <Field
+                  id="los-b-page"
+                  type="number"
+                  min="0"
+                  dir="ltr"
+                  value={editing.page}
+                  onChange={(e) => setEditing((s) => ({ ...s, page: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
             <div>
               <label htmlFor="los-b-lesson" className="mb-1.5 block text-xs text-white/45">
                 أهم درس يغيّر حياتي
@@ -590,7 +763,7 @@ export function VaultModule({ state, setState }) {
    reading has reached. Kept in a modal rather than on the card, because the
    card has to stay scannable — this is the place you come back to, not the
    place you glance at. */
-function BookDesk({ book, log = [], onClose, onPatch, onDelete }) {
+function BookDesk({ book, log = [], onClose, onPatch, onDelete, onTurnIntoTask, onTurnIntoHabit }) {
   const [draft, setDraft] = useState({ text: "", page: "" });
   const [copied, setCopied] = useState(false);
 
@@ -744,13 +917,24 @@ function BookDesk({ book, log = [], onClose, onPatch, onDelete }) {
 
         {/* the one takeaway */}
         <div>
-          <label
-            htmlFor={`los-desk-lesson-${book.id}`}
-            className="mb-1.5 block text-xs"
-            style={{ color: `${T.accent}CC` }}
-          >
-            أهم درس يغيّر حياتي
-          </label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label
+              htmlFor={`los-desk-lesson-${book.id}`}
+              className="block text-xs"
+              style={{ color: `${T.accent}CC` }}
+            >
+              أهم درس يغيّر حياتي
+            </label>
+            {book.lesson && onTurnIntoTask && (
+              <button
+                type="button"
+                onClick={() => onTurnIntoTask(book.lesson)}
+                className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                <Zap size={10} /> ⚡ حوّل لخطة عمل
+              </button>
+            )}
+          </div>
           <textarea
             id={`los-desk-lesson-${book.id}`}
             value={book.lesson}
@@ -913,6 +1097,26 @@ function BookDesk({ book, log = [], onClose, onPatch, onDelete }) {
                           }`
                         : ""}
                     </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      {onTurnIntoTask && (
+                        <button
+                          type="button"
+                          onClick={() => onTurnIntoTask(n.text)}
+                          className="flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-400 hover:bg-amber-500/20 transition-colors"
+                        >
+                          <Zap size={9} /> ⚡ مهمة
+                        </button>
+                      )}
+                      {onTurnIntoHabit && (
+                        <button
+                          type="button"
+                          onClick={() => onTurnIntoHabit(n.text)}
+                          className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                        >
+                          <Sparkles size={9} /> 🌱 عادة
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => moveNote(n.id, "up")}
@@ -954,3 +1158,155 @@ const BOOK_STATUS = {
   finished: { label: "أنهيته", tint: T.primary },
 };
 
+
+
+/* ==================================================================== *
+ *  BookFlashcardsModal — بطاقات استذكار الفوائد (Spaced Repetition)
+ * ==================================================================== */
+function BookFlashcardsModal({ open, onClose, books, onReview, onTurnIntoTask, onTurnIntoHabit }) {
+  const waiting = useMemo(() => dueNotes(books), [books]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  const idx = Math.min(currentIdx, Math.max(0, waiting.length - 1));
+  const current = waiting[idx];
+
+  const handleNext = () => {
+    if (idx >= waiting.length - 1) {
+      setCurrentIdx(0);
+    }
+  };
+
+  const reviewCurrent = (kept) => {
+    if (!current) return;
+    onReview(current.book.id, current.note.id, kept);
+    handleNext();
+  };
+
+  if (!open) return null;
+
+  const cat = current?.book?.category ? BOOK_CATEGORIES.find((c) => c.id === current.book.category) : null;
+  const ident = current?.book?.identity ? IDENTITIES[current.book.identity] : null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="بطاقات استذكار الفوائد (Spaced Repetition)"
+      footer={
+        <Btn variant="default" className="flex-1" onClick={onClose}>
+          إغلاق النافذة
+        </Btn>
+      }
+    >
+      {waiting.length === 0 ? (
+        <div className="py-10 text-center space-y-3">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <Sparkles size={28} />
+          </div>
+          <h4 className="text-base font-extrabold text-white">لا توجد فوائد مستحقة الآن!</h4>
+          <p className="text-xs text-white/50 max-w-sm mx-auto leading-relaxed">
+            أحسنت! لقد راجعت كل الفوائد المستحقة لهذا اليوم، أو لم يحن موعد المراجعة بعد. واصل القراءة وتدوين الفوائد!
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs text-white/50">
+            <span className="font-bold text-amber-400 flex items-center gap-1.5">
+              <Brain size={14} /> بطاقة {idx + 1} من {waiting.length}
+            </span>
+            <span className="tabular-nums font-bold">المرحلة {current.note.box || 0} / 5</span>
+          </div>
+
+          <div
+            className="rounded-2xl border p-5 relative overflow-hidden transition-all"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              background: "linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))",
+            }}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3 mb-3">
+              <div>
+                <h4 className="font-black text-sm text-white/90">{current.book.title}</h4>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[11px] text-white/40">{current.book.author || "—"}</span>
+                  {cat && (
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-bold"
+                      style={{ background: `${cat.tint}22`, color: cat.tint }}
+                    >
+                      {cat.label}
+                    </span>
+                  )}
+                  {ident && (
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-bold"
+                      style={{ background: `${ident.tint}22`, color: ident.tint }}
+                    >
+                      {ident.label}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {current.note.page && (
+                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60 tabular-nums">
+                  ص {current.note.page}
+                </span>
+              )}
+            </div>
+
+            <div className="py-4 min-h-[110px] flex items-center justify-center text-center">
+              <p className="text-base font-bold text-white/95 leading-relaxed">
+                "{current.note.text}"
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[10px] text-white/40">
+                {current.note.box === 0
+                  ? "أول مراجعة لهذه الفائدة"
+                  : `صمدت في ${current.note.box} مراجعات سابقة`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onTurnIntoTask(current.note.text, current.book.title)}
+                  className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-400 hover:bg-amber-500/20 transition-colors"
+                  title="تحويل الفائدة إلى مهمة تنفيذية اليوم"
+                >
+                  <Zap size={11} /> ⚡ مهمة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onTurnIntoHabit(current.note.text, current.book.title)}
+                  className="flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                  title="تحويل الفائدة إلى عادة مستمرة"
+                >
+                  <Sparkles size={11} /> 🌱 عادة
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => reviewCurrent(false)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 py-2.5 text-xs font-bold text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              <span>❌ نسيتها</span>
+              <span className="text-[10px] opacity-70">(إعادة غداً)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => reviewCurrent(true)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors"
+            >
+              <span>✅ تذكّرتها</span>
+              <span className="text-[10px] opacity-70">(المرحلة التالية)</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
