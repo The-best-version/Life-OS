@@ -1,10 +1,9 @@
 {
   // ——— لماذا هذا الملف موجود ———————————————————————————————
-  // الجذر يحتوي iron-log/node_modules (785 ميغابايت، 15,101 ملف) ونسخاً
-  // كاملة من المستودع داخل .claude/worktrees، ومجلد cache للرسوم البيانية.
-  // بدون هذه الاستثناءات يفتح VS Code مراقِب ملفات على كل واحد منها، وهذا
-  // هو سبب التعليق — لا السيرفرات. أي مجلد يُضاف هنا يختفي من المراقبة
-  // والبحث، ولا يختفي من القرص.
+  // الجذر يحتوي نسخاً كاملة من المستودع داخل .claude/worktrees، ومجلد
+  // cache للرسوم البيانية. بدون هذه الاستثناءات يفتح VS Code مراقِب ملفات
+  // على كل واحد منها، وهذا هو سبب التعليق — لا السيرفرات. أي مجلد يُضاف
+  // هنا يختفي من المراقبة والبحث، ولا يختفي من القرص.
   "files.watcherExclude": {
     "**/.git/objects/**": true,
     "**/.git/subtree-cache/**": true,
@@ -44,7 +43,6 @@
     "README.md": "HOW-TO-EDIT.md, CLAUDE.md, DEVELOPER-MAP.md"
   },
   "workbench.editor.customLabels.patterns": {
-    "iron-log/src/**": "${filename} [Iron Log 🏋️]",
     "src/features/**": "${filename} [Life OS Screen 🌱]",
     "src/components/**": "${filename} [Life OS Component 🌱]",
     "src/state/**": "${filename} [Life OS State 💾]",

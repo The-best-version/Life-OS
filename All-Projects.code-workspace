@@ -3,10 +3,6 @@
     {
       "name": "Life OS",
       "path": "."
-    },
-    {
-      "name": "Iron Log",
-      "path": "./iron-log"
     }
   ],
   "settings": {

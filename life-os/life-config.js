@@ -120,12 +120,6 @@ export const todayBlocks = [
     visible: true,
   },
   {
-    key: "gymBridge",
-    label: "جسر النادي (Iron-Log)",
-    desc: "ربط تلقائي مع جلسات الحديد ووزن الجسم وعادة التمرين",
-    visible: true,
-  },
-  {
     key: "tasksModule",
     label: "المهام",
     desc: "أهم ٣ مهام اليوم + المهام الإضافية بلا سقف",

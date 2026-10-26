@@ -15,8 +15,7 @@
     "bot:whoami": "node services/telegram-bot/whoami.js",
     "bot:install": "npm --prefix services/telegram-bot install",
     "report": "node services/report-agent.js",
-    "report:watch": "node services/report-agent.js --watch",
-    "iron-log": "npm --prefix iron-log run dev"
+    "report:watch": "node services/report-agent.js --watch"
   },
   "engines": {
     "node": ">=20"

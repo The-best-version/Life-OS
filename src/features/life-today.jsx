@@ -1,5 +1,4 @@
 import { ReadLogModal, TodayExtras, TopThree, useHabitTick } from "../components/life-day.jsx";
-import { GymBridgeCard } from "../components/life-command.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Modal, PRAYERS, ProgressRing, ReadingCue, T, arDate, countedWord, courseIn, courseName, coursesIn, cupWord, daySections, dayWord, daysPhrase, groupOf, nextPrayer, nextSection, prettyTime, taskWord, tasksPhrase, useBurst, useMinuteClock, whenWord } from "../components/life-shared.jsx";
 import { todayBlocks } from "../life-config.js";
 import { CORE_CAP, TOP_TASK_CAP, UNI_TASK_KINDS, blockRank, bookForHabit, capToday, clampGoal, dayKey, daysUntil, inReflectWindow, kindOf, minsIn, placeShape, prepPickAdd, prepReady, remainingIn, rows, scoredOf, stampToday, taskOverdue, taskShape, tomorrowKey, uid, uniDayOf, uniPending, uniShape, upcomingRows, IDENTITIES, HABIT_LEVEL_POINTS, identityScores, freezeShape, contextualBlock, chainedHabits } from "../state/life-state.mjs";
@@ -351,7 +350,6 @@ export function TodayModule({
         />
       </div>
     ),
-    gymBridge: <GymBridgeCard state={state} setState={setState} />,
     tasksModule: (
       <>
         <TopThree state={state} setState={setState} />

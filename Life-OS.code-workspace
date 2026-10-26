@@ -11,8 +11,7 @@
       "**/.git": false,
       "**/.next": true,
       "**/.next-verify": true,
-      "**/node_modules": true,
-      "iron-log": true
+      "**/node_modules": true
     },
     "editor.tabSize": 2
   }

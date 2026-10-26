@@ -10,36 +10,14 @@
 
 | ما تريد العمل عليه | مساحة العمل | ما تراه في المحرر |
 |---|---|---|
-| **كل المشاريع معاً** | [`All-Projects.code-workspace`](All-Projects.code-workspace) | شجرة منظمة تضم (تطبيق النادي + كود الحياة + البوتات + الأدوات) بأقسام منفصلة. |
-| **تطبيق النادي فقط** | [`Iron-Log.code-workspace`](Iron-Log.code-workspace) | بيئة نقية لتطبيق Next.js فقط دون أي تشتيت من ملفات الحياة. |
+| **كل المشاريع معاً** | [`All-Projects.code-workspace`](All-Projects.code-workspace) | شجرة منظمة تضم كود الحياة + البوتات + الأدوات. |
 | **نظام الحياة فقط** | [`Life-OS.code-workspace`](Life-OS.code-workspace) | بيئة مركزة على كود Life OS المصدري والبوتات وسكربتات البناء. |
 
 > **نصيحة:** لفتح أي مساحة عمل، اضغط عليها مرتين، أو من داخل VS Code: `File -> Open Workspace from File`.
 
 ---
 
-## 🏋️ 1. تطبيق النادي الرياضي (`iron-log/`)
-مشروع **Next.js + TypeScript + Tailwind** متكامل ومستقل:
-
-* **شاشات التطبيق:**
-  - `iron-log/src/app/page.tsx`: لوحة القياس والإحصائيات الرئيسية (Dashboard).
-  - `iron-log/src/app/workout/page.tsx`: شاشة تسجيل التمارين والمجموعات والمؤقت الحي.
-  - `iron-log/src/app/history/page.tsx`: سجل الحصص والتمارين السابقة.
-  - `iron-log/src/app/nutrition/page.tsx`: التغذية والبروتين وحساب السعرات.
-  - `iron-log/src/app/settings/page.tsx`: إعدادات التمارين وقواعد البيانات.
-* **عناصر الواجهة (Components):**
-  - `iron-log/src/components/workout/`: مسجل التمارين، مؤقت الراحة، فورم الإضافة.
-  - `iron-log/src/components/dashboard/`: كروت الأحجام العضلية، الثبات، الأرقام القياسية.
-  - `iron-log/src/components/charts/`: الرسوم البيانية الخفيفة.
-* **المنطق وقواعد البيانات:**
-  - `iron-log/src/lib/types.ts`: تعريفات البيانات (المجموعات، العضلات).
-  - `iron-log/src/lib/metrics.ts`: حسابات الـ 1RM والحجم التدريبي.
-  - `iron-log/src/lib/repository.ts` & `storage.ts`: تخزين البيانات واستعادتها.
-* **دليل التعديل المفصل للنادي:** راجع [`iron-log/HOW-TO-EDIT.md`](iron-log/HOW-TO-EDIT.md).
-
----
-
-## 🌱 2. نظام إدارة الحياة (`Life OS`)
+## 🌱 1. نظام إدارة الحياة (`Life OS`)
 تطبيق ويب أحادي الصفحة (Single Page App) مبني بـ React مع معالج بناء فائق السرعة:
 
 * **الكود المصدري الرئيسي:**
@@ -59,13 +37,13 @@
 
 ---
 
-## 🤖 3. الخدمات الخلفية والبوتات (`services/`)
+## 🤖 2. الخدمات الخلفية والبوتات (`services/`)
 * `services/telegram-bot/`: بوت تيليجرام للإدخال السريع والتذكيرات الفورية.
 * `services/local-sync-server.js`: خادم المزامنة المحلي وحفظ التغييرات على القرص.
 
 ---
 
-## 📦 4. التطبيقات المصغرة المستقلة (`apps/`)
+## 📦 3. التطبيقات المصغرة المستقلة (`apps/`)
 أدوات مخصصة بصفحات مستقلة:
 * `apps/step-arena/`: تدريب واختبارات قياس الكفايات (STEP).
 * `apps/focus-flow/`: أداة المؤقت والتركيز.
@@ -76,7 +54,7 @@
 ## 💡 ميزة أسماء التبويبات التلقائية
 تم تفعيل خاصية ذكية في إعدادات VS Code:
 عند فتح ملفات متشابهة الأسماء، سيظهر بجانب اسم الملف وسم توضيحي في التبويب تلقائياً:
-- `page.tsx [workout]` أو `[Iron Log 🏋️]`
 - `life-today.jsx [Life OS Screen 🌱]`
+- `life-shared.jsx [Life OS Component 🌱]`
 - `telegram-bot.js [Service 🤖]`
 لتعرف دائماً في أي مشروع أنت بمجرد النظر إلى التبويب!

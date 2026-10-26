@@ -12,16 +12,20 @@
  *
  * Three things about it are not obvious:
  *
- * - There is no node_modules beside LifeOS.jsx and no package.json. What it
- *   needs — esbuild, tailwindcss, lucide-react — already sits in
- *   iron-log/node_modules, so esbuild is imported from there and told to
- *   resolve packages there too, through `nodePaths`. Nothing is installed,
- *   nothing is copied, and nothing is fetched.
+ * - There is no node_modules beside `src/`, where LifeOS.jsx actually lives.
+ *   What the build needs — esbuild, tailwindcss, lucide-react — sits in
+ *   life-os/node_modules instead (a small package.json of its own, holding
+ *   only those three; not an app), so esbuild is imported from there and
+ *   told to resolve packages there too, through `nodePaths`. This borrowed
+ *   from iron-log/node_modules until Iron Log was deleted (2026-10-26);
+ *   moving it here keeps the same "no deps beside the source" shape without
+ *   depending on a second project still existing.
  *
  * - React is not bundled. It loads as a UMD build from cdnjs and the bundle
- *   reaches it through shims that read window.React. Bundling the React 19
- *   in iron-log beside a page that loads 18.3.1 would give the app two
- *   copies of React and one of them would own the hooks.
+ *   reaches it through shims that read window.React. Bundling a React of a
+ *   different version in beside a page loading 18.3.1 would give the app
+ *   two Reacts and one of them would own the hooks — which is why
+ *   life-os/node_modules holds no React at all, only the three build tools.
  *
  * - The Tailwind CSS is generated from LifeOS.jsx itself rather than kept as
  *   a file, so a class used once on a new screen cannot be missing from it.
@@ -33,9 +37,9 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /* This file lives in scripts/, so the project root is one level up. Every
-   path below hangs off it — src/, life-os/, tests/ and iron-log/node_modules
-   — and resolving it from the script's own folder instead would point the
-   whole build at scripts/ and fail on the entry point. */
+   path below hangs off it — src/, life-os/ and tests/ — and resolving it
+   from the script's own folder instead would point the whole build at
+   scripts/ and fail on the entry point. */
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = join(root, "src");
 const src = join(srcDir, "LifeOS.jsx");
@@ -124,7 +128,7 @@ const shipped = [
 ];
 const splitSrc = scanned.map((f) => join(srcDir, f));
 const site = join(root, "life-os");
-const modules = join(root, "iron-log", "node_modules");
+const modules = join(root, "life-os", "node_modules");
 
 const esbuild = await import(pathToFileURL(join(modules, "esbuild", "lib", "main.js")).href);
 
@@ -220,7 +224,7 @@ async function runOnce() {
       jsxFactory: "React.createElement",
       jsxFragment: "React.Fragment",
       loader: { ".jsx": "jsx" },
-      nodePaths: [modules], // lucide-react lives over in iron-log
+      nodePaths: [modules], // lucide-react lives in life-os/node_modules
       alias: { react: reactShim, "react-dom": domShim, "react-dom/client": clientShim },
       define: { "process.env.NODE_ENV": '"production"' },
       legalComments: "none",
