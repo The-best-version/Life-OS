@@ -21,6 +21,7 @@ import {
   MapPin,
   RefreshCw,
   ShieldCheck,
+  SlidersHorizontal,
   Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -552,6 +553,7 @@ export function SettingsModal({
   diskAt,
   onGo,
   onEditYesterday,
+  onOpenNavCustomizer,
 }) {
   const fileRef = useRef(null);
   const [note, setNote] = useState(null); // {ok, text}
@@ -735,6 +737,22 @@ export function SettingsModal({
 
         {/* الميزة #1: المزامنة السحابية المشفرة صفرية المعرفة (E2EE Cloud Sync) */}
         <CloudSyncVaultCard state={state} setState={setState} onNotice={setNote} />
+
+        {onOpenNavCustomizer && (
+          <div className="rounded-2xl border p-3.5 space-y-2" style={{ borderColor: T.border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+            <div>
+              <p className="text-[12.5px] font-bold text-white flex items-center gap-1.5">
+                <SlidersHorizontal size={14} style={{ color: T.cta }} /> تخصيص وترتيب القائمة الجانبية
+              </p>
+              <p className="text-[10.5px] text-white/40 mt-0.5 leading-relaxed">
+                إعادة ترتيب التبويبات، تغيير مسميات القوائم والأقسام، وإخفاء أو إظهار أي شاشة.
+              </p>
+            </div>
+            <Btn variant="outline" className="w-full" onClick={onOpenNavCustomizer}>
+              <SlidersHorizontal size={14} /> فتح مخصّص وترتيب القوائم
+            </Btn>
+          </div>
+        )}
 
         <DataHealth
           open={open}

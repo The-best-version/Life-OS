@@ -7,7 +7,7 @@ import { AnalyticsModule, DayRollCall } from "./features/life-analytics.jsx";
 import { RoutineModule, SaveStamp, MirrorModal, EditYesterdayModal } from "./features/life-routine.jsx";
 import { TodayModule } from "./features/life-today.jsx";
 import { MatrixModule, TomorrowModal } from "./features/life-matrix.jsx";
-import { NavGroups, BottomTabs, NowStamp, NAV } from "./layouts/life-nav.jsx";
+import { NavGroups, BottomTabs, NowStamp, NAV, NavCustomizerModal, loadNavCustomization, saveNavCustomization, resetNavCustomization, applyNavCustomization } from "./layouts/life-nav.jsx";
 import { AssistantFab } from "./features/life-bot.jsx";
 import { SettingsModal } from "./features/life-settings.jsx";
 import { T, GLASS, useBurst, Card, Btn, Field, Badge, Modal, StarRating, Checkbox, ProgressRing, whenWord, NumStep, DateField, TimeField, DOW_AR, arCount, dayWord, daysPhrase, minWord, stepWord, meetWord, timesWord, fallWord, taskWord, tasksPhrase, forgivenPhrase, countedWord, prettyTime, AR_MONTHS, WEEK_LABELS, arDate, coursesIn, courseIn, courseName, daySections, nextSection, useMinuteClock, GROUPS, groupOf, PRAYERS, nextPrayer, cupWord, shrinkImage, Since, READ_KEY, useDailyQuote, UndoBus, useUndo, UndoToast, HoverDeleteProvider } from "./components/life-shared.jsx";
@@ -154,6 +154,7 @@ import {
   Archive,
   Footprints,
   Feather,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { blockAt, clockAt, fixHour, prayerTimes } from "./utils/prayer-times.mjs";
@@ -1141,10 +1142,30 @@ export default function LifeOS() {
 
   const go = (id) => setTab(id);
 
-  const navItems = NAV;
+  const [navConfig, setNavConfig] = useState(() => loadNavCustomization());
+  const [customNavOpen, setCustomNavOpen] = useState(false);
+
+  const navItems = useMemo(() => {
+    return applyNavCustomization(NAV, navConfig).filter((n) => n.visible !== false);
+  }, [navConfig]);
+
+  const allNavItems = useMemo(() => {
+    return applyNavCustomization(NAV, navConfig);
+  }, [navConfig]);
+
+  const handleSaveNavConfig = (newConfig) => {
+    saveNavCustomization(newConfig);
+    setNavConfig(newConfig);
+  };
+
+  const handleResetNavConfig = () => {
+    resetNavCustomization();
+    setNavConfig(null);
+  };
+
   const moreItems = [];
 
-  const active = NAV.find((n) => n.id === tab) || NAV[0];
+  const active = navItems.find((n) => n.id === tab) || NAV.find((n) => n.id === tab) || NAV[0];
 
   const goFromSettings = (id) => {
     setSettings(false);
@@ -1297,14 +1318,34 @@ export default function LifeOS() {
                 </div>
               )}
 
-              {!collapsed && (
-                <p className="mb-2 px-5 text-[10px] font-bold text-white/30">
-                  التنقّل
-                </p>
+              {!collapsed ? (
+                <div className="mb-2 flex items-center justify-between px-4">
+                  <p className="text-[10px] font-bold text-white/30">
+                    التنقّل
+                  </p>
+                  <button
+                    onClick={() => setCustomNavOpen(true)}
+                    className="flex items-center gap-1 text-[10px] font-bold text-white/45 hover:text-orange-300 transition-colors bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-lg border border-white/5"
+                    title="تخصيص وترتيب القوائم وتغيير الأسماء"
+                  >
+                    <SlidersHorizontal size={10} />
+                    <span>تخصيص</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-center mb-2">
+                  <button
+                    onClick={() => setCustomNavOpen(true)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 bg-white/5 text-white/40 hover:text-orange-300 hover:bg-white/10 transition-colors"
+                    title="تخصيص وترتيب القائمة وتغيير الأسماء"
+                  >
+                    <SlidersHorizontal size={11} />
+                  </button>
+                </div>
               )}
 
-              <div className={`los-scroll flex-1 overflow-y-auto px-3 pb-2 ${collapsed ? 'mt-4' : ''}`}>
-                <NavGroups items={navItems} tab={tab} onGo={go} showLabels={!collapsed} />
+              <div className={`los-scroll flex-1 overflow-y-auto px-3 pb-2 ${collapsed ? 'mt-1' : ''}`}>
+                <NavGroups items={navItems} tab={tab} onGo={go} showLabels={!collapsed} sectionNames={navConfig?.sectionNames} />
               </div>
 
               <div className="mt-auto space-y-3 p-4">
@@ -1622,6 +1663,19 @@ export default function LifeOS() {
           setSettings(false);
           setFixing(true);
         }}
+        onOpenNavCustomizer={() => {
+          setSettings(false);
+          setCustomNavOpen(true);
+        }}
+      />
+
+      <NavCustomizerModal
+        open={customNavOpen}
+        onClose={() => setCustomNavOpen(false)}
+        baseItems={NAV}
+        currentConfig={navConfig}
+        onSave={handleSaveNavConfig}
+        onReset={handleResetNavConfig}
       />
 
       <EditYesterdayModal
