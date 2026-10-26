@@ -62,13 +62,13 @@ function NavList({ items, tab, onGo, showLabels }) {
             key={n.id}
             onClick={() => onGo(n.id)}
             aria-current={on ? "page" : undefined}
-            title={showLabels ? undefined : n.label}
-            className={`group relative flex items-center gap-3 rounded-2xl border text-right transition-all duration-300 ${
-              showLabels ? "px-3 py-2.5" : "justify-center px-0 py-2.5"
+            title={!showLabels ? `${n.label} (${n.short})` : undefined}
+            className={`group relative flex items-center rounded-2xl border text-right transition-all duration-300 ${
+              showLabels ? "gap-3 px-3 py-2.5" : "justify-center px-0 py-2.5 mx-auto w-11 h-11"
             }${
               on 
                 ? " scale-[1.02] bg-white/[0.08] backdrop-blur-md" 
-                : " hover:bg-white/[0.04] hover:translate-x-[-2px]"
+                : " hover:bg-white/[0.04] hover:scale-105"
             }`}
             style={{
               borderColor: on ? `${T.cta}40` : "transparent",
@@ -84,7 +84,7 @@ function NavList({ items, tab, onGo, showLabels }) {
             {on && (
               <span
                 aria-hidden="true"
-                className="absolute inset-y-2 right-0 w-[4px] rounded-full"
+                className={`absolute inset-y-2 rounded-full ${showLabels ? "right-0 w-[4px]" : "right-1 w-[3px]"}`}
                 style={{
                   background: `linear-gradient(180deg, ${T.cta}, ${T.ember})`,
                   boxShadow: `0 0 16px 2px ${T.cta}80`,
@@ -93,14 +93,16 @@ function NavList({ items, tab, onGo, showLabels }) {
             )}
             
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:scale-110"
+              className={`flex shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:scale-110 ${
+                showLabels ? "h-8 w-8" : "h-9 w-9"
+              }`}
               style={{
                 backgroundColor: on ? `${T.cta}20` : "rgba(255,255,255,0.03)",
                 color: on ? T.ctaLift : T.muted,
                 boxShadow: on ? `inset 0 0 10px ${T.cta}30` : "none",
               }}
             >
-              <Icon size={17} strokeWidth={on ? 2.5 : 2} />
+              <Icon size={showLabels ? 17 : 19} strokeWidth={on ? 2.5 : 2} />
             </span>
             
             {showLabels && (
@@ -115,7 +117,29 @@ function NavList({ items, tab, onGo, showLabels }) {
   );
 }
 
+export const CONTEXT_SECTIONS = [
+  { id: "daily", label: "اليومي", icon: "⚡", groupIds: ["daily"] },
+  { id: "growth", label: "المستقبلي", icon: "🎯", groupIds: ["growth"] },
+  { id: "tools", label: "الأدوات", icon: "🧰", groupIds: ["tools", "ai_assist"] },
+  { id: "all", label: "الكل", icon: "🌐", groupIds: ["daily", "growth", "tools", "ai_assist"] },
+];
+
 export function NavGroups({ items, tab, onGo, showLabels }) {
+  const [activeSection, setActiveSection] = useState(() => {
+    try {
+      return localStorage.getItem("los-nav-section") || "daily";
+    } catch {
+      return "daily";
+    }
+  });
+
+  const selectSection = (secId) => {
+    setActiveSection(secId);
+    try {
+      localStorage.setItem("los-nav-section", secId);
+    } catch {}
+  };
+
   const [collapsedMap, setCollapsedMap] = useState(() => {
     try {
       const raw = localStorage.getItem("los-nav-collapsed-groups");
@@ -124,6 +148,19 @@ export function NavGroups({ items, tab, onGo, showLabels }) {
       return {};
     }
   });
+
+  // Automatically ensure active tab's section is shown if not in 'all'
+  useEffect(() => {
+    if (activeSection === "all") return;
+    const secDef = CONTEXT_SECTIONS.find((s) => s.id === activeSection);
+    const tabGroupId = GROUP_OF_TAB.get(tab) || "ai_assist";
+    if (secDef && !secDef.groupIds.includes(tabGroupId)) {
+      const match = CONTEXT_SECTIONS.find((s) => s.id !== "all" && s.groupIds.includes(tabGroupId));
+      if (match) {
+        selectSection(match.id);
+      }
+    }
+  }, [tab]);
 
   const toggleGroup = (groupId) => {
     setCollapsedMap((prev) => {
@@ -144,98 +181,164 @@ export function NavGroups({ items, tab, onGo, showLabels }) {
 
   const loose = items.filter((n) => !GROUP_OF_TAB.has(n.id));
 
-  return (
-    <div className="flex flex-col gap-6">
-      {groups.map((g, i) => {
-        const hasActive = g.tabsIn.some((n) => n.id === tab);
-        const isCollapsible = g.id === "tools";
-        const isCollapsed = isCollapsible && !hasActive && !!collapsedMap[g.id];
+  const currentSectionDef =
+    CONTEXT_SECTIONS.find((s) => s.id === activeSection) || CONTEXT_SECTIONS[0];
+  const filteredGroups = groups.filter((g) => currentSectionDef.groupIds.includes(g.id));
+  const showLoose = loose.length > 0 && currentSectionDef.groupIds.includes("ai_assist");
 
-        return (
-          <div key={g.id}>
-            {showLabels ? (
-              <div
-                onClick={isCollapsible ? () => toggleGroup(g.id) : undefined}
-                className={`mb-2.5 flex items-center justify-between px-3 ${
-                  isCollapsible ? "cursor-pointer group select-none" : ""
-                }`}
-                title={isCollapsible ? (isCollapsed ? "اضغط لإظهار الأدوات" : "اضغط لطي الأدوات وتصفية القائمة") : undefined}
-              >
-                <div className="flex items-center gap-2">
-                  <p
-                    className={`shrink-0 text-[10px] font-extrabold tracking-widest uppercase transition-colors ${
-                      isCollapsible ? "group-hover:text-white/70" : ""
+  return (
+    <div className="flex flex-col gap-3">
+      {/* 🧭 محوّل السياق السريع (Segmented Context Switcher) */}
+      <div className="mb-1">
+        {showLabels ? (
+          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white/[0.03] p-1 border border-white/5 backdrop-blur-sm">
+            {CONTEXT_SECTIONS.map((sec) => {
+              const active = activeSection === sec.id;
+              return (
+                <button
+                  key={sec.id}
+                  type="button"
+                  onClick={() => selectSection(sec.id)}
+                  className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[11px] transition-all duration-200 select-none ${
+                    active
+                      ? "bg-gradient-to-r from-orange-500/80 to-amber-600/80 text-white font-black shadow-md shadow-orange-500/20 scale-[1.02]"
+                      : "text-white/45 hover:text-white/80 hover:bg-white/5 font-bold"
+                  }`}
+                  title={`تصفية: ${sec.label}`}
+                >
+                  <span className="text-xs">{sec.icon}</span>
+                  <span className="truncate">{sec.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-white/[0.03] p-1 border border-white/5">
+            {CONTEXT_SECTIONS.map((sec) => {
+              const active = activeSection === sec.id;
+              return (
+                <button
+                  key={sec.id}
+                  type="button"
+                  onClick={() => selectSection(sec.id)}
+                  className={`h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs transition-all duration-200 ${
+                    active
+                      ? "bg-gradient-to-r from-orange-500/80 to-amber-600/80 text-white shadow-md shadow-orange-500/20 scale-105"
+                      : "text-white/40 hover:text-white hover:bg-white/5"
+                  }`}
+                  title={`سياق: ${sec.label}`}
+                >
+                  {sec.icon}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {filteredGroups.map((g, i) => {
+          const hasActive = g.tabsIn.some((n) => n.id === tab);
+          const isCollapsible = activeSection === "all" && g.id === "tools";
+          const isCollapsed = isCollapsible && !hasActive && !!collapsedMap[g.id];
+
+          return (
+            <div key={g.id}>
+              {showLabels ? (
+                activeSection === "all" ? (
+                  <div
+                    onClick={isCollapsible ? () => toggleGroup(g.id) : undefined}
+                    className={`mb-2 flex items-center justify-between px-3 ${
+                      isCollapsible ? "cursor-pointer group select-none" : ""
                     }`}
-                    style={{ color: "rgba(255,255,255,0.4)" }}
+                    title={
+                      isCollapsible
+                        ? isCollapsed
+                          ? "اضغط لإظهار الأدوات"
+                          : "اضغط لطي الأدوات وتصفية القائمة"
+                        : undefined
+                    }
                   >
-                    {g.label}
-                  </p>
-                  {isCollapsible && (
-                    <span
-                      className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white/35 transition-colors group-hover:text-white/60"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
-                    >
-                      {g.tabsIn.length}
+                    <div className="flex items-center gap-2">
+                      <p
+                        className={`shrink-0 text-[10px] font-extrabold tracking-widest uppercase transition-colors ${
+                          isCollapsible ? "group-hover:text-white/70" : ""
+                        }`}
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                      >
+                        {g.label}
+                      </p>
+                      {isCollapsible && (
+                        <span
+                          className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white/35 transition-colors group-hover:text-white/60"
+                          style={{ background: "rgba(255,255,255,0.05)" }}
+                        >
+                          {g.tabsIn.length}
+                        </span>
+                      )}
+                    </div>
+                    {isCollapsible && (
+                      <span className="text-white/30 transition-transform group-hover:text-white/60">
+                        {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                      </span>
+                    )}
+                  </div>
+                ) : null
+              ) : (
+                i > 0 &&
+                activeSection === "all" && (
+                  <div
+                    aria-hidden="true"
+                    className="mx-auto mb-3 h-px w-8"
+                    style={{ background: "rgba(255,255,255,0.08)" }}
+                  />
+                )
+              )}
+              {!isCollapsed && (
+                <NavList items={g.tabsIn} tab={tab} onGo={onGo} showLabels={showLabels} />
+              )}
+            </div>
+          );
+        })}
+        {showLoose &&
+          (() => {
+            const hasActive = loose.some((n) => n.id === tab);
+            const isCollapsible = activeSection === "all";
+            const isCollapsed = isCollapsible && !hasActive && !!collapsedMap["ai_assist"];
+            return (
+              <div>
+                {showLabels && activeSection === "all" && (
+                  <div
+                    onClick={() => toggleGroup("ai_assist")}
+                    className="mb-2 flex cursor-pointer select-none items-center justify-between px-3 group"
+                    title={isCollapsed ? "اضغط لإظهار أدوات الذكاء والمساعد" : "اضغط لطي القسم"}
+                  >
+                    <div className="flex items-center gap-2">
+                      <p
+                        className="shrink-0 text-[10px] font-extrabold tracking-widest uppercase transition-colors group-hover:text-white/70"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                      >
+                        الذكاء والمساعد
+                      </p>
+                      <span
+                        className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white/35 transition-colors group-hover:text-white/60"
+                        style={{ background: "rgba(255,255,255,0.05)" }}
+                      >
+                        {loose.length}
+                      </span>
+                    </div>
+                    <span className="text-white/30 transition-transform group-hover:text-white/60">
+                      {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
                     </span>
-                  )}
-                </div>
-                {isCollapsible && (
-                  <span className="text-white/30 transition-transform group-hover:text-white/60">
-                    {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
-                  </span>
+                  </div>
+                )}
+                {!isCollapsed && (
+                  <NavList items={loose} tab={tab} onGo={onGo} showLabels={showLabels} />
                 )}
               </div>
-            ) : (
-              i > 0 && (
-                <div
-                  aria-hidden="true"
-                  className="mx-auto mb-4 h-px w-8"
-                  style={{ background: "rgba(255,255,255,0.08)" }}
-                />
-              )
-            )}
-            {!isCollapsed && (
-              <NavList items={g.tabsIn} tab={tab} onGo={onGo} showLabels={showLabels} />
-            )}
-          </div>
-        );
-      })}
-      {loose.length > 0 && (() => {
-        const hasActive = loose.some((n) => n.id === tab);
-        const isCollapsed = !hasActive && !!collapsedMap["ai_assist"];
-        return (
-          <div>
-            {showLabels && (
-              <div
-                onClick={() => toggleGroup("ai_assist")}
-                className="mb-2.5 flex cursor-pointer select-none items-center justify-between px-3 group"
-                title={isCollapsed ? "اضغط لإظهار أدوات الذكاء والمساعد" : "اضغط لطي القسم"}
-              >
-                <div className="flex items-center gap-2">
-                  <p
-                    className="shrink-0 text-[10px] font-extrabold tracking-widest uppercase transition-colors group-hover:text-white/70"
-                    style={{ color: "rgba(255,255,255,0.4)" }}
-                  >
-                    الذكاء والمساعد
-                  </p>
-                  <span
-                    className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white/35 transition-colors group-hover:text-white/60"
-                    style={{ background: "rgba(255,255,255,0.05)" }}
-                  >
-                    {loose.length}
-                  </span>
-                </div>
-                <span className="text-white/30 transition-transform group-hover:text-white/60">
-                  {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
-                </span>
-              </div>
-            )}
-            {!isCollapsed && (
-              <NavList items={loose} tab={tab} onGo={onGo} showLabels={showLabels} />
-            )}
-          </div>
-        );
-      })()}
+            );
+          })()}
+      </div>
     </div>
   );
 }

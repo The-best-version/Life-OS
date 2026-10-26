@@ -792,12 +792,16 @@ export default function LifeOS() {
   const [fixing, setFixing] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
-  // اختصار عالمي Ctrl + K أو Cmd + K لفتح لوحة الأوامر الخاطفة
+  // اختصارات عالمية: Ctrl+K للأوامر الخاطفة، Ctrl+B للتبديل للشريط الرشيق
   useEffect(() => {
     const onGlobalKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandOpen((prev) => !prev);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setCollapsed((prev) => !prev);
       }
     };
     window.addEventListener("keydown", onGlobalKey);
@@ -1210,7 +1214,7 @@ export default function LifeOS() {
           >
             <aside
               className={`absolute right-4 top-4 bottom-4 flex flex-col rounded-[2rem] transition-all duration-500 ease-in-out ${
-                collapsed ? "w-[88px]" : "w-[280px]"
+                collapsed ? "w-[80px]" : "w-[280px]"
               }`}
               style={{
                 transform: isSidebarHovered ? "translateX(0)" : "translateX(calc(100% - 6px))",
@@ -1239,37 +1243,38 @@ export default function LifeOS() {
               {!collapsed ? (
                 <>
                   {/* 🌟 الشعار في القمة (The Brand) */}
-                  <div className="relative w-full flex flex-col items-center pt-8 pb-4 overflow-hidden">
+                  <div className="relative w-full flex flex-col items-center pt-5 pb-2.5 overflow-hidden">
                     {/* الشمس المشرقة */}
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-orange-500/20 blur-[40px] pointer-events-none mix-blend-screen" />
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-40 bg-orange-500/20 blur-[35px] pointer-events-none mix-blend-screen" />
                     
                     {/* أثر */}
-                    <h1 className="z-10 text-[48px] font-kufi font-bold leading-none bg-clip-text text-transparent bg-gradient-to-b from-white via-orange-50 to-orange-300 drop-shadow-[0_0_25px_rgba(249,115,22,0.3)]">
+                    <h1 className="z-10 text-[38px] font-kufi font-bold leading-none bg-clip-text text-transparent bg-gradient-to-b from-white via-orange-50 to-orange-300 drop-shadow-[0_0_20px_rgba(249,115,22,0.3)]">
                       أثر
                     </h1>
 
                     {/* ATHAR */}
-                    <p className="z-10 text-[9px] font-cinzel font-bold text-white/70 tracking-[0.6em] mt-2" style={{ direction: "ltr" }}>
+                    <p className="z-10 text-[8.5px] font-cinzel font-bold text-white/70 tracking-[0.5em] mt-1.5" style={{ direction: "ltr" }}>
                       A T H A R
                     </p>
 
                     {/* الخط الفاصل المضيء مع 2030 */}
-                    <div className="w-full flex items-center gap-3 px-6 mt-4 z-10">
+                    <div className="w-full flex items-center gap-2.5 px-6 mt-2.5 z-10">
                       <span className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-orange-500/60" />
-                      <span className="text-[11px] font-cinzel font-bold text-orange-300/90 tracking-[0.3em] drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]" style={{ direction: "ltr" }}>2030</span>
+                      <span className="text-[10.5px] font-cinzel font-bold text-orange-300/90 tracking-[0.25em] drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]" style={{ direction: "ltr" }}>2030</span>
                       <span className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-orange-500/60" />
                     </div>
                   </div>
 
                   {/* 🛠️ زر القائمة والوقت */}
-                  <div className="flex items-center justify-between px-4 py-3 border-y border-white/5 bg-white/[0.02] mb-2 mx-2 rounded-xl">
+                  <div className="flex items-center justify-between px-3.5 py-2 border-y border-white/5 bg-white/[0.02] mb-2 mx-2 rounded-xl">
                     <button
                       onClick={() => setCollapsed((c) => !c)}
-                      aria-label="طيّ القائمة"
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 transition-colors hover:border-white/30 hover:bg-white/10"
+                      aria-label="التبديل للشريط الرشيق (Slim Rail) — اختصار Ctrl+B"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 transition-colors hover:border-white/30 hover:bg-white/10"
                       style={{ color: T.accent }}
+                      title="التبديل للشريط الرشيق (Slim Rail) — اختصار Ctrl+B"
                     >
-                      <Menu size={16} />
+                      <Menu size={15} />
                     </button>
                     <div className="shrink-0 text-left">
                       <NowStamp />
@@ -1277,17 +1282,18 @@ export default function LifeOS() {
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col items-center pt-6 pb-4">
+                <div className="flex flex-col items-center pt-5 pb-3">
                   <button
                     onClick={() => setCollapsed((c) => !c)}
-                    aria-label="توسيع القائمة"
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-colors hover:border-white/30 hover:bg-white/10"
+                    aria-label="توسيع القائمة — اختصار Ctrl+B"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-colors hover:border-white/30 hover:bg-white/10"
                     style={{ color: T.accent }}
+                    title="توسيع القائمة — اختصار Ctrl+B"
                   >
-                    <Menu size={18} />
+                    <Menu size={16} />
                   </button>
                   {/* شعار مصغر يظهر عندما تكون القائمة مطوية */}
-                  <h1 className="text-[24px] font-kufi font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-orange-300 mt-4">أثر</h1>
+                  <h1 className="text-[22px] font-kufi font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-orange-300 mt-3 drop-shadow-[0_0_10px_rgba(249,115,22,0.3)]">أثر</h1>
                 </div>
               )}
 
