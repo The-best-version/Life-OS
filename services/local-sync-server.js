@@ -58,7 +58,6 @@ const SITE = path.join(ROOT, "life-os");
 const PROJECTS = {
   lifeos: "lifeos.json",
   step: "step.json",
-  ironlog: "ironlog.json",
 };
 
 /* The graphify side of the house, read-only. The app already writes its
@@ -77,7 +76,6 @@ const GRAPHIFY_FILES = {
   "graph.html": "graph.html",
   "report.md": "GRAPH_REPORT.md",
   "charts/discipline.svg": "lifeos-discipline.svg",
-  "charts/gym.svg": "gym-consistency.svg",
   "charts/step.svg": "step-progress.svg",
 };
 

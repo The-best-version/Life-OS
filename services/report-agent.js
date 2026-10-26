@@ -5,9 +5,8 @@
  * Reads three independent projects WITHOUT touching them:
  *   LifeOS.jsx            → daily routine / discipline / 2027 goals
  *   step-arena.html       → STEP preparation
- *   iron-log/             → gym tracker
  *
- * and writes exactly three SVG charts into graphify-out/.
+ * and writes exactly two SVG charts into graphify-out/.
  *
  * Source cascade, per project:
  *   1. live snapshot  — graphify-out/data/*.json  (localStorage payload)
@@ -60,8 +59,6 @@ const SRC = {
     path.join(ROOT, "src", "components", "life-shared.jsx"),
   ],
   step: path.join(ROOT, "apps", "step-arena", "step-arena.html"),
-  gymSeed: path.join(ROOT, "iron-log", "src", "lib", "seed.ts"),
-  gymTypes: path.join(ROOT, "iron-log", "src", "lib", "types.ts"),
 };
 
 const log = (...a) => {
@@ -320,7 +317,7 @@ function evalConsts(src, names) {
 }
 
 /* ══════════════════════════════════════════════════════════════════ */
-/* Date helpers — the week opens on Saturday, as iron-log does         */
+/* Date helpers — the training week opens on Saturday                  */
 /* ══════════════════════════════════════════════════════════════════ */
 
 const iso = (d) =>
@@ -1133,243 +1130,12 @@ function chartLifeOS(d) {
 }
 
 /* ══════════════════════════════════════════════════════════════════ */
-/* 3 · Gym (iron-log)                                                  */
-/* ══════════════════════════════════════════════════════════════════ */
-
-function extractGym() {
-  const snap = snapshot([/iron/i, /gym/i]);
-  const seedSrc = read(SRC.gymSeed);
-  const typeSrc = read(SRC.gymTypes);
-  const seeds = evalConsts(seedSrc, ["CATALOG", "PROGRAM", "DEFAULT_SETTINGS"]);
-  const types = evalConsts(typeSrc, ["MUSCLE_GROUPS", "MUSCLE_GROUP_LABELS"]);
-
-  const labels =
-    types.MUSCLE_GROUP_LABELS && typeof types.MUSCLE_GROUP_LABELS === "object"
-      ? types.MUSCLE_GROUP_LABELS
-      : {};
-
-  const out = {
-    source: "static",
-    file: path.join("iron-log", "src", "lib", "seed.ts"),
-    labels,
-    weeklyGoal: Number(seeds.DEFAULT_SETTINGS && seeds.DEFAULT_SETTINGS.weeklyGoal) || 4,
-    programDays: [],
-    muscleCounts: {},
-    weeks: [],
-    sessions: 0,
-    setCount: 0,
-    volumeKg: 0,
-    prCount: 0,
-  };
-
-  const catalog = seeds.CATALOG && typeof seeds.CATALOG === "object" ? seeds.CATALOG : {};
-  if (Array.isArray(seeds.PROGRAM)) {
-    out.programDays = seeds.PROGRAM.map((p) => ({
-      name: p.name,
-      focus: p.focus,
-      count: Array.isArray(p.exercises) ? p.exercises.length : 0,
-    }));
-    const seen = new Set();
-    for (const day of seeds.PROGRAM)
-      for (const slug of day.exercises || []) {
-        if (seen.has(slug)) continue;
-        seen.add(slug);
-        const g = catalog[slug] && catalog[slug].muscleGroup;
-        if (g) out.muscleCounts[g] = (out.muscleCounts[g] || 0) + 1;
-      }
-  }
-
-  if (!snap) return out;
-
-  const raw = snap.data;
-  const db =
-    raw && Array.isArray(raw.setEntries)
-      ? raw
-      : (unwrap(raw, "ironlog.") || {})["db.v1"] || raw["ironlog.db.v1"] || null;
-  if (!db || !Array.isArray(db.sessions) || !Array.isArray(db.setEntries)) return out;
-
-  out.source = "live";
-  out.file = snap.name;
-  if (db.settings && Number(db.settings.weeklyGoal))
-    out.weeklyGoal = Number(db.settings.weeklyGoal);
-
-  const exById = new Map((db.exercises || []).map((e) => [e.id, e]));
-  const sessById = new Map((db.sessions || []).map((s) => [s.id, s]));
-  const working = (db.setEntries || []).filter((s) => s && !s.isWarmup);
-
-  out.sessions = db.sessions.length;
-  out.setCount = working.length;
-  out.volumeKg = Math.round(
-    working.reduce((n, s) => n + (Number(s.weightKg) || 0) * (Number(s.reps) || 0), 0),
-  );
-
-  // Muscle-group volume replaces the structural exercise count.
-  const vol = {};
-  for (const s of working) {
-    const ex = exById.get(s.exerciseId);
-    if (!ex) continue;
-    vol[ex.muscleGroup] =
-      (vol[ex.muscleGroup] || 0) + (Number(s.weightKg) || 0) * (Number(s.reps) || 0);
-  }
-  if (Object.keys(vol).length) {
-    out.muscleCounts = {};
-    for (const k of Object.keys(vol)) out.muscleCounts[k] = Math.round(vol[k]);
-    out.muscleUnit = "kg";
-  }
-
-  // Personal records: best working weight per exercise.
-  const bestByEx = new Map();
-  for (const s of working) {
-    const w = Number(s.weightKg) || 0;
-    if (w > (bestByEx.get(s.exerciseId) || 0)) bestByEx.set(s.exerciseId, w);
-  }
-  out.prCount = bestByEx.size;
-
-  // Weekly buckets, 12 weeks back, week opening Saturday.
-  const thisWeek = weekStart(new Date());
-  const weeks = [];
-  for (let i = 0; i < 12; i++) {
-    const start = addDays(thisWeek, -i * 7);
-    weeks.push({ start, key: iso(start), sessions: 0, attended: 0 });
-  }
-  const byKey = new Map(weeks.map((w) => [w.key, w]));
-  for (const s of db.sessions) {
-    const dt = parseIso(s.date);
-    if (!dt) continue;
-    const b = byKey.get(iso(weekStart(dt)));
-    if (b) b.sessions++;
-  }
-  for (const [day, on] of Object.entries(db.attendance || {})) {
-    if (!on) continue;
-    const dt = parseIso(day);
-    if (!dt) continue;
-    const b = byKey.get(iso(weekStart(dt)));
-    if (b) b.attended++;
-  }
-  out.weeks = weeks; // index 0 = current week
-
-  return out;
-}
-
-function chartGym(d) {
-  const W = 980,
-    H = 580;
-  const b = [];
-  const live = d.source === "live";
-  b.push(
-    header(
-      W,
-      "انتظام النادي",
-      live ? "الجلسات الأسبوعية مقابل الهدف، وتوزيع الحجم" : "برنامج التقسيم وتغطية العضلات",
-      d.source,
-    ),
-  );
-
-  const metGoal = d.weeks.filter((w) => w.sessions >= d.weeklyGoal).length;
-  let run = 0;
-  for (const w of d.weeks) {
-    if (w.sessions >= d.weeklyGoal) run++;
-    else break;
-  }
-  b.push(
-    tilesRTL(32, 100, W - 64, [
-      { label: "الهدف الأسبوعي", value: String(d.weeklyGoal), color: C.emerald },
-      { label: "جلسات مسجّلة", value: String(d.sessions), color: C.coral },
-      { label: "مجاميع فعّالة", value: String(d.setCount), color: C.amber },
-      { label: "الحجم الكلّي", value: d.volumeKg ? d.volumeKg.toLocaleString("en-US") + " kg" : "—", color: C.cyan },
-      { label: "أسابيع متتالية", value: String(run), color: C.pink },
-    ]),
-  );
-
-  // ── Top card: weekly columns (live) or program days (structure)
-  b.push(card(32, 186, W - 64, 196));
-  if (live) {
-    b.push(
-      panelTitle(W - 52, 218, "الجلسات في كل أسبوع", "١٢ أسبوعًا · الأحدث على اليسار · الأسبوع يبدأ السبت"),
-    );
-    b.push(
-      columnsRTL(
-        72,
-        266,
-        W - 144,
-        86,
-        d.weeks.map((w) => ({
-          value: w.sessions,
-          label: String(w.start.getDate()).padStart(2, "0") + "/" + String(w.start.getMonth() + 1).padStart(2, "0"),
-        })),
-        { goal: d.weeklyGoal, max: Math.max(d.weeklyGoal + 1, 5), barWidth: 30 },
-      ),
-    );
-  } else {
-    b.push(panelTitle(W - 52, 218, "أيام البرنامج", "عدد التمارين في كل يوم من التقسيم"));
-    const days = d.programDays;
-    const slot = (W - 144) / (days.length || 1);
-    b.push(
-      columnsRTL(
-        72,
-        266,
-        W - 144,
-        86,
-        days.map((p) => ({ value: p.count, color: C.coral })),
-        { barWidth: Math.min(44, slot * 0.6) },
-      ),
-    );
-    days.forEach((p, i) => {
-      const cx = 72 + (W - 144) - (i + 0.5) * slot;
-      b.push(
-        lt(cx, 370, p.name, { size: 11.5, anchor: "middle", fill: INK, weight: 700 }),
-      );
-    });
-  }
-
-  // ── Bottom card: muscle coverage
-  b.push(card(32, 398, W - 64, 142));
-  b.push(
-    panelTitle(
-      W - 52,
-      428,
-      live ? "الحجم حسب المجموعة العضلية" : "تغطية المجموعات العضلية",
-      live ? "كيلوجرام × تكرار عبر كل الجلسات" : "عدد التمارين الفريدة في البرنامج",
-    ),
-  );
-  const entries = Object.entries(d.muscleCounts)
-    .sort((a, b2) => b2[1] - a[1])
-    .slice(0, 10);
-  if (!entries.length) {
-    b.push(emptyNote(56, 460, W - 112, 48, "لا توجد مجموعات عضلية مسجَّلة"));
-  } else {
-    const max = Math.max(...entries.map((e) => e[1])) || 1;
-    const slot = (W - 112) / entries.length;
-    entries.forEach(([g, v], i) => {
-      const cx = 56 + (W - 112) - (i + 0.5) * slot;
-      const bw = Math.min(46, slot * 0.66);
-      const bh = Math.max(3, (v / max) * 40);
-      const col = [C.coral, C.amber, C.emerald, C.violet, C.cyan, C.pink, C.blue, C.orange, C.rose, C.coral][i % 10];
-      b.push(
-        `<rect x="${(cx - bw / 2).toFixed(1)}" y="${(514 - bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="5" fill="${col}" fill-opacity="0.92"/>`,
-        lt(cx, 514 - bh - 6, d.muscleUnit ? Math.round(v / 1000) + "k" : String(v), {
-          size: 10,
-          anchor: "middle",
-          fill: col,
-          weight: 700,
-        }),
-        `<text x="${cx.toFixed(1)}" y="531" fill="${MUTED}" font-size="11" font-weight="600" text-anchor="middle" style="direction:rtl;unicode-bidi:isolate">${esc(d.labels[g] || g)}</text>`,
-      );
-    });
-  }
-
-  b.push(stamp(W, H));
-  return doc(W, H, b.join("\n"));
-}
-
-/* ══════════════════════════════════════════════════════════════════ */
 /* Main                                                                */
 /* ══════════════════════════════════════════════════════════════════ */
 
 const JOBS = [
   { name: "step-progress.svg", extract: extractStep, chart: chartStep, tag: "STEP" },
   { name: "lifeos-discipline.svg", extract: extractLifeOS, chart: chartLifeOS, tag: "Life OS" },
-  { name: "gym-consistency.svg", extract: extractGym, chart: chartGym, tag: "Gym" },
 ];
 
 function render() {
@@ -1404,7 +1170,7 @@ function render() {
       log(
         "\n  no snapshots in " +
           DATA +
-          "\n  drop lifeos.json / step.json / ironlog.json there for live charts",
+          "\n  drop lifeos.json / step.json there for live charts",
       );
   }
   return failed;
@@ -1412,7 +1178,7 @@ function render() {
 
 /** --watch: regenerate whenever a source file or a snapshot changes. */
 function watch() {
-  const targets = [SRC.lifeos, ...SRC.lifeosConsts, SRC.step, SRC.gymSeed, SRC.gymTypes, DATA];
+  const targets = [SRC.lifeos, ...SRC.lifeosConsts, SRC.step, DATA];
   let timer = null;
   const kick = () => {
     clearTimeout(timer);

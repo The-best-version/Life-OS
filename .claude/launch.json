@@ -2,17 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "iron-log-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "iron-log",
-        "run",
-        "dev"
-      ],
-      "port": 3000
-    },
-    {
       "name": "life-os-test",
       "runtimeExecutable": "node",
       "runtimeArgs": [
@@ -23,21 +12,6 @@
         "life-os-test-data"
       ],
       "port": 47699
-    },
-    {
-      "name": "iron-log-verify",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "iron-log",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "3077"
-      ],
-      "port": 3077,
-      "url": "http://ironlog.localhost:3077"
     }
   ]
 }
