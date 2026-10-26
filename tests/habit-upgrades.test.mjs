@@ -7,6 +7,7 @@ import {
   chainedHabits,
   freezeShape,
   habitShape,
+  inferHabitIdentity,
   HABIT_LEVEL_POINTS,
 } from "../src/state/life-state.mjs";
 
@@ -87,4 +88,28 @@ test("chainedHabits groups stacked habits into chronological chains", () => {
   assert.equal(chains[0][2].id, "3");
   assert.equal(chains[1].length, 1);
   assert.equal(chains[1][0].id, "4");
+});
+
+test("inferHabitIdentity maps keywords accurately", () => {
+  assert.equal(inferHabitIdentity("صلاة الفجر وأذكار"), "mindful");
+  assert.equal(inferHabitIdentity("ورد قرآن وتدبر"), "mindful");
+  assert.equal(inferHabitIdentity("تمارين مقاومة و15 ألف خطوة"), "athlete");
+  assert.equal(inferHabitIdentity("شرب ماء"), "athlete");
+  assert.equal(inferHabitIdentity("قراءة كتاب"), "scholar");
+  assert.equal(inferHabitIdentity("محادثة إنجليزية"), "scholar");
+  assert.equal(inferHabitIdentity("جلسة عمل وإنجاز"), "executor");
+  assert.equal(inferHabitIdentity("تتبع ميزانية ومصاريف"), "investor");
+  assert.equal(inferHabitIdentity("روتين عام"), "general");
+});
+
+test("habitShape automatically infers identity unless manually specified", () => {
+  const prayer = habitShape({ label: "صلاة المغرب" });
+  assert.equal(prayer.identity, "mindful");
+
+  const gym = habitShape({ label: "نادي رياضي" });
+  assert.equal(gym.identity, "athlete");
+
+  // When manually set, it is preserved even if label suggests otherwise
+  const manual = habitShape({ label: "صلاة المغرب", identity: "general", identityManual: true });
+  assert.equal(manual.identity, "general");
 });

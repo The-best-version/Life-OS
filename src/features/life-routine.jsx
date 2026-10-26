@@ -2,7 +2,7 @@ import { HorizonRow, clockLabel, horizonClock } from "./life-goals.jsx";
 import { ReadLogModal, useHabitTick } from "../components/life-day.jsx";
 import { Badge, Btn, Card, Checkbox, ConfigBlockBoundary, Field, GLASS, GROUPS, GROUP_BY_ID, Modal, ProgressRing, T, arDate, countedWord, dayWord, groupOf, shrinkImage, useBurst, useUndo } from "../components/life-shared.jsx";
 import { cardTitles, routineBlocks } from "../life-config.js";
-import { CORE_CAP, HABIT_MIN_MAX, HORIZONS, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, goalShape, habitShape, habitStreak, historyIndex, isGap, openingWindow, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
+import { CORE_CAP, HABIT_MIN_MAX, HORIZONS, IDENTITIES, READ_ACTIVE, STREAK_TARGET, bookForHabit, coreOf, goalShape, habitShape, habitStreak, historyIndex, inferHabitIdentity, isGap, openingWindow, pctOfRow, rows, setDayDone, streakBaseFrom, uid, yesterdayKey } from "../state/life-state.mjs";
 import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, Database, Feather, Flame, GripVertical, History, Hourglass, ImagePlus, Library, MessageSquareQuote, Pencil, Plus, Quote, RotateCcw, ScanFace, Star, Sunrise, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -53,6 +53,8 @@ export function RoutineModule({
     /* Through the one shape, so the add form and the migration cannot drift
        into writing two different kinds of habit. */
     const min = String(editing.min || "").trim();
+    const identity = editing.identity || "general";
+    const identityManual = editing.identityManual === true;
     setState((s) => ({
       ...s,
       habits: editing.id
@@ -64,6 +66,8 @@ export function RoutineModule({
                   group: editing.group,
                   book: editing.book || null,
                   min,
+                  identity,
+                  identityManual,
                 })
               : h
           )
@@ -74,6 +78,8 @@ export function RoutineModule({
               group: editing.group,
               book: editing.book || null,
               min,
+              identity,
+              identityManual,
             }),
           ],
     }));
@@ -185,7 +191,7 @@ export function RoutineModule({
         onOpenTomorrow={onOpenTomorrow}
         onOpenFix={onOpenFix}
         onOpenMirror={onOpenMirror}
-        onAddHabit={() => setEditing({ label: "", group: "morning", book: null, min: "" })}
+        onAddHabit={() => setEditing({ label: "", group: "morning", book: null, min: "", identity: "general", identityManual: false })}
         onPickCore={() => setPicking(true)}
       />
     ),
@@ -230,6 +236,8 @@ export function RoutineModule({
             group: h.group,
             book: h.book || null,
             min: h.min || "",
+            identity: h.identity || "general",
+            identityManual: h.identityManual === true,
           })
         }
         onDelete={remove}
@@ -311,9 +319,14 @@ export function RoutineModule({
                 id="los-habit-label"
                 value={editing.label}
                 autoFocus
-                onChange={(e) =>
-                  setEditing((s) => ({ ...s, label: e.target.value }))
-                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditing((s) => ({
+                    ...s,
+                    label: val,
+                    identity: s.identityManual ? s.identity : inferHabitIdentity(val),
+                  }));
+                }}
                 onKeyDown={(e) => e.key === "Enter" && save()}
                 placeholder="مثال: قراءة ١٠ صفحات"
               />
@@ -398,6 +411,31 @@ export function RoutineModule({
                       }}
                     >
                       <g.icon size={15} /> {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <span className="mb-1.5 block text-xs text-white/45">عمود الهوية الشخصية</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {Object.entries(IDENTITIES).map(([id, def]) => {
+                  const active = (editing.identity || "general") === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setEditing((s) => ({ ...s, identity: id, identityManual: true }))}
+                      className="flex items-center gap-2 rounded-xl border px-3 py-2 text-[12px] transition-all text-right"
+                      style={{
+                        borderColor: active ? `${def.tint}80` : T.border,
+                        background: active ? `${def.tint}16` : "transparent",
+                        color: active ? def.tint : T.muted,
+                      }}
+                    >
+                      <span className="text-sm">{def.icon}</span>
+                      <span className="font-bold truncate">{def.label}</span>
                     </button>
                   );
                 })}

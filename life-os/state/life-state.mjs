@@ -834,6 +834,7 @@ export {
   breakerToday,
   IDENTITIES,
   HABIT_LEVEL_POINTS,
+  inferHabitIdentity,
   identityScores,
   freezeShape,
   contextualBlock,

@@ -117,18 +117,18 @@ export const LEGACY_POSTISHA = new Set(["صلاة العشاء", "تقييم ي�
 /* Added in schema 6. Kept in their own list so the migration can top up an
    existing profile with exactly the ones it is missing. */
 export const ADDED_HABITS = [
-  { label: "تمارين مقاومة (صدر/بطن) أو T-Bar + ١٥ ألف خطوة", group: "morning" },
-  { label: "محادثة إنجليزية مع متحدث أصلي", group: "afternoon" },
-  { label: "تحضير وجبة الغد: دجاج صيني وأرز", group: "maghrib" },
+  { label: "تمارين مقاومة (صدر/بطن) أو T-Bar + ١٥ ألف خطوة", group: "morning", identity: "athlete" },
+  { label: "محادثة إنجليزية مع متحدث أصلي", group: "afternoon", identity: "scholar" },
+  { label: "تحضير وجبة الغد: دجاج صيني وأرز", group: "maghrib", identity: "athlete" },
 ];
 
 /* Schema 8 split the old "المساء" block into "بعد العصر" و"بعد المغرب". */
 export const ASR_HABITS = [
-  { label: "صلاة العصر", group: "asr" },
-  { label: "مراجعة سريعة لمهام اليوم", group: "asr" },
-  { label: "مشي أو حركة خفيفة", group: "asr" },
+  { label: "صلاة العصر", group: "asr", identity: "mindful" },
+  { label: "مراجعة سريعة لمهام اليوم", group: "asr", identity: "executor" },
+  { label: "مشي أو حركة خفيفة", group: "asr", identity: "athlete" },
 ];
-export const MAGHRIB_HABITS = [{ label: "صلاة المغرب وأذكار", group: "maghrib" }];
+export const MAGHRIB_HABITS = [{ label: "صلاة المغرب وأذكار", group: "maghrib", identity: "mindful" }];
 
 /* --- water ------------------------------------------------------------ *
  *  Eight cups is the figure everyone already knows, so it is the default.
@@ -325,36 +325,42 @@ export const IDENTITIES = {
     label: "المفكر والباحث",
     tagline: "قراءة، كتابة، تعلّم عميق",
     tint: "#38bdf8",
+    icon: "📚",
   },
   athlete: {
     id: "athlete",
     label: "الرياضي القوي",
     tagline: "لياقة، تغذية، حركة ونشاط",
     tint: "#10b981",
+    icon: "⚡",
   },
   executor: {
     id: "executor",
     label: "المنجز المنضبط",
     tagline: "تركيز، إتمام مهام، إنتاجية",
     tint: "#f59e0b",
+    icon: "🎯",
   },
   mindful: {
     id: "mindful",
     label: "الروحاني المتزن",
     tagline: "صلوات، أذكار، صفاء الذهن",
     tint: "#818cf8",
+    icon: "🕊️",
   },
   investor: {
     id: "investor",
     label: "المستثمر المالي",
     tagline: "ثروة، ادخار، استثمار، ذكاء مالي",
     tint: "#34d399",
+    icon: "💎",
   },
   general: {
     id: "general",
     label: "تطوير الذات",
     tagline: "تراكم يومي مستمر",
     tint: "#a855f7",
+    icon: "🌟",
   },
 };
 
@@ -364,10 +370,20 @@ export const HABIT_LEVEL_POINTS = {
   micro: 5,
 };
 
+export function inferHabitIdentity(label) {
+  const l = String(label || "").toLowerCase();
+  if (/صلاة|قرآن|أذكار|اذكار|سنن|ذكر|مسجد|تراويح|قيام|استغفار|وضوء|تهجد|دعاء|تلاوة|ورد|صيام|صدقة|روح/.test(l)) return "mindful";
+  if (/تمرين|تمارين|رياضة|مشي|خطوة|خطوات|حركة|جيم|نادي|حديد|أثقال|اثقال|فطور|وجبة|بروتين|صحي|أرز|ارز|جري|ركض|هرولة|وزن|لياقة|نوم|ماء|شرب/.test(l)) return "athlete";
+  if (/قراءة|كتاب|كتب|لغة|إنجليزية|انجليزية|إنجليزي|انجليزي|محادثة|تعلم|تعلّم|دراسة|بحث|مذاكرة|كورس|دورة|محاضرة|جامعة|كلية|تدوين|كتابة|يوميات|برمجة|كود/.test(l)) return "scholar";
+  if (/مهمة|مهام|إنجاز|انجاز|نجز|عمل|شغل|تنفيذ|مشروع|تركيز|بومودورو|step|إنتاجية|انتاجية|تخطيط|تحضير|تقييم|تنظيم|بريد|ايميل|إيميل/.test(l)) return "executor";
+  if (/استثمار|ادخار|مال|مالي|ميزانية|مصاريف|نفقات|توفير|أسهم|اسهم|تداول|محفظة|دخل|أرباح|ارباح/.test(l)) return "investor";
+  return "general";
+}
+
 export function identityScores(habits) {
   const scores = {};
   for (const k of Object.keys(IDENTITIES)) {
-    scores[k] = { ...IDENTITIES[k], total: 0, done: 0, pts: 0 };
+    scores[k] = { ...IDENTITIES[k], total: 0, done: 0, pts: 0, pct: 0 };
   }
   for (const h of rows(habits)) {
     const k = h.identity && IDENTITIES[h.identity] ? h.identity : "general";
@@ -377,6 +393,9 @@ export function identityScores(habits) {
       const pts = HABIT_LEVEL_POINTS[h.levelDone] || (h.tiny ? 5 : 10);
       scores[k].pts += pts;
     }
+  }
+  for (const k of Object.keys(scores)) {
+    scores[k].pct = scores[k].total > 0 ? Math.round((scores[k].done / scores[k].total) * 100) : 0;
   }
   return scores;
 }
@@ -421,6 +440,17 @@ export const HABIT_MIN_MAX = 70;
 export const habitShape = (h) => {
   h = obj(h);
   const tiny = h.done === true && h.tiny === true;
+  const inferred = inferHabitIdentity(h.label);
+  let resolvedIdentity = "general";
+  if (h.identityManual && typeof h.identity === "string" && IDENTITIES[h.identity]) {
+    resolvedIdentity = h.identity;
+  } else if (typeof h.identity === "string" && IDENTITIES[h.identity] && h.identity !== "general") {
+    resolvedIdentity = h.identity;
+  } else if (inferred !== "general") {
+    resolvedIdentity = inferred;
+  } else if (typeof h.identity === "string" && IDENTITIES[h.identity]) {
+    resolvedIdentity = h.identity;
+  }
   return {
     id: h.id || uid(),
     label: typeof h.label === "string" ? h.label : "",
@@ -431,7 +461,8 @@ export const habitShape = (h) => {
     min: typeof h.min === "string" ? h.min.slice(0, HABIT_MIN_MAX) : "",
     tiny,
     stackAfter: typeof h.stackAfter === "string" && h.stackAfter ? h.stackAfter : null,
-    identity: typeof h.identity === "string" && IDENTITIES[h.identity] ? h.identity : "general",
+    identity: resolvedIdentity,
+    identityManual: h.identityManual === true,
     levels: h.levels && typeof h.levels === "object" ? {
       ideal: typeof h.levels.ideal === "string" ? h.levels.ideal.slice(0, HABIT_MIN_MAX) : "",
       standard: typeof h.levels.standard === "string" ? h.levels.standard.slice(0, HABIT_MIN_MAX) : "",
@@ -443,16 +474,16 @@ export const habitShape = (h) => {
 };
 
 export const SEED_HABITS = [
-  { id: uid(), label: "شرب ماء", group: "morning", done: false },
-  { id: uid(), label: "صلاة الفجر وأذكار", group: "morning", done: false },
+  { id: uid(), label: "شرب ماء", group: "morning", done: false, identity: "athlete" },
+  { id: uid(), label: "صلاة الفجر وأذكار", group: "morning", done: false, identity: "mindful" },
   ...ADDED_HABITS.filter((h) => h.group === "morning").map((h) => ({
     id: uid(),
     done: false,
     ...h,
   })),
-  { id: uid(), label: "جلسة STEP — ٩٠ دقيقة", group: "morning", done: false },
-  { id: uid(), label: "صلاة الظهر", group: "afternoon", done: false },
-  { id: uid(), label: "قراءة", group: "afternoon", done: false, book: READ_ACTIVE },
+  { id: uid(), label: "جلسة STEP — ٩٠ دقيقة", group: "morning", done: false, identity: "executor" },
+  { id: uid(), label: "صلاة الظهر", group: "afternoon", done: false, identity: "mindful" },
+  { id: uid(), label: "قراءة", group: "afternoon", done: false, book: READ_ACTIVE, identity: "scholar" },
   ...ADDED_HABITS.filter((h) => h.group === "afternoon").map((h) => ({
     id: uid(),
     done: false,
@@ -470,10 +501,11 @@ export const SEED_HABITS = [
     label,
     group: "postisha",
     done: false,
+    identity: inferHabitIdentity(label),
   })),
-  { id: uid(), label: "الابتعاد عن الشاشات", group: "night", done: false },
-  { id: uid(), label: "تدوين", group: "night", done: false },
-  { id: uid(), label: "أذكار النوم", group: "night", done: false },
+  { id: uid(), label: "الابتعاد عن الشاشات", group: "night", done: false, identity: "general" },
+  { id: uid(), label: "تدوين", group: "night", done: false, identity: "scholar" },
+  { id: uid(), label: "أذكار النوم", group: "night", done: false, identity: "mindful" },
 ];
 
 export const HOUR_BANDS = [
