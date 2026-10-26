@@ -200,6 +200,42 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: "add_book",
+    description:
+      "إضافة كتاب جديد متكامل إلى مكتبة الإنجازات ببياناته الكاملة: المؤلف، التصنيف، الهوية، عدد الصفحات، أهم درس، الملخص، والفوائد المستخرجة.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "عنوان أو اسم الكتاب" },
+        author: { type: "string", description: "اسم المؤلف (اختياري)" },
+        category: {
+          type: "string",
+          enum: ["self", "faith", "business", "knowledge", "health"],
+          description: "تصنيف الكتاب (self: تطوير الذات, faith: الدين والروح, business: المال والأعمال, knowledge: الفكر والعلوم, health: الصحة)",
+        },
+        identity: {
+          type: "string",
+          enum: ["scholar", "athlete", "executor", "mindful", "general"],
+          description: "هوية الكتاب (scholar: المفكر والباحث, executor: المنجز, athlete: الرياضي, mindful: الروحاني, general: عام)",
+        },
+        pages: { type: "number", description: "إجمالي عدد صفحات الكتاب التقريبي" },
+        lesson: { type: "string", description: "أهم درس يغيّر الحياة من هذا الكتاب" },
+        summary: { type: "string", description: "ملخص عميق ومكثف لمحتوى الكتاب" },
+        notes: {
+          type: "array",
+          items: { type: "string" },
+          description: "أهم 3 إلى 5 فوائد ونقاط مستخرجة من الكتاب لتوضع في دفتره وتدخل نظام التكرار المتباعد",
+        },
+        status: {
+          type: "string",
+          enum: ["planned", "reading", "finished"],
+          description: "حالة الكتاب (افتراضياً reading إذا كان يبدأ بقراءته أو planned)",
+        },
+      },
+      required: ["title"],
+    },
+  },
+  {
     name: "add_book_note",
     description:
       "حفظ فائدة أو اقتباس أو درس من كتاب في مكتبة الإنجازات ليتم جدولته في نظام المراجعة والتكرار المتباعد.",
@@ -835,6 +871,56 @@ export function executeTool(name, input = {}, currentState = {}, setState = null
           { books: safe.books, reading: safe.reading },
           `تم تسجيل قراءة ${pages} صفحة من «${updatedBook.title}» (وصلت لصفحة ${nextPage} · إجمالي اليوم ${todayTotal}/${readGoal}) 📖`,
           { badge: `+${pages} صفحة` }
+        );
+      }
+
+      // ----------------------------------------------------------------------
+      // 10.5 إضافة كتاب متكامل بكل تفاصيله بالذكاء الاصطناعي
+      // ----------------------------------------------------------------------
+      case "add_book": {
+        const title = String(input.title || "").trim();
+        if (!title) return { ok: false, message: "عنوان الكتاب مطلوب." };
+
+        const books = [...rows(safe.books)];
+        const already = books.find((b) => matchesText(b.title, title));
+        if (already) {
+          return {
+            ok: true,
+            message: `الكتاب «${already.title}» موجود بالفعل على الرف (الحالة: ${already.status || "قيد القراءة"}).`,
+            nextState: safe,
+          };
+        }
+
+        const notesArr = Array.isArray(input.notes)
+          ? input.notes.map((txt) =>
+              noteShape({
+                text: String(txt).trim(),
+                at: dayKey(),
+                due: addDays(dayKey(), 1),
+              })
+            )
+          : [];
+
+        const row = bookShape({
+          id: uid(),
+          title,
+          author: String(input.author || "").trim(),
+          status: input.status || "reading",
+          category: input.category || "self",
+          identity: input.identity || "scholar",
+          pages: input.pages ? String(input.pages) : "250",
+          page: "0",
+          lesson: String(input.lesson || "").trim(),
+          summary: String(input.summary || "").trim(),
+          notes: notesArr,
+        });
+
+        const nextBooks = [row, ...books];
+        return commit(
+          { ...safe, books: nextBooks },
+          { books: safe.books },
+          `✨ أضفت كتاب «${row.title}» بالكامل إلى مكتبتك (المؤلف: ${row.author || "—"} · ${row.pages} صفحة · ${notesArr.length} فوائد مستخرجة ومجدولة) 📚`,
+          { badge: "كتاب جديد" }
         );
       }
 

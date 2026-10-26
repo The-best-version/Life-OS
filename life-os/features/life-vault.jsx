@@ -19,6 +19,7 @@ export function VaultModule({ state, setState }) {
   const [filter, setFilter] = useState("all");
   const [deskId, setDeskId] = useState(null);
   const [flashcardsOpen, setFlashcardsOpen] = useState(false);
+  const [smartImporterOpen, setSmartImporterOpen] = useState(false);
   const [deepReadingBook, setDeepReadingBook] = useState(null);
   const [capsuleBook, setCapsuleBook] = useState(null);
   const [aiModalBook, setAiModalBook] = useState(null);
@@ -239,11 +240,20 @@ export function VaultModule({ state, setState }) {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setSmartImporterOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/20 to-orange-500/20 px-3.5 py-2 text-xs font-black text-amber-300 hover:from-amber-500/30 hover:to-orange-500/30 transition-all shadow-lg shadow-amber-500/10 active:scale-95"
+              title="اكتب اسم أي كتاب ليجلبه الوكيل بكامل تفاصيله وفوائده فوراً"
+            >
+              <Sparkles size={14} className="text-amber-400" />
+              <span>إضافة ذكية بالاسم</span>
+            </button>
             <Btn
-              variant="default"
+              variant="outline"
               onClick={() => setEditing(bookShape())}
             >
-              <Plus size={15} strokeWidth={3} /> أضف كتابًا
+              <Plus size={14} strokeWidth={3} /> يدوي
             </Btn>
           </div>
         </div>
@@ -729,6 +739,13 @@ export function VaultModule({ state, setState }) {
         onReview={handleReviewNote}
         onTurnIntoTask={handleTurnIntoTask}
         onTurnIntoHabit={handleTurnIntoHabit}
+      />
+
+      <SmartBookImporterModal
+        open={smartImporterOpen}
+        onClose={() => setSmartImporterOpen(false)}
+        state={state}
+        setState={setState}
       />
 
       <DeepReadingModal
@@ -1953,6 +1970,240 @@ function AIBookModal({ book, onClose, state, setState }) {
                 )}
               </Btn>
             )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+
+/* ==================================================================== *
+ *  SmartBookImporterModal — إضافة كتاب ذكية وشاملة بالاسم فقط
+ * ==================================================================== */
+function SmartBookImporterModal({ open, onClose, state, setState }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("reading");
+  const [loading, setLoading] = useState(false);
+  const [addedBook, setAddedBook] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  if (!open) return null;
+
+  const handleImport = async () => {
+    const titleQuery = query.trim();
+    if (!titleQuery) return;
+    setLoading(true);
+    setErrorMsg("");
+    setAddedBook(null);
+
+    const prompt = `أريد إضافة كتاب "${titleQuery}" إلى مكتبتي في Life OS.
+حلل الكتاب بدقة واستخرج بياناته الواقعية الكاملة بصيغة JSON حصراً بدون أي نص خارجي، بهذا الهيكل الدقيق:
+{
+  "title": "اسم الكتاب بالعربية كاملاً وواضحاً",
+  "author": "اسم المؤلف",
+  "category": "self" أو "faith" أو "business" أو "knowledge" أو "health",
+  "identity": "scholar" أو "executor" أو "athlete" أو "mindful",
+  "pages": 280,
+  "lesson": "أهم درس يغيّر الحياة يخرج به القارئ من هذا الكتاب في سطرين بليغين",
+  "summary": "ملخص مكثف وعميق من 4-6 أسطر لأفكار الكتاب الجوهرية وفصوله",
+  "notes": [
+    "فائدة جوهرية أولى عميقة ومؤثرة",
+    "فائدة واقتباس عملي ثانٍ",
+    "فائدة ثالثة قابلة للتطبيق",
+    "فائدة رابعة تلخص قاعدة مهمة"
+  ]
+}
+أعطني JSON صحيح فقط.`;
+
+    try {
+      const res = await runLifeAgent(prompt, [], state, setState, { mode: "executive" });
+      const text = typeof res === "string" ? res : res?.text || "";
+
+      // استخراج الـ JSON
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("لم يتمكن الوكيل من صياغة تفاصيل الكتاب.");
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      const notesArr = Array.isArray(parsed.notes)
+        ? parsed.notes.map((nText) =>
+            noteShape({
+              text: String(nText).trim(),
+              at: dayKey(),
+              due: addDays(dayKey(), 1),
+            })
+          )
+        : [];
+
+      const newBook = bookShape({
+        id: uid(),
+        title: parsed.title || titleQuery,
+        author: parsed.author || "مؤلف معروف",
+        category: parsed.category || "self",
+        identity: parsed.identity || "scholar",
+        pages: parsed.pages ? String(parsed.pages) : "250",
+        page: "0",
+        status: status || "reading",
+        lesson: parsed.lesson || "",
+        summary: parsed.summary || "",
+        notes: notesArr,
+      });
+
+      setState((s) => ({
+        ...s,
+        books: [newBook, ...s.books.filter((b) => b.title.trim() !== newBook.title.trim())],
+      }));
+
+      setAddedBook(newBook);
+    } catch (err) {
+      setErrorMsg("تعذر جلب تفاصيل الكتاب تلقائياً. تأكد من صحة الاسم والمحاولة مجدداً.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDone = () => {
+    setQuery("");
+    setAddedBook(null);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleDone}
+      title="إضافة كتاب ذكية بالاسم (AI Magic Importer)"
+      footer={
+        addedBook ? (
+          <Btn variant="default" className="flex-1" onClick={handleDone}>
+            تمّ! إغلاق والذهاب للمكتبة
+          </Btn>
+        ) : (
+          <>
+            <Btn variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+              إلغاء
+            </Btn>
+            <Btn
+              variant="default"
+              className="flex-1 font-bold"
+              onClick={handleImport}
+              disabled={loading || !query.trim()}
+            >
+              {loading ? "جارٍ التحليل والتوليد…" : "جلب وإضافة الكتاب فوراً"}
+            </Btn>
+          </>
+        )
+      }
+    >
+      <div className="space-y-4">
+        {!addedBook ? (
+          <>
+            <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-transparent p-4">
+              <div className="flex items-center gap-2.5 mb-1.5">
+                <Sparkles size={18} className="text-amber-400" />
+                <h4 className="text-xs font-black text-amber-300">وفّر وقتك تماماً</h4>
+              </div>
+              <p className="text-[11.5px] leading-relaxed text-white/60">
+                اكتب اسم أي كتاب باللغة العربية أو الإنجليزية؛ وسيقوم الوكيل الذكي بالبحث عنه وإدخال:
+                <strong> اسم المؤلف، عدد الصفحات، التصنيف، الهوية، أهم درس يغيّر حياتك، ملخصاً شاملاً، و٤ فوائد ذهبية مجدولة فوراً!</strong>
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="los-smart-b-query" className="mb-1.5 block text-xs font-bold text-white/70">
+                اسم أو عنوان الكتاب:
+              </label>
+              <Field
+                id="los-smart-b-query"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !loading && query.trim()) {
+                    e.preventDefault();
+                    handleImport();
+                  }
+                }}
+                placeholder="مثال: الأب الغني والأب الفقير، العادات الذرية، فن الحرب…"
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <span className="mb-1.5 block text-xs text-white/50">الحالة عند الإضافة:</span>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: "reading", label: "📖 أقرأه الآن" },
+                  { id: "planned", label: "📌 أنوي قراءته" },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setStatus(st.id)}
+                    className={`rounded-xl border p-2 text-xs font-bold transition-all ${
+                      status === st.id
+                        ? "border-amber-500/70 bg-amber-500/20 text-amber-300"
+                        : "border-white/10 bg-transparent text-white/40 hover:text-white"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loading && (
+              <div className="py-8 text-center space-y-2.5">
+                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 animate-spin">
+                  <Sparkles size={20} />
+                </div>
+                <p className="text-xs font-bold text-white/80">جارٍ استدعاء بيانات الكتاب وتلخيصه واستخراج درره…</p>
+                <p className="text-[10px] text-white/40">ثوانٍ معدودة فقط</p>
+              </div>
+            )}
+
+            {errorMsg && (
+              <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-center text-xs font-bold text-red-300">
+                {errorMsg}
+              </p>
+            )}
+          </>
+        ) : (
+          /* بطاقة نجاح وتأكيد الإضافة الخورافية */
+          <div className="space-y-4 py-2 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+              <Check size={28} />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-white">{addedBook.title}</h3>
+              <p className="text-xs text-white/50 mt-0.5">{addedBook.author} · {addedBook.pages} صفحة</p>
+            </div>
+
+            {addedBook.lesson && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-3 text-right">
+                <span className="text-[10px] font-black text-amber-400 block mb-1">💡 أهم درس تم توثيقه:</span>
+                <p className="text-xs font-bold text-amber-200/90 leading-relaxed">"{addedBook.lesson}"</p>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-right">
+              <span className="text-[10px] font-black text-sky-400 block mb-1">
+                📌 الفوائد المستخرجة تلقائياً ({addedBook.notes?.length || 0}):
+              </span>
+              <ul className="space-y-1 text-xs text-white/70">
+                {(addedBook.notes || []).map((n, i) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="text-amber-400">•</span>
+                    <span>{n.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <p className="text-[11px] text-emerald-400 font-bold">
+              ✓ تمت إضافة الكتاب وجدولة فوائده في نظام المراجعة المتباعدة بنجاح!
+            </p>
           </div>
         )}
       </div>

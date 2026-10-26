@@ -339,6 +339,7 @@ const RUN = {
     }),
   breakdown_task: (s, a) =>
     act.breakdownTask(s, { query: a.query, step: a.step, today: a.today !== false }),
+  add_book: (s, a) => act.addBook(s, a),
 };
 
 /* تنفيذ أداة واحدة على حالة. يُرجع ما تُرجعه الدالة نفسها بالضبط — بما

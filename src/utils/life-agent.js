@@ -85,6 +85,7 @@ export const TOOL_LABELS = {
   log_expense: "تسجيل مصروف",
   log_income: "تسجيل دخل",
   log_reading: "تسجيل قراءة",
+  add_book: "إضافة كتاب متكامل",
   add_book_note: "حفظ فائدة كتاب",
   start_focus_session: "جلسة عمل عميق",
   schedule_time_block: "جدولة بالتقويم",

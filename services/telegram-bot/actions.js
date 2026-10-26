@@ -434,7 +434,7 @@ export function logReading(state, { pages, habitId = null, bookId = null, back =
 
 export const BOOK_CAP = 120;
 
-export function addBook(state, { title, author = "", status = "planned" } = {}) {
+export function addBook(state, { title, author = "", status = "planned", category = "", identity = "scholar", pages = "", lesson = "", summary = "", notes = [] } = {}) {
   const name = String(title ?? "").trim();
   if (!name) return { refused: "اكتب عنوان الكتاب. مثال: «أضف كتاب سيكولوجية المال»." };
   const books = rows(state.books);
@@ -443,7 +443,27 @@ export function addBook(state, { title, author = "", status = "planned" } = {}) 
   }
   const already = findBooks(books, name);
   if (already.length === 1) return { kind: "book", act: "already", book: already[0] };
-  const row = bookShape({ id: uid(), title: name, author: String(author || "").trim(), status });
+  const notesArr = Array.isArray(notes)
+    ? notes.map((txt) =>
+        noteShape({
+          text: String(txt).trim(),
+          at: dayKey(),
+          due: addDays(dayKey(), 1),
+        })
+      )
+    : [];
+  const row = bookShape({
+    id: uid(),
+    title: name,
+    author: String(author || "").trim(),
+    status,
+    category: category || "",
+    identity: identity || "scholar",
+    pages: pages ? String(pages) : "",
+    lesson: String(lesson || "").trim(),
+    summary: String(summary || "").trim(),
+    notes: notesArr,
+  });
   return {
     kind: "book",
     act: "add",
