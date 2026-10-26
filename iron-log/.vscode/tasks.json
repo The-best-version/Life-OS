@@ -43,6 +43,14 @@
       "command": "npm run build",
       "group": "build",
       "problemMatcher": []
+    },
+    {
+      "label": "📦 بناء ملف واحد (npm run build:standalone)",
+      "type": "shell",
+      "command": "npm run build:standalone",
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "الناتج standalone/index.html — ما يفتحه اختصار «افتح Iron Log» على سطح المكتب. لازم إعادة بناء بعد أي تعديل على src/."
     }
   ]
 }
