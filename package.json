@@ -4,6 +4,9 @@
   "private": true,
   "description": "2027 Life OS وما يجاوره — التطبيق، خادم الحفظ المحلي، سكريبتات البناء والأتمتة.",
   "scripts": {
+    "start": "node services/cloud-runner.mjs",
+    "cloud": "node services/cloud-runner.mjs",
+    "postinstall": "npm --prefix services/telegram-bot install",
     "dev": "node scripts/build-life-os.mjs && wscript \"services/launchers/run-life-os.vbs\"",
     "build": "node scripts/build-life-os.mjs",
     "build:watch": "node scripts/build-life-os.mjs --watch",

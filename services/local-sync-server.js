@@ -32,8 +32,8 @@ const flag = (name, fallback) => {
   return process.argv[at + 1];
 };
 
-const PORT = Number(flag("port", 47615)) || 47615;
-const HOST = "127.0.0.1";
+const PORT = Number(flag("port", process.env.PORT || 47615)) || 47615;
+const HOST = flag("host", process.env.HOST || "127.0.0.1");
 const MAX_BODY = 8 * 1024 * 1024;
 const QUIET = process.argv.includes("--quiet");
 
@@ -117,7 +117,9 @@ function originOk(origin) {
 const WRITE_ORIGIN = "http://" + HOST + ":" + PORT;
 function writeOriginOk(origin) {
   if (origin === undefined) return true; // curl, and this machine's own tools
-  return origin === WRITE_ORIGIN;
+  if (origin === WRITE_ORIGIN) return true;
+  if (process.env.LIFEOS_WEB_URL && origin === process.env.LIFEOS_WEB_URL.replace(/\/+$/, "")) return true;
+  return false;
 }
 
 function cors(res, origin) {

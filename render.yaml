@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: lifeos-telegram-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LIFEOS_WEB_URL
+        value: "https://life-os-rho-swart.vercel.app"
