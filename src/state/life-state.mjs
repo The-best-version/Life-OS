@@ -1226,4 +1226,11 @@ export {
   weighMovingAverage,
   exerciseProgressReport,
   gymWeekReview,
+  GYM_SPIKE_WEEKS,
+  GYM_SPIKE_RATIO,
+  weeklyTonnage,
+  tonnageSpike,
+  GYM_STALL_DAYS,
+  GYM_STALL_SESSIONS,
+  stalledExercises,
 } from "./life-state-gym.mjs";

@@ -958,6 +958,25 @@ export const gymAdvise = (gym, today = dayKey()) => {
     }
   }
 
+  /* الإفراط والركود — قبل الخبر الجيّد، لأنهما تحذيران لا تهنئة. */
+  const spike = tonnageSpike(g, today);
+  if (spike && spike.spike) {
+    out.push({
+      id: "spike",
+      tone: "ask",
+      text: `حمل هذا الأسبوع ×${spike.ratio} من معتادك — فكّر بأسبوع أخفّ قبل إصابة إفراط.`,
+    });
+  }
+  const stalls = stalledExercises(g, today);
+  if (stalls.length) {
+    const s = stalls[0];
+    out.push({
+      id: `stall:${s.exercise}`,
+      tone: "push",
+      text: `${s.exercise}: ${s.sessions} حصص بلا تقدّم على ${s.best} كجم — جرّب ديلود (خفّف الوزن ١٠٪ أسبوعاً) أو غيّر نطاق التكرار.`,
+    });
+  }
+
   /* أفضل أسبوع في شهرين. يُقال بعد الباقي لأنه خبر جيّد، والخبر الجيّد
      الذي يُقال أولاً يُقرأ تهنئة على أسبوع ناقص. */
   const mins = week.minutes;
@@ -1006,4 +1025,76 @@ export const gymWeekReview = (gym, today = dayKey()) => {
   const volume = muscleVolume(g, 7, today);
   const neglected = volume.filter((m) => m.status === "none" || m.status === "low");
   return { thisWeek, lastWeek, weighT, fatT, prs, volume, neglected };
+};
+
+/* --- التعب والركود ------------------------------------------------------ *
+ *  سؤالان مختلفان عن نفس الخطر — الإفراط في التمرين — ولكل منهما إجابته:
+ *    «الحمل ارتفع بسرعة» قرار اليومين الماضيين، و«الوزن لم يتقدَّم» قرار
+ *  الأسابيع الماضية. كلتاهما تُقرآن من `exerciseLogs` نفسها التي يقرأها
+ *  كل شيء آخر في هذا الملف — لا رقم مخترَع، ولا نسخة ثانية من الحساب بين
+ *  الشاشة والبوت.
+ * ---------------------------------------------------------------------- */
+
+/* الحمل الأسبوعي: مجموع الحجم (وزن × تكرار × مجموعات) على التمارين
+   الفعلية فقط — الإحماء لا يحمل جسداً. */
+export const weeklyTonnage = (gym, today = dayKey()) => {
+  const g = gymShape(gym);
+  const from = addDays(today, -6);
+  return Math.round(
+    g.exerciseLogs
+      .filter((l) => l.date >= from && l.date <= today && l.setType !== "warmup")
+      .reduce((n, l) => n + (l.volume || 0), 0),
+  );
+};
+
+/* كم مرة أعلى من معتاده هذا الأسبوع. `null` بلا أربعة أسابيع سابقة فعلية
+   للمقارنة — قفزة محسوبة على فراغ ليست قفزة، هي أول أسبوع. */
+export const GYM_SPIKE_WEEKS = 4;
+export const GYM_SPIKE_RATIO = 1.4;
+
+export const tonnageSpike = (gym, today = dayKey()) => {
+  const g = gymShape(gym);
+  const thisWeek = weeklyTonnage(g, today);
+  const prior = [];
+  for (let k = 1; k <= GYM_SPIKE_WEEKS; k++) prior.push(weeklyTonnage(g, addDays(today, -7 * k)));
+  const known = prior.filter((v) => v > 0);
+  if (!known.length || !thisWeek) return null;
+  const avg = known.reduce((n, v) => n + v, 0) / known.length;
+  if (!avg) return null;
+  const ratio = Math.round((thisWeek / avg) * 10) / 10;
+  return { thisWeek, avg: Math.round(avg), ratio, spike: ratio >= GYM_SPIKE_RATIO };
+};
+
+/* ركود الوزن: تمرين وصل أعلى وزنه ولم يكسره منذ `GYM_STALL_SESSIONS` حصص
+   متتالية على الأقل، داخل نافذة `GYM_STALL_DAYS`. الحصة هي يوم مميَّز
+   لا سطراً — جولتان في يوم واحد تقدُّم واحد، لا اثنان، لنفس سبب `gymDays`
+   أعلاه. */
+export const GYM_STALL_DAYS = 28;
+export const GYM_STALL_SESSIONS = 4;
+
+export const stalledExercises = (gym, today = dayKey(), days = GYM_STALL_DAYS, minSessions = GYM_STALL_SESSIONS) => {
+  const g = gymShape(gym);
+  const from = addDays(today, -days);
+  const byExercise = new Map();
+  for (const l of g.exerciseLogs) {
+    if (l.setType === "warmup" || l.date < from || l.date > today) continue;
+    if (!byExercise.has(l.exercise)) byExercise.set(l.exercise, new Map());
+    const byDate = byExercise.get(l.exercise);
+    byDate.set(l.date, Math.max(byDate.get(l.date) || 0, l.weight || 0));
+  }
+  const out = [];
+  for (const [exercise, byDate] of byExercise) {
+    const sessions = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    if (sessions.length < minSessions) continue;
+    const weights = sessions.map((s) => s[1]);
+    const best = Math.max(...weights);
+    const peakAt = weights.lastIndexOf(best);
+    const sinceBest = weights.length - 1 - peakAt;
+    /* الركود يبدأ من آخر مرة تحسّن الوزن فيها، لا من أول حصة في النافذة —
+       من كسر رقمه أمس لم يركد اليوم لمجرد أن النافذة تحمل حصصاً أقدم. */
+    if (sinceBest >= minSessions - 1) {
+      out.push({ exercise, sessions: sinceBest + 1, best, current: weights[weights.length - 1] });
+    }
+  }
+  return out.sort((a, b) => b.sessions - a.sessions);
 };

@@ -53,6 +53,9 @@ import {
   weighMovingAverage,
   renameExerciseInGym,
   exerciseProgressReport,
+  weeklyTonnage,
+  tonnageSpike,
+  stalledExercises,
 } from "../src/state/life-state.mjs";
 
 const TODAY = "2026-10-26"; /* الاثنين */
@@ -493,4 +496,61 @@ test("renameExerciseInGym يعدل اسم التمرين في البرنامج �
   assert.equal(g.routines[0].exercises[0], "بنش مسطح بار");
   assert.equal(g.exerciseLogs[0].exercise, "بنش مسطح بار");
   assert.equal(exercisePRs(g)[0].exercise, "بنش مسطح بار");
+});
+
+test("weeklyTonnage يجمع الحجم على السبعة أيام ويستثني الإحماء", () => {
+  let g = gymShape({});
+  g = logExercise(g, { date: TODAY, exercise: "Chest Press", weight: 60, reps: 10, sets: 3, setType: "warmup" });
+  g = logExercise(g, { date: TODAY, exercise: "Chest Press", weight: 60, reps: 10, sets: 3 });
+  g = logExercise(g, { date: back(10), exercise: "Chest Press", weight: 60, reps: 10, sets: 3 });
+  assert.equal(weeklyTonnage(g, TODAY), 1800, "الإحماء وما قبل السبعة أيام لا يُحسبان");
+});
+
+test("tonnageSpike يحتاج أربعة أسابيع فعلية للمقارنة، لا يخترع خطًّا أساسيًّا من فراغ", () => {
+  const g = gymShape({});
+  assert.equal(tonnageSpike(g, TODAY), null, "ملف فارغ: لا شيء يُقاس عليه");
+});
+
+test("tonnageSpike يرصد حملاً أعلى بكثير من معتاد الأسابيع الأربعة الماضية", () => {
+  let g = gymShape({});
+  for (let w = 1; w <= 4; w++) {
+    g = logExercise(g, { date: back(7 * w), exercise: "Squat", weight: 50, reps: 10, sets: 3 });
+  }
+  g = logExercise(g, { date: TODAY, exercise: "Squat", weight: 50, reps: 10, sets: 3 * 2 }); // ضعف الحجم المعتاد
+  const spike = tonnageSpike(g, TODAY);
+  assert.ok(spike && spike.spike, "ضعف الحجم المعتاد يتجاوز نسبة الإفراط");
+  assert.equal(spike.ratio, 2);
+});
+
+test("stalledExercises يرصد تمريناً لم يكسر أعلى وزنه منذ أربع حصص متتالية", () => {
+  let g = gymShape({});
+  g = logExercise(g, { date: back(21), exercise: "Deadlift", weight: 100, reps: 5 });
+  g = logExercise(g, { date: back(14), exercise: "Deadlift", weight: 95, reps: 5 });
+  g = logExercise(g, { date: back(7), exercise: "Deadlift", weight: 97.5, reps: 5 });
+  g = logExercise(g, { date: TODAY, exercise: "Deadlift", weight: 96, reps: 5 });
+  const stalls = stalledExercises(g, TODAY);
+  assert.equal(stalls.length, 1);
+  assert.equal(stalls[0].exercise, "Deadlift");
+  assert.equal(stalls[0].best, 100);
+  assert.equal(stalls[0].sessions, 4);
+});
+
+test("stalledExercises لا يرصد تمريناً كسر رقمه مؤخراً", () => {
+  let g = gymShape({});
+  g = logExercise(g, { date: back(21), exercise: "Deadlift", weight: 90, reps: 5 });
+  g = logExercise(g, { date: back(14), exercise: "Deadlift", weight: 95, reps: 5 });
+  g = logExercise(g, { date: back(7), exercise: "Deadlift", weight: 100, reps: 5 });
+  g = logExercise(g, { date: TODAY, exercise: "Deadlift", weight: 105, reps: 5 });
+  assert.equal(stalledExercises(g, TODAY).length, 0);
+});
+
+test("gymAdvise يحذّر من الإفراط والركود، لأن هذا هو المكان الذي يقرأه البوت والشاشة منه معاً", () => {
+  let g = gymShape({});
+  g = logWeigh(g, { date: TODAY, kg: 80 }); /* بلا حصة أو وزن مسجَّل، gymAdvise تصمت كاملةً — هذا الشرط أعلى منها */
+  for (let w = 1; w <= 4; w++) {
+    g = logExercise(g, { date: back(7 * w), exercise: "Squat", weight: 50, reps: 10, sets: 3 });
+  }
+  g = logExercise(g, { date: TODAY, exercise: "Squat", weight: 50, reps: 10, sets: 6 });
+  const notes = gymAdvise(g, TODAY);
+  assert.ok(notes.some((n) => n.id === "spike"));
 });
