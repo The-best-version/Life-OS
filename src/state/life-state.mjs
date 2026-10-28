@@ -93,6 +93,7 @@ import {
 import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
 import { gymShape, gymCarry } from "./life-state-gym.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
+import { sleepLogsOf } from "./life-state-sleep.mjs";
 
 /* --- the tabs --------------------------------------------------------- *
  *  The ids, in the order the sidebar shows them — the one canonical list of
@@ -238,7 +239,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 33;
+export const SCHEMA = 34;
 
 /* --- the daily goal ------------------------------------------------ *
  *  One number the user picks and breaks every day. It lives in the state
@@ -305,6 +306,10 @@ export const freshState = (carry = {}) => ({
   /* النادي: الرياضات والحصص والوزن والقياسات. يَعبُر كاملاً مثل التقويم
      والجامعة — كل صف فيه مؤرَّخ بتاريخه، فلا شيء منه ينتمي إلى «اليوم». */
   gym: gymCarry(carry.gym),
+  /* المخطَّط 34 يضيف النوم بوصفه حقل حالة حقيقياً لا سطراً محلياً في
+     localStorage شاشة النوم وحدها — انظر تعليق أعلى `life-state-sleep.mjs`.
+     كل صف مؤرَّخ بتاريخه فيَعبُر كاملاً، مثل النادي والتقويم. */
+  sleepLogs: carry.sleepLogs || [],
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -638,6 +643,11 @@ export function migrate(saved) {
        تكتب حدًّا أدنى لرياضة ولا تخترع رياضة ثالثة، نفس امتناعها عن
        تخمين العادات الخمس الأساسية. */
     gym: gymShape(saved.gym),
+    /* المخطَّط 34 يضيف `sleepLogs`. كان بوت تيليجرام الرئيسي يكتبه فعلاً
+       (ومراجعته الأسبوعية في `ask.js` تقرأه) لكنه غاب عن هذه الدالة
+       ومن `carryOf` معاً، فكل ليلة يكتبها البوت كانت تُمحى في أول دوران
+       يوم — حمولة من قبله تصل ببساطة بلا ليلة واحدة، وهذا بالضبط معناه. */
+    sleepLogs: sleepLogsOf(saved.sleepLogs),
     history,
     /* Schema 29 gives a focus round a shape. Every row written before it
        carried a day and a length and nothing else, so `sessionShape` fills
@@ -730,6 +740,7 @@ export const carryOf = (s) => ({
   events: s.events,
   uni: s.uni,
   gym: s.gym,
+  sleepLogs: s.sleepLogs,
   quotes: s.quotes,
   reads: s.reads,
   reading: s.reading,
@@ -1233,4 +1244,20 @@ export {
   GYM_STALL_DAYS,
   GYM_STALL_SESSIONS,
   stalledExercises,
+  GYM_SLEEP_LOW_HOURS,
+  gymSleepAdvice,
 } from "./life-state-gym.mjs";
+
+export {
+  SLEEP_CAP,
+  sleepShape,
+  sleepLogsOf,
+  logSleep,
+  deleteSleep,
+  latestSleep,
+  sleepOn,
+  sleepIn,
+  avgSleepHours,
+  SLEEP_GOAL_HOURS,
+  sleepDebtHours,
+} from "./life-state-sleep.mjs";

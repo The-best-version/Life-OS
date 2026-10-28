@@ -93,6 +93,7 @@ import {
   horizonOf,
   quarterOf,
   pillarOf,
+  logSleep as logSleepRow,
 } from "../../src/state/life-state.mjs";
 import { fold, BACK_MAX } from "./parse.js";
 
@@ -233,35 +234,32 @@ export function drinkWater(state, count = 1) {
   };
 }
 
-/* --- the sleep -------------------------------------------------------- */
+/* --- the sleep -------------------------------------------------------- *
+ *  `logSleepRow` هي نفس الدالة التي تكتب بها شاشة «مختبر النوم» الآن —
+ *  انظر تعليق `life-state-sleep.mjs`. هذا الملف لم يعد يبني سطر النوم
+ *  بيده؛ ساعة واحدة مُدخَلة يداً ("نمت ٧ ساعات") أصبحت وجهاً واحداً من
+ *  سطر يفهمه الموقع والبوت والتحليل سواء بسواء. */
 export function logSleep(state, hours, note = "") {
-  const h = Math.min(24, Math.max(1, Number(hours) || 0));
-  const cycles = +(h / 1.5).toFixed(1);
-  const date = dayKey();
-  const existingSleepLogs = Array.isArray(state.sleepLogs) ? state.sleepLogs : [];
-  const newLog = {
-    id: uid(),
-    date,
-    hours: h,
-    cycles,
-    notes: note || "",
+  const sleepLogs = logSleepRow(state.sleepLogs, {
+    date: dayKey(),
+    hours,
+    notes: note,
     source: "telegram",
-    at: new Date().toISOString(),
-  };
-  const nextLogs = [newLog, ...existingSleepLogs.filter((l) => l.date !== date)];
+  });
+  const latest = sleepLogs[0];
 
   // تحديث ساعات النوم في طقوس الصباح أيضاً
   const ritual = state.morningRitual || {};
-  const nextRitual = { ...ritual, sleepHours: h };
+  const nextRitual = { ...ritual, sleepHours: latest.hours };
 
   return {
     kind: "sleep",
-    hours: h,
-    cycles,
-    date,
+    hours: latest.hours,
+    cycles: latest.cycles,
+    date: latest.date,
     next: stampToday({
       ...state,
-      sleepLogs: nextLogs,
+      sleepLogs,
       morningRitual: nextRitual,
     }),
     before: {
@@ -947,19 +945,50 @@ export function whenKey(day, from = dayKey()) {
   return addDays(from, ahead);
 }
 
-export function addEvent(state, { title, day, time }) {
+export function addEvent(state, { title, day, time, nagMinutes, nagUntilDone }) {
   const text = String(title ?? "").trim();
-  if (!text) return { refused: "اكتب عنوان الموعد." };
+  if (!text) return { refused: "اكتب عنوان الموعد أو التذكير." };
   const row = eventShape({
     title: text,
     date: whenKey(day),
     time: time || "",
     kind: /مقابل|اجتماع/.test(text) ? "meet" : "note",
+    note: nagMinutes ? `🔁 تكرار كل ${nagMinutes} دقيقة حتى الإنجاز` : "",
   });
+  if (nagMinutes) {
+    row.nagMinutes = nagMinutes;
+    row.nagUntilDone = !!nagUntilDone;
+  }
   return {
     kind: "event",
     row,
     next: { ...state, events: [...rows(state.events), row] },
+    before: { events: state.events },
+  };
+}
+
+export function markEventDone(state, id, on = dayKey()) {
+  const list = rows(state.events);
+  const ev = list.find((e) => e.id === id);
+  if (!ev) return { refused: "ما لقيت الموعد أو التذكير." };
+  const doneOn = Array.from(new Set([...(ev.doneOn || []), on]));
+  const updated = { ...ev, doneOn };
+  return {
+    kind: "event-done",
+    row: updated,
+    next: { ...state, events: list.map((e) => (e.id === id ? updated : e)) },
+    before: { events: state.events },
+  };
+}
+
+export function deleteEvent(state, id) {
+  const list = rows(state.events);
+  const ev = list.find((e) => e.id === id);
+  if (!ev) return { refused: "ما لقيت الموعد أو التذكير." };
+  return {
+    kind: "event-del",
+    row: ev,
+    next: { ...state, events: list.filter((e) => e.id !== id) },
     before: { events: state.events },
   };
 }

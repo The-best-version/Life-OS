@@ -56,6 +56,8 @@ import {
   weeklyTonnage,
   tonnageSpike,
   stalledExercises,
+  gymSleepAdvice,
+  logSleep,
 } from "../src/state/life-state.mjs";
 
 const TODAY = "2026-10-26"; /* الاثنين */
@@ -553,4 +555,45 @@ test("gymAdvise يحذّر من الإفراط والركود، لأن هذا ه
   g = logExercise(g, { date: TODAY, exercise: "Squat", weight: 50, reps: 10, sets: 6 });
   const notes = gymAdvise(g, TODAY);
   assert.ok(notes.some((n) => n.id === "spike"));
+});
+
+test("gymSleepAdvice يصمت بلا نوم مسجَّل هذا الأسبوع — لا يفترض نوماً جيداً لمن لم يسجّله", () => {
+  const g = gymShape({});
+  assert.equal(gymSleepAdvice(g, [], TODAY), null);
+});
+
+test("gymSleepAdvice يصمت إن كان النوم كافياً، حتى مع حمل مرتفع", () => {
+  let g = gymShape({});
+  for (let w = 1; w <= 4; w++) {
+    g = logExercise(g, { date: back(7 * w), exercise: "Squat", weight: 50, reps: 10, sets: 3 });
+  }
+  g = logExercise(g, { date: TODAY, exercise: "Squat", weight: 50, reps: 10, sets: 6 });
+  let sleep = [];
+  sleep = logSleep(sleep, { date: TODAY, hours: 8 });
+  assert.equal(gymSleepAdvice(g, sleep, TODAY), null);
+});
+
+test("gymSleepAdvice يجمع بين نوم قليل وحمل مرتفع في تحذير واحد", () => {
+  let g = gymShape({});
+  for (let w = 1; w <= 4; w++) {
+    g = logExercise(g, { date: back(7 * w), exercise: "Squat", weight: 50, reps: 10, sets: 3 });
+  }
+  g = logExercise(g, { date: TODAY, exercise: "Squat", weight: 50, reps: 10, sets: 6 });
+  let sleep = [];
+  sleep = logSleep(sleep, { date: TODAY, hours: 5 });
+  sleep = logSleep(sleep, { date: back(1), hours: 5 });
+  const note = gymSleepAdvice(g, sleep, TODAY);
+  assert.equal(note.id, "sleep-load");
+});
+
+test("gymSleepAdvice يحذّر من نوم قليل وركود معاً حين لا إفراط", () => {
+  let g = gymShape({});
+  g = logExercise(g, { date: back(21), exercise: "Deadlift", weight: 100, reps: 5 });
+  g = logExercise(g, { date: back(14), exercise: "Deadlift", weight: 95, reps: 5 });
+  g = logExercise(g, { date: back(7), exercise: "Deadlift", weight: 97, reps: 5 });
+  g = logExercise(g, { date: TODAY, exercise: "Deadlift", weight: 96, reps: 5 });
+  let sleep = [];
+  sleep = logSleep(sleep, { date: TODAY, hours: 5 });
+  const note = gymSleepAdvice(g, sleep, TODAY);
+  assert.equal(note.id, "sleep-stall");
 });

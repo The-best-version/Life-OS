@@ -28,10 +28,16 @@ import {
   Volume2,
   Trash2,
 } from "lucide-react";
-import { Card, Badge, T } from "../components/life-shared.jsx";
-import { dayKey, uid } from "../state/life-state.mjs";
+import { Card, Badge, T, useUndo } from "../components/life-shared.jsx";
+import { dayKey, logSleep, deleteSleep, avgSleepHours, sleepDebtHours, sleepIn } from "../state/life-state.mjs";
 
-const SLEEP_LOGS_KEY = "life_os_sleep_logs_v1";
+/* النسخة القديمة من هذه الشاشة كتبت ليالٍ هنا — في مخزن المتصفح وحده،
+   لا في `state.sleepLogs` الذي يكتبه بوت تيليجرام فعلاً ويقرأه تحليل
+   تعب النادي. انظر التعليق في أعلى `life-state-sleep.mjs` لسبب هذا
+   الدمج. هذا المفتاح لا يُكتَب إليه بعد الآن — يُقرأ مرة واحدة فقط عند
+   أول فتح، لترحيل ما كان محفوظاً فيه إلى الحالة الحقيقية. */
+const OLD_SLEEP_LOGS_KEY = "life_os_sleep_logs_v1";
+const MIGRATED_KEY = "life_os_sleep_migrated_v1";
 
 // دورة النوم الكاملة = 90 دقيقة (1.5 ساعة)
 // متوسط الوقت المستغرق للاستغراق في النوم = 15 دقيقة
@@ -39,25 +45,36 @@ const CYCLE_MINUTES = 90;
 const FALL_ASLEEP_MINUTES = 15;
 
 export function SleepLabModule({ state, setState }) {
+  const arm = useUndo();
   // وضع الحاسبة: "sleep_now" (نمت الآن متى أستيقظ؟) | "wake_at" (أريد الاستيقاظ في وقت محدد متى أنام؟)
   const [calcMode, setCalcMode] = useState("sleep_now");
   const [targetWakeTime, setTargetWakeTime] = useState("06:30");
 
-  // سجلات النوم المحفوظة
-  const [sleepLogs, setSleepLogs] = useState(() => {
-    try {
-      const saved = localStorage.getItem(SLEEP_LOGS_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // سجلات النوم — من حالة Life OS نفسها، لا من مخزن خاص بهذه الشاشة.
+  const sleepLogs = state.sleepLogs || [];
 
+  /* ترحيل لمرة واحدة فقط: ما كان محفوظاً في المخزن القديم ينتقل إلى
+     الحالة الحقيقية أول مرة تُفتَح هذه الشاشة بعد التحديث، ثم يُمسَح
+     المفتاح القديم فلا يُستورَد مرتين. لا يَكتب شيئاً إن كان الترحيل قد
+     تم من قبل، حتى لو حذف المستخدم كل ليالي سجلّه بعدها. */
   useEffect(() => {
     try {
-      localStorage.setItem(SLEEP_LOGS_KEY, JSON.stringify(sleepLogs));
-    } catch {}
-  }, [sleepLogs]);
+      if (localStorage.getItem(MIGRATED_KEY)) return;
+      const raw = localStorage.getItem(OLD_SLEEP_LOGS_KEY);
+      const old = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(old) && old.length) {
+        setState((s) => ({
+          ...s,
+          sleepLogs: old.reduce((list, row) => logSleep(list, row), s.sleepLogs || []),
+        }));
+      }
+      localStorage.setItem(MIGRATED_KEY, "1");
+      localStorage.removeItem(OLD_SLEEP_LOGS_KEY);
+    } catch {
+      /* لا شيء — المتصفح لا يسمح، أو لا مخزن قديم أصلاً */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // إدخال سجل نوم جديد يدوياً
   const [logDate, setLogDate] = useState(dayKey());
@@ -136,51 +153,47 @@ export function SleepLabModule({ state, setState }) {
     return options;
   }, [targetWakeTime]);
 
-  // حفظ سجل النوم
+  // حفظ سجل النوم — عبر `logSleep` في طبقة الحالة، ليلة اليوم تصحّح
+  // نفسها لا تُضاف بجانب نفسها، ونفس السطر الذي يكتبه البوت.
   const handleSaveSleep = (e) => {
     e.preventDefault();
-    const dur = calculateDuration(bedTime, wakeTime);
-    const newEntry = {
-      id: uid(),
-      date: logDate,
-      bedTime,
-      wakeTime,
-      hours: dur.decimal,
-      cycles: dur.cycles,
-      quality: sleepQuality,
-      notes: sleepNotes.trim(),
-      loggedAt: new Date().toISOString(),
-    };
-
-    setSleepLogs((prev) => [newEntry, ...prev.filter((l) => l.date !== logDate)]);
+    setState((s) => ({
+      ...s,
+      sleepLogs: logSleep(s.sleepLogs, {
+        date: logDate,
+        bedTime,
+        wakeTime,
+        quality: sleepQuality,
+        notes: sleepNotes.trim(),
+      }),
+    }));
     setSaveNotice(true);
     setTimeout(() => setSaveNotice(false), 2500);
   };
 
   // حذف سجل
   const handleDeleteLog = (id) => {
-    setSleepLogs((prev) => prev.filter((l) => l.id !== id));
+    arm("حُذف سجلّ النوم", { sleepLogs: state.sleepLogs });
+    setState((s) => ({ ...s, sleepLogs: deleteSleep(s.sleepLogs, id) }));
   };
 
-  // إحصائيات الأسبوع ودين النوم (Sleep Debt)
+  // إحصائيات الأسبوع ودين النوم — على آخر سبعة أيام فعلية، لا على آخر
+  // سبع ليالٍ مسجَّلة أياً كان تاريخها: نفس القراءة التي يقرأها تحليل
+  // تعب النادي وتقرير البوت الأسبوعي، فلا يختلف الرقم هنا عنهما.
   const stats = useMemo(() => {
-    if (sleepLogs.length === 0) {
+    const today = dayKey();
+    const avg = avgSleepHours(sleepLogs, 7, today);
+    if (avg === null) {
       return { avgHours: 0, sleepDebt: 0, totalLogs: 0, qualityAvg: 0 };
     }
-    const recent = sleepLogs.slice(0, 7);
-    const sumHours = recent.reduce((acc, curr) => acc + Number(curr.hours || 0), 0);
-    const avg = +(sumHours / recent.length).toFixed(1);
-
-    // المعدل الصحي الموصى به = 7.5 إلى 8 ساعات يومياً (7.5 * عدد الأيام)
-    const idealHours = recent.length * 7.5;
-    const debt = +(idealHours - sumHours).toFixed(1);
-
-    const sumQuality = recent.reduce((acc, curr) => acc + Number(curr.quality || 3), 0);
-    const qAvg = +(sumQuality / recent.length).toFixed(1);
-
+    const recent = sleepIn(sleepLogs, 7, today);
+    const rated = recent.filter((l) => l.quality !== null);
+    const qAvg = rated.length
+      ? +(rated.reduce((acc, l) => acc + l.quality, 0) / rated.length).toFixed(1)
+      : 0;
     return {
       avgHours: avg,
-      sleepDebt: debt,
+      sleepDebt: sleepDebtHours(sleepLogs, 7, today),
       totalLogs: sleepLogs.length,
       qualityAvg: qAvg,
     };
@@ -481,9 +494,13 @@ export function SleepLabModule({ state, setState }) {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-black text-white font-mono">{log.date}</span>
-                          <span className="text-[10px] text-white/40">
-                            ({log.bedTime} ➔ {log.wakeTime})
-                          </span>
+                          {log.bedTime && log.wakeTime ? (
+                            <span className="text-[10px] text-white/40">
+                              ({log.bedTime} ➔ {log.wakeTime})
+                            </span>
+                          ) : log.source === "telegram" ? (
+                            <span className="text-[10px] text-white/40">(من البوت)</span>
+                          ) : null}
                         </div>
                         {log.notes && (
                           <p className="text-[11px] text-white/60 line-clamp-1 mt-0.5">

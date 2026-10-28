@@ -25,6 +25,7 @@ import {
   clampNum,
   daysBetween,
 } from "./life-state-util.mjs";
+import { avgSleepHours } from "./life-state-sleep.mjs";
 
 /* --- السقوف ------------------------------------------------------------ *
  *  ثماني رياضات، لأن قائمة أطول من ذلك ليست ممارسة بل قائمة. وبقية السقوف
@@ -865,7 +866,7 @@ export const targetStand = (gym, today = dayKey()) => {
  *    • الملاحظة تحمل فعلاً، لا درجة. «انتظامك ٤٠٪» حكم، و«باقي حصتان —
  *      الأدنى يكفي» حركة.
  * ---------------------------------------------------------------------- */
-export const gymAdvise = (gym, today = dayKey()) => {
+export const gymAdvise = (gym, today = dayKey(), sleepLogs = []) => {
   const g = gymShape(gym);
   const out = [];
   if (!g.workouts.length && !g.weighs.length) return out;
@@ -976,6 +977,8 @@ export const gymAdvise = (gym, today = dayKey()) => {
       text: `${s.exercise}: ${s.sessions} حصص بلا تقدّم على ${s.best} كجم — جرّب ديلود (خفّف الوزن ١٠٪ أسبوعاً) أو غيّر نطاق التكرار.`,
     });
   }
+  const sleepNote = gymSleepAdvice(g, sleepLogs, today);
+  if (sleepNote) out.push(sleepNote);
 
   /* أفضل أسبوع في شهرين. يُقال بعد الباقي لأنه خبر جيّد، والخبر الجيّد
      الذي يُقال أولاً يُقرأ تهنئة على أسبوع ناقص. */
@@ -1012,7 +1015,7 @@ export const gymAdvise = (gym, today = dayKey()) => {
  *  لا تصمت — بخلاف `gymAdvise` التي تُسكت نفسها حين لا جديد، فأسبوع لم
  *  يتدرَّب فيه هو أهم ما تقوله المراجعة لا أقله.
  * ---------------------------------------------------------------------- */
-export const gymWeekReview = (gym, today = dayKey()) => {
+export const gymWeekReview = (gym, today = dayKey(), sleepLogs = []) => {
   const g = gymShape(gym);
   const thisWeek = weekLoad(g, today);
   const lastWeek = weekLoad(g, addDays(today, -7));
@@ -1024,7 +1027,8 @@ export const gymWeekReview = (gym, today = dayKey()) => {
   );
   const volume = muscleVolume(g, 7, today);
   const neglected = volume.filter((m) => m.status === "none" || m.status === "low");
-  return { thisWeek, lastWeek, weighT, fatT, prs, volume, neglected };
+  const sleepAvg = avgSleepHours(sleepLogs, 7, today);
+  return { thisWeek, lastWeek, weighT, fatT, prs, volume, neglected, sleepAvg };
 };
 
 /* --- التعب والركود ------------------------------------------------------ *
@@ -1097,4 +1101,41 @@ export const stalledExercises = (gym, today = dayKey(), days = GYM_STALL_DAYS, m
     }
   }
   return out.sort((a, b) => b.sessions - a.sessions);
+};
+
+/* --- النوم والتعب --------------------------------------------------------- *
+ *  التعب نفسه خطران لا واحد: حمل ارتفع بسرعة (أعلاه)، ونوم قليل لا يمنحه
+ *  فرصة ليُعوَّض — وهذا الملف لا يرى نوماً إلا مُمرَّراً إليه (`sleepLogs`)،
+ *  لأن النوم ليس حقل نادٍ، هو حقل في `state` نفسه يقرأه كل شيء. `null`
+ *  بلا ليلة واحدة مسجَّلة هذا الأسبوع — صمت، لا افتراض أن النوم جيّد لمن
+ *  لم يسجّله. */
+export const GYM_SLEEP_LOW_HOURS = 6;
+
+export const gymSleepAdvice = (gym, sleepLogs, today = dayKey()) => {
+  const avg = avgSleepHours(sleepLogs, 7, today);
+  if (avg === null || avg >= GYM_SLEEP_LOW_HOURS) return null;
+
+  const spike = tonnageSpike(gym, today);
+  if (spike && spike.spike) {
+    return {
+      id: "sleep-load",
+      tone: "ask",
+      text: `نومك هذا الأسبوع ${avg} ساعة في المتوسط، وحمل تمرينك أعلى من معتادك — مزيج يرفع خطر الإصابة. خفّف أحدهما.`,
+    };
+  }
+
+  const stalls = stalledExercises(gym, today);
+  if (stalls.length) {
+    return {
+      id: "sleep-stall",
+      tone: "ask",
+      text: `نومك قليل هذا الأسبوع (${avg} ساعة في المتوسط) وتقدّمك راكد — التعافي جزء من التمرين لا إضافة عليه.`,
+    };
+  }
+
+  return {
+    id: "sleep-low",
+    tone: "ask",
+    text: `نومك هذا الأسبوع ${avg} ساعة في المتوسط فقط.`,
+  };
 };

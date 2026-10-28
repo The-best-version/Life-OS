@@ -62,6 +62,8 @@ import {
   pillarOf,
   uniShape,
   uniDayOf,
+  avgSleepHours,
+  sleepDebtHours,
 } from "../../src/state/life-state.mjs";
 import { PRAYER_ROWS, clockAt, prayerTimes } from "../../src/utils/prayer-times.mjs";
 import { fold } from "./parse.js";
@@ -751,14 +753,13 @@ export function weekReview(state, now = new Date()) {
     ),
   );
 
-  /* --- sleep & recovery (مختبر النوم في التقرير الأسبوعي) --- */
-  const sleepList = Array.isArray(s.sleepLogs) ? s.sleepLogs : [];
-  const weekSleep = sleepList.filter((l) => l.date >= from && l.date <= today);
-  if (weekSleep.length) {
-    const totalSleep = weekSleep.reduce((acc, curr) => acc + Number(curr.hours || 0), 0);
-    const avgSleep = +(totalSleep / weekSleep.length).toFixed(1);
-    const ideal = weekSleep.length * 7.5;
-    const debt = +(ideal - totalSleep).toFixed(1);
+  /* --- sleep & recovery (مختبر النوم في التقرير الأسبوعي) --- *
+   *  تقرأ `avgSleepHours`/`sleepDebtHours` نفسهما اللذين يقرآن تعب النادي
+   *  منهما الآن — انظر `gymSleepAdvice` في `life-state-gym.mjs` — فلا
+   *  تختلف هذه السطر وذاك التحذير عن الأسبوع نفسه. */
+  const avgSleep = avgSleepHours(s.sleepLogs, 7, today);
+  if (avgSleep !== null) {
+    const debt = sleepDebtHours(s.sleepLogs, 7, today);
     out.push(
       line(
         `🌙 النوم: معدل ${num(avgSleep)} س/ليلة${

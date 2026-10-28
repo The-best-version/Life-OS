@@ -24,6 +24,7 @@ import {
   gymWeekReview,
   HARD_LABELS,
   MEASURE_FIELDS,
+  dayKey,
 } from "../../src/state/life-state.mjs";
 import { parseGym } from "./parse.js";
 
@@ -144,7 +145,7 @@ export function statusText(state) {
   if (stand.kg !== null && stand.pct !== null) {
     lines.push(`الهدف: ${ar(stand.pct)}٪ من الطريق${stand.left !== null ? ` — باقي ${ar(stand.left)} يوم` : ""}.`);
   }
-  const notes = gymAdvise(gym);
+  const notes = gymAdvise(gym, dayKey(), state.sleepLogs);
   if (notes.length) lines.push("", ...notes.map((n) => "• " + n.text));
   return lines.join("\n");
 }
@@ -163,7 +164,7 @@ export const HELP_TEXT = [
    فلا رقم هنا مخترع. ولا تُسكَت أبداً: أسبوع بلا حصص هو أهم ما تقوله
    المراجعة، لا سبباً لصمتها. */
 export function weekReviewText(state) {
-  const r = gymWeekReview(state.gym);
+  const r = gymWeekReview(state.gym, dayKey(), state.sleepLogs);
   const lines = ["🗓️ ملخص الأسبوع", ""];
 
   const sign = (n) => (n > 0 ? "+" : "");
@@ -179,6 +180,9 @@ export function weekReviewText(state) {
   }
   if (r.fatT && r.fatT.delta !== 0) {
     lines.push(`• الدهون: ${sign(r.fatT.delta)}${r.fatT.delta}٪ هذا الأسبوع.`);
+  }
+  if (r.sleepAvg !== null) {
+    lines.push(`• النوم: ${r.sleepAvg} س/ليلة في المتوسط.`);
   }
 
   if (r.prs.length) {
@@ -201,7 +205,7 @@ export function weekReviewText(state) {
    `null` حين لا يوجد ما يُقال، لأن رسالة تصل كل مساء بلا جديد تُعلِّم
    تمريرها بلا قراءة. */
 export function dailyCheck(state) {
-  const notes = gymAdvise(state.gym);
+  const notes = gymAdvise(state.gym, dayKey(), state.sleepLogs);
   if (!notes.length) return null;
   return notes.map((n) => "• " + n.text).join("\n");
 }

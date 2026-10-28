@@ -63,8 +63,8 @@ export function HeroCard({ gym }) {
   );
 }
 
-export function AdviceCard({ gym }) {
-  const notes = useMemo(() => gymAdvise(gym), [gym]);
+export function AdviceCard({ gym, sleepLogs }) {
+  const notes = useMemo(() => gymAdvise(gym, dayKey(), sleepLogs), [gym, sleepLogs]);
   if (!notes.length) return null;
   const tones = { door: T.cta, push: T.accent, ask: T.sky, keep: T.primary };
   return h(
@@ -325,7 +325,7 @@ export function PRShowcaseCard({ gym, onGo }) {
   );
 }
 
-export function HomeView({ gym, go }) {
+export function HomeView({ gym, go, sleepLogs }) {
   const [showCalc, setShowCalc] = useState(false);
   const [showTimer, setShowTimer] = useState(false);
 
@@ -418,7 +418,7 @@ export function HomeView({ gym, go }) {
     h(HeroCard, { gym }),
     h(WeekMatrixCard, { gym }),
     h(PRShowcaseCard, { gym, onGo: () => go("workouts") }),
-    h(AdviceCard, { gym }),
+    h(AdviceCard, { gym, sleepLogs }),
 
     h(
       "div",

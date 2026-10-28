@@ -114,6 +114,10 @@ function NavBar({ tab, go }) {
 
 function App() {
   const [gym, setGym] = useState(null);
+  /* النوم ليس حقل نادٍ — يقرأه `gymAdvise` ليحذّر من مزيج التعب وقلّة
+     النوم، لكن من يكتبه هو شاشة النوم وبوت Life OS الرئيسي، لا هذا
+     الموقع. يُقرأ هنا للعرض فقط. */
+  const [sleepLogs, setSleepLogs] = useState([]);
   const [tab, setTab] = useState("home");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -121,8 +125,10 @@ function App() {
   const load = useCallback(() => {
     readLife()
       .then((s) => {
-        if (s) setGym(s.gym);
-        else setError("لا توجد نسخة على القرص بعد — افتح 2027 Life OS مرة واحدة على الحاسب أولاً.");
+        if (s) {
+          setGym(s.gym);
+          setSleepLogs(s.sleepLogs || []);
+        } else setError("لا توجد نسخة على القرص بعد — افتح 2027 Life OS مرة واحدة على الحاسب أولاً.");
       })
       .catch((e) => setError(e.message || "تعذّر القراءة."));
   }, []);
@@ -135,7 +141,10 @@ function App() {
     setBusy(true);
     setError("");
     withState((s) => ({ ...s, gym: mutate(s.gym) }))
-      .then((next) => setGym(next.gym))
+      .then((next) => {
+        setGym(next.gym);
+        setSleepLogs(next.sleepLogs || []);
+      })
       .catch((e) => setError(e.message || "حصل خطأ."))
       .finally(() => setBusy(false));
   }, []);
@@ -155,6 +164,7 @@ function App() {
     home: () =>
       h(HomeView, {
         gym,
+        sleepLogs,
         go: setTab,
         onLogWorkout: (w) => act((g) => logWorkout(g, w)),
       }),
@@ -187,7 +197,7 @@ function App() {
           act((g) => deletePhoto(g, row.id));
         },
       }),
-    analysis: () => h(AnalysisView, { gym }),
+    analysis: () => h(AnalysisView, { gym, sleepLogs }),
     telegram: () => h(TelegramBotView, { gym }),
     settings: () =>
       h(SettingsView, {

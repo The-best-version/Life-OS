@@ -312,11 +312,11 @@ export function ExerciseProgressReportCard({ gym }) {
   );
 }
 
-export function AnalysisView({ gym }) {
+export function AnalysisView({ gym, sleepLogs }) {
   const [period, setPeriod] = useState("week");
   const today = dayKey();
   const report = useMemo(() => buildReport(gym, period, today), [gym, period, today]);
-  const notes = useMemo(() => gymAdvise(gym, today), [gym, today]);
+  const notes = useMemo(() => gymAdvise(gym, today, sleepLogs), [gym, today, sleepLogs]);
 
   return h(
     "div",

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 
 import { parseGym, fold } from "../services/telegram-gym-bot/parse.js";
 import { route, statusText, dailyCheck, weekReviewText } from "../services/telegram-gym-bot/actions.js";
-import { freshState, logWorkout, logWeigh } from "../src/state/life-state.mjs";
+import { freshState, logWorkout, logWeigh, logExercise } from "../src/state/life-state.mjs";
 
 const SPORTS = () => {
   const s = freshState();
@@ -201,4 +201,33 @@ test("weekReviewText يسرد الأرقام الجديدة (PR) المسجَّ�
   const text = weekReviewText(state);
   assert.ok(text.includes("أرقام جديدة"));
   assert.ok(text.includes("Chest Press"), "اسم التمرين المعتمد في البرنامج («صدر مستوي» يُطابَق إليه)");
+});
+
+test("weekReviewText يذكر معدّل النوم حين يوجد، ومن نفس state.sleepLogs الذي يكتبه بوت Life OS", () => {
+  let state = freshState();
+  state = { ...state, sleepLogs: [{ date: state.date, hours: 6.5, source: "telegram" }] };
+  const text = weekReviewText(state);
+  assert.ok(text.includes("النوم: 6.5 س/ليلة"), text);
+});
+
+test("statusText وdailyCheck يمرّران sleepLogs إلى gymAdvise — ركود + نوم قليل يصل البوت", () => {
+  const dateBack = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+  let g = freshState().gym;
+  g = logWeigh(g, { date: dateBack(0), kg: 80 });
+  g = logExercise(g, { date: dateBack(21), exercise: "Deadlift", weight: 100, reps: 5 });
+  g = logExercise(g, { date: dateBack(14), exercise: "Deadlift", weight: 95, reps: 5 });
+  g = logExercise(g, { date: dateBack(7), exercise: "Deadlift", weight: 97, reps: 5 });
+  g = logExercise(g, { date: dateBack(0), exercise: "Deadlift", weight: 96, reps: 5 });
+  const today = dateBack(0);
+  const state = { ...freshState(), gym: g, sleepLogs: [{ date: today, hours: 5, source: "telegram" }] };
+
+  const status = statusText(state);
+  assert.ok(status.includes("نومك قليل"), status);
+
+  const daily = dailyCheck(state);
+  assert.ok(daily.includes("نومك قليل"), daily);
 });
