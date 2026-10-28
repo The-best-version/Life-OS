@@ -33,6 +33,9 @@ import LifeWrapped from "./features/life-wrapped.jsx";
 // 👇 استيراد لوحة الأوامر الخاطفة وشريط التركيز والصلاة العائم 👇
 import { CommandPalette, DynamicIslandBar } from "./components/life-command.jsx";
 
+// 👇 استيراد مركز التقييم والمراجعة الشامل 👇
+import { ReviewModule } from "./features/life-review.jsx";
+
 import React, {
   useState,
   useEffect,
@@ -318,6 +321,7 @@ const SCREENS = {
     />
   ),
   agenda: (c) => <AgendaModule state={c.state} setState={c.setState} onGo={c.go} />,
+  review: (c) => <ReviewModule state={c.state} setState={c.setState} onGo={c.go} discipline={c.discipline} streak={c.streak} />,
   uni: (c) => <UniModule state={c.state} setState={c.setState} onGo={c.go} />,
   matrix: (c) => <MatrixModule state={c.state} setState={c.setState} />,
   deep: (c) => (
@@ -1268,14 +1272,14 @@ export default function LifeOS() {
                     {/* الشمس المشرقة */}
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-40 bg-orange-500/20 blur-[35px] pointer-events-none mix-blend-screen" />
                     
-                    {/* أثر */}
+                    {/* إرث */}
                     <h1 className="z-10 text-[38px] font-kufi font-bold leading-none bg-clip-text text-transparent bg-gradient-to-b from-white via-orange-50 to-orange-300 drop-shadow-[0_0_20px_rgba(249,115,22,0.3)]">
-                      أثر
+                      إرث
                     </h1>
 
-                    {/* ATHAR */}
+                    {/* ERTH */}
                     <p className="z-10 text-[8.5px] font-cinzel font-bold text-white/70 tracking-[0.5em] mt-1.5" style={{ direction: "ltr" }}>
-                      A T H A R
+                      E R T H
                     </p>
 
                     {/* الخط الفاصل المضيء مع 2030 */}
@@ -1314,7 +1318,7 @@ export default function LifeOS() {
                     <Menu size={16} />
                   </button>
                   {/* شعار مصغر يظهر عندما تكون القائمة مطوية */}
-                  <h1 className="text-[22px] font-kufi font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-orange-300 mt-3 drop-shadow-[0_0_10px_rgba(249,115,22,0.3)]">أثر</h1>
+                  <h1 className="text-[22px] font-kufi font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-orange-300 mt-3 drop-shadow-[0_0_10px_rgba(249,115,22,0.3)]">إرث</h1>
                 </div>
               )}
 
@@ -1489,7 +1493,7 @@ export default function LifeOS() {
             </div>
 
             <footer className="mt-14 text-center text-[11px] text-white/20">
-              2027 Life OS · الانضباط حرية مؤجّلة
+              إرث 2030 · الانضباط حرية مؤجّلة
             </footer>
           </div>
         </main>
