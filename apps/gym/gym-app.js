@@ -20,6 +20,9 @@ import {
   renameExerciseInGym,
   logPhoto,
   deletePhoto,
+  logMeal,
+  deleteMeal,
+  saveNutritionTarget,
 } from "/src/state/life-state.mjs";
 import { T, Btn, Card } from "/gym/lib/ui.js";
 import { deletePhotoFile } from "/gym/lib/photos.js";
@@ -27,6 +30,7 @@ import { HomeView } from "/gym/views/Home.js";
 import { WorkoutsView } from "/gym/views/Workouts.js";
 import { MeasurementsView } from "/gym/views/Measurements.js";
 import { PhotosView } from "/gym/views/Photos.js";
+import { NutritionView } from "/gym/views/Nutrition.js";
 import { AnalysisView } from "/gym/views/Analysis.js";
 import { SettingsView } from "/gym/views/Settings.js";
 import { TelegramBotView } from "/gym/views/TelegramBot.js";
@@ -38,6 +42,7 @@ const TABS = [
   { id: "home", label: "الرئيسية" },
   { id: "workouts", label: "التمارين" },
   { id: "measurements", label: "القياسات" },
+  { id: "nutrition", label: "التغذية" },
   { id: "photos", label: "الصور" },
   { id: "analysis", label: "التحليل" },
   { id: "telegram", label: "بوت تيليجرام 🤖" },
@@ -118,6 +123,9 @@ function App() {
      النوم، لكن من يكتبه هو شاشة النوم وبوت Life OS الرئيسي، لا هذا
      الموقع. يُقرأ هنا للعرض فقط. */
   const [sleepLogs, setSleepLogs] = useState([]);
+  /* مجال موازٍ للنادي بلا رياضات ولا حصص — انظر تعليق أعلى
+     `life-state-nutrition.mjs`. هذا الموقع يكتبه فعلاً، خلافاً للنوم. */
+  const [nutrition, setNutrition] = useState(null);
   const [tab, setTab] = useState("home");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,6 +136,7 @@ function App() {
         if (s) {
           setGym(s.gym);
           setSleepLogs(s.sleepLogs || []);
+          setNutrition(s.nutrition);
         } else setError("لا توجد نسخة على القرص بعد — افتح 2027 Life OS مرة واحدة على الحاسب أولاً.");
       })
       .catch((e) => setError(e.message || "تعذّر القراءة."));
@@ -144,6 +153,20 @@ function App() {
       .then((next) => {
         setGym(next.gym);
         setSleepLogs(next.sleepLogs || []);
+        setNutrition(next.nutrition);
+      })
+      .catch((e) => setError(e.message || "حصل خطأ."))
+      .finally(() => setBusy(false));
+  }, []);
+
+  const actNutrition = useCallback((mutate) => {
+    setBusy(true);
+    setError("");
+    withState((s) => ({ ...s, nutrition: mutate(s.nutrition) }))
+      .then((next) => {
+        setGym(next.gym);
+        setSleepLogs(next.sleepLogs || []);
+        setNutrition(next.nutrition);
       })
       .catch((e) => setError(e.message || "حصل خطأ."))
       .finally(() => setBusy(false));
@@ -196,6 +219,14 @@ function App() {
           deletePhotoFile(row.filename);
           act((g) => deletePhoto(g, row.id));
         },
+      }),
+    nutrition: () =>
+      h(NutritionView, {
+        gym,
+        nutrition,
+        onAdd: (row) => actNutrition((n) => logMeal(n, row)),
+        onDelete: (m) => actNutrition((n) => deleteMeal(n, m.id)),
+        onSaveTarget: (t) => actNutrition((n) => saveNutritionTarget(n, t)),
       }),
     analysis: () => h(AnalysisView, { gym, sleepLogs }),
     telegram: () => h(TelegramBotView, { gym }),

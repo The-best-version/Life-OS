@@ -25,6 +25,12 @@ import {
   HARD_LABELS,
   MEASURE_FIELDS,
   dayKey,
+  logMeal,
+  MEAL_TYPES,
+  dayTotals,
+  calorieStand,
+  nutritionAdvise,
+  nutritionWeekReview,
 } from "../../src/state/life-state.mjs";
 import { parseGym } from "./parse.js";
 
@@ -45,6 +51,8 @@ export function route(state, text) {
       return { refused: null, status: true };
     case "week":
       return { refused: null, week: true };
+    case "nutrition":
+      return { refused: null, nutrition: true };
     case "weight":
       return logWeighMsg(state, parsed);
     case "measure":
@@ -53,6 +61,8 @@ export function route(state, text) {
       return logWorkoutMsg(state, parsed);
     case "exercise":
       return logExerciseMsg(state, parsed);
+    case "meal":
+      return logMealMsg(state, parsed);
     default:
       return { refused: parsed.reply || null, unknown: true };
   }
@@ -123,6 +133,38 @@ export function logWorkoutMsg(state, { sportId, sportLabel, minutes, hard, round
   };
 }
 
+const MEAL_LABELS = Object.fromEntries(MEAL_TYPES.map((m) => [m.id, m.label]));
+
+export function logMealMsg(state, { meal, name, calories }) {
+  const nutrition = logMeal(state.nutrition, { date: undefined, meal, name, calories });
+  const totals = dayTotals(nutrition, dayKey());
+  return {
+    next: { ...state, nutrition },
+    before: { nutrition: state.nutrition },
+    reply: `✅ ${MEAL_LABELS[meal]} — ${name}: ${ar(calories)} سعرة.\nإجمالي اليوم: ${ar(totals.calories)} سعرة من ${ar(totals.count)} وجبة.`,
+  };
+}
+
+/* التغذية — قراءة بلا كتابة، مثل «ملخص» للنادي. */
+export function nutritionStatusText(state) {
+  const n = state.nutrition;
+  const totals = dayTotals(n, dayKey());
+  const stand = calorieStand(n, dayKey());
+  const lines = [];
+  lines.push(
+    totals.count
+      ? `اليوم: ${ar(totals.calories)} سعرة من ${ar(totals.count)} وجبة.`
+      : "ما سجّلت وجبة اليوم بعد.",
+  );
+  if (stand.target !== null) {
+    lines.push(`الهدف: ${ar(stand.calories)} من ${ar(stand.target)} سعرة${stand.left >= 0 ? ` — باقي ${ar(stand.left)}` : ` — تجاوزت بـ ${ar(-stand.left)}`}.`);
+  }
+  if (totals.protein !== null) lines.push(`بروتين: ${ar(totals.protein)} غ.`);
+  const notes = nutritionAdvise(n, dayKey());
+  if (notes.length) lines.push("", ...notes.map((x) => "• " + x.text));
+  return lines.join("\n");
+}
+
 /* الحالة — قراءة بلا كتابة. يُبنى من نفس الدوال التي ترسم «الرئيسية». */
 export function statusText(state) {
   const gym = state.gym;
@@ -158,6 +200,8 @@ export const HELP_TEXT = [
   "• «قياس خصر 86» — يسجّل قياس الشريط",
   "• «ملخص» أو «وضعي» — يعرض وضعك الحالي وأسبوعك",
   "• «ملخص الأسبوع» أو «اسبوعي» — يقارن أسبوعك بالأسبوع الماضي",
+  "• «اكلت أرز ودجاج 650 سعرة» أو «اكلت فطور بيض 400 سعرة» — يسجّل وجبة",
+  "• «سعراتي» أو «تغذيتي» — يعرض سعرات اليوم مقابل هدفك",
 ].join("\n");
 
 /* المراجعة الأسبوعية — مبنيّة بالحرف على `gymWeekReview` (طبقة الحالة)،
@@ -198,6 +242,12 @@ export function weekReviewText(state) {
     lines.push("", "ما سجّلت حصة هذا الأسبوع — ابدأ بأقل شيء.");
   }
 
+  const nr = nutritionWeekReview(state.nutrition, dayKey());
+  if (nr.thisWeek.avgCalories !== null) {
+    const cmp = nr.lastWeek.avgCalories !== null ? ` (الماضي: ${ar(nr.lastWeek.avgCalories)})` : "";
+    lines.push("", `🍽️ متوسط السعرات: ${ar(nr.thisWeek.avgCalories)}${cmp} — ${ar(nr.thisWeek.loggedDays)} من 7 أيام مسجَّلة.`);
+  }
+
   return lines.join("\n");
 }
 
@@ -205,7 +255,10 @@ export function weekReviewText(state) {
    `null` حين لا يوجد ما يُقال، لأن رسالة تصل كل مساء بلا جديد تُعلِّم
    تمريرها بلا قراءة. */
 export function dailyCheck(state) {
-  const notes = gymAdvise(state.gym, dayKey(), state.sleepLogs);
+  const notes = [
+    ...gymAdvise(state.gym, dayKey(), state.sleepLogs),
+    ...nutritionAdvise(state.nutrition, dayKey()),
+  ];
   if (!notes.length) return null;
   return notes.map((n) => "• " + n.text).join("\n");
 }

@@ -8,7 +8,7 @@ import "./dns-fallback.js";
 import { Bot } from "grammy";
 import { CONFIG, configProblems } from "./config.js";
 import { withState, readLife, DiskError } from "./gym-client.js";
-import { route, statusText, weekReviewText, HELP_TEXT, dailyCheck } from "./actions.js";
+import { route, statusText, weekReviewText, nutritionStatusText, HELP_TEXT, dailyCheck } from "./actions.js";
 
 const problems = configProblems();
 if (problems.length) {
@@ -52,6 +52,7 @@ bot.on("message:text", async (ctx) => {
   if (dry.help) return ctx.reply(HELP_TEXT);
   if (dry.status) return ctx.reply(statusText(state));
   if (dry.week) return ctx.reply(weekReviewText(state));
+  if (dry.nutrition) return ctx.reply(nutritionStatusText(state));
   if (dry.unknown) return ctx.reply(dry.refused || "ما فهمت. أرسل «مساعدة» لترى الأمثلة.");
 
   /* كتابة فعلية — تُعاد من الصفر داخل withState على نسخة طازجة من القرص،

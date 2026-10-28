@@ -40,6 +40,19 @@ const STATUS_TRIGGERS = ["وضعي", "ملخص", "تقرير", "حالتي", "ت
 const WEEK_TRIGGERS = ["ملخص الاسبوع", "تقرير الاسبوع", "مراجعة الاسبوع", "اسبوعي"];
 const HELP_TRIGGERS = ["مساعدة", "اوامر", "أوامر", "help", "start"].map(fold);
 
+/* التغذية — مجال موازٍ للنادي بلا رياضات ولا حصص، فمحفّزاته منفصلة عن
+   محفّزات الحصة والوزن تماماً. «اكلت» تُطابِق «أكلت» أيضاً لأن `fold`
+   يسقط الهمزة الأولى. */
+const FOOD_TRIGGERS = ["اكلت", "تناولت", "وجبة"];
+const NUTRITION_STATUS_TRIGGERS = ["سعراتي", "تغذيتي", "سعرات اليوم"];
+const MEAL_WORDS = [
+  { words: ["فطور", "فطوري"], id: "breakfast" },
+  { words: ["غداء", "غدائي", "غدا", "غدائي اليوم"], id: "lunch" },
+  { words: ["عشاء", "عشائي", "عشا"], id: "dinner" },
+  { words: ["سناك", "سناكي", "وجبة خفيفة"], id: "snack" },
+];
+const CALORIE_WORD = /سعره|سعرة|سعرات|كالوري|كالوريز/u;
+
 const HARD_WORDS = [
   { words: ["خفيف", "خفيفه", "خفيفة"], v: 1 },
   { words: ["متوسط", "متوسطه", "متوسطة"], v: 2 },
@@ -126,6 +139,37 @@ function parseMeasure(text) {
     return { kind: "unknown", reply: "اكتب الحقل ورقمه، مثال: «قياس خصر 86 صدر 102»." };
   }
   return { kind: "measure", fields };
+}
+
+/* `rest` هنا نصّ بعد حذف محفّز «اكلت» الأول — نوع الوجبة إن وُجد هو
+   الكلمة الثانية تحديداً، لا كلمة منقَّبة في أي مكان، لنفس سبب أن
+   المحفّز نفسه أول كلمة: «فطور» في منتصف جملة وصفية ليست نوع الوجبة. */
+function parseMeal(rest) {
+  const words = rest.split(" ").filter(Boolean);
+  let meal = null;
+  let nameWords = words;
+  if (words.length) {
+    const found = MEAL_WORDS.find((m) => m.words.some((w) => fold(w) === words[0]));
+    if (found) {
+      meal = found.id;
+      nameWords = words.slice(1);
+    }
+  }
+  const text = nameWords.join(" ");
+  const m = text.match(NUMBER);
+  if (!m) {
+    return { kind: "unknown", reply: "ما لقيت السعرات. مثال: «اكلت أرز ودجاج 650 سعرة»." };
+  }
+  const calories = Number(m[0]);
+  const name = text
+    .replace(m[0], " ")
+    .replace(CALORIE_WORD, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!name) {
+    return { kind: "unknown", reply: "اكتب اسم الوجبة مع السعرات. مثال: «اكلت أرز ودجاج 650 سعرة»." };
+  }
+  return { kind: "meal", meal: meal || "snack", name, calories };
 }
 
 function parseWorkout(text, sport) {
@@ -232,8 +276,12 @@ export function parseGym(raw, sports = [], routineExercises = []) {
 
   if (HELP_TRIGGERS.includes(first) || text.startsWith("/")) return { kind: "help" };
   if (WEEK_TRIGGERS.some((w) => startsWithWord(folded, w))) return { kind: "week" };
+  if (NUTRITION_STATUS_TRIGGERS.some((w) => startsWithWord(folded, w))) return { kind: "nutrition" };
   if (STATUS_TRIGGERS.some((w) => startsWithWord(folded, w))) return { kind: "status" };
   if (startsWithWord(folded, MEASURE_TRIGGER)) return parseMeasure(folded);
+
+  const foodLead = FOOD_TRIGGERS.find((w) => startsWithWord(folded, w));
+  if (foodLead) return parseMeal(folded.slice(fold(foodLead).length).trim());
 
   /* اسم الرياضة أول كلمة، أو ثاني كلمة بعد فعل قيادة («تدربت بوكسنج...»). */
   let rest = folded;

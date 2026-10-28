@@ -8,8 +8,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { parseGym, fold } from "../services/telegram-gym-bot/parse.js";
-import { route, statusText, dailyCheck, weekReviewText } from "../services/telegram-gym-bot/actions.js";
-import { freshState, logWorkout, logWeigh, logExercise } from "../src/state/life-state.mjs";
+import { route, statusText, dailyCheck, weekReviewText, nutritionStatusText } from "../services/telegram-gym-bot/actions.js";
+import { freshState, logWorkout, logWeigh, logExercise, logMeal, saveNutritionTarget } from "../src/state/life-state.mjs";
 
 const SPORTS = () => {
   const s = freshState();
@@ -230,4 +230,70 @@ test("statusText وdailyCheck يمرّران sleepLogs إلى gymAdvise — رك
 
   const daily = dailyCheck(state);
   assert.ok(daily.includes("نومك قليل"), daily);
+});
+
+test("اكلت: المحفّز أول كلمة، ونوع الوجبة هو الكلمة التالية تحديداً إن وُجدت", () => {
+  const a = parseGym("اكلت أرز ودجاج 650 سعرة");
+  assert.equal(a.kind, "meal");
+  assert.equal(a.meal, "snack", "بلا كلمة نوع وجبة معروفة: الافتراضي سناك");
+  assert.equal(a.calories, 650);
+  assert.ok(a.name.includes("ارز") || a.name.includes("أرز"));
+
+  const b = parseGym("اكلت فطور بيض وخبز 400 سعرة");
+  assert.equal(b.kind, "meal");
+  assert.equal(b.meal, "breakfast");
+  assert.equal(b.calories, 400);
+
+  const c = parseGym("تناولت غداء كبسة 800");
+  assert.equal(c.kind, "meal");
+  assert.equal(c.meal, "lunch");
+  assert.equal(c.calories, 800);
+});
+
+test("اكلت بلا رقم سعرات يُرفَض بسؤال، لا بتخمين", () => {
+  const u = parseGym("اكلت أرز ودجاج");
+  assert.equal(u.kind, "unknown");
+  assert.ok(u.reply.includes("السعرات"));
+});
+
+test("«كم وزن» ليست تسجيل أكل، و«اكل» ليست أول كلمة لا تُقرَأ وجبة", () => {
+  assert.notEqual(parseGym("هل اكلت اليوم؟").kind, "meal");
+});
+
+test("route يكتب الوجبة عبر logMeal، ويضيف ولا يستبدل كالنادي لا كالوزن", () => {
+  let state = freshState();
+  const a = route(state, "اكلت فطور بيض 400 سعرة");
+  assert.ok(a.next);
+  assert.equal(a.next.nutrition.meals.length, 1);
+  assert.equal(a.next.nutrition.meals[0].meal, "breakfast");
+  assert.equal(a.next.nutrition.meals[0].calories, 400);
+  assert.ok(a.reply.includes("فطور") && a.reply.includes("سعرة"));
+
+  const b = route(a.next, "اكلت غداء ارز 700 سعرة");
+  assert.equal(b.next.nutrition.meals.length, 2, "وجبة ثانية تُضاف، لا تستبدل الأولى");
+});
+
+test("«سعراتي»/«تغذيتي» تعرض حالة التغذية بلا كتابة", () => {
+  const state = freshState();
+  assert.equal(route(state, "سعراتي").nutrition, true);
+  assert.equal(route(state, "تغذيتي").nutrition, true);
+});
+
+test("nutritionStatusText لا يخترع هدفاً، ويحسب الباقي حين يوجد هدف", () => {
+  let state = freshState();
+  state = route(state, "اكلت فطور بيض 500 سعرة").next;
+  const noTarget = nutritionStatusText(state);
+  assert.ok(!noTarget.includes("الهدف"));
+
+  state = { ...state, nutrition: saveNutritionTarget(state.nutrition, { calories: 2000 }) };
+  const withTarget = nutritionStatusText(state);
+  assert.ok(withTarget.includes("الهدف"));
+  assert.ok(withTarget.includes("باقي"));
+});
+
+test("weekReviewText يذكر متوسط السعرات حين توجد وجبات مسجَّلة هذا الأسبوع", () => {
+  let state = freshState();
+  state = route(state, "اكلت فطور بيض 500 سعرة").next;
+  const text = weekReviewText(state);
+  assert.ok(text.includes("متوسط السعرات"));
 });

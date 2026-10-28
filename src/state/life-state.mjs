@@ -94,6 +94,7 @@ import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
 import { gymShape, gymCarry } from "./life-state-gym.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 import { sleepLogsOf } from "./life-state-sleep.mjs";
+import { nutritionShape, nutritionCarry } from "./life-state-nutrition.mjs";
 
 /* --- the tabs --------------------------------------------------------- *
  *  The ids, in the order the sidebar shows them — the one canonical list of
@@ -239,7 +240,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 34;
+export const SCHEMA = 35;
 
 /* --- the daily goal ------------------------------------------------ *
  *  One number the user picks and breaks every day. It lives in the state
@@ -310,6 +311,9 @@ export const freshState = (carry = {}) => ({
      localStorage شاشة النوم وحدها — انظر تعليق أعلى `life-state-sleep.mjs`.
      كل صف مؤرَّخ بتاريخه فيَعبُر كاملاً، مثل النادي والتقويم. */
   sleepLogs: carry.sleepLogs || [],
+  /* المخطَّط 35 يضيف التغذية — مجال موازٍ للنادي والنوم، لا تابع لأيّ
+     منهما. سطر لكل وجبة لا لكل يوم، فيَعبُر كاملاً كالصورة والقياس. */
+  nutrition: nutritionCarry(carry.nutrition),
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -648,6 +652,10 @@ export function migrate(saved) {
        ومن `carryOf` معاً، فكل ليلة يكتبها البوت كانت تُمحى في أول دوران
        يوم — حمولة من قبله تصل ببساطة بلا ليلة واحدة، وهذا بالضبط معناه. */
     sleepLogs: sleepLogsOf(saved.sleepLogs),
+    /* المخطَّط 35 يضيف `nutrition`. مُشكَّل ولا فرع له، كالنادي قبله:
+       حمولة من قبله تصل ببساطة بلا وجبة واحدة ولا هدف سعرات — وهذا
+       بالضبط معنى ألّا تكون الشاشة قد فُتحت بعد. */
+    nutrition: nutritionShape(saved.nutrition),
     history,
     /* Schema 29 gives a focus round a shape. Every row written before it
        carried a day and a length and nothing else, so `sessionShape` fills
@@ -741,6 +749,7 @@ export const carryOf = (s) => ({
   uni: s.uni,
   gym: s.gym,
   sleepLogs: s.sleepLogs,
+  nutrition: s.nutrition,
   quotes: s.quotes,
   reads: s.reads,
   reading: s.reading,
@@ -1261,3 +1270,24 @@ export {
   SLEEP_GOAL_HOURS,
   sleepDebtHours,
 } from "./life-state-sleep.mjs";
+
+export {
+  MEAL_CAP,
+  MEAL_TYPES,
+  mealShape,
+  nutritionTargetShape,
+  nutritionShape,
+  nutritionCarry,
+  logMeal,
+  deleteMeal,
+  saveNutritionTarget,
+  mealsOn,
+  mealsIn,
+  dayTotals,
+  calorieStand,
+  noLogDays,
+  NUTRITION_AWAY,
+  NUTRITION_OVER_PCT,
+  nutritionAdvise,
+  nutritionWeekReview,
+} from "./life-state-nutrition.mjs";
