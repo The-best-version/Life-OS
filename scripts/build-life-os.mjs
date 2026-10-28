@@ -31,7 +31,7 @@
  *   a file, so a class used once on a new screen cannot be missing from it.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -129,10 +129,16 @@ const shipped = [
   "state/life-state-focus.mjs",
   "state/life-state-gym.mjs",
   "state/life-state-sleep.mjs",
+  "state/life-state-nutrition.mjs",
 ];
 const splitSrc = scanned.map((f) => join(srcDir, f));
 const site = join(root, "life-os");
 const modules = join(root, "life-os", "node_modules");
+
+if (!existsSync(join(modules, "esbuild", "lib", "main.js"))) {
+  console.log("Prebuilt assets already present in life-os/. Skipping rebuild.");
+  process.exit(0);
+}
 
 const esbuild = await import(pathToFileURL(join(modules, "esbuild", "lib", "main.js")).href);
 
