@@ -91,6 +91,7 @@ import {
   SESSION_CAP,
 } from "./life-state-focus.mjs";
 import { uniShape, SEED_UNI } from "./life-state-uni.mjs";
+import { gymShape, gymCarry } from "./life-state-gym.mjs";
 import { fillGaps, firstDay, streakBaseFrom } from "./life-state-streak.mjs";
 
 /* --- the tabs --------------------------------------------------------- *
@@ -104,6 +105,7 @@ export const NAV_IDS = [
   "today",
   "routine",
   "agenda",
+  "review",
   "uni",
   "matrix",
   "deep",
@@ -132,7 +134,7 @@ export const NAV_IDS = [
  *  holds these ids against `NAV_IDS`.
  * ---------------------------------------------------------------------- */
 export const NAV_GROUPS = [
-  { id: "daily", label: "التركيز اليومي", ids: ["today", "routine", "agenda", "deep"] },
+  { id: "daily", label: "التركيز اليومي", ids: ["today", "routine", "agenda", "review", "deep"] },
   { id: "growth", label: "النمو والتطوير", ids: ["goals", "uni", "finance"] },
   { id: "tools", label: "الأدوات", ids: ["matrix", "breaker", "vault", "analytics", "bot", "graph"] },
 ];
@@ -236,7 +238,7 @@ export const QUOTES = [
    stays the immutable seed the migration reads from. */
 export const SEED_QUOTES = () => QUOTES.map((q) => ({ id: uid(), ...q }));
 
-export const SCHEMA = 31;
+export const SCHEMA = 33;
 
 /* --- the daily goal ------------------------------------------------ *
  *  One number the user picks and breaks every day. It lives in the state
@@ -300,6 +302,9 @@ export const freshState = (carry = {}) => ({
      nothing in either of them belongs to "today" in the first place. */
   events: carry.events || [],
   uni: carry.uni || SEED_UNI(),
+  /* النادي: الرياضات والحصص والوزن والقياسات. يَعبُر كاملاً مثل التقويم
+     والجامعة — كل صف فيه مؤرَّخ بتاريخه، فلا شيء منه ينتمي إلى «اليوم». */
+  gym: gymCarry(carry.gym),
   quotes: carry.quotes || SEED_QUOTES(),
   reads: carry.reads || SEED_READS(),
   reading: carry.reading || [],
@@ -627,6 +632,12 @@ export function migrate(saved) {
     badHabits,
     events,
     uni,
+    /* المخطَّط 32 يضيف النادي. مُشكَّل ولا فرع له، كجدول البوت والمكتب
+       قبله: حمولة من قبله تصل بالرياضتين المبذورتين وبلا حصة ولا وزن ولا
+       قياس — وهو بالضبط معنى ألّا تكون الشاشة قد فُتحت بعد. و`migrate` لا
+       تكتب حدًّا أدنى لرياضة ولا تخترع رياضة ثالثة، نفس امتناعها عن
+       تخمين العادات الخمس الأساسية. */
+    gym: gymShape(saved.gym),
     history,
     /* Schema 29 gives a focus round a shape. Every row written before it
        carried a day and a length and nothing else, so `sessionShape` fills
@@ -718,6 +729,7 @@ export const carryOf = (s) => ({
   badHabits: s.badHabits,
   events: s.events,
   uni: s.uni,
+  gym: s.gym,
   quotes: s.quotes,
   reads: s.reads,
   reading: s.reading,
@@ -1145,3 +1157,73 @@ export {
   hourRate,
   netBalance,
 } from "./life-state-finance.mjs";
+
+export {
+  SPORT_CAP,
+  WORKOUT_CAP,
+  WEIGH_CAP,
+  MEASURE_CAP,
+  HARD_MIN,
+  HARD_MAX,
+  HARD_LABELS,
+  SPORT_TINTS,
+  MEASURE_FIELDS,
+  GYM_REACH,
+  GYM_AWAY,
+  GYM_DAYS,
+  REST_DAY,
+  sportShape,
+  workoutShape,
+  weighShape,
+  measureShape,
+  targetShape,
+  SEED_SPORTS,
+  gymShape,
+  gymCarry,
+  logWorkout,
+  deleteWorkout,
+  PHOTO_CAP,
+  photoShape,
+  logPhoto,
+  deletePhoto,
+  logWeigh,
+  logMeasure,
+  sportOf,
+  liveSports,
+  workoutsIn,
+  minutesOf,
+  sportLoad,
+  gymDays,
+  lastWorkoutOn,
+  restDays,
+  weekLoad,
+  gymRun,
+  latestWeigh,
+  weighTrend,
+  latestFat,
+  fatTrend,
+  latestMeasure,
+  measureDelta,
+  targetStand,
+  gymAdvise,
+  DEFAULT_PROGRAM,
+  routineShape,
+  SET_TYPES,
+  SET_TYPE_LABELS,
+  estimate1RM,
+  exerciseLogShape,
+  logExercise,
+  deleteExerciseLog,
+  saveRoutines,
+  renameExerciseInGym,
+  lastExerciseLog,
+  exerciseHistory,
+  exercisePRs,
+  exerciseAdvice,
+  MUSCLE_GROUPS,
+  exerciseMuscleOf,
+  muscleVolume,
+  weighMovingAverage,
+  exerciseProgressReport,
+  gymWeekReview,
+} from "./life-state-gym.mjs";

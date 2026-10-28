@@ -1,0 +1,18 @@
+{
+  "name": "life-os-gym-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "بوت تيليجرام مستقل للنادي — تسجيل حصص ووزن وقياسات من الجوال، يقرأ ويكتب نفس ملف 2027 Life OS عبر local-sync-server.",
+  "type": "module",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "whoami": "node whoami.js"
+  },
+  "dependencies": {
+    "grammy": "^1.46.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

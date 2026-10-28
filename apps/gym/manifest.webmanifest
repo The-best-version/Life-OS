@@ -1,0 +1,15 @@
+{
+  "name": "إرثي 2030",
+  "short_name": "إرثي 2030",
+  "start_url": "/gym/",
+  "scope": "/gym/",
+  "display": "standalone",
+  "background_color": "#070B1F",
+  "theme_color": "#070B1F",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    { "src": "/gym/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/gym/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
