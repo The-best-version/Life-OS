@@ -14,11 +14,16 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const SYNC_SERVER = join(HERE, "local-sync-server.js");
-const BOT_SCRIPT = join(HERE, "telegram-bot.js", "bot.js");
+
+const botDir = existsSync(join(HERE, "telegram-bot"))
+  ? join(HERE, "telegram-bot")
+  : join(HERE, "telegram-bot.js");
+const BOT_SCRIPT = join(botDir, "bot.js");
 
 const PORT = process.env.PORT || "47615";
 const HOST = "0.0.0.0";
@@ -63,7 +68,7 @@ function startBot() {
   };
 
   botProcess = spawn(process.execPath, [BOT_SCRIPT], {
-    cwd: join(HERE, "telegram-bot.js"),
+    cwd: botDir,
     env,
     stdio: "inherit",
   });
